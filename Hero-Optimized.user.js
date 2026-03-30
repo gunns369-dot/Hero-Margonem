@@ -1756,6 +1756,9 @@ window.handleTeleportNPC = function(targetMap) {
     // ==========================================
     // INTERFEJS UŻYTKOWNIKA (UI)
     // ==========================================
+// ==========================================
+    // INTERFEJS UŻYTKOWNIKA (UI)
+    // ==========================================
     function initGUI() {
         const style = document.createElement('style');
         style.innerHTML = `
@@ -1860,8 +1863,9 @@ window.handleTeleportNPC = function(targetMap) {
                     <div class="nav-row" style="display: flex; flex-direction: column; flex-grow: 1;">
                         <label style="color:#00acc1;">Kolejność Przechodzenia Map:</label>
                         <div id="heroMapListContainer"><div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div></div>
-                        <div style="display:flex; margin-top:5px;">
-                            <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; flex-grow:1; padding: 4px;" title="Zresetuj pętlę">🔁 ZRESETUJ AKTUALNĄ PĘTLĘ TRASY</button>
+                        <div style="display:flex; gap:5px; margin-top:5px;">
+                            <button id="btnAutoRoute" class="btn btn-go-sepia" style="flex-grow:1;" onclick="openAutoRouteModal()">🪄 KREATOR TRASY</button>
+                            <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; width: auto;" title="Zresetuj pętlę">🔁 ZRESETUJ PĘTLĘ</button>
                         </div>
                     </div>
                     <div class="nav-row" style="margin-top: 10px; display: flex; flex-direction: column;"><label style="color:#d4af37;">Koordynaty (Zasięg: 7 kratek):</label><div id="cordsListContainer"></div></div>
@@ -2052,6 +2056,7 @@ window.handleTeleportNPC = function(targetMap) {
                     document.getElementById('radarControlsWrapper').style.display = (tab === 'hero') ? 'block' : 'none';
 
                     activeBossTarget = null;
+                    updateUI(); // NAPRAWA: Odświeżanie list E2 i Kolosów!
                     if(tab === 'exp' && typeof renderExpMaps === 'function') renderExpMaps();
                     if(tab === 'expProfiles' && typeof renderExpProfiles === 'function') renderExpProfiles();
                 });
