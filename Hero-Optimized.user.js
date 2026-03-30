@@ -1587,7 +1587,7 @@ let attackInterval = null;
     }
     function autoDetectEngineData() {
 
-        if (!Engine || !Engine.map || !Engine.map.d) return;
+        if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
 
         let currentName = Engine.map.d.name;
 
