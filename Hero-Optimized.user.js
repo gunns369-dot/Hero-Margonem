@@ -1577,7 +1577,6 @@ let attackInterval = null;
                     globalGateways[currMap][target].allCoords.push([px, py]);
                     addedOrUpdated = true;
                 }
-            }
         });
 
         if (addedOrUpdated) {
