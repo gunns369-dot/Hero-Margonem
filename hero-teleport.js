@@ -1,81 +1,87 @@
 // hero-teleport.js
-console.log("%c[HERO] Załadowano zewnętrzny moduł teleportacji (Zakonników)!", "color: #00acc1; font-weight: bold;");
+console.log("%c[HERO] Załadowano NOWY, bezklawiszowy moduł teleportacji!", "color: #00acc1; font-weight: bold;");
 
 window.HeroTeleportModule = {
-    // Funkcja symulująca wciśnięcie klawisza (np. 'r' do rozmowy, '1', '2' do opcji)
-    simulateKeyPress: function(keyChar) {
-        let keyCode = keyChar.toUpperCase().charCodeAt(0);
-        if (keyChar >= '1' && keyChar <= '9') {
-            keyCode = 48 + parseInt(keyChar);
-        }
-        let codeStr = keyChar === 'r' ? 'KeyR' : 'Digit' + keyChar;
-
-        let evtDown = new KeyboardEvent('keydown', { key: keyChar, code: codeStr, keyCode: keyCode, which: keyCode, bubbles: true });
-        let evtUp = new KeyboardEvent('keyup', { key: keyChar, code: codeStr, keyCode: keyCode, which: keyCode, bubbles: true });
-
-        document.dispatchEvent(evtDown);
-        document.dispatchEvent(evtUp);
-    },
-
-    // Pobieranie cyfry przypisanej do opcji dialogowej
-    getOptionKey: function(el, index) {
-        let match = el.innerText.match(/^(\d+)\./);
-        if (match) return match[1];
-        return (index + 1).toString();
-    },
-
     // Główna logika przetwarzania okna rozmowy
     processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
+        
         let dialogBox = document.querySelector('.dialog-texts') || document.querySelector('.dialog-content');
         let isDialogOpen = dialogBox && dialogBox.offsetParent !== null;
 
+        // ETAP 1: Otwieranie dialogu (Bezpośrednio przez silnik gry)
         if (!isDialogOpen) {
-            console.log("%c[HERO] Wciskam klawisz [ R ], aby zacząć rozmowę z Zakonnikiem...", "color: yellow; font-weight: bold;");
-            this.simulateKeyPress('r');
+            console.log("%c[HERO] Szukam Zakonnika w pobliżu...", "color: yellow;");
+            
+            let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
+            let zakonnikId = null;
+            
+            // Szukamy ID Zakonnika na mapie
+            for (let id in npcs) {
+                let n = npcs[id].d || npcs[id];
+                if (n.nick && n.nick.toLowerCase().includes("zakonnik planu astralnego")) {
+                    zakonnikId = id;
+                    break;
+                }
+            }
+
+            if (zakonnikId && typeof Engine.npcs.interact === 'function') {
+                console.log("%c[HERO] Otwieram dialog z Zakonnikiem (Wymuszenie silnika)...", "color: yellow;");
+                Engine.npcs.interact(zakonnikId);
+            } else {
+                // Fallback (zapasowa opcja), jeśli silnik by nie odpowiedział
+                this.simulateKeyPress('r');
+            }
+
             retryCallback();
             return;
         }
 
+        // ETAP 2: Wybieranie opcji (Fizyczne klikanie w element DOM)
         let options = Array.from(document.querySelectorAll('.dialog-texts li, .dialog-options li, .answer, [data-option]'));
+        
         if (options.length > 0) {
             
-            // ETAP 1: Klawisz dla "Chciałam się teleportować"
-            let startOptIndex = options.findIndex(el => el.innerText.toLowerCase().includes("teleportować"));
-            if (startOptIndex !== -1) {
-                let key = this.getOptionKey(options[startOptIndex], startOptIndex);
-                console.log(`%c[HERO] Wybieram opcję teleportacji -> Wciskam klawisz [ ${key} ]`, "color: #00acc1;");
-                this.simulateKeyPress(key);
+            // A. Krok pierwszy rozmowy: "Chciałam/Chciałbym się teleportować"
+            let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleportować"));
+            if (startOpt) {
+                console.log(`%c[HERO] Klikam opcję teleportacji...`, "color: #00acc1;");
+                startOpt.click(); 
                 retryCallback();
                 return;
             }
 
-            // ETAP 2: Klawisz dla miasta docelowego
-            let destOptIndex = options.findIndex(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
-            if (destOptIndex !== -1) {
-                let destOpt = options[destOptIndex];
-
-                // Zabezpieczenie przed brakiem zezwolenia
+            // B. Krok drugi rozmowy: Wybór miasta
+            let destOpt = options.find(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
+            if (destOpt) {
+                
+                // Zabezpieczenie przed brakiem wykupionego zezwolenia (Brak opłaty u zakonnika)
                 if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
                     console.log(`%c[HERO] Zablokowane! Nie wykupiłeś zezwolenia do: ${targetMap}!`, "color: red; font-weight: bold;");
-                    let closeOptIndex = options.findIndex(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ"));
-                    if (closeOptIndex !== -1) {
-                        let closeKey = this.getOptionKey(options[closeOptIndex], closeOptIndex);
-                        this.simulateKeyPress(closeKey);
-                    }
-                    stopCallback(); // Wyłącza bota, bo nie mamy jak przejść dalej
+                    let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ"));
+                    if (closeOpt) closeOpt.click();
+                    stopCallback(); // Zatrzymuje bota (chroni przed zacięciem w pętli)
                     return;
                 }
 
-                let key = this.getOptionKey(destOpt, destOptIndex);
-                console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Wciskam klawisz [ ${key} ]!`, "color: #4caf50; font-weight: bold;");
-                this.simulateKeyPress(key);
+                console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Klikam docelowe przejście!`, "color: #4caf50; font-weight: bold;");
+                destOpt.click();
                 
-                // Udało się kliknąć, pozwalamy botowi czekać na załadowanie mapy
+                // Sukces! Gra ładuje mapę, puszczamy logikę dalej.
                 continueCallback(); 
                 return;
             }
         }
-        // Jeśli nie znalazł opcji, odświeża pętle sprawdzania
+        
+        // Jeżeli opcje się jeszcze nie załadowały po stronie Margonem, zapętl sprawdzanie
         retryCallback(); 
+    },
+
+    // Awaryjna symulacja klawiatury dla starszych przeglądarek/interfejsów
+    simulateKeyPress: function(keyChar) {
+        let keyCode = keyChar.toUpperCase().charCodeAt(0);
+        let evtDown = new KeyboardEvent('keydown', { key: keyChar, keyCode: keyCode, which: keyCode, bubbles: true });
+        let evtUp = new KeyboardEvent('keyup', { key: keyChar, keyCode: keyCode, which: keyCode, bubbles: true });
+        document.dispatchEvent(evtDown);
+        document.dispatchEvent(evtUp);
     }
 };
