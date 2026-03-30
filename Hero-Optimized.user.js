@@ -3599,28 +3599,27 @@ function scanCurrentMapForGateways() {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return heroAlert("Błąd: Silnik gry nie jest gotowy.");
         let currentMap = Engine.map.d.name;
         
-        // Wywołanie agresywnego skanera
         let gatewaysFound = HeroScannerModule.scanCurrentMap(currentMap, ZAKONNICY);
         let container = document.getElementById('gatewaysListContainer');
         if (!container) return;
 
-        // Czyścimy poprzednie wyniki (te z żółtym paskiem), aby nie spamować listy
-        container.querySelectorAll('.list-item').forEach(el => {
-            if (el.style.borderLeftColor === 'rgb(255, 179, 0)') el.remove();
-        });
-
         if (gatewaysFound.length === 0) {
-            return heroAlert("Skaner nie wykrył żadnych nowych przejść. Spróbuj podejść do niebieskiej kropki.");
+            return heroAlert("Skaner nie wykrył żadnych przejść. Spróbuj podejść bliżej niebieskich kropek na mapie.");
         }
 
+        // Czyścimy stare wyniki skanowania (te z żółtym paskiem), ale zostawiamy bazę danych
+        let oldScans = container.querySelectorAll('.scanner-result-header, .scanner-result-item');
+        oldScans.forEach(el => el.remove());
+
         let header = document.createElement('div');
+        header.className = "scanner-result-header";
         header.innerHTML = `<br><span style="color:#ffb300; font-weight:bold; font-size:10px;">🔍 WYKRYTE PRZEJŚCIA (${gatewaysFound.length}):</span>`;
         header.style.padding = "2px 5px"; header.style.background = "#1a1a1a";
         container.insertBefore(header, container.firstChild);
 
         gatewaysFound.forEach(gw => {
             let row = document.createElement('div');
-            row.className = "list-item";
+            row.className = "list-item scanner-result-item";
             row.style.borderLeft = "3px solid #ffb300";
             row.innerHTML = `
                 <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer;" onclick="goSinglePoint(${gw.x}, ${gw.y}, '${currentMap}')">
@@ -3632,9 +3631,8 @@ function scanCurrentMapForGateways() {
             container.insertBefore(row, header.nextSibling);
         });
         
-        heroAlert(`Sukces! Skaner wyciągnął z silnika ${gatewaysFound.length} przejść.`);
+        heroAlert(`Sukces! Znaleziono ${gatewaysFound.length} przejść.`);
     }
-
 
     function renderCordsList(activeIndex = -1) {
 
