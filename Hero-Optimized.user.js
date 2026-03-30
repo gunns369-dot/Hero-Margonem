@@ -42,6 +42,14 @@
 
     loadCombatModule();
 
+    function loadTeleportModule() {
+        const script = document.createElement('script');
+        // TUTAJ WKLEJ LINK RAW DO NOWEGO PLIKU hero-teleport.js:
+        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-teleport.js`;
+        document.head.appendChild(script);
+    }
+    loadTeleportModule();
+
     // ==========================================
 
     // BAZA DANYCH HEROSÓW
@@ -2033,168 +2041,45 @@ function executeRushStep() {
 
 
 window.handleTeleportNPC = function(targetMap) {
-
         if (!isRushing && !isPatrolling) return;
-
         let currentSysMap = lastMapName;
-
         let tp = ZAKONNICY[currentSysMap];
-
         if (!tp) return;
 
-
-
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-
         let dist = Math.max(Math.abs(cx - tp.x), Math.abs(cy - tp.y));
 
-
-
-        // 1. Musimy podejść bardzo blisko (1 kratka), żeby klawisz "r" zadziałał na odpowiedniego NPC
-
+        // 1. Podchodzenie do Zakonnika
         if (dist > 1) {
-
             if (!Engine.hero.d.path || Engine.hero.d.path.length === 0) {
-
                 console.log(`%c[HERO] Podbiegam do Zakonnika na [${tp.x}, ${tp.y}]...`, "color: #9c27b0;");
-
                 safeGoTo(tp.x, tp.y, false);
-
             }
-
             rescheduleTeleportCheck(targetMap);
-
             return;
-
         }
 
-
-
-        // 2. Sprawdzanie, czy okno dialogowe jest otwarte
-
-        let dialogBox = document.querySelector('.dialog-texts') || document.querySelector('.dialog-content');
-
-        let isDialogOpen = dialogBox && dialogBox.offsetParent !== null;
-
-
-
-        if (!isDialogOpen) {
-
-            console.log("%c[HERO] Wciskam klawisz [ R ], aby zacząć rozmowę...", "color: yellow; font-weight: bold;");
-
-            simulateKeyPress('r');
-
+        // 2. Przekazanie pałeczki do zewnętrznego modułu
+        if (typeof window.HeroTeleportModule !== 'undefined') {
+            window.HeroTeleportModule.processDialog(
+                targetMap,
+                () => stopPatrol(false), // Co ma zrobić w przypadku zablokowania
+                () => { // Co ma zrobić gdy pomyślnie kliknie teleportację (czeka na mapę)
+                    if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(executeRushStep, 3500); }
+                    else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(executePatrolStep, 3500); }
+                },
+                () => rescheduleTeleportCheck(targetMap) // Co ma zrobić by ponowić skan okienka
+            );
+        } else {
+            console.log("Moduł teleportacji z GitHuba jeszcze się ładuje...");
             rescheduleTeleportCheck(targetMap);
-
-            return;
-
         }
-
-
-
-        // 3. Pobieramy opcje dialogowe i wyszukujemy cyfry
-
-        let options = Array.from(document.querySelectorAll('.dialog-texts li, .dialog-options li, .answer, [data-option]'));
-
-        if (options.length > 0) {
-
-
-
-            // Wewnętrzna funkcja: szuka cyfry na początku zdania (np. "1. Chciałam...")
-
-            // lub z automatu przypisuje jej numer od góry do dołu.
-
-            const getOptionKey = (el, index) => {
-
-                let match = el.innerText.match(/^(\d+)\./);
-
-                if (match) return match[1];
-
-                return (index + 1).toString();
-
-            };
-
-
-
-            // ETAP 1: Klawisz dla "Chciałam się teleportować"
-
-            let startOptIndex = options.findIndex(el => el.innerText.toLowerCase().includes("teleportować"));
-
-            if (startOptIndex !== -1) {
-
-                let key = getOptionKey(options[startOptIndex], startOptIndex);
-
-                console.log(`%c[HERO] Wybieram opcję teleportacji -> Wciskam klawisz [ ${key} ]`, "color: #00acc1;");
-
-                simulateKeyPress(key);
-
-                rescheduleTeleportCheck(targetMap);
-
-                return;
-
-            }
-
-
-
-            // ETAP 2: Klawisz dla miasta docelowego
-
-            let destOptIndex = options.findIndex(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
-
-            if (destOptIndex !== -1) {
-
-                let destOpt = options[destOptIndex];
-
-
-
-                // Jeśli brak zezwolenia - anuluj i wyjdź (szukamy klawisza dla opcji "Nigdzie")
-
-                if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
-
-                    console.log(`%c[HERO] Zablokowane! Nie wykupiłeś zezwolenia do: ${targetMap}!`, "color: red; font-weight: bold;");
-
-                    let closeOptIndex = options.findIndex(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ"));
-
-                    if (closeOptIndex !== -1) {
-
-                        let closeKey = getOptionKey(options[closeOptIndex], closeOptIndex);
-
-                        simulateKeyPress(closeKey);
-
-                    }
-
-                    stopPatrol(false);
-
-                    return;
-
-                }
-
-
-
-                let key = getOptionKey(destOpt, destOptIndex);
-
-                console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Wciskam klawisz [ ${key} ]!`, "color: #4caf50; font-weight: bold;");
-
-                simulateKeyPress(key);
-
-
-
-                // Czekamy dłużej, bo ładowanie mapy po teleporcie potrafi chwilę zająć
-
-                if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(executeRushStep, 3500); }
-
-                else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(executePatrolStep, 3500); }
-
-                return;
-
-            }
-
-        }
-
-        rescheduleTeleportCheck(targetMap);
-
     };
 
-
+    function rescheduleTeleportCheck(targetMap) {
+        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
+        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
+    }
 
     // --- FUNKCJE WSPOMAGAJĄCE ---
 
@@ -2775,22 +2660,18 @@ window.handleTeleportNPC = function(targetMap) {
                     </div>
                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
-                <div id="expProfilesContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
+               <div id="expProfilesContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
                     <label style="color:#a99a75; font-size:11px; margin-top:2px;">Zapisane Expowiska (Baza gry):</label>
                     <div id="expProfilesList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; padding:2px;"></div>
-                    <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
+                </div>
 
+                <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
                     <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
-
                         <span style="color:#00acc1; font-weight:bold; font-size:11px;">Zakonnicy Planu Astralnego</span><br>
-
                         <span style="color:#a99a75; font-size:9px;">Zaznacz miasta, do których wykupiłeś zezwolenie na teleport. Algorytm trasy sam ich użyje!</span>
-
                     </div>
-
-                    <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;">
-
-                        </div>
+                    <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;"></div>
+                </div>
 
                 </div>
 
