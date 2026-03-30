@@ -20,14 +20,14 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-function loadCombatModule() {
+function loadScannerModule() {
         const script = document.createElement('script');
-        // TUTAJ WKLEJ SKOPIOWANY LINK RAW Z GITHUBA:
-        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-combat.js`;
-        script.onload = () => console.log("%c[HERO] Pobrano moduł bojowy z serwera!", "color: #4caf50;");
+        // PAMIĘTAJ BY PODMIENIĆ TEN LINK, JEŚLI MASZ INNĄ ŚCIEŻKĘ:
+        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-scanner.js`;
         document.head.appendChild(script);
     }
-    loadCombatModule();
+    loadScannerModule();
+
     // WBUDOWANY MODUŁ TELEPORTACJI (Złoty środek: Niezawodny, ale LUDZKI - Anty-Captcha)
     const HeroTeleportModule = {
         isClicking: false,
