@@ -20,62 +20,59 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-// 3. AGRESYWNY SKANER PÓL (NI OPTIMIZED - SKANUJE SIATKĘ MAPY)
+// WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - Zabezpieczony przed SyntaxError)
     const HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
-            let found = [];
-            let set = new Set();
-            if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return [];
-
-            // METODA 1: Skanowanie siatki kolizji (Niebieskie kropki na NI)
-            let gws = Engine.map.d.gw || {};
-            for (let key in gws) {
-                let x, y, name;
-                if (key.includes(',')) {
-                    let p = key.split(','); x = parseInt(p[0]); y = parseInt(p[1]); name = gws[key];
-                } else { x = gws[key].x; y = gws[key].y; name = gws[key].name || gws[key].targetName; }
-                this.pushGateway(x, y, name, found, set, currentMapName, zakkonicyData);
+            let foundGateways = [];
+            let processedCoords = new Set();
+            let gwsObj = {};
+            
+            if (typeof Engine !== 'undefined' && Engine.map) {
+                if (Engine.map.gateways) gwsObj = Engine.map.gateways;
+                else if (Engine.map.d && Engine.map.d.gw) gwsObj = Engine.map.d.gw;
+            } else if (typeof g !== 'undefined' && g.townname) { 
+                gwsObj = g.townname; 
             }
 
-            // METODA 2: Skanowanie obiektów graficznych
-            if (Engine.map.gateways && Engine.map.gateways.all) {
-                for (let id in Engine.map.gateways.all) {
-                    let g = Engine.map.gateways.all[id];
-                    this.pushGateway(g.x, g.y, g.name || g.targetName, found, set, currentMapName, zakkonicyData);
+            let gwsList = [];
+            try {
+                if (typeof gwsObj.values === 'function') gwsList = Array.from(gwsObj.values());
+                else gwsList = Object.values(gwsObj);
+            } catch(e) {
+                for (let key in gwsObj) { if (gwsObj.hasOwnProperty(key)) gwsList.push(gwsObj[key]); }
+            }
+
+            gwsList.forEach(gw => {
+                let data = gw.d || gw;
+                if (!data) return;
+                let px = data.x; let py = data.y;
+                if (px === undefined || py === undefined) return;
+
+                // Ignorowanie Zakonników
+                let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
+                if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) return;
+
+                // Blokada dublikatów
+                let coordKey = px + "_" + py;
+                if (processedCoords.has(coordKey)) return; 
+                processedCoords.add(coordKey);
+
+                // Wyciąganie nazwy
+                let rawName = data.name || data.targetName || data.title || data.tooltip || "";
+                let cleanName = rawName.toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
+                
+                if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
+                    cleanName = `Wejście [${px}, ${py}]`;
                 }
-            }
-            return found;
-        },
-        pushGateway: function(x, y, rawName, list, set, currMap, tpData) {
-            if (isNaN(x) || isNaN(y)) return;
-            let tp = tpData ? tpData[currMap] : null;
-            if (tp && Math.max(Math.abs(x - tp.x), Math.abs(y - tp.y)) <= 2) return;
-            let k = x + "_" + y; if (set.has(k)) return; set.add(k);
-            let name = (rawName || "").toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").split(" .")[0].trim();
-            if (!name || name.length < 2 || name === "Wyjście") name = `Wejście [${x},${y}]`;
-            if (name !== currMap && !name.includes("Brak")) list.push({ x: x, y: y, targetMap: name });
+
+                if (cleanName !== currentMapName && !cleanName.includes("Brak")) {
+                    foundGateways.push({ x: px, y: py, targetMap: cleanName });
+                }
+            });
+            
+            return foundGateways;
         }
     };
-            // 2. SKANOWANIE OBIEKTÓW INTERAKTYWNYCH (Drzwi/Jaskinie/Namioty)
-            if (Engine.map.gateways && Engine.map.gateways.all) {
-                for (let id in Engine.map.gateways.all) {
-                    let g = Engine.map.gateways.all[id];
-                    this.pushGateway(g.x, g.y, g.name || g.targetName, foundGateways, processedCoords, currentMapName, zakkonicyData);
-                }
-            }
-
-            // 3. FALLBACK - Skanowanie tablicy nazw (Stary sposób)
-            if (foundGateways.length < 2 && mapData.townname) {
-                for (let key in mapData.townname) {
-                    let p = key.split(',');
-                    if (p.length === 2) {
-                        this.pushGateway(parseInt(p[0]), parseInt(p[1]), mapData.townname[key], foundGateways, processedCoords, currentMapName, zakkonicyData);
-                    }
-                }
-            }
-
-            return foundGateways;
-        },
 
         pushGateway: function(x, y, rawName, list, set, currMap, tpData) {
             let key = x + "_" + y;
