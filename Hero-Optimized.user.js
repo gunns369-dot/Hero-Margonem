@@ -1,48 +1,27 @@
 // ==UserScript==
-
 // @name         Hero, Elity II & Kolosy - Optimized Edition
-
-// @version      64.2
-
+// @version      64.3
 // @description  Automatyczne wykrywanie, inteligentny zasięg, natywny auto-atak, poprawne limity poziomowe, naprawiony scroll.
-
 // @author       Ty & Gemini
-
 // @match        https://*.margonem.pl/
-
 // @grant        none
-
 // @updateURL    https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/main/Hero-Optimized.user.js
-
 // @downloadURL  https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/main/Hero-Optimized.user.js
-
 // ==/UserScript==
 
-
-
 (function() {
-
     'use strict';
 
-// Ładowanie modułu bojowego z zewnątrz
-
- function loadCombatModule() {
-
+    // Ładowanie modułu bojowego z zewnątrz
+    function loadCombatModule() {
         const script = document.createElement('script');
-
-        // TUTAJ WKLEJ SKOPIOWANY LINK RAW Z GITHUBA:
-
-        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-combat.js}`;
-
+        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-combat.js`;
         script.onload = () => console.log("%c[HERO] Pobrano moduł bojowy z serwera!", "color: #4caf50;");
-
         document.head.appendChild(script);
-
     }
-
     loadCombatModule();
 
-// WBUDOWANY MODUŁ TELEPORTACJI 
+    // WBUDOWANY MODUŁ TELEPORTACJI (Bardzo szybki i niezawodny)
     const HeroTeleportModule = {
         isClicking: false,
 
@@ -106,11 +85,8 @@
     };
 
     // ==========================================
-
     // BAZA DANYCH HEROSÓW
-
     // ==========================================
-
     const heroData = {
 
         "Domina Ecclesiae": {"Stare Ruiny": [[56,53],[57,48],[58,25],[66,22],[72,17]], "Przeklęty Zamek - wejście południowe": [[9,8],[16,7]], "Przeklęty Zamek - wejście północne": [[6,9],[18,7]], "Przeklęty Zamek - wejście wschodnie": [[8,8],[12,7]], "Przeklęty Zamek - podziemia południowe": [[8,27],[11,8],[19,27],[21,8]], "Przeklęty Zamek - kanały": [[8,8],[20,28]], "Przeklęty Zamek - sala zgromadzeń": [[4,8],[10,10],[30,9],[42,29]], "Przeklęty Zamek p.1": [[8,13],[13,4]], "Przeklęty Zamek p.2": [[2,11],[21,6]], "Orla Grań": [[44,9],[46,24],[52,10],[54,12],[56,22]], "Przeklęta Strażnica": [[4,10],[6,13],[8,9],[13,12],[17,8]], "Przeklęta Strażnica p.1": [[3,10],[4,17],[5,8],[12,8],[15,16],[17,14]], "Przeklęta Strażnica p.2": [[5,14],[8,4],[9,14],[13,12],[15,6]], "Przeklęta Strażnica - podziemia p.1 s.1": [[5,36],[7,35],[9,9],[15,27],[22,33],[24,6],[26,34],[27,20],[30,8],[31,21],[31,35]], "Przeklęta Strażnica - podziemia p.1 s.2": [[5,9],[5,35],[12,17],[17,4],[17,34],[21,22],[22,4],[27,24]], "Przeklęta Strażnica - podziemia p.2 s.2": [[2,5],[7,11],[8,5],[12,6],[12,18]]},
@@ -4494,7 +4470,8 @@ let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Eng
                     closestTx = n.x;
                     closestTy = n.y;
                    closestId = id;
-                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : "Potwór";
+                    // Wycinamy tagi HTML oraz dopisek o metrach np. (15m)
+                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim() : "Potwór";
                 }
             }
         }
