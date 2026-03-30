@@ -1859,10 +1859,16 @@ function executeRushStep() {
         }
 
         let nextMap = path[1];
+        
+        // ZMIANA: Teleport ma całkowity priorytet!
+        let isTeleportRoute = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-        let isTeleport = botSettings.useTeleports && !door && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
 
-        if (door) {
+        if (isTeleportRoute) {
+            console.log(`%c[HERO] Bieg przez teleporter do: [${nextMap}]...`, "color: #9c27b0;");
+            clearTimeout(rushInterval);
+            rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
+        } else if (door) {
             let targetX = door.x; let targetY = door.y;
             if(door.allCoords && door.allCoords.length > 0) {
                 let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
@@ -1871,10 +1877,6 @@ function executeRushStep() {
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
             rushInterval = setTimeout(checkRushArrival, 500);
-        } else if (isTeleport) {
-            console.log(`%c[HERO] Bieg przez teleporter do: [${nextMap}]...`, "color: #9c27b0;");
-            clearTimeout(rushInterval);
-            rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
         } else {
             stopPatrol(false);
             console.log(`%c[HERO] Brak zapisanej bramy do: [${nextMap}]`, "color: #e53935;");
@@ -1889,14 +1891,11 @@ function executeRushStep() {
         let path = getShortestPath(currentSysMap, rushTarget);
         if(!path || path.length < 2) return;
         let nextMap = path[1];
+        
+        let isTeleportRoute = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
+        if (isTeleportRoute) return; // Zignoruj sprawdzanie bramy - handleTeleportNPC obsługuje to samo!
+
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-        let isTeleport = botSettings.useTeleports && !door && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
-
-        if (isTeleport) {
-            // Ignorujemy - handleTeleportNPC obsługuje swoją własną pętlę!
-            return; 
-        }
-
         if (!door) return;
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
@@ -3680,37 +3679,21 @@ selHero.addEventListener('change', (e) => {
 
 
            if (path && path.length > 1) {
-
                     let immediateNextMap = path[1];
-
+                    let isTeleport = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[immediateNextMap];
                     let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
 
-                    let isTeleport = botSettings.useTeleports && !door && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[immediateNextMap];
-
-
-
-                    if(door) {
-
-                        let targetX = door.x; let targetY = door.y;
-
-                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
-
-                        safeGoTo(targetX, targetY, false);
-
-                        return;
-
-                    } else if (isTeleport) {
-
-                        console.log(`%c[HERO] Używam teleportera w patrolu...`, "color: #9c27b0;");
-
+                    if (isTeleport) {
+                        console.log(`%c[HERO] Używam teleportera w patrolu do [${immediateNextMap}]...`, "color: #9c27b0;");
                         clearTimeout(smoothPatrolInterval);
-
-                        smoothPatrolInterval = setTimeout(() => handleTeleportNPC(immediateNextMap), 200);
-
+                        smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(immediateNextMap), 200);
                         return;
-
+                    } else if(door) {
+                        let targetX = door.x; let targetY = door.y;
+                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
+                        safeGoTo(targetX, targetY, false);
+                        return;
                     }
-
                 }
 
         }
@@ -3939,32 +3922,25 @@ selHero.addEventListener('change', (e) => {
 
 
 
-                let path = getShortestPath(currentSysMap, finalDestinationMap);
-
-
+              let path = getShortestPath(currentSysMap, finalDestinationMap);
 
                 if (path && path.length > 1) {
-
                     let immediateNextMap = path[1];
-
+                    let isTeleport = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[immediateNextMap];
                     let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
 
-
-
-                    if(door) {
-
+                    if (isTeleport) {
+                        console.log(`%c[HERO] Koniec respów na mapie. Teleport w patrolu do [${immediateNextMap}]...`, "color: #9c27b0;");
+                        clearTimeout(smoothPatrolInterval);
+                        smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(immediateNextMap), 200);
+                        return;
+                    } else if (door) {
                         let targetX = door.x; let targetY = door.y;
-
                         if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
 
-
-
                         safeGoTo(targetX, targetY, false);
-
                         return;
-
                     }
-
                 }
 
 
