@@ -15,7 +15,7 @@
  function loadCombatModule() {
         const script = document.createElement('script');
         // TUTAJ WKLEJ SKOPIOWANY LINK RAW Z GITHUBA:
-        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-combat.js}`;
+        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-combat.js`;
         script.onload = () => console.log("%c[HERO] Pobrano moduł bojowy z serwera!", "color: #4caf50;");
         document.head.appendChild(script);
     }
@@ -320,8 +320,8 @@ let opacityValue = 0.95;
         "Torneg": {x: 54, y: 28},
         "Ithan": {x: 56, y: 26},
         "Eder": {x: 26, y: 40}
-  };
-  // ==========================================
+
+// ==========================================
     // ZMIENNE GLOBALNE I USTAWIENIA
     // ==========================================
     let currentCordsList = [];
@@ -392,12 +392,12 @@ let opacityValue = 0.95;
             console.log("%c[HERO] Silnik gry wykryty. Uruchamianie bota...", "color: #4caf50; font-weight: bold;");
             loadData();
             cleanOldGateways();
-            if (typeof initGUI === 'function') initGUI();
-            if (typeof autoDetectEngineData === 'function') setInterval(autoDetectEngineData, 800);
-            if (typeof heroPositionTracker === 'function') setInterval(heroPositionTracker, 100);
-            if (typeof radarLoop === 'function') setInterval(radarLoop, 150);
-            if (typeof handleGlobalKeydown === 'function') document.addEventListener('keydown', handleGlobalKeydown);
-            if (typeof setupMapClickListener === 'function') setupMapClickListener();
+            initGUI();
+            setInterval(autoDetectEngineData, 800);
+            setInterval(heroPositionTracker, 100);
+            setInterval(radarLoop, 150);
+            document.addEventListener('keydown', handleGlobalKeydown);
+            setupMapClickListener();
         }
     }, 1500);
 
@@ -408,7 +408,7 @@ let opacityValue = 0.95;
                 let parsed = JSON.parse(s1);
                 if (parsed.waitMin === undefined) { parsed.waitMin = 200; parsed.waitMax = 500; }
                 if (parsed.autoAttack === undefined) { parsed.autoAttack = false; }
-                delete parsed.combatKey; 
+                delete parsed.combatKey;
                 botSettings = {...botSettings, ...parsed};
             } catch(e) { console.error("Błąd parsowania ustawień:", e); }
         }
@@ -446,7 +446,6 @@ let opacityValue = 0.95;
     // ==========================================
     function checkVisionRange() {
         if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
-
         const h = Engine.hero.d;
         let anyPointMarked = false;
 
@@ -454,62 +453,33 @@ let opacityValue = 0.95;
             if (checkedPoints.has(index)) return;
             const dx = Math.abs(h.x - coord[0]);
             const dy = Math.abs(h.y - coord[1]);
-            const distance = Math.max(dx, dy);
-
-            if (distance <= botSettings.visionRange) {
+            if (Math.max(dx, dy) <= botSettings.visionRange) {
                 checkedPoints.add(index);
                 anyPointMarked = true;
             }
         });
 
-        if (anyPointMarked && typeof renderCordsList === 'function') {
-            renderCordsList(patrolIndex);
-        }
+        if (anyPointMarked) renderCordsList(patrolIndex);
     }
 
-    // ==========================================
-    // LOGIKA INTELIGENTNEGO ZASIĘGU
-    // ==========================================
-    function checkVisionRange() {
-        if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
-
-        const h = Engine.hero.d;
-        let anyPointMarked = false;
-
-        currentCordsList.forEach((coord, index) => {
-            if (checkedPoints.has(index)) return;
-            const dx = Math.abs(h.x - coord[0]);
-            const dy = Math.abs(h.y - coord[1]);
-            const distance = Math.max(dx, dy);
-
-            if (distance <= botSettings.visionRange) {
-                checkedPoints.add(index);
-                anyPointMarked = true;
-            }
-        });
-
-        if (anyPointMarked && typeof renderCordsList === 'function') {
-            renderCordsList(patrolIndex);
-        }
-    }
     // ==========================================
     // AKTUALIZACJA INTERFEJSU (UI)
     // ==========================================
     function updateUI() {
         if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
-            if (typeof renderGatewaysDatabase === 'function') renderGatewaysDatabase();
+            renderGatewaysDatabase();
         }
         if (document.getElementById('heroMapListContainer') && document.getElementById('heroMapListContainer').parentElement.style.display !== 'none') {
-            if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+            renderMapOrderList();
         }
         if (document.getElementById('e2Container') && document.getElementById('e2Container').style.display !== 'none') {
-            if (typeof renderBossList === 'function') renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8');
+            renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8');
         }
         if (document.getElementById('kolosyContainer') && document.getElementById('kolosyContainer').style.display !== 'none') {
-            if (typeof renderBossList === 'function') renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
+            renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
         }
         if (document.getElementById('expContainer') && document.getElementById('expContainer').style.display !== 'none') {
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            renderExpMaps();
         }
     }
 
@@ -545,7 +515,6 @@ let opacityValue = 0.95;
 
     function attackTarget(npcId) {
         if (attackInterval) clearInterval(attackInterval);
-
         let targetId = parseInt(npcId, 10);
         console.log(`%c[HERO] Cel namierzony (ID: ${targetId}). Włączam serwerowy Auto-Atak...`, "color: #f44336; font-weight: bold;");
 
@@ -642,8 +611,7 @@ let opacityValue = 0.95;
                 let reactionDelay = Math.floor(Math.random() * (botSettings.reactionMax - botSettings.reactionMin + 1)) + botSettings.reactionMin;
                 
                 setTimeout(() => {
-                    if(typeof stopPatrol === 'function') stopPatrol(true);
-
+                    stopPatrol(true);
                     try {
                         let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
                         audio.play();
@@ -660,9 +628,7 @@ let opacityValue = 0.95;
 
                    if (botSettings.autoAttack) {
                         let attackDelay = Math.floor(Math.random() * (botSettings.attackDelayMax - botSettings.attackDelayMin + 1)) + botSettings.attackDelayMin;
-                        setTimeout(() => {
-                            attackTarget(parseInt(id, 10));
-                        }, attackDelay);
+                        setTimeout(() => { attackTarget(parseInt(id, 10)); }, attackDelay);
                     }
                 }, reactionDelay);
                 return;
@@ -674,35 +640,31 @@ let opacityValue = 0.95;
     // E2 / KOLOSY: Zarządzanie Koordynatami
     // ==========================================
     window.saveCurrentCoordsForBoss = function(bossName) {
-        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return typeof heroAlert === 'function' ? heroAlert("Błąd: Nie można pobrać pozycji.") : alert("Błąd");
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return heroAlert("Błąd: Nie można pobrać pozycji.");
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
         bossSavedCoords[bossName] = { map: lastMapName, x: cx, y: cy };
         saveBossCoords(); updateUI();
-        if(typeof heroAlert === 'function') heroAlert(`✅ Pomyślnie zapisano koordynaty dla ${bossName}!\n\nMapa: ${lastMapName}\nKratka: [${cx}, ${cy}]`);
+        heroAlert(`✅ Pomyślnie zapisano koordynaty dla ${bossName}!\n\nMapa: ${lastMapName}\nKratka: [${cx}, ${cy}]`);
     };
 
     window.editBossCoords = function(bossName) {
         let currentData = bossSavedCoords[bossName]; if (!currentData) return;
-        if(typeof heroPrompt === 'function') {
-            heroPrompt(`Edytuj oś X dla ${bossName}:`, currentData.x, (newX) => {
-                if(newX !== null && newX !== "") {
-                    heroPrompt(`Edytuj oś Y dla ${bossName}:`, currentData.y, (newY) => {
-                        if(newY !== null && newY !== "") {
-                            bossSavedCoords[bossName].x = parseInt(newX); bossSavedCoords[bossName].y = parseInt(newY);
-                            saveBossCoords(); updateUI(); heroAlert(`Zaktualizowano kordy dla ${bossName}: [${newX}, ${newY}]`);
-                        }
-                    });
-                }
-            });
-        }
+        heroPrompt(`Edytuj oś X dla ${bossName}:`, currentData.x, (newX) => {
+            if(newX !== null && newX !== "") {
+                heroPrompt(`Edytuj oś Y dla ${bossName}:`, currentData.y, (newY) => {
+                    if(newY !== null && newY !== "") {
+                        bossSavedCoords[bossName].x = parseInt(newX); bossSavedCoords[bossName].y = parseInt(newY);
+                        saveBossCoords(); updateUI(); heroAlert(`Zaktualizowano kordy dla ${bossName}: [${newX}, ${newY}]`);
+                    }
+                });
+            }
+        });
     };
 
     window.deleteBossCoords = function(bossName) {
-        if(typeof heroConfirm === 'function') {
-            heroConfirm(`Czy na pewno usunąć zapisane koordynaty dla bosa:\n${bossName}?`, (res) => {
-                if(res) { delete bossSavedCoords[bossName]; saveBossCoords(); updateUI(); }
-            });
-        }
+        heroConfirm(`Czy na pewno usunąć zapisane koordynaty dla bosa:\n${bossName}?`, (res) => {
+            if(res) { delete bossSavedCoords[bossName]; saveBossCoords(); updateUI(); }
+        });
     };
 
     window.toggleBossCoordPicker = function(bossName) {
@@ -806,8 +768,7 @@ let opacityValue = 0.95;
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
             rushInterval = setTimeout(checkRushArrival, 500);
-        } else if (ZAKONNICY && ZAKONNICY[currentSysMap] && typeof handleTeleportNPC === 'function') {
-             // Sprawdzamy czy kolejny krok to teleport
+        } else if (typeof ZAKONNICY !== 'undefined' && ZAKONNICY[currentSysMap]) {
              if(botSettings.unlockedTeleports && botSettings.unlockedTeleports[nextMap]) {
                  handleTeleportNPC(nextMap);
              } else {
@@ -860,7 +821,6 @@ let opacityValue = 0.95;
                     }
                 }
             }
-            // ZAKONNICY object is defined in Part 1
             if (typeof ZAKONNICY !== 'undefined' && botSettings.useTeleports && ZAKONNICY[node]) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && !visited.has(tpMap) && tpMap !== node) {
@@ -895,6 +855,7 @@ let opacityValue = 0.95;
             nextAllowedClickTime = Date.now() + throttleDelay;
         }
     }
+
     // ==========================================
     // OBSŁUGA TELEPORTÓW (ZAKONNICY)
     // ==========================================
@@ -952,7 +913,7 @@ let opacityValue = 0.95;
                     if (closeOptIndex !== -1) {
                         simulateKeyPress(getOptionKey(options[closeOptIndex], closeOptIndex));
                     }
-                    if(typeof stopPatrol === 'function') stopPatrol(false);
+                    stopPatrol(false);
                     return;
                 }
 
@@ -1001,7 +962,7 @@ let opacityValue = 0.95;
         }
         checkedPoints.clear();
         clearTimeout(smoothPatrolInterval);
-        if(typeof renderCordsList === 'function') renderCordsList(-1);
+        renderCordsList(-1);
 
         if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
             try {
@@ -1067,7 +1028,7 @@ let opacityValue = 0.95;
                         if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
                         safeGoTo(targetX, targetY, false);
                         return;
-                    } else if (ZAKONNICY && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports && botSettings.unlockedTeleports[immediateNextMap]) {
+                    } else if (typeof ZAKONNICY !== 'undefined' && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports && botSettings.unlockedTeleports[immediateNextMap]) {
                         handleTeleportNPC(immediateNextMap);
                         return;
                     }
@@ -1075,16 +1036,16 @@ let opacityValue = 0.95;
 
                 stopPatrol(true);
                 let fallbackMissing = path ? path[1] : finalDestinationMap;
-                if(typeof heroAlert === 'function') heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy (wyjścia/powroty z podziemi). Kliknij 🎥 Nagrywam i przejdź tam!`);
+                heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy (wyjścia/powroty z podziemi). Kliknij 🎥 Nagrywam i przejdź tam!`);
                 return;
             }
 
             checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true); 
-            if(typeof heroAlert === 'function') heroAlert("✅ Trasa zrobiona!"); 
+            heroAlert("✅ Trasa zrobiona!"); 
             return;
         }
 
-        if(typeof renderCordsList === 'function') renderCordsList(patrolIndex);
+        renderCordsList(patrolIndex);
         let target = currentCordsList[patrolIndex];
         safeGoTo(target[0], target[1], true);
         stuckCount = 0; clearTimeout(smoothPatrolInterval);
@@ -1108,7 +1069,7 @@ let opacityValue = 0.95;
         }
 
         let target = currentCordsList[patrolIndex];
-        if(!target) return; // Zabezpieczenie
+        if(!target) return;
         
         let dist = Math.abs(cx - target[0]) + Math.abs(cy - target[1]);
 
@@ -1189,7 +1150,7 @@ let opacityValue = 0.95;
         if (added) {
             saveGateways();
             if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
-                if(typeof renderGatewaysDatabase === 'function') renderGatewaysDatabase();
+                renderGatewaysDatabase();
             }
         }
     }
@@ -1199,10 +1160,8 @@ let opacityValue = 0.95;
         let currentName = Engine.map.d.name;
         if (!currentName || currentName === "undefined") return;
 
-        if(typeof updateSuitableBosses === 'function') {
-            updateSuitableBosses('e2SuitableContainer', 'e2Search', typeof elityIIData !== 'undefined' ? elityIIData : [], '#ba68c8');
-            updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', typeof kolosyData !== 'undefined' ? kolosyData : [], '#ff7043');
-        }
+        updateSuitableBosses('e2SuitableContainer', 'e2Search', typeof elityIIData !== 'undefined' ? elityIIData : [], '#ba68c8');
+        updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', typeof kolosyData !== 'undefined' ? kolosyData : [], '#ff7043');
 
         if (currentName !== lastMapName) {
             window.lastLoggedMap = "";
@@ -1282,20 +1241,20 @@ let opacityValue = 0.95;
                     updateUI();
 
                     setTimeout(() => {
-                        if(currentCordsList.length > 0 && typeof optimizeRoute === 'function') optimizeRoute();
-                        if(typeof renderCordsList === 'function') renderCordsList();
+                        if(currentCordsList.length > 0) optimizeRoute();
+                        renderCordsList();
                     }, 200);
 
                 } else {
                     currentCordsList = [];
                     checkedPoints.clear();
-                    if(typeof renderCordsList === 'function') renderCordsList();
+                    renderCordsList();
                     updateUI();
                 }
             } else if (document.getElementById('heroModeToggle') && !document.getElementById('heroModeToggle').classList.contains('active-tab')) {
                  currentCordsList = [];
                  checkedPoints.clear();
-                 if(typeof renderCordsList === 'function') renderCordsList();
+                 renderCordsList();
                  updateUI();
             }
 
@@ -1565,8 +1524,8 @@ let opacityValue = 0.95;
             }
             window.mapClearTimes = {};
             saveSettings();
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-            if(typeof heroAlert === 'function') heroAlert(`✅ Załadowano i NADPISANO trasę: ${p.name}\nAutomatycznie ustawiono poziom potworów na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
+            renderExpMaps();
+            heroAlert(`✅ Załadowano i NADPISANO trasę: ${p.name}\nAutomatycznie ustawiono poziom potworów na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
         }
     };
 
@@ -1590,8 +1549,8 @@ let opacityValue = 0.95;
                 if (maxInput) maxInput.value = botSettings.exp.maxLvl;
             }
             saveSettings();
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-            if(typeof heroAlert === 'function') heroAlert(`➕ DOŁĄCZONO do obecnej trasy: ${p.name}\nZakres potworów został poszerzony i wynosi teraz: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
+            renderExpMaps();
+            heroAlert(`➕ DOŁĄCZONO do obecnej trasy: ${p.name}\nZakres potworów został poszerzony i wynosi teraz: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
         }
     };
 
@@ -1601,7 +1560,7 @@ let opacityValue = 0.95;
         if (!botSettings.exp.mapOrder.includes(m)) {
             botSettings.exp.mapOrder.push(m);
             localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            renderExpMaps();
         }
     };
 
@@ -1623,31 +1582,30 @@ let opacityValue = 0.95;
                 let cleanName = tName.split(" .")[0].trim();
                 if (cleanName && cleanName !== currMap && !botSettings.exp.mapOrder.includes(cleanName)) {
                     botSettings.exp.mapOrder.push(cleanName);
-                    if (gw.x !== undefined && gw.y !== undefined && typeof window.saveGatewayToDB === 'function') window.saveGatewayToDB(currMap, cleanName, gw.x, gw.y);
+                    if (gw.x !== undefined && gw.y !== undefined) saveGatewayToDB(currMap, cleanName, gw.x, gw.y);
                     added++;
                 }
             }
         }
         if (added > 0) { 
             localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); 
-            if (typeof window.renderExpMaps === 'function') window.renderExpMaps(); 
+            renderExpMaps(); 
             window.logExp(`Dodano ${added} map!`, "#4caf50"); 
         }
     };
 
     window.removeExpMap = (index) => {
-        if(typeof heroConfirm === 'function') {
-            heroConfirm(`Usunąć mapę ze ścieżki expowiska?`, (res) => {
-                if (res) { botSettings.exp.mapOrder.splice(index, 1); localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); window.renderExpMaps(); }
-            });
-        }
+        heroConfirm(`Usunąć mapę ze ścieżki expowiska?`, (res) => {
+            if (res) { botSettings.exp.mapOrder.splice(index, 1); localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); renderExpMaps(); }
+        });
     };
 
     window.clearExpMaps = () => {
         botSettings.exp.mapOrder = [];
         localStorage.setItem('exp_map_order_v64', '[]');
-        if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+        renderExpMaps();
     };
+
     // ==========================================
     // RENDEROWANIE LIST (Kordy, Bossy, Trasy)
     // ==========================================
@@ -1912,7 +1870,7 @@ let opacityValue = 0.95;
     // INTERFEJS UŻYTKOWNIKA (UI) & STYLIZACJA
     // ==========================================
     function initGUI() {
-        if(document.getElementById('heroNavGUI')) return; // Zabezpieczenie przed wielokrotnym odpaleniem
+        if(document.getElementById('heroNavGUI')) return; 
 
         const style = document.createElement('style');
         style.innerHTML = `
@@ -1975,6 +1933,7 @@ let opacityValue = 0.95;
         let recIcon = botSettings.isRecording ? '⏹' : '🎥';
         let recText = botSettings.isRecording ? 'Nagrywam' : 'Nagraj';
 
+        
         const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
         mainGui.innerHTML = `
             <div class="gui-header">
@@ -2450,3 +2409,7 @@ let opacityValue = 0.95;
     }
 
 })(); // Koniec kodu całego skryptu!
+
+
+      
+ 
