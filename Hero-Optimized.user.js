@@ -42,14 +42,15 @@
 
     loadCombatModule();
 
-   // WBUDOWANY MODUŁ TELEPORTACJI (Pełne wsparcie dla Nowego Interfejsu - NI)
+// WBUDOWANY MODUŁ TELEPORTACJI (Z systemem ludzkiego klikania)
     const HeroTeleportModule = {
+        isClicking: false, // Flaga zapobiegająca dublowaniu akcji
+
         processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
-            
-            // Szukamy WSZYSTKICH możliwych wariantów odpowiedzi (wspiera NI oraz SI)
+            if (this.isClicking) return; // Jeśli bot właśnie "odlicza" w głowie do kliknięcia, nie przerywaj mu
+
             let options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
 
-            // Jeśli nie widzi żadnych opcji = okno jest zamknięte. Otwieramy je!
             if (options.length === 0) {
                 console.log("%c[HERO] Szukam Zakonnika w pobliżu...", "color: yellow;");
                 let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
@@ -68,7 +69,6 @@
 
                 if (zakonnikId) {
                     console.log(`%c[HERO] Znalazłem Zakonnika (ID: ${zakonnikId}). Wymuszam rozmowę!`, "color: #4caf50; font-weight: bold;");
-                    // Bezpośrednie wymuszenie dialogu
                     if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
                     else if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
                 } else {
@@ -79,20 +79,27 @@
                 return;
             }
 
-            // Jeśli dotarliśmy tutaj, to znaczy że opcje SĄ na ekranie!
-            
-            // 1. Sprawdzamy czy to początek rozmowy (wybór opcji "teleportować")
+            // FUNKCJA WEWNĘTRZNA: Losowe opóźnienie "Ludzkie" (od 500ms do 1300ms)
+            const humanClick = (element, nextStepFunction) => {
+                this.isClicking = true;
+                let humanDelay = Math.floor(Math.random() * (1300 - 500 + 1)) + 500;
+                
+                setTimeout(() => {
+                    if (typeof element.click === 'function') element.click(); 
+                    else {
+                        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                    }
+                    this.isClicking = false;
+                    if (nextStepFunction) nextStepFunction();
+                }, humanDelay);
+            };
+
+            // 1. Sprawdzamy czy to początek rozmowy
             let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleport"));
             if (startOpt) {
-                console.log(`%c[HERO] Klikam: ${startOpt.innerText.trim()}`, "color: #00acc1;");
-                
-                // Solidne kliknięcie wspierające każdy interfejs
-                if (typeof startOpt.click === 'function') startOpt.click(); 
-                else {
-                    startOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                    startOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-                }
-                retryCallback();
+                console.log(`%c[HERO] Czekam naturalnie, aby kliknąć: ${startOpt.innerText.trim()}`, "color: #00acc1;");
+                humanClick(startOpt, retryCallback);
                 return;
             }
 
@@ -103,36 +110,25 @@
                     console.log(`%c[HERO] Zablokowane! Brak zezwolenia do: ${targetMap}!`, "color: red; font-weight: bold;");
                     let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ") || el.innerText.toLowerCase().includes("niczego"));
                     if (closeOpt) {
-                        if (typeof closeOpt.click === 'function') closeOpt.click();
-                        else closeOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                        humanClick(closeOpt, stopCallback);
+                    } else {
+                        stopCallback();
                     }
-                    stopCallback(); 
                     return;
                 }
-                console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Przenoszę!`, "color: #4caf50; font-weight: bold;");
-                if (typeof destOpt.click === 'function') destOpt.click();
-                else {
-                    destOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                    destOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-                }
-                continueCallback(); 
+                console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Przenoszę z naturalnym opóźnieniem!`, "color: #4caf50; font-weight: bold;");
+                humanClick(destOpt, continueCallback);
                 return;
             } 
             
-            // 3. Jeśli miasta nie ma na liście, szukamy przycisku "Inne / Dalej"
+            // 3. Jeśli miasta nie ma na liście, klikamy dalej
             let moreOpt = options.find(el => el.innerText.toLowerCase().includes("inne") || el.innerText.toLowerCase().includes("dalej") || el.innerText.toLowerCase().includes("więcej"));
             if (moreOpt) {
-                console.log(`%c[HERO] Szukam miasta na kolejnej stronie...`, "color: #00acc1;");
-                if (typeof moreOpt.click === 'function') moreOpt.click();
-                else {
-                    moreOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                    moreOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-                }
-                retryCallback();
+                console.log(`%c[HERO] Zmieniam stronę u Zakonnika...`, "color: #00acc1;");
+                humanClick(moreOpt, retryCallback);
                 return;
             }
             
-            // Czekamy na załadowanie elementów
             retryCallback(); 
         }
     };
@@ -991,56 +987,43 @@ let opacityValue = 0.95;
 
 
 
-    function cleanOldGateways() {
-
+function cleanOldGateways() {
         let changed = false;
-
         for (let src in globalGateways) {
-
             for (let target in globalGateways[src]) {
-
-                if (target.includes(" .")) {
-
-                    let base = target.split(" .")[0];
-
-                    let gw = globalGateways[src][target];
-
-
-
-                    if (!globalGateways[src][base]) {
-
-                        globalGateways[src][base] = { x: gw.x, y: gw.y, allCoords: [[gw.x, gw.y]] };
-
-                    } else {
-
-                        if (!globalGateways[src][base].allCoords) globalGateways[src][base].allCoords = [[globalGateways[src][base].x, globalGateways[src][base].y]];
-
-                        let exists = globalGateways[src][base].allCoords.some(c => c[0]===gw.x && c[1]===gw.y);
-
-                        if (!exists) globalGateways[src][base].allCoords.push([gw.x, gw.y]);
-
-                    }
-
+                let gw = globalGateways[src][target];
+                let tp = ZAKONNICY[src];
+                
+                // AUTOMATYCZNE USUWANIE ZAKONNIKÓW Z BAZY BRAM
+                if (tp && gw && Math.abs(gw.x - tp.x) <= 2 && Math.abs(gw.y - tp.y) <= 2) {
                     delete globalGateways[src][target];
-
                     changed = true;
-
+                    continue;
                 }
 
+                if (target.includes(" .")) {
+                    let base = target.split(" .")[0];
+                    if (!globalGateways[src][base]) {
+                        globalGateways[src][base] = { x: gw.x, y: gw.y, allCoords: [[gw.x, gw.y]] };
+                    } else {
+                        if (!globalGateways[src][base].allCoords) globalGateways[src][base].allCoords = [[globalGateways[src][base].x, globalGateways[src][base].y]];
+                        let exists = globalGateways[src][base].allCoords.some(c => c[0]===gw.x && c[1]===gw.y);
+                        if (!exists) globalGateways[src][base].allCoords.push([gw.x, gw.y]);
+                    }
+                    delete globalGateways[src][target];
+                    changed = true;
+                }
             }
-
         }
-
         if (changed) saveGateways();
-
     }
 
-
-
     window.saveGatewayToDB = function(source, target, x, y) {
+        // Blokada przed ręcznym nagraniem Zakonnika
+        let tp = ZAKONNICY[source];
+        if (tp && Math.abs(x - tp.x) <= 2 && Math.abs(y - tp.y) <= 2) return;
 
         if (!globalGateways[source]) globalGateways[source] = {};
-
         let baseTarget = target.trim().split(" .")[0];
 
 
@@ -1568,14 +1551,13 @@ let attackInterval = null;
 
 
                 // Omijamy śmieci, powroty do miasta, "Wyjście" (domyślny tekst pustej bramy)
-
                 if (cleanName.length > 2 && cleanName !== currMap && cleanName !== "Wyjście") {
-
                     let px = gw.x;
-
                     let py = gw.y;
-
-
+                    
+                    // Zablokowanie auto-skanera przed czytaniem Zakonników
+                    let tp = ZAKONNICY[currMap];
+                    if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) continue;
 
                     if (px !== undefined && py !== undefined) {
 
@@ -5089,7 +5071,7 @@ window.renderMapOrderList = () => {
     // Globalna funkcja do zapisu teleportów
     window.toggleTeleportLock = function(city, isChecked) {
         botSettings.unlockedTeleports[city] = isChecked;
-        localStorage.setItem('hero_teleports_v64', JSON.stringify(botSettings.unlockedTeleports));
+        saveSettings(); // To wymusi solidny zapis w głównym jądrze bota!
     };
 
     window.renderTeleportOptions = function() {
