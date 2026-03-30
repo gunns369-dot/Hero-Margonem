@@ -2706,76 +2706,43 @@ window.handleTeleportNPC = function(targetMap) {
 
                         </div>
 
-                        <div style="display:flex; gap:5px; margin-top:5px;">
-
+                       <div style="display:flex; gap:5px; margin-top:5px;">
                             <button id="btnAutoRoute" class="btn btn-go-sepia" style="flex-grow:1;" onclick="openAutoRouteModal()">🪄 KREATOR TRASY</button>
-
-                            <button id="btnAddTransit" class="btn btn-sepia" style="width: auto;" title="Dodaj przejście">➕</button>
-
-                            <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; width: auto;" title="Zresetuj pętlę">🔁</button>
-
+                            <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; width: auto;" title="Zresetuj pętlę i przywróć z bazy">🔁 ZRESETUJ BAZĘ</button>
                         </div>
-
                     </div>
-
                     <div class="nav-row" style="margin-top: 10px; display: flex; flex-direction: column;"><label style="color:#d4af37;">Koordynaty (Zasięg: 7 kratek):</label><div id="cordsListContainer"></div></div>
-
                 </div>
-
-
 
                 <div id="e2Container" style="display:none; flex-direction:column; flex:1; min-height:0;">
-
                     <div id="e2SuitableContainer" style="background:rgba(156,39,176,0.1); border:1px solid #9c27b0; padding:6px; margin-bottom:8px; border-radius:2px;"><span style="color:#777; font-size:10px;">Ładowanie podpowiedzi levelowych...</span></div>
-
                     <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:5px;">
-
                         <label style="color:#9c27b0; font-weight:bold;">Baza Elit II (Spis tras):</label>
-
                         <input type="text" id="e2Search" placeholder="Szukaj..." style="width:100px; padding:2px; font-size:10px; background:#0f0f0f; border:1px solid #4a3f2b; color:#fff;">
-
                     </div>
-
                     <div id="e2ListContainer"></div>
-
                 </div>
-
-
 
                 <div id="kolosyContainer" style="display:none; flex-direction:column; flex:1; min-height:0;">
-
                     <div id="kolosySuitableContainer" style="background:rgba(230,74,25,0.1); border:1px solid #e64a19; padding:6px; margin-bottom:8px; border-radius:2px;"><span style="color:#777; font-size:10px;">Ładowanie podpowiedzi levelowych...</span></div>
-
                     <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:5px;">
-
                         <label style="color:#e64a19; font-weight:bold;">Baza Kolosów:</label>
-
                         <input type="text" id="kolosySearch" placeholder="Szukaj..." style="width:100px; padding:2px; font-size:10px; background:#0f0f0f; border:1px solid #4a3f2b; color:#fff;">
-
                     </div>
-
                     <div id="kolosyListContainer"></div>
-
                 </div>
 
-
-
                <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
-
-                    <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
-
+                    <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 250px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
                         <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
-
                     </div>
-
-
 
                   <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
     ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
 </div>
 <div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
     <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
-        <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj auto-atak serwerowy
+        <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj Berserka
     </label>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
         <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
@@ -2785,69 +2752,32 @@ window.handleTeleportNPC = function(targetMap) {
     </div>
     <div style="display:flex; justify-content: space-between; gap: 5px;">
         <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-        <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${botSettings.berserk?.minLvlOffset ?? -20}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+        <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
     </div>
 </div>
 
-
                     <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
-
                     <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:0;">
-
                         <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
-
                         <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
-
                     </div>
-
                     <input type="hidden" id="expRange" value="999">
-
                     <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px;">
-
                         <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
-
                         <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
-
                     </div>
-
                     <label style="color:#a99a75; font-size:11px; margin-top:2px;">Kolejność map na expowisku (Smart-Roam):</label>
-
                     <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
-
                     <div style="display:flex; gap:4px;">
-
                         <button class="btn-sepia" style="flex:1; padding:4px;" onclick="addCurrentMapToExp()" title="Dodaje tylko obecną mapę">➕ TĄ MAPĘ</button>
-
                         <button class="btn-sepia" style="flex:1; padding:4px; background:#00838f;" onclick="addNeighborsToExp()" title="Skanuje bramy i dodaje wszystkie sąsiadujące mapy!">🪄 SĄSIADÓW</button>
-
                         <button class="btn-sepia" style="background:#8e0000; width:50px; padding:4px;" onclick="clearExpMaps()">CZYŚĆ</button>
-
                     </div>
-
                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
-
                 </div>
-
                 <div id="expProfilesContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
-
-                    <div style="background:rgba(212, 175, 55, 0.1); border:1px solid #d4af37; padding:6px; margin-bottom:4px; border-radius:2px;">
-
-                        <span style="color:#d4af37; font-weight:bold; font-size:10px;">Zapisz obecną rotację map EXP:</span>
-
-                    </div>
-
-                    <input type="text" id="inpProfileName" placeholder="Nazwa (np. Wilki 50lvl)..." style="width:100%; padding:4px; background:#0f0f0f; color:#fff; border:1px solid #4a3f2b; font-size:11px;">
-
-                    <input type="text" id="inpProfileDesc" placeholder="Krótki opis (opcjonalnie)..." style="width:100%; padding:4px; background:#0f0f0f; color:#fff; border:1px solid #4a3f2b; font-size:11px;">
-
-                    <button class="btn-sepia" style="padding:6px; font-weight:bold;" onclick="saveCurrentExpProfile()">💾 ZAPISZ DO BAZY</button>
-
-
-
-                    <label style="color:#a99a75; font-size:11px; margin-top:8px;">Zapisane Expowiska:</label>
-
+                    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Zapisane Expowiska (Baza gry):</label>
                     <div id="expProfilesList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; padding:2px;"></div>
-
                     <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
 
                     <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
@@ -3212,8 +3142,7 @@ window.handleTeleportNPC = function(targetMap) {
         document.getElementById('berserkE2').addEventListener('change', (e) => { botSettings.berserk.e2 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
         document.getElementById('berserkHero').addEventListener('change', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); window.updateServerBerserk(); });
         document.getElementById('berserkMaxLvl').addEventListener('change', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value) || 100; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkMinLvl').addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = parseInt(e.target.value) || -20; saveSettings(); window.updateServerBerserk(); });
-
+        document.getElementById('berserkMinLvl').addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = -(parseInt(e.target.value) || 20); saveSettings(); window.updateServerBerserk(); });
 
 
         // ZAPISYWANIE USTAWIEŃ EXP
@@ -4657,236 +4586,119 @@ selHero.addEventListener('change', (e) => {
 
 
 
-        // --- SZUKANIE NAJLEPSZEGO CELU ---
-
+       // --- SZUKANIE NAJLEPSZEGO CELU ---
         let closestDist = 999;
-
         let closestTx = -1, closestTy = -1;
-
         let closestName = "";
-
         let closestId = null;
-
-
+        let isHeroMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0; // Detekcja chodu
 
         for (let id in npcs) {
-
             let n = npcs[id].d || npcs[id];
-
             if ((n.type === 2 || n.type === 3) && !n.dead) {
-
                 let lvl = parseInt(n.lvl) || 0;
-
                 if (lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
 
-
-
                 let wt = parseInt(n.wt) || 0;
-
                 if (wt === 0 && !botSettings.exp.normal) continue;
-
                 if (wt === 1 && !botSettings.exp.elite) continue;
-
                 if (wt >= 2) continue;
 
-
-
                 let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
-
                 if (dist < closestDist) {
-
                     closestDist = dist;
-
                     closestTx = n.x;
-
                     closestTy = n.y;
-
                     closestId = id;
-
                     closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : "Potwór";
-
                 }
-
             }
-
         }
 
-
-
         // --- DECYZJA LOGICZNA ---
-
         if (closestId && closestDist <= 999) {
-
             // 1. Zmiana celu, jeśli znaleźliśmy lepszy (bliższy) LUB dopiero go złapaliśmy
-
             if (!expCurrentTargetId || closestDist < currentTargetDist) {
-
                 if (expCurrentTargetId !== closestId) {
-
                     expCurrentTargetId = closestId;
-
-                    window.logExp(`Namierzono: ${closestName} (${closestDist}m)`, "#00e5ff");
-
+                    let m_lvl = npcs[closestId].d ? npcs[closestId].d.lvl : npcs[closestId].lvl;
+                    window.logExp(`Namierzono: ${closestName} (${m_lvl} lvl) [Kratek: ${closestDist}]`, "#00e5ff");
                     Engine.hero.autoGoTo({x: closestTx, y: closestTy});
-
-                    expLastActionTime = now + 400; // Krótki delay, żeby gra przetworzyła ścieżkę
-
+                    expLastActionTime = now + 800; // Większy delay aby ograniczyć spam klikań "idę!"
                     return;
-
                 }
-
             }
-
-
 
             // 2. Jeśli mamy cel i jesteśmy tuż obok (1 kratka odstępu = atak)
-
             if (expCurrentTargetId && currentTargetDist <= 1) {
-
-                let finalTx = npcs[expCurrentTargetId].d ? npcs[expCurrentTargetId].d.x : npcs[expCurrentTargetId].x;
-
-                let finalTy = npcs[expCurrentTargetId].d ? npcs[expCurrentTargetId].d.y : npcs[expCurrentTargetId].y;
-
-
-
-                // ZMIANA: Tylko wchodzimy na moba i nic nie klikamy.
-
-                // Silnik gry (wbudowany auto-fight) sam wyłapie kolizję i odpali walkę!
-
-                Engine.hero.autoGoTo({x: finalTx, y: finalTy});
-
-
-
-                // Zwiększamy opóźnienie do 1200ms, żeby dać grze czas na załadowanie
-
-                // okna bitwy i uniknąć spamu chodzenia w to samo miejsce.
-
-                expLastActionTime = now + 1200;
-
+                // Skoro jesteśmy przy potworze, wymuszamy samą interakcję z serwerem. 
+                // Zero sztucznego chodzenia w tę samą kratkę.
+                if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(expCurrentTargetId);
+                expLastActionTime = now + 1500; // Czekamy zablokowani, żeby serwer odpowiedział walką
                 return;
-
             }
 
-
-
-            // 3. Idziemy sobie spokojnie, cel jest ten sam i wciąż za daleko.
-
-            // Czekamy. Zero bezmyślnego spamu "autoGoTo"!
-
+            // 3. Idziemy spokojnie - zabezpieczenie przed zbędnymi logami
             return;
 
-
-
         } else {
-
             // --- SMART-ROAM (ZMIANA MAPY, GDY JEST CZYSTO) ---
-
             if (now < expMapTransitionCooldown) return;
-
             expCurrentTargetId = null;
 
-
-
             let maps = botSettings.exp.mapOrder;
-
             let currMap = Engine.map.d.name;
-
-
 
             if (maps.includes(currMap)) window.mapClearTimes[currMap] = Date.now();
 
-
-
             if (maps.length > 1) {
-
                 let oldestMap = maps[0];
-
                 let oldestTime = window.mapClearTimes[oldestMap] || 0;
 
-
-
                 for (let i = 1; i < maps.length; i++) {
-
                     let t = window.mapClearTimes[maps[i]] || 0;
-
                     if (t < oldestTime) {
-
                         oldestMap = maps[i];
-
                         oldestTime = t;
-
                     }
-
                 }
-
-
 
                 if (oldestMap === currMap) {
-
                     if (now - expMapTransitionCooldown > 3000) {
-
-                        window.logExp("Wszystkie mapy czyste. Czekam...", "#777");
-
+                        window.logExp("Wszystkie mapy czyste. Czekam na moby...", "#777");
                         expMapTransitionCooldown = now + 3000;
-
                     }
-
                     return;
-
                 }
-
-
 
                 let path = getShortestPath(currMap, oldestMap);
-
                 if (path && path.length > 1) {
-
                     let nextStepMap = path[1];
-
                     let door = globalGateways[currMap] && globalGateways[currMap][nextStepMap];
 
-
-
                     if (door) {
-
-                        window.logExp(`[Przejście] ➝ ${nextStepMap}`, "#ba68c8");
-
+                        // Jeśli postać JUŻ BIEGNIE, nie spamujemy konsoli przejściami
+                        if (!isHeroMoving) {
+                            window.logExp(`[Przejście] ➝ ${nextStepMap}`, "#ba68c8");
+                            Engine.hero.autoGoTo({x: door.x, y: door.y});
+                        }
                         expAntiLagTime = now + getAntiLagDelay();
-
-                        Engine.hero.autoGoTo({x: door.x, y: door.y});
-
                         expMapTransitionCooldown = now + 2000;
-
-                        expLastActionTime = now + 500;
-
+                        expLastActionTime = now + 1000;
                     } else {
-
                         expMapTransitionCooldown = now + 5000;
-
                     }
-
                 } else {
-
                     window.mapClearTimes[oldestMap] = Date.now();
-
                     expMapTransitionCooldown = now + 2000;
-
                 }
-
             } else {
-
                 if (now - expMapTransitionCooldown > 5000) {
-
-                    window.logExp("Wyczyszczono. Czekam na respawn...", "#777");
-
+                    window.logExp("Wyczyszczono expowisko. Czekam...", "#777");
                     expMapTransitionCooldown = now + 5000;
-
                 }
-
             }
-
         }
-
     }
 
 
@@ -4944,9 +4756,7 @@ selHero.addEventListener('change', (e) => {
             if(lvlMatch && lvlMatch[1]) {
 
                 let baseLvl = parseInt(lvlMatch[1]);
-
-                botSettings.exp.minLvl = Math.max(1, baseLvl - 15);
-
+                botSettings.exp.minLvl = Math.max(1, baseLvl - 5);
                 botSettings.exp.maxLvl = baseLvl + 15;
 
 
