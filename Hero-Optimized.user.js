@@ -1467,111 +1467,43 @@ let attackInterval = null;
 
     // ==========================================
 
+   // ==========================================
+    // AUTO-SKANER SILNIKA MARGONEM (Deep Engine Read)
+    // ==========================================
     function autoLearnGateways() {
-
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
-
         let currMap = Engine.map.d.name;
-
         if (!currMap) return;
 
-
-
-        let added = false;
-
-        if (!globalGateways[currMap]) globalGateways[currMap] = {};
-
-
-
-        // Silnik Margonem trzyma bramy w kilku miejscach w zależności od trybu (nowy interfejs / stary interfejs)
-
-        let gws = {};
-
-        if (Engine.map.gateways) gws = Engine.map.gateways;
-
-        if (Engine.map.d.gw && Object.keys(gws).length === 0) gws = Engine.map.d.gw;
-
-        if (typeof g !== 'undefined' && g.townname && Object.keys(gws).length === 0) gws = g.townname; // Stary silnik
-
-
-
-        // Skanowanie
-
-        for (let id in gws) {
-
-            let gw = gws[id].d || gws[id];
-
-
-
-            // Pobieramy nazwę, a jeśli gra ją ukrywa, próbujemy wyłuskać ją z okienka "Tooltip" bramy
-
-            let rawName = gw.name || gw.targetName || gw.title || "";
-
-
-
-            if (rawName && typeof rawName === 'string') {
-
-                // Usuwamy znaczniki (często są tam ramki, kolory, napisy "Przejście do:")
-
-                let cleanName = rawName.replace(/<[^>]*>?/gm, '').replace("Przejście do: ", "").replace("Przejście do ", "").split(" .")[0].trim();
-
-
-
-                // Omijamy śmieci, powroty do miasta, "Wyjście" (domyślny tekst pustej bramy)
-                if (cleanName.length > 2 && cleanName !== currMap && cleanName !== "Wyjście") {
-                    let px = gw.x;
-                    let py = gw.y;
-                    
-                    // Zablokowanie auto-skanera przed czytaniem Zakonników
-                    let tp = ZAKONNICY[currMap];
-                    if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) continue;
-
-                    if (px !== undefined && py !== undefined) {
-
-                        if (!globalGateways[currMap][cleanName]) {
-
-                            globalGateways[currMap][cleanName] = { x: px, y: py, allCoords: [[px, py]] };
-
-                            added = true;
-
-                        } else {
-
-                            let exists = globalGateways[currMap][cleanName].allCoords.some(c => c[0] === px && c[1] === py);
-
-                            if (!exists) {
-
-                                globalGateways[currMap][cleanName].allCoords.push([px, py]);
-
-                                added = true;
-
-                            }
-
-                        }
-
+        // Używamy modułu z zewnątrz, o ile zdążył się załadować z GitHuba
+        if (typeof window.HeroScannerModule !== 'undefined') {
+            let foundGateways = window.HeroScannerModule.scanCurrentMap(currMap, ZAKONNICY);
+            let added = false;
+            
+            foundGateways.forEach(gw => {
+                if (!globalGateways[currMap]) globalGateways[currMap] = {};
+                
+                if (!globalGateways[currMap][gw.targetMap]) {
+                    globalGateways[currMap][gw.targetMap] = { x: gw.x, y: gw.y, allCoords: [[gw.x, gw.y]] };
+                    added = true;
+                } else {
+                    // Dodawanie kolejnych kratek (drzwi potrafią zajmować kilka pól)
+                    let exists = globalGateways[currMap][gw.targetMap].allCoords.some(c => c[0] === gw.x && c[1] === gw.y);
+                    if (!exists) {
+                        globalGateways[currMap][gw.targetMap].allCoords.push([gw.x, gw.y]);
+                        added = true;
                     }
-
                 }
+            });
 
+            if (added) {
+                saveGateways();
+                if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
+                    renderGatewaysDatabase();
+                }
             }
-
         }
-
-
-
-        if (added) {
-
-            saveGateways();
-
-            if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
-
-                renderGatewaysDatabase();
-
-            }
-
-        }
-
     }
-
     function autoDetectEngineData() {
 
         if (!Engine || !Engine.map || !Engine.map.d) return;
@@ -3570,92 +3502,40 @@ selHero.addEventListener('change', (e) => {
 
 
 
-    function scanCurrentMapForGateways() {
-
+   function scanCurrentMapForGateways() {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return heroAlert("Brak danych mapy z silnika.");
-
         let currentMap = Engine.map.d.name;
-
         if (!currentMap) return;
 
-
-
-        let gatewaysFound = [];
-
-        let gws = {};
-
-        if (Engine.map.gateways) gws = Engine.map.gateways;
-
-        if (Engine.map.d.gw && Object.keys(gws).length === 0) gws = Engine.map.d.gw;
-
-
-
-        for (let id in gws) {
-
-            let gw = gws[id].d || gws[id];
-
-            let px = gw.x; let py = gw.y;
-
-            let tName = gw.name || gw.targetName || gw.title || "Ukryte przejście";
-
-            tName = tName.replace(/<[^>]*>?/gm, '').replace("Przejście do: ", "").split(" .")[0].trim();
-
-
-
-            if (px !== undefined && py !== undefined) {
-
-                gatewaysFound.push({x: px, y: py, name: tName});
-
-            }
-
+        if (typeof window.HeroScannerModule === 'undefined') {
+            return heroAlert("Moduł skanera z GitHuba jeszcze się ładuje lub został zablokowany przez przeglądarkę!");
         }
 
-
-
+        let gatewaysFound = window.HeroScannerModule.scanCurrentMap(currentMap, ZAKONNICY);
         let container = document.getElementById('gatewaysListContainer');
-
-        if (gatewaysFound.length === 0) return heroAlert("Skaner nie znalazł tu żadnych drzwi ani wejść do jaskiń.");
-
-
+        
+        if (gatewaysFound.length === 0) return heroAlert("Skaner nie znalazł tu żadnych nowych drzwi, domków ani wejść do jaskiń.");
 
         let header = document.createElement('div');
-
         header.innerHTML = `<br><span style="color:#ffb300; font-weight:bold; font-size:10px;">🔍 WYKRYTE PRZEZ SKANER (Obecna Mapa):</span>`;
-
         header.style.padding = "2px 5px"; header.style.background = "#1a1a1a";
-
         container.insertBefore(header, container.firstChild);
 
-
-
         gatewaysFound.forEach(gw => {
-
             let row = document.createElement('div');
-
             row.className = "list-item";
-
             row.style.borderLeft = "3px solid #ffb300";
-
             row.innerHTML = `
-
                 <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer;" onclick="goSinglePoint(${gw.x}, ${gw.y}, '${currentMap}')" title="Biegnij tam">
-
-                    <span style="color:#ffb300; font-weight:bold;">${gw.name}</span>
-
+                    <span style="color:#ffb300; font-weight:bold;">${gw.targetMap}</span>
                     <span style="color:#a99a75;">Stoi na: X: ${gw.x}, Y: ${gw.y}</span>
-
                 </div>
-
-                <button class="btn-sepia" onclick="saveGatewayToDB('${currentMap}', '${gw.name}', ${gw.x}, ${gw.y}); heroAlert('Zapisano pomyślnie!');">Zapisz Cel</button>
-
+                <button class="btn-sepia" onclick="saveGatewayToDB('${currentMap}', '${gw.targetMap}', ${gw.x}, ${gw.y}); heroAlert('Zapisano pomyślnie!');">Zapisz Cel</button>
             `;
-
             container.insertBefore(row, header.nextSibling);
-
         });
-
-        heroAlert(`Skaner wykrył ${gatewaysFound.length} przejść na mapie. Zobaczysz je na samej górze panelu.`);
-
+        
+        heroAlert(`Pomyślnie użyto zewnętrznego modułu skanera.\nZnaleziono: ${gatewaysFound.length} wejść na mapie. Zobaczysz je na samej górze panelu.`);
     }
 
 
