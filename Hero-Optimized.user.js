@@ -1578,7 +1578,7 @@ let attackInterval = null;
             addedOrUpdated = true;
         }
     } // 🔥 TEGO BRAKOWAŁO
-});
+};
 
         if (addedOrUpdated) {
             saveGateways();
