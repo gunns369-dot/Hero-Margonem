@@ -2875,7 +2875,7 @@ mainGui.innerHTML = `
 
 
 
-  function setupLogic() {
+ function setupLogic() {
 
     const tabs = ['hero', 'e2', 'kolosy', 'exp', 'teleports'];
 
