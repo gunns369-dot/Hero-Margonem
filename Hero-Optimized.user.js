@@ -1545,14 +1545,7 @@ let attackInterval = null;
 
 // ==========================================
 
-    // AUTO-SKANER SILNIKA MARGONEM (Deep Engine Read)
-
-    // ==========================================
-
-   // ==========================================
-    // AUTO-SKANER SILNIKA MARGONEM (Deep Engine Read)
-    // ==========================================
-   // ==========================================
+// ==========================================
     // AUTO-SKANER SILNIKA MARGONEM (Deep Engine Read - Grupujący wejścia)
     // ==========================================
     function autoLearnGateways() {
@@ -1591,8 +1584,6 @@ let attackInterval = null;
             saveGateways();
             updateUI(); // Odświeżenie bazy na żywo
         }
-     }
-     }
     }
     function autoDetectEngineData() {
 
