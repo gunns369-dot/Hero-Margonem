@@ -980,6 +980,7 @@ let opacityValue = 0.95;
             loadData();
             cleanOldGateways();
             initGUI();
+        setupGoToSearch();
             setInterval(autoDetectEngineData, 800);
             setInterval(heroPositionTracker, 100);
             setInterval(radarLoop, 150);
@@ -1072,6 +1073,9 @@ function rebuildMissingHeroRoutes(forceAll = false) {
             renderGatewaysDatabase();
 
         }
+        if (document.getElementById('recommendedExpList')) {
+    renderRecommendedExpMaps();
+}
 
         if (document.getElementById('heroMapListContainer') && document.getElementById('heroMapListContainer').parentElement.style.display !== 'none') {
 
@@ -2279,7 +2283,80 @@ window.handleTeleportNPC = function(targetMap) {
 
     }
 
+function getAllKnownMaps() {
+    const set = new Set();
 
+    for (const hero in heroData) {
+        Object.keys(heroData[hero] || {}).forEach(m => set.add(m));
+    }
+
+    elityIIData.forEach(e => (e.path || []).forEach(m => set.add(m)));
+    kolosyData.forEach(e => (e.path || []).forEach(m => set.add(m)));
+
+    return [...set].sort((a, b) => a.localeCompare(b, 'pl'));
+}
+
+function renderGoToSuggestions(filter = "") {
+    const box = document.getElementById('goToSuggestions');
+    if (!box) return;
+
+    const allMaps = getAllKnownMaps();
+    const q = (filter || "").trim().toLowerCase();
+
+    const filtered = q
+        ? allMaps.filter(m => m.toLowerCase().includes(q)).slice(0, 40)
+        : allMaps.slice(0, 20);
+
+    if (filtered.length === 0) {
+        box.innerHTML = '<div style="padding:6px; color:#777; text-align:center;">Brak wyników</div>';
+        return;
+    }
+
+    box.innerHTML = filtered.map(mapName => `
+        <div class="list-item" style="cursor:pointer;" onclick="window.goToSelectedMap('${mapName.replace(/'/g, "\\'")}')">
+            <span style="color:#d4af37;">${mapName}</span>
+        </div>
+    `).join('');
+}
+
+window.goToSelectedMap = function(mapName) {
+    const input = document.getElementById('inpGoToMap');
+    if (input) input.value = mapName;
+    const box = document.getElementById('goToSuggestions');
+    if (box) box.style.display = 'none';
+
+    window.rushToMap(mapName);
+};
+
+function setupGoToSearch() {
+    const input = document.getElementById('inpGoToMap');
+    const box = document.getElementById('goToSuggestions');
+    const btn = document.getElementById('btnGoToMap');
+
+    if (!input || !box || !btn) return;
+
+    input.addEventListener('input', () => {
+        box.style.display = 'block';
+        renderGoToSuggestions(input.value);
+    });
+
+    input.addEventListener('focus', () => {
+        box.style.display = 'block';
+        renderGoToSuggestions(input.value);
+    });
+
+    btn.addEventListener('click', () => {
+        const mapName = (input.value || "").trim();
+        if (!mapName) return heroAlert("Wpisz nazwę mapy.");
+        window.rushToMap(mapName);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!box.contains(e.target) && e.target !== input) {
+            box.style.display = 'none';
+        }
+    });
+}
 
     // ==========================================
 
@@ -2447,8 +2524,6 @@ window.handleTeleportNPC = function(targetMap) {
 
                 <div id="expModeToggle" class="nav-tab">⚔️ EXP</div>
 
-                <div id="expProfilesModeToggle" class="nav-tab">🔖 BAZA</div>
-
                 <div id="teleportsModeToggle" class="nav-tab">🚀 TELEPORTY</div>
 
             </div>
@@ -2478,7 +2553,14 @@ window.handleTeleportNPC = function(targetMap) {
                 <div class="location-wrapper" style="margin-top: 8px;">
 
                     <span class="location-label">Stoisz na:</span>
-
+<div class="nav-row" style="margin-top:6px; position:relative; flex-direction:column; align-items:stretch;">
+    <label style="color:#00acc1; margin-bottom:4px;">IDŹ NA:</label>
+    <div style="display:flex; gap:4px;">
+        <input type="text" id="inpGoToMap" placeholder="Wpisz nazwę mapy..." style="flex:1;">
+        <button id="btnGoToMap" class="btn btn-go-sepia" style="width:70px;">IDŹ</button>
+    </div>
+    <div id="goToSuggestions" style="display:none; max-height:160px; overflow-y:auto; margin-top:4px; border:1px solid #3a3020; background:#000; padding:2px;"></div>
+</div>
                     <span id="currentMapNameDisplay">Ładowanie...</span>
 
                 </div>
@@ -2791,7 +2873,7 @@ window.handleTeleportNPC = function(targetMap) {
 
         // ZAKŁADKI (TABS)
 
-       const tabs = ['hero', 'e2', 'kolosy', 'exp', 'expProfiles', 'teleports'];
+       const tabs = ['hero', 'e2', 'kolosy', 'exp', 'teleports'];
 
         tabs.forEach(tab => {
 
@@ -2813,8 +2895,6 @@ window.handleTeleportNPC = function(targetMap) {
 
                     document.getElementById('expContainer').style.display = tab === 'exp' ? 'flex' : 'none';
 
-                    document.getElementById('expProfilesContainer').style.display = tab === 'expProfiles' ? 'flex' : 'none';
-
                     document.getElementById('teleportsContainer').style.display = tab === 'teleports' ? 'flex' : 'none';
 
                     if (tab === 'teleports') renderTeleportOptions();
@@ -2828,8 +2908,10 @@ window.handleTeleportNPC = function(targetMap) {
                     activeBossTarget = null;
 
                     if(tab === 'exp' && typeof renderExpMaps === 'function') renderExpMaps();
-
-                    if(tab === 'expProfiles' && typeof renderExpProfiles === 'function') renderExpProfiles();
+if(tab === 'exp') {
+    if (typeof renderExpProfiles === 'function') renderExpProfiles();
+    renderRecommendedExpMaps();
+}
 
                 });
 
@@ -3113,9 +3195,6 @@ selHero.addEventListener('change', (e) => {
         document.getElementById('btnResetRoute').addEventListener('click', () => { heroConfirm("Zresetować pętlę i zacząć od nowa?", (res) => { if(res) { checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); autoDetectEngineData(); updateUI(); }}); });
 
       
-        document.getElementById('btnRecordRouteToggle').addEventListener('click', function() { botSettings.isRecording = !botSettings.isRecording; saveSettings(); let btn = this; let iconSpan = btn.querySelector('.btn-icon'); let textSpan = btn.querySelector('#txtRecBtn'); if(botSettings.isRecording) { btn.style.borderColor = '#e53935'; btn.style.color = '#ff5252'; iconSpan.innerText = '⏹'; textSpan.innerText = 'Nagrywam'; heroAlert("🔴 Nagrywanie Smart Memory WŁĄCZONE.\nSkrypt przechwyci każdą użytą bramę i zapisze do bazy."); } else { btn.style.borderColor = '#a99a75'; btn.style.color = '#e0d8c0'; iconSpan.innerText = '🎥'; textSpan.innerText = 'Nagraj'; heroAlert("⚪ Nagrywanie WYŁĄCZONE."); } });
-
-
 
         document.getElementById('btnStartStop').addEventListener('click', () => {
 
@@ -4939,7 +5018,37 @@ window.renderMapOrderList = () => {
         }).join('');
 
     };
+function renderRecommendedExpMaps() {
+    const container = document.getElementById('recommendedExpList');
+    if (!container) return;
+    if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) {
+        container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak danych o poziomie.</div>';
+        return;
+    }
 
+    const lvl = Engine.hero.d.lvl;
+    const minLvl = lvl - 5;
+    const maxLvl = lvl + 15;
+
+    const matches = (botSettings.expProfiles || [])
+        .filter(p => {
+            const m = (p.name || "").match(/(\d+)\s*lvl/i);
+            if (!m) return false;
+            const req = parseInt(m[1], 10);
+            return req >= minLvl && req <= maxLvl;
+        });
+
+    if (matches.length === 0) {
+        container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak polecanych expowisk.</div>';
+        return;
+    }
+
+    container.innerHTML = matches.map(p => `
+        <div class="list-item">
+            <span style="color:#8bc34a;">${p.name}</span>
+        </div>
+    `).join('');
+}
     window.renderExpMaps = () => {
 
         let c = document.getElementById('expMapList'); if (!c) return;
