@@ -918,7 +918,7 @@ let opacityValue = 0.95;
 
     function checkVisionRange() {
 
-        if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
+        if (typeof Engine === 'undefined' || !isPatrolling || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
 
 
 
@@ -968,8 +968,14 @@ let opacityValue = 0.95;
 
     // ==========================================
 
-   const bootloader = setInterval(() => {
-        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.map && Engine.map.d && Engine.map.d.id) {
+  const bootloader = setInterval(() => {
+    if (
+        typeof Engine !== 'undefined' &&
+        Engine.hero &&
+        Engine.hero.d &&
+        Engine.map &&
+        Engine.map.d
+    ) {
             clearInterval(bootloader);
             loadData();
             cleanOldGateways();
@@ -1489,7 +1495,7 @@ let attackInterval = null;
 
     window.toggleBossCoordPicker = function(bossName) {
 
-        if (!Engine || !Engine.map) return;
+        if (typeof Engine === 'undefined' || !Engine.map) return;
 
         activeBossTarget = bossName;
 
@@ -1529,7 +1535,7 @@ let attackInterval = null;
 
         let container = document.getElementById(containerId);
 
-        if (!container || !Engine || !Engine.hero) return;
+        if (typeof Engine === 'undefined' || !container || !Engine.hero) return;
 
 
 
