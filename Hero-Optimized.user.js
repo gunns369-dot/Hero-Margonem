@@ -1591,7 +1591,8 @@ let attackInterval = null;
             saveGateways();
             updateUI(); // Odświeżenie bazy na żywo
         }
-    }
+     }
+     }
     }
     function autoDetectEngineData() {
 
