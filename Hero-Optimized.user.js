@@ -12,13 +12,54 @@
 (function() {
     'use strict';
 
-   // WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - Zabezpieczony przed SyntaxError)
+   // WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - z Twoją metodą NI)
     const HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
             let foundGateways = [];
             let processedCoords = new Set();
-            let gwsObj = {};
             
+            // 1. GŁÓWNA METODA DLA NOWEGO INTERFEJSU (Zbudowana na Twoim kodzie)
+            if (typeof Engine !== 'undefined' && Engine.map && typeof Engine.map.getGateways === 'function') {
+                try {
+                    let list = Engine.map.getGateways().getList();
+                    list.forEach(g => {
+                        if (!g || !g.d) return;
+                        
+                        let px = g.rx !== undefined ? g.rx : g.d.x;
+                        let py = g.ry !== undefined ? g.ry : g.d.y;
+                        
+                        if (px === undefined || py === undefined) return;
+
+                        // Ignorowanie Zakonników
+                        let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
+                        if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) return;
+
+                        let coordKey = px + "_" + py;
+                        if (processedCoords.has(coordKey)) return; 
+                        processedCoords.add(coordKey);
+
+                        // Wyciąganie nazwy (Twoja metoda z tooltipa)
+                        let rawName = (g.tip && g.tip[0]) ? g.tip[0] : (g.d.name || g.d.targetName || "");
+                        let cleanName = rawName.toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
+                        
+                        if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
+                            cleanName = `Wejście [${px}, ${py}]`;
+                        }
+
+                        if (cleanName !== currentMapName && !cleanName.includes("Brak")) {
+                            foundGateways.push({ x: px, y: py, targetMap: cleanName });
+                        }
+                    });
+                    
+                    // Jeśli znaleźliśmy przejścia Twoją metodą, natychmiast je zwracamy
+                    if (foundGateways.length > 0) return foundGateways; 
+                } catch(e) {
+                    console.log("%c[HERO] Skaner NI zawiódł, przechodzę do trybu zapasowego...", "color: orange;");
+                }
+            }
+
+            // 2. METODA ZAPASOWA DLA STAREGO INTERFEJSU (SI)
+            let gwsObj = {};
             if (typeof Engine !== 'undefined' && Engine.map) {
                 if (Engine.map.gateways) gwsObj = Engine.map.gateways;
                 else if (Engine.map.d && Engine.map.d.gw) gwsObj = Engine.map.d.gw;
@@ -40,16 +81,13 @@
                 let px = data.x; let py = data.y;
                 if (px === undefined || py === undefined) return;
 
-                // Ignorowanie Zakonników
                 let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
                 if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) return;
 
-                // Blokada dublikatów
                 let coordKey = px + "_" + py;
                 if (processedCoords.has(coordKey)) return; 
                 processedCoords.add(coordKey);
 
-                // Wyciąganie nazwy
                 let rawName = data.name || data.targetName || data.title || data.tooltip || "";
                 let cleanName = rawName.toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
                 
