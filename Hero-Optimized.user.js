@@ -1578,7 +1578,7 @@ let attackInterval = null;
             addedOrUpdated = true;
         }
     } // 🔥 TEGO BRAKOWAŁO
-};
+});
 
         if (addedOrUpdated) {
             saveGateways();
@@ -2107,44 +2107,6 @@ window.handleTeleportNPC = function(targetMap) {
     }
 
 
-
-    function rescheduleTeleportCheck(targetMap) {
-
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-    }
-
-
-
-    function rescheduleTeleportCheck(targetMap) {
-
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-    }
-
-
-
-    function rescheduleTeleportCheck(targetMap) {
-
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-    }
-
-
-
-    function rescheduleTeleportCheck(targetMap) {
-
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-
-    }
 
 
 
