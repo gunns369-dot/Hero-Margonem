@@ -322,8 +322,14 @@ let opacityValue = 0.95;
         "Eder": {x: 26, y: 40}
   };
   // ==========================================
-    // USTAWIENIA I ZMIENNE STANU
+    // ZMIENNE GLOBALNE I USTAWIENIA
     // ==========================================
+    let currentCordsList = [];
+    let globalGateways = {};
+    let heroMapOrder = {};
+    let bossSavedCoords = JSON.parse(localStorage.getItem('hero_boss_coords_v64') || localStorage.getItem('hero_e2_coords_v62') || '{}');
+    let opacityValue = 0.95;
+
     let botSettings = {
         radarEnabled: true, autoAttack: false,
         reactionMin: 400, reactionMax: 900,
@@ -353,14 +359,12 @@ let opacityValue = 0.95;
     let checkedMapsThisSession = new Set(JSON.parse(sessionStorage.getItem('hero_checked_maps') || '[]'));
     let heroFoundAlerted = false;
 
-    // Stan biegu (Rush)
     let isRushing = false;
     let rushTarget = "";
     let rushTargetX = null;
     let rushTargetY = null;
     let rushInterval = null;
 
-    // Stan patrolu
     let isPatrolling = false;
     let patrolIndex = 0;
     let smoothPatrolInterval = null;
@@ -388,16 +392,12 @@ let opacityValue = 0.95;
             console.log("%c[HERO] Silnik gry wykryty. Uruchamianie bota...", "color: #4caf50; font-weight: bold;");
             loadData();
             cleanOldGateways();
-            initGUI();
-            setInterval(autoDetectEngineData, 800);
-            setInterval(heroPositionTracker, 100);
-            setInterval(radarLoop, 150);
-            document.addEventListener('keydown', handleGlobalKeydown);
-            
-            // Rejestracja globalnej funkcji klikania na mapę (jeśli nie istnieje, zabezpieczamy)
-            if (typeof setupMapClickListener === 'function') {
-                setupMapClickListener();
-            }
+            if (typeof initGUI === 'function') initGUI();
+            if (typeof autoDetectEngineData === 'function') setInterval(autoDetectEngineData, 800);
+            if (typeof heroPositionTracker === 'function') setInterval(heroPositionTracker, 100);
+            if (typeof radarLoop === 'function') setInterval(radarLoop, 150);
+            if (typeof handleGlobalKeydown === 'function') document.addEventListener('keydown', handleGlobalKeydown);
+            if (typeof setupMapClickListener === 'function') setupMapClickListener();
         }
     }, 1500);
 
@@ -408,7 +408,7 @@ let opacityValue = 0.95;
                 let parsed = JSON.parse(s1);
                 if (parsed.waitMin === undefined) { parsed.waitMin = 200; parsed.waitMax = 500; }
                 if (parsed.autoAttack === undefined) { parsed.autoAttack = false; }
-                delete parsed.combatKey; // Czyszczenie starych kluczy
+                delete parsed.combatKey; 
                 botSettings = {...botSettings, ...parsed};
             } catch(e) { console.error("Błąd parsowania ustawień:", e); }
         }
@@ -439,6 +439,32 @@ let opacityValue = 0.95;
             }
         }
         if (changed) saveGateways();
+    }
+
+    // ==========================================
+    // LOGIKA INTELIGENTNEGO ZASIĘGU
+    // ==========================================
+    function checkVisionRange() {
+        if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
+
+        const h = Engine.hero.d;
+        let anyPointMarked = false;
+
+        currentCordsList.forEach((coord, index) => {
+            if (checkedPoints.has(index)) return;
+            const dx = Math.abs(h.x - coord[0]);
+            const dy = Math.abs(h.y - coord[1]);
+            const distance = Math.max(dx, dy);
+
+            if (distance <= botSettings.visionRange) {
+                checkedPoints.add(index);
+                anyPointMarked = true;
+            }
+        });
+
+        if (anyPointMarked && typeof renderCordsList === 'function') {
+            renderCordsList(patrolIndex);
+        }
     }
 
     // ==========================================
