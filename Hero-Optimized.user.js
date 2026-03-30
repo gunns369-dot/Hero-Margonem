@@ -108,79 +108,109 @@
     const HeroTeleportModule = {
         isClicking: false,
 
-        processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
-            if (this.isClicking) return; // Zapobiega dublowaniu kliknięć
+       processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
+    if (this.isClicking) return;
 
-            let options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
+    let options = Array.from(
+        document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]')
+    );
 
-            // Okno zamknięte - szukamy NPC i "klikamy" w niego z opóźnieniem
-            if (options.length === 0) {
-                let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
-                let zakonnikId = null;
-                for (let id in npcs) {
-                    let n = npcs[id].d || npcs[id];
-                    if (n && n.nick && n.nick.replace(/<[^>]*>?/gm, '').toLowerCase().includes("zakonnik")) {
-                        zakonnikId = parseInt(id, 10); break;
-                    }
-                }
-                
-                if (zakonnikId) {
-                    this.isClicking = true;
-                    let approachDelay = Math.floor(Math.random() * (800 - 400 + 1)) + 400;
-                    setTimeout(() => {
-                        if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
-                        else if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
-                        this.isClicking = false;
-                        retryCallback();
-                    }, approachDelay);
-                } else {
-                    retryCallback();
-                }
-                return;
+    if (options.length === 0) {
+        let npcs = (typeof Engine !== 'undefined' && Engine.npcs)
+            ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d)
+            : {};
+
+        let zakonnikId = null;
+
+        for (let id in npcs) {
+            let n = npcs[id].d || npcs[id];
+            let nick = (n && n.nick) ? n.nick.replace(/<[^>]*>?/gm, '').toLowerCase() : "";
+            if (nick.includes("zakonnik")) {
+                zakonnikId = parseInt(id, 10);
+                break;
             }
-
-            // Funkcja klikająca: ZABEZPIECZONA pod Nowy Interfejs (Wymusza zdarzenia myszy)
-            const humanClick = (element, nextStepFunction) => {
-                this.isClicking = true;
-                let humanDelay = Math.floor(Math.random() * (1200 - 600 + 1)) + 600; 
-                setTimeout(() => {
-                    // Margonem NI ignoruje zwykłe .click(), wymaga pełnego cyklu myszki!
-                    if (typeof MouseEvent !== 'undefined') {
-                        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                    }
-                    if (typeof element.click === 'function') element.click();
-
-                    this.isClicking = false;
-                    if (nextStepFunction) nextStepFunction();
-                }, humanDelay);
-            };
-
-            let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleport"));
-            if (startOpt) {
-                humanClick(startOpt, retryCallback);
-                return;
-            }
-
-            let destOpt = options.find(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
-            if (destOpt) {
-                if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
-                    let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ") || el.innerText.toLowerCase().includes("niczego"));
-                    if (closeOpt) humanClick(closeOpt, stopCallback); else stopCallback();
-                    return;
-                }
-                humanClick(destOpt, continueCallback);
-                return;
-            } 
-            
-            let moreOpt = options.find(el => el.innerText.toLowerCase().includes("inne") || el.innerText.toLowerCase().includes("dalej") || el.innerText.toLowerCase().includes("więcej"));
-            if (moreOpt) {
-                humanClick(moreOpt, retryCallback);
-                return;
-            }
-            
-            retryCallback(); 
         }
+
+        if (zakonnikId) {
+            this.isClicking = true;
+            let approachDelay = Math.floor(Math.random() * 401) + 400;
+
+            setTimeout(() => {
+                if (typeof Engine !== 'undefined' && Engine.npcs && typeof Engine.npcs.interact === 'function') {
+                    Engine.npcs.interact(zakonnikId);
+                } else if (typeof window._g === 'function') {
+                    window._g(`talk&id=${zakonnikId}`);
+                }
+
+                this.isClicking = false;
+                retryCallback();
+            }, approachDelay);
+        } else {
+            retryCallback();
+        }
+
+        return;
+    }
+
+    const humanClick = (element, nextStepFunction) => {
+        if (!element) return;
+        this.isClicking = true;
+
+        let humanDelay = Math.floor(Math.random() * 601) + 600;
+
+        setTimeout(() => {
+            if (typeof MouseEvent !== 'undefined') {
+                element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+            }
+
+            if (typeof element.click === 'function') element.click();
+
+            this.isClicking = false;
+            if (nextStepFunction) nextStepFunction();
+        }, humanDelay);
+    };
+
+    const safeText = el => ((el && (el.innerText || el.textContent)) || "").toLowerCase();
+
+    let startOpt = options.find(el => safeText(el).includes("teleport"));
+    if (startOpt) {
+        humanClick(startOpt, retryCallback);
+        return;
+    }
+
+    let targetLower = (targetMap || "").toLowerCase();
+    let destOpt = options.find(el => safeText(el).includes(targetLower));
+
+    if (destOpt) {
+        if (safeText(destOpt).includes("brak zezwolenia")) {
+            let closeOpt = options.find(el =>
+                safeText(el).includes("nigdzie") ||
+                safeText(el).includes("zakończ") ||
+                safeText(el).includes("niczego")
+            );
+            if (closeOpt) humanClick(closeOpt, stopCallback);
+            else stopCallback();
+            return;
+        }
+
+        humanClick(destOpt, continueCallback);
+        return;
+    }
+
+    let moreOpt = options.find(el =>
+        safeText(el).includes("inne") ||
+        safeText(el).includes("dalej") ||
+        safeText(el).includes("więcej")
+    );
+
+    if (moreOpt) {
+        humanClick(moreOpt, retryCallback);
+        return;
+    }
+
+    retryCallback();
+}
     };
 
     // ==========================================
@@ -1549,85 +1579,74 @@ let attackInterval = null;
     // AUTO-SKANER SILNIKA MARGONEM (Deep Engine Read - Grupujący wejścia)
     // ==========================================
     function autoLearnGateways() {
-        if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
-        let currMap = Engine.map.d.name;
-        if (!currMap) return;
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
 
-        // Natychmiastowe użycie naszego niezawodnego skanera
-        let gatewaysFound = HeroScannerModule.scanCurrentMap(currMap, ZAKONNICY);
-        let addedOrUpdated = false;
+    let currMap = Engine.map.d.name;
+    if (!currMap) return;
 
-        if (!globalGateways[currMap]) globalGateways[currMap] = {};
+    let gatewaysFound = HeroScannerModule.scanCurrentMap(currMap, ZAKONNICY) || [];
+    let addedOrUpdated = false;
 
-     gatewaysFound.forEach(gw => {
-    let target = gw.targetMap;
-    let px = gw.x; let py = gw.y;
+    if (!globalGateways[currMap]) globalGateways[currMap] = {};
 
-    if (!globalGateways[currMap][target]) {
-        globalGateways[currMap][target] = { x: px, y: py, allCoords: [[px, py]] };
-        addedOrUpdated = true;
-    } else {
-        if (!globalGateways[currMap][target].allCoords) {
-            globalGateways[currMap][target].allCoords = [[globalGateways[currMap][target].x, globalGateways[currMap][target].y]];
-        }
+    gatewaysFound.forEach(gw => {
+        if (!gw) return;
 
-        let exists = globalGateways[currMap][target].allCoords.some(c => c[0] === px && c[1] === py);
+        let target = gw.targetMap;
+        let px = gw.x;
+        let py = gw.y;
 
-        if (!exists) {
-            globalGateways[currMap][target].allCoords.push([px, py]);
+        if (!target || px === undefined || py === undefined) return;
+
+        if (!globalGateways[currMap][target]) {
+            globalGateways[currMap][target] = {
+                x: px,
+                y: py,
+                allCoords: [[px, py]]
+            };
             addedOrUpdated = true;
-        }
-    } // 🔥 TEGO BRAKOWAŁO
-});
-
-        if (addedOrUpdated) {
-            saveGateways();
-            updateUI(); // Odświeżenie bazy na żywo
-        }
-    }
-    function autoDetectEngineData() {
-
-        if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
-
-        let currentName = Engine.map.d.name;
-
-        if (!currentName || currentName === "undefined") return;
-
-
-
-        updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
-
-        updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
-
-
-
-        if (currentName !== lastMapName) {
-
-          if (currentName !== lastMapName) {
-            // Fizyczne nagrywanie starych śladów (Smart Memory z chodzenia) wyłączone!
-            // Całą robotę w tle wykonuje teraz bezbłędny Auto-Skaner, który wrzuca wszystko do pamięci.
-            /*
-            if (lastMapName !== "" && positionHistory.length > 0) {
-                let validPos = null;
-                for (let i = positionHistory.length - 1; i >= 0; i--) { if (positionHistory[i].map === lastMapName) { validPos = positionHistory[i]; break; } }
-                if (validPos && botSettings.isRecording) { saveGatewayToDB(lastMapName, currentName, validPos.x, validPos.y); }
+        } else {
+            if (!globalGateways[currMap][target].allCoords) {
+                globalGateways[currMap][target].allCoords = [
+                    [globalGateways[currMap][target].x, globalGateways[currMap][target].y]
+                ];
             }
-            */
 
-            positionHistory = [];
+            let exists = globalGateways[currMap][target].allCoords.some(c => c[0] === px && c[1] === py);
 
-            lastMapName = currentName;
+            if (!exists) {
+                globalGateways[currMap][target].allCoords.push([px, py]);
+                addedOrUpdated = true;
+            }
+        }
+    });
 
-            heroFoundAlerted = false;
+    if (addedOrUpdated) {
+        saveGateways();
+        updateUI();
+    }
+}
+  function autoDetectEngineData() {
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
 
+    let currentName = Engine.map.d.name;
+    if (!currentName || currentName === "undefined") return;
 
+    updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
+    updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
 
-            // Szpieg i pobieranie ukrytych przejść silnika
+    if (currentName !== lastMapName) {
+        // Fizyczne nagrywanie starych śladów z chodzenia wyłączone.
+        // Przejścia łapie autoLearnGateways().
 
-            autoLearnGateways();
+        positionHistory = [];
+        lastMapName = currentName;
+        heroFoundAlerted = false;
 
+        autoLearnGateways();
 
-
+        let domMap = document.getElementById('currentMapNameDisplay');
+        if (domMap) domMap.innerText = currentName;
             let domMap = document.getElementById('currentMapNameDisplay');
 
             if (domMap) domMap.innerText = currentName;
