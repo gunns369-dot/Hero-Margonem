@@ -4493,9 +4493,8 @@ let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Eng
                     closestDist = dist;
                     closestTx = n.x;
                     closestTy = n.y;
-                    closestId = id;
-                    // Wycinamy tagi HTML oraz dopisek o metrach np. (15m)
-                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim() : "Potwór";
+                   closestId = id;
+                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : "Potwór";
                 }
             }
         }
