@@ -21,15 +21,16 @@
     }
     loadCombatModule();
 
-    // WBUDOWANY MODUŁ TELEPORTACJI (Bardzo szybki i niezawodny)
+    // WBUDOWANY MODUŁ TELEPORTACJI (Złoty środek: Niezawodny, ale LUDZKI - Anty-Captcha)
     const HeroTeleportModule = {
         isClicking: false,
 
         processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
-            if (this.isClicking) return; // Zapobiega dublowaniu kliknięć
+            if (this.isClicking) return; // Zapobiega dublowaniu kliknięć i wysyłaniu za dużo pakietów
 
             let options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
 
+            // Okno zamknięte - szukamy NPC i "klikamy" w niego z opóźnieniem
             if (options.length === 0) {
                 let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
                 let zakonnikId = null;
@@ -39,17 +40,29 @@
                         zakonnikId = parseInt(id, 10); break;
                     }
                 }
+                
                 if (zakonnikId) {
-                    if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
-                    else if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
+                    this.isClicking = true; // Blokujemy skrypt, żeby nie wysłał 10 pakietów w sekundę
+                    
+                    // Ludzkie opóźnienie przed podejściem i rozpoczęciem rozmowy (400 - 800ms)
+                    let approachDelay = Math.floor(Math.random() * (800 - 400 + 1)) + 400;
+                    setTimeout(() => {
+                        if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
+                        else if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
+                        this.isClicking = false;
+                        retryCallback();
+                    }, approachDelay);
+                } else {
+                    retryCallback();
                 }
-                retryCallback();
                 return;
             }
 
+            // Funkcja klikająca opcje dialogowe z ludzkim opóźnieniem (Czytanie + Ruch myszką)
             const humanClick = (element, nextStepFunction) => {
                 this.isClicking = true;
-                let humanDelay = Math.floor(Math.random() * (350 - 150 + 1)) + 150; // Błyskawiczne opóźnienie: 150 - 350ms
+                // Zwiększamy pauzę, by oszukać anty-cheata: 600 - 1200ms
+                let humanDelay = Math.floor(Math.random() * (1200 - 600 + 1)) + 600; 
                 setTimeout(() => {
                     if(typeof element.click === 'function') element.click();
                     this.isClicking = false;
@@ -83,7 +96,6 @@
             retryCallback(); 
         }
     };
-
     // ==========================================
     // BAZA DANYCH HEROSÓW
     // ==========================================
