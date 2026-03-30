@@ -773,6 +773,8 @@ let attackInterval = null;
         updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
 
         if (currentName !== lastMapName) {
+            window.lastLoggedMap = ""; // Reset zapobiegania spamu w logach
+            
             if (lastMapName !== "" && positionHistory.length > 0) {
                 let validPos = null;
                 for (let i = positionHistory.length - 1; i >= 0; i--) { if (positionHistory[i].map === lastMapName) { validPos = positionHistory[i]; break; } }
@@ -1119,128 +1121,638 @@ window.handleTeleportNPC = function(targetMap) {
         else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
     }
 
-    function rescheduleTeleportCheck(targetMap) {
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-    }
+    function safeGoTo(targetX, targetY, useRandom) {
+        let now = Date.now();
+        if (now < nextAllowedClickTime) return;
 
-    function rescheduleTeleportCheck(targetMap) {
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-    }
+        let x = Number(targetX); let y = Number(targetY);
 
-    function rescheduleTeleportCheck(targetMap) {
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-    }
-
-    window.openAutoRouteModal = function() {
-        let hero = document.getElementById('selHero').value;
-        if (!hero || !heroData[hero]) return heroAlert("Najpierw wybierz herosa z listy!");
-
-        let targets = Object.keys(heroData[hero]);
-        let currentMap = lastMapName;
-
-        let optionsHtml = targets.map(t => `<option value="${t}" ${t===currentMap?'selected':''}>${t}</option>`).join('');
-
-        let modalContent = `
-            <div style="margin-bottom:10px; color:#00acc1; font-weight:bold;">⚙️ KREATOR AUTO-TRASY</div>
-            <div style="margin-bottom:10px; font-size:11px; color:#a99a75;">Algorytm połączy mapy logiczną pętlą, duplikując ślepe zaułki na liście.</div>
-            <select id="startMapSelect" style="width:100%; padding:5px; background:#0f0f0f; color:#d4af37; border:1px solid #4a3f2b; margin-bottom:10px; outline:none; text-align:center;">
-                ${optionsHtml}
-            </select>
-            <div class="nav-row"><label style="margin-bottom: 2px;">Zasięg omijania punktów / losowość trasy (kratki):</label><input type="number" id="inpRandomInKreator" value="${botSettings.randomRadius}" min="0" max="5"></div>
-        `;
-
-        heroModal('confirm', modalContent, "", (res) => {
-            if(res) {
-                botSettings.randomRadius = parseInt(document.getElementById('inpRandomInKreator').value) || 0; saveSettings();
-                let startMapNode = document.getElementById('startMapSelect').value;
-                runRoutingAlgorithm(hero, targets, startMapNode);
+        if (useRandom) {
+            let radius = botSettings.randomRadius;
+            if (radius > 0) {
+                x += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
+                y += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
+                x = Math.max(0, x); y = Math.max(0, y);
             }
-        });
+        }
+
+        if (typeof Engine !== 'undefined' && Engine.hero) {
+            Engine.hero.autoGoTo({x: x, y: y});
+            let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
+            nextAllowedClickTime = Date.now() + throttleDelay;
+        }
     }
 
- window.runRoutingAlgorithm = function(hero, targets, startMap) {
-        let unvisited = new Set(targets);
-        let currentMap = startMap;
-        let finalRoute = [currentMap];
-        unvisited.delete(currentMap);
+    function stopPatrol(hardStop = false) {
+        isPatrolling = false;
+        isRushing = false;
+        clearTimeout(rushInterval);
 
-        // Do kalkulacji odległości śledzimy naszą fizyczną pozycję X, Y
-        let currentX = 32, currentY = 32;
-        if (heroData[hero][currentMap] && heroData[hero][currentMap].length > 0) {
-            currentX = heroData[hero][currentMap][0][0]; currentY = heroData[hero][currentMap][0][1];
-        }
+        let btn = document.getElementById('btnStartStop');
+        if (btn) {
+            btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>';
+            btn.style.color = "#4caf50";
+            btn.style.borderColor = "#4caf50";
+        }
+        checkedPoints.clear();
+        clearTimeout(smoothPatrolInterval);
+        renderCordsList(-1);
 
-        while(unvisited.size > 0) {
-            let bestPath = null;
-            let bestTarget = null;
-            let minScore = Infinity;
+        if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+            try {
+                if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
+                if (Engine.hero.d.path) Engine.hero.d.path = [];
+            } catch(e) {}
+        }
+    }
 
-            for (let target of unvisited) {
-                let path = getShortestPath(currentMap, target);
-                if (path) {
-                    // Obliczamy wynik: Przejścia przez mapy kosztują najwięcej,
-                    // ale w przypadku remisu wygrywa fizyczny dystans z obecnej kratki do bramy!
-                    let score = path.length * 10000;
-                    if (path.length > 1) {
-                        let door = globalGateways[currentMap] && globalGateways[currentMap][path[1]];
-                        if (door) score += Math.abs(currentX - door.x) + Math.abs(currentY - door.y);
-                    }
-                    if (score < minScore) { minScore = score; bestPath = path; bestTarget = target; }
-                }
-            }
+    function startPatrol() {
+        let hero = document.getElementById('selHero').value; let mapList = heroMapOrder[hero];
+        if (hero && mapList) {
+            let currentSysMap = lastMapName;
+            if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) { currentRouteIndex = mapList.indexOf(currentSysMap); sessionStorage.setItem('hero_route_index', currentRouteIndex); updateUI(); }
+        }
+        isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
+        let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; executePatrolStep();
+    }
 
-            if (!bestPath) {
-                heroAlert(`🚨 Zatrzymano układanie!\nAlgorytm utknął na mapie:\n[${currentMap}]\nNie potrafi stąd wyjść.`);
-                break;
-            }
+    function executePatrolStep() {
+        if (!isPatrolling) return;
 
-            for (let i = 1; i < bestPath.length; i++) finalRoute.push(bestPath[i]);
-            unvisited.delete(bestTarget);
-            currentMap = bestTarget;
+        checkVisionRange();
 
-            // Aktualizujemy pozycję na ostatni sprawdzany resp na nowej mapie
-            if (heroData[hero][currentMap] && heroData[hero][currentMap].length > 0) {
-                let coords = heroData[hero][currentMap];
-                currentX = coords[coords.length - 1][0]; currentY = coords[coords.length - 1][1];
-            }
-        }
+        while (patrolIndex < currentCordsList.length && checkedPoints.has(patrolIndex)) {
+            patrolIndex++;
+        }
 
-        // --- AUTOMATYCZNE SORTOWANIE KOORDYNATÓW POD WYJŚCIE ---
-        finalRoute.forEach((mapName, idx) => {
-            if (heroData[hero] && heroData[hero][mapName] && heroData[hero][mapName].length > 1) {
-                let nextMap = finalRoute[(idx + 1) % finalRoute.length];
-                let exitPath = getShortestPath(mapName, nextMap);
-                let exitGw = null;
-                if (exitPath && exitPath.length > 1 && globalGateways[mapName] && globalGateways[mapName][exitPath[1]]) {
-                    exitGw = globalGateways[mapName][exitPath[1]];
-                }
-                if (exitGw) {
-                    let coords = [...heroData[hero][mapName]];
-                    let closestIdx = 0; let minDist = Infinity;
-                    for(let i = 0; i < coords.length; i++) {
-                        let d = Math.abs(coords[i][0] - exitGw.x) + Math.abs(coords[i][1] - exitGw.y);
-                        if (d < minDist) { minDist = d; closestIdx = i; }
-                    }
-                    // Wycinamy ten najbliżej bramy i wrzucamy na sam koniec listy
-                    let finalPt = coords.splice(closestIdx, 1)[0];
-                    coords.push(finalPt);
-                    heroData[hero][mapName] = coords;
-                }
-            }
-        });
+        let hero = document.getElementById('selHero').value;
+        let currentSysMap = lastMapName;
 
-        heroMapOrder[hero] = finalRoute;
-        saveMapOrder();
-        currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); checkedMapsThisSession.clear(); saveCheckedMaps(); updateUI();
-        if (unvisited.size === 0) heroAlert("✅ Auto-Trasa wygenerowana!\n\nAlgorytm zoptymalizował kolejność map oraz z automatu ustawił koordynaty w taki sposób, aby ostatni sprawdzany resp na liście był fizycznie najbliżej przejścia!");
-    }
+        if (patrolIndex >= currentCordsList.length || currentCordsList.length === 0) {
+            clearTimeout(smoothPatrolInterval);
 
+            if (!checkedMapsThisSession.has(currentSysMap)) { checkedMapsThisSession.add(currentSysMap); saveCheckedMaps(); }
+
+            if(hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0) {
+                let mapList = heroMapOrder[hero];
+
+                let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
+                let finalDestinationMap = mapList[nextRouteIndex];
+
+                let path = getShortestPath(currentSysMap, finalDestinationMap);
+
+                if (path && path.length > 1) {
+                    let immediateNextMap = path[1];
+                    let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
+
+                    if(door) {
+                        let targetX = door.x; let targetY = door.y;
+                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
+
+                        safeGoTo(targetX, targetY, false);
+                        return;
+                    }
+                }
+
+                stopPatrol(true);
+                let fallbackMissing = path ? path[1] : finalDestinationMap;
+                heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy (wyjścia/powroty z podziemi). Kliknij 🎥 Nagrywam i przejdź tam!`);
+                return;
+            }
+
+            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true); heroAlert("✅ Trasa zrobiona!"); return;
+        }
+
+        renderCordsList(patrolIndex);
+        let target = currentCordsList[patrolIndex];
+        safeGoTo(target[0], target[1], true);
+        stuckCount = 0; clearTimeout(smoothPatrolInterval);
+
+        let pingDelay = Math.floor(Math.random() * (botSettings.stepMax - botSettings.stepMin + 1)) + botSettings.stepMin;
+        smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
+    }
+
+    function checkSmoothArrival() {
+        if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d) return;
+
+        checkVisionRange();
+
+        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
+
+        if (checkedPoints.has(patrolIndex)) {
+            clearTimeout(smoothPatrolInterval);
+            patrolIndex++;
+            executePatrolStep();
+            return;
+        }
+
+        let target = currentCordsList[patrolIndex];
+        let dist = Math.abs(cx - target[0]) + Math.abs(cy - target[1]);
+
+        if (dist <= 1) {
+            clearTimeout(smoothPatrolInterval);
+            checkedPoints.add(patrolIndex);
+
+            let waitDelay = Math.floor(Math.random() * (botSettings.waitMax - botSettings.waitMin + 1)) + botSettings.waitMin;
+
+            patrolIndex++;
+            setTimeout(executePatrolStep, waitDelay);
+        } else {
+            if (cx === lastX && cy === lastY) {
+                stuckCount++;
+                if (stuckCount > 8) {
+                    clearTimeout(smoothPatrolInterval); checkedPoints.add(patrolIndex); patrolIndex++; executePatrolStep(); return;
+                }
+            } else {
+                stuckCount = 0;
+            }
+
+            let pingDelay = Math.floor(Math.random() * (botSettings.stepMax - botSettings.stepMin + 1)) + botSettings.stepMin;
+            smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
+        }
+        lastX = cx; lastY = cy;
+    }
+
+
+// ==========================================
+    // LOGIKA EXP (Smart-Roam, Auto-Lvl, Aggro & Anty-Lag)
     // ==========================================
-    // INTERFEJS UŻYTKOWNIKA (UI)
-    // ==========================================
+    window.isExping = false;
+    window.lastLoggedMap = ""; // Zapobiega spamowaniu logami bram
+    let expMapTransitionCooldown = 0;
+    let expLastActionTime = 0;
+    let expCurrentTargetId = null;
+
+    let expLastX = -1;
+    let expLastY = -1;
+    let expAntiLagTime = 0;
+
+    window.lastHeroExpLevel = 0;
+    window.mapClearTimes = window.mapClearTimes || {};
+
+    window.logExp = function(msg, color="#a99a75") {
+        let consoleDiv = document.getElementById('expConsole');
+        if (!consoleDiv) return;
+        let time = new Date().toLocaleTimeString('pl-PL', {hour12: false});
+        let entry = document.createElement('div');
+        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${msg}</span>`;
+        consoleDiv.appendChild(entry);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    };
+
+    function runExpLogic() {
+        if (!window.isExping) return;
+        if (typeof Engine === 'undefined' || !Engine.hero || Engine.map.isLoading) return;
+
+        // --- AUTOMATYCZNY ZAKRES LEVELOWY ---
+        if (Engine.hero.d && Engine.hero.d.lvl) {
+            let currentLvl = Engine.hero.d.lvl;
+            if (window.lastHeroExpLevel === 0) {
+                window.lastHeroExpLevel = currentLvl;
+            } else if (currentLvl > window.lastHeroExpLevel) {
+                let diff = currentLvl - window.lastHeroExpLevel;
+                botSettings.exp.minLvl += diff;
+                botSettings.exp.maxLvl += diff;
+                saveSettings();
+
+                let minInp = document.getElementById('expMinL');
+                let maxInp = document.getElementById('expMaxL');
+                if (minInp) minInp.value = botSettings.exp.minLvl;
+                if (maxInp) maxInp.value = botSettings.exp.maxLvl;
+
+                window.logExp(`[AWANS!] Zaktualizowano przedział na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`, "#ffb300");
+                window.lastHeroExpLevel = currentLvl;
+
+                // Odśwież natywny berserk jeśli włączony
+                if (botSettings.berserk && botSettings.berserk.enabled && typeof window.updateServerBerserk === 'function') {
+                    window.updateServerBerserk();
+                }
+            }
+        }
+
+        let now = Date.now();
+
+        if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
+            expLastActionTime = now + 500;
+            expCurrentTargetId = null;
+            return;
+        }
+
+        if (now < expLastActionTime) return;
+
+        let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
+        let hx = Engine.hero.d.x, hy = Engine.hero.d.y;
+
+        const getAntiLagDelay = () => {
+            let min = botSettings.expAntiLagMin || 1500;
+            let max = botSettings.expAntiLagMax || 2500;
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        };
+
+        // --- WYSZUKIWANIE BRAM NA MAPIE ---
+        const isOnGateway = (x, y) => {
+            let gws = (Engine.map && Engine.map.gateways) ? Engine.map.gateways : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
+            for (let id in gws) {
+                let gw = gws[id].d || gws[id];
+                if (gw.x === x && gw.y === y) return true;
+            }
+            return false;
+        };
+
+        // --- DETEKCJA RUCHU I BEZRUCHU (ANTY-LAG) ---
+        if (hx !== expLastX || hy !== expLastY) {
+            expLastX = hx;
+            expLastY = hy;
+            expAntiLagTime = now + getAntiLagDelay(); // Jeśli idziemy, resetujemy timer
+        } else if (now > expAntiLagTime) {
+            // Ratunek: Czy stoimy na przejściu między mapami?
+            if (isOnGateway(hx, hy)) {
+                window.logExp(`Stoję na przejściu! Odbiegam kawałek...`, "#ff9800");
+                let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
+                let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
+                Engine.hero.autoGoTo({x: stepX, y: stepY});
+
+                expAntiLagTime = now + 1500;
+                expMapTransitionCooldown = now + 1500;
+                expLastActionTime = now + 500;
+                return;
+            }
+
+            if (expCurrentTargetId) {
+                window.logExp(`Zawieszenie w drodze do potwora. Resetuję cel!`, "#f44336");
+                expCurrentTargetId = null;
+                expAntiLagTime = now + getAntiLagDelay();
+            } else {
+                expAntiLagTime = now + getAntiLagDelay();
+            }
+        }
+
+        // --- OCENA AKTUALNEGO CELU ---
+        let currentTargetDist = 999;
+        if (expCurrentTargetId && npcs[expCurrentTargetId]) {
+            let n = npcs[expCurrentTargetId].d || npcs[expCurrentTargetId];
+            if (!n.dead) {
+                currentTargetDist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+            } else {
+                expCurrentTargetId = null; // Cel nie żyje, porzucamy
+            }
+        } else {
+            expCurrentTargetId = null;
+        }
+
+        // --- SZUKANIE NAJLEPSZEGO CELU ---
+        let closestDist = 999;
+        let closestTx = -1, closestTy = -1;
+        let closestName = "";
+        let closestId = null;
+
+        for (let id in npcs) {
+            let n = npcs[id].d || npcs[id];
+            if ((n.type === 2 || n.type === 3) && !n.dead) {
+                let lvl = parseInt(n.lvl) || 0;
+                if (lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
+
+                let wt = parseInt(n.wt) || 0;
+                if (wt === 0 && !botSettings.exp.normal) continue;
+                if (wt === 1 && !botSettings.exp.elite) continue;
+                if (wt >= 2) continue;
+
+                let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestTx = n.x;
+                    closestTy = n.y;
+                    closestId = id;
+                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : "Potwór";
+                }
+            }
+        }
+
+        // --- DECYZJA LOGICZNA ---
+        if (closestId && closestDist <= 999) {
+            // Zmiana celu na bliższy
+            if (!expCurrentTargetId || closestDist < currentTargetDist) {
+                if (expCurrentTargetId !== closestId) {
+                    expCurrentTargetId = closestId;
+                    window.logExp(`Namierzono: ${closestName} (${closestDist}m)`, "#00e5ff");
+                    Engine.hero.autoGoTo({x: closestTx, y: closestTy});
+                    expLastActionTime = now + 800; // Zmniejszenie spamu
+                    return;
+                }
+            }
+
+            // Jesteśmy przy samym mobku (1 kratka)
+            if (expCurrentTargetId && currentTargetDist <= 1) {
+                let finalTx = npcs[expCurrentTargetId].d ? npcs[expCurrentTargetId].d.x : npcs[expCurrentTargetId].x;
+                let finalTy = npcs[expCurrentTargetId].d ? npcs[expCurrentTargetId].d.y : npcs[expCurrentTargetId].y;
+
+                Engine.hero.autoGoTo({x: finalTx, y: finalTy});
+                expLastActionTime = now + 1200; // Dajemy grze czas na załadowanie walki
+                return;
+            }
+
+            return; // Czekamy aż dobiegniemy
+        } else {
+            // --- SMART-ROAM (ZMIANA MAPY, GDY JEST CZYSTO) ---
+            if (now < expMapTransitionCooldown) return;
+            expCurrentTargetId = null;
+
+            let maps = botSettings.exp.mapOrder;
+            let currMap = Engine.map.d.name;
+
+            if (maps.includes(currMap)) window.mapClearTimes[currMap] = Date.now();
+
+            if (maps.length > 1) {
+                let oldestMap = maps[0];
+                let oldestTime = window.mapClearTimes[oldestMap] || 0;
+
+                for (let i = 1; i < maps.length; i++) {
+                    let t = window.mapClearTimes[maps[i]] || 0;
+                    if (t < oldestTime) {
+                        oldestMap = maps[i];
+                        oldestTime = t;
+                    }
+                }
+
+                if (oldestMap === currMap) {
+                    if (now - expMapTransitionCooldown > 3000) {
+                        window.logExp("Wszystkie mapy czyste. Czekam...", "#777");
+                        expMapTransitionCooldown = now + 3000;
+                    }
+                    return;
+                }
+
+                let path = getShortestPath(currMap, oldestMap);
+                if (path && path.length > 1) {
+                    let nextStepMap = path[1];
+                    let door = globalGateways[currMap] && globalGateways[currMap][nextStepMap];
+
+                    if (door) {
+                        if (window.lastLoggedMap !== nextStepMap) {
+                            window.logExp(`[Przejście] ➝ ${nextStepMap}`, "#ba68c8");
+                            window.lastLoggedMap = nextStepMap;
+                        }
+                        
+                        // Nie spamujemy, jeżeli postać już tam biegnie (path wbudowane w Margonem)
+                        if (!Engine.hero.d.path || Engine.hero.d.path.length === 0) {
+                            Engine.hero.autoGoTo({x: door.x, y: door.y});
+                        }
+                        
+                        expAntiLagTime = now + getAntiLagDelay();
+                        expMapTransitionCooldown = now + 1000;
+                        expLastActionTime = now + 500;
+                    } else {
+                        expMapTransitionCooldown = now + 5000;
+                    }
+                } else {
+                    window.mapClearTimes[oldestMap] = Date.now();
+                    expMapTransitionCooldown = now + 2000;
+                }
+            } else {
+                if (now - expMapTransitionCooldown > 5000) {
+                    window.logExp("Wyczyszczono. Czekam na respawn...", "#777");
+                    expMapTransitionCooldown = now + 5000;
+                }
+            }
+        }
+    }
+
+    setInterval(runExpLogic, 150);
+
+    // --- BAZA DANYCH PROFILI EXPOWISK ---
+    window.loadExpProfile = function(index) {
+        let p = botSettings.expProfiles[index];
+        if(p) {
+            botSettings.exp.mapOrder = [...p.maps];
+            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+
+            // Ustawienie poziomu: Min: -5, Max: +15
+            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+            if(lvlMatch && lvlMatch[1]) {
+                let baseLvl = parseInt(lvlMatch[1]);
+                botSettings.exp.minLvl = Math.max(1, baseLvl - 5);
+                botSettings.exp.maxLvl = baseLvl + 15;
+
+                let minInput = document.getElementById('expMinL');
+                let maxInput = document.getElementById('expMaxL');
+                if (minInput) minInput.value = botSettings.exp.minLvl;
+                if (maxInput) maxInput.value = botSettings.exp.maxLvl;
+            }
+
+            window.mapClearTimes = {};
+            saveSettings();
+            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            heroAlert(`✅ Załadowano i NADPISANO trasę: ${p.name}\nAutomatycznie ustawiono poziom potworów na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
+        }
+    };
+
+    window.appendExpProfile = function(index) {
+        let p = botSettings.expProfiles[index];
+        if(p) {
+            p.maps.forEach(m => {
+                if (!botSettings.exp.mapOrder.includes(m)) {
+                    botSettings.exp.mapOrder.push(m);
+                }
+            });
+            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+
+            // Zmiana zakresu z uwzględnieniem tolerancji 5 w dół
+            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+            if(lvlMatch && lvlMatch[1]) {
+                let baseLvl = parseInt(lvlMatch[1]);
+                let newMin = Math.max(1, baseLvl - 5);
+                let newMax = baseLvl + 15;
+
+                botSettings.exp.minLvl = Math.min(botSettings.exp.minLvl, newMin);
+                botSettings.exp.maxLvl = Math.max(botSettings.exp.maxLvl, newMax);
+
+                let minInput = document.getElementById('expMinL');
+                let maxInput = document.getElementById('expMaxL');
+                if (minInput) minInput.value = botSettings.exp.minLvl;
+                if (maxInput) maxInput.value = botSettings.exp.maxLvl;
+            }
+
+            saveSettings();
+            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            heroAlert(`➕ DOŁĄCZONO do obecnej trasy: ${p.name}\nZakres potworów został poszerzony i wynosi teraz: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
+        }
+    };
+
+    window.renderExpProfiles = function() {
+        let c = document.getElementById('expProfilesList'); if(!c) return;
+
+        if (!botSettings.expProfiles || botSettings.expProfiles.length === 0) {
+            if (window.defaultExpProfiles && window.defaultExpProfiles.length > 0) {
+                botSettings.expProfiles = [...window.defaultExpProfiles];
+                localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
+            }
+        }
+
+        c.innerHTML = '';
+        if (botSettings.expProfiles.length === 0) {
+             c.innerHTML = '<div style="padding:10px; text-align:center; color:#777; font-size:10px;">Brak zapisanych tras. Odśwież stronę (F5).</div>';
+             return;
+        }
+
+        botSettings.expProfiles.forEach((p, i) => {
+            let wrap = document.createElement('div');
+            wrap.style.marginBottom = "4px";
+
+            let header = document.createElement('div');
+            header.style.cssText = "background: #1a1a1a; border: 1px solid #333; padding: 4px 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;";
+            header.innerHTML = `
+                <div style="display:flex; flex-direction:column; line-height:1.2;">
+                    <span style="color: #d4af37; font-weight: bold; font-size: 11px;">${p.name}</span>
+                </div>
+                <span style="font-size:10px; color:#a99a75;">▼</span>
+            `;
+
+            let content = document.createElement('div');
+            content.style.display = "none";
+            content.style.padding = "4px";
+            content.style.borderLeft = "1px solid #333";
+            content.style.background = "#141414";
+
+            let mapsHtml = p.maps.join(' <span style="color:#777;">➝</span> ');
+
+            content.innerHTML = `
+                ${p.desc ? `<div style="font-size:9px; color:#aaa; margin-bottom:4px;">Opis: ${p.desc}</div>` : ''}
+                <div style="font-size:9px; color:#888; margin-bottom:6px; line-height:1.3; word-wrap:break-word; white-space:normal;">
+                    Mapy: <span style="color:#a99a75">${mapsHtml}</span>
+                </div>
+                <div style="display:flex; gap:4px; flex-wrap: wrap;">
+                    <button class="btn-sepia" style="padding:4px 4px; background:#00838f; flex:1;" onclick="loadExpProfile(${i})" title="Całkowicie podmienia listę na to expowisko">📥 NADPISZ</button>
+                    <button class="btn-sepia" style="padding:4px 4px; background:#4caf50; flex:1;" onclick="appendExpProfile(${i})" title="Dopisuje mapy tego expowiska do już wczytanych">➕ DOŁĄCZ</button>
+                </div>
+            `;
+
+            header.onclick = () => {
+                let isHidden = content.style.display === "none";
+
+                document.querySelectorAll('#expProfilesList > div > div:nth-child(2)').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('#expProfilesList > div > div:nth-child(1)').forEach(el => { el.style.background = '#1a1a1a'; el.style.borderColor = '#333'; });
+
+                if (isHidden) {
+                    content.style.display = "block";
+                    header.style.background = "rgba(212, 175, 55, 0.1)";
+                    header.style.borderColor = "#d4af37";
+                }
+            };
+
+            wrap.appendChild(header);
+            wrap.appendChild(content);
+            c.appendChild(wrap);
+        });
+    };
+
+    window.addCurrentMapToExp = () => {
+        let m = Engine.map.d.name;
+        if (!botSettings.exp.mapOrder.includes(m)) {
+            botSettings.exp.mapOrder.push(m);
+            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+        }
+    };
+
+    window.addNeighborsToExp = () => {
+        let currMap = Engine.map.d.name; let added = 0;
+        if (!botSettings.exp.mapOrder.includes(currMap)) { botSettings.exp.mapOrder.push(currMap); added++; }
+        if (globalGateways[currMap]) {
+            for (let targetMap in globalGateways[currMap]) {
+                if (!botSettings.exp.mapOrder.includes(targetMap)) { botSettings.exp.mapOrder.push(targetMap); added++; }
+            }
+        }
+        let gws = (Engine.map && Engine.map.gateways) ? Engine.map.gateways : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
+        for (let id in gws) {
+            let gw = gws[id].d || gws[id]; let tName = gw.name || gw.targetName || "";
+            if (tName && typeof tName === 'string') {
+                let cleanName = tName.split(" .")[0].trim();
+                if (cleanName && cleanName !== currMap && !botSettings.exp.mapOrder.includes(cleanName)) {
+                    botSettings.exp.mapOrder.push(cleanName);
+                    if (gw.x !== undefined && gw.y !== undefined && typeof window.saveGatewayToDB === 'function') window.saveGatewayToDB(currMap, cleanName, gw.x, gw.y);
+                    added++;
+                }
+            }
+        }
+        if (added > 0) { localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); if (typeof window.renderExpMaps === 'function') window.renderExpMaps(); window.logExp(`Dodano ${added} map!`, "#4caf50"); }
+    };
+
+    window.removeExpMap = (index) => {
+        heroConfirm(`Usunąć mapę ze ścieżki expowiska?`, (res) => {
+            if (res) { botSettings.exp.mapOrder.splice(index, 1); localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); window.renderExpMaps(); }
+        });
+    };
+
+    window.clearExpMaps = () => {
+        botSettings.exp.mapOrder = [];
+        localStorage.setItem('exp_map_order_v64', '[]');
+        if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    };
+
+    window.renderMapOrderList = () => {
+        let c = document.getElementById('heroMapListContainer');
+        if (!c) return;
+
+        let hero = document.getElementById('selHero').value;
+        if (!hero || !heroMapOrder[hero] || heroMapOrder[hero].length === 0) {
+            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa, by zobaczyć trasę</div>';
+            return;
+        }
+
+        let currentMap = lastMapName;
+        c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
+            if (editingGatewayFor === mapName) {
+                let defaultX = "", defaultY = "";
+                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
+                if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
+                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div></div></div>`;
+            } else {
+                let isPathPossible = false;
+                for(let fromMap in globalGateways) { if(globalGateways[fromMap][mapName]) isPathPossible = true; }
+                let gatewayIndicator = isPathPossible ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>" : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
+
+                let activeClass = (currentRouteIndex === index) ? "active-route" : "";
+                let checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
+                let nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
+
+                return `<div class="list-item ${activeClass} ${checkClass}"><div class="map-name-wrap"><span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span><span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">${index + 1}. ${gatewayIndicator} ${mapName}</span></div><div class="buttons-wrapper"><input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)" title="Zmień pozycję na liście (1-10)"><button class="icon-btn" onclick="openInlineEditor('${mapName}')" title="Edytuj kordy przejścia">🚪</button></div></div>`;
+            }
+        }).join('');
+    };
+
+    window.renderExpMaps = () => {
+        let c = document.getElementById('expMapList'); if (!c) return;
+        let currentMap = lastMapName;
+        c.innerHTML = botSettings.exp.mapOrder.map((mapName, index) => {
+            if (editingGatewayFor === mapName) {
+                let defaultX = "", defaultY = ""; let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
+                if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
+                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div></div></div>`;
+            } else {
+                let isPathPossible = false;
+                for(let fromMap in globalGateways) { if(globalGateways[fromMap][mapName]) isPathPossible = true; }
+                let gatewayIndicator = isPathPossible ? "<span style='color:#4caf50;' title='Zapisano w bazie'>[🚪✔]</span>" : "<span style='color:#777;' title='Brakuje w bazie!'>[➕🚪]</span>";
+                return `<div class="list-item"><div class="map-name-wrap"><span class="btn-del-map" onclick="removeExpMap(${index})">✖</span><span class="map-name" style="color:#81c784; font-weight:bold;">${index + 1}. ${gatewayIndicator} ${mapName}</span></div><div class="buttons-wrapper"><button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button></div></div>`;
+            }
+        }).join('');
+    };
+
+    window.renderTeleportOptions = function() {
+        let container = document.getElementById('tpCheckboxes');
+        if (!container) return; // Zabezpieczenie przed błędem
+        container.innerHTML = '';
+        for (let city in botSettings.unlockedTeleports) {
+            let checked = botSettings.unlockedTeleports[city] ? 'checked' : '';
+            container.innerHTML += `
+                <label style="color:#d4af37; font-size:11px; cursor:pointer; background:#1a1a1a; padding:5px; border:1px solid #333; display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" onchange="botSettings.unlockedTeleports['${city}'] = this.checked; localStorage.setItem('hero_teleports_v64', JSON.stringify(botSettings.unlockedTeleports));" ${checked}>
+                    ${city}
+                </label>
+            `;
+        }
+    };
+
     // ==========================================
     // INTERFEJS UŻYTKOWNIKA (UI)
     // ==========================================
@@ -1348,16 +1860,8 @@ window.handleTeleportNPC = function(targetMap) {
                     <div class="nav-row" style="display: flex; flex-direction: column; flex-grow: 1;">
                         <label style="color:#00acc1;">Kolejność Przechodzenia Map:</label>
                         <div id="heroMapListContainer"><div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div></div>
-                        <div id="inlineTransitEditor" style="display:none; padding:8px; border:1px solid #00acc1; background:rgba(0, 172, 193, 0.1); margin-top:5px; border-radius:2px;">
-                            <label style="color:#00acc1; font-weight:bold; margin-bottom:4px; display:block;">Edytuj Przejście:</label>
-                            <input type="text" id="newTransitMapName" placeholder="Nazwa mapy docelowej..." style="margin-bottom:4px;">
-                            <input type="number" id="newTransitPos" placeholder="Pozycja na liście (puste = na koniec)" style="margin-bottom:6px;">
-                            <div style="display:flex; gap:4px; margin-bottom:6px;"><input type="number" id="newTransitX" placeholder="X" style="width:40px;"><input type="number" id="newTransitY" placeholder="Y" style="width:40px;"><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('newTransitX').value = Engine.hero.d.x; document.getElementById('newTransitY').value = Engine.hero.d.y;">📍 Stąd</button></div>
-                            <div style="display:flex; gap:4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway(document.getElementById('newTransitMapName').value)">ZAPISZ MAPĘ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div>
-                        </div>
-                        <div style="display:flex; gap:5px; margin-top:5px;">
-                            <button id="btnAutoRoute" class="btn btn-go-sepia" style="flex-grow:1;" onclick="openAutoRouteModal()">🪄 KREATOR TRASY</button>
-                            <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; width: auto;" title="Zresetuj pętlę">🔁</button>
+                        <div style="display:flex; margin-top:5px;">
+                            <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; flex-grow:1; padding: 4px;" title="Zresetuj pętlę">🔁 ZRESETUJ AKTUALNĄ PĘTLĘ TRASY</button>
                         </div>
                     </div>
                     <div class="nav-row" style="margin-top: 10px; display: flex; flex-direction: column;"><label style="color:#d4af37;">Koordynaty (Zasięg: 7 kratek):</label><div id="cordsListContainer"></div></div>
@@ -1382,16 +1886,16 @@ window.handleTeleportNPC = function(targetMap) {
                 </div>
 
                <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
-                    <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
+                    <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; min-height:55px; height:55px; resize:vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
                         <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
                     </div>
 
                     <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
-                        ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
+                        ▼ BERSERK (SERWEROWY AUTO-ATAK)
                     </div>
                     <div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
                         <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
-                            <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj auto-atak serwerowy
+                            <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj
                         </label>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
                             <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
@@ -1401,7 +1905,7 @@ window.handleTeleportNPC = function(targetMap) {
                         </div>
                         <div style="display:flex; justify-content: space-between; gap: 5px;">
                             <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-                            <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${botSettings.berserk?.minLvlOffset ?? -20}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+                            <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
                         </div>
                     </div>
 
@@ -1421,23 +1925,16 @@ window.handleTeleportNPC = function(targetMap) {
                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START AUTO-EXP</button>
                 </div>
                 <div id="expProfilesContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
-                    <div style="background:rgba(212, 175, 55, 0.1); border:1px solid #d4af37; padding:6px; margin-bottom:4px; border-radius:2px;">
-                        <span style="color:#d4af37; font-weight:bold; font-size:10px;">Zapisz obecną rotację map EXP:</span>
-                    </div>
-                    <input type="text" id="inpProfileName" placeholder="Nazwa (np. Wilki 50lvl)..." style="width:100%; padding:4px; background:#0f0f0f; color:#fff; border:1px solid #4a3f2b; font-size:11px;">
-                    <input type="text" id="inpProfileDesc" placeholder="Krótki opis (opcjonalnie)..." style="width:100%; padding:4px; background:#0f0f0f; color:#fff; border:1px solid #4a3f2b; font-size:11px;">
-                    <button class="btn-sepia" style="padding:6px; font-weight:bold;" onclick="saveCurrentExpProfile()">💾 ZAPISZ DO BAZY</button>
-
                     <label style="color:#a99a75; font-size:11px; margin-top:8px;">Zapisane Expowiska:</label>
                     <div id="expProfilesList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; padding:2px;"></div>
-                    <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
+                </div>
+                <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
                     <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
                         <span style="color:#00acc1; font-weight:bold; font-size:11px;">Zakonnicy Planu Astralnego</span><br>
                         <span style="color:#a99a75; font-size:9px;">Zaznacz miasta, do których wykupiłeś zezwolenie na teleport. Algorytm trasy sam ich użyje!</span>
                     </div>
                     <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;">
-                        </div>
-                </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -1584,8 +2081,8 @@ window.handleTeleportNPC = function(targetMap) {
                 }
             });
             
-            if (b.enabled && typeof window.logExp === 'function') window.logExp("⚔️ Aktywowano serwerowego Kieszonkowego Berserka!", "#ff9800");
-            else if (typeof window.logExp === 'function') window.logExp("🛡️ Wyłączono Kieszonkowego Berserka.", "#ff9800");
+            if (b.enabled && typeof window.logExp === 'function') window.logExp("⚔️ Aktywowano serwerowego Berserka!", "#ff9800");
+            else if (typeof window.logExp === 'function') window.logExp("🛡️ Wyłączono serwerowego Berserka.", "#ff9800");
 
             // Odświeżenie ikonek nad głowami mobów na NI
             try {
@@ -1610,7 +2107,7 @@ window.handleTeleportNPC = function(targetMap) {
         document.getElementById('berserkE2').addEventListener('change', (e) => { botSettings.berserk.e2 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
         document.getElementById('berserkHero').addEventListener('change', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); window.updateServerBerserk(); });
         document.getElementById('berserkMaxLvl').addEventListener('change', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value) || 100; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkMinLvl').addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = parseInt(e.target.value) || -20; saveSettings(); window.updateServerBerserk(); });
+        document.getElementById('berserkMinLvl').addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = -Math.abs(parseInt(e.target.value) || 20); saveSettings(); window.updateServerBerserk(); });
         
        // EXP - PRZYCISK START / STOP
         const btnExp = document.getElementById('btnStartExp');
@@ -1763,847 +2260,6 @@ window.handleTeleportNPC = function(targetMap) {
             win.addEventListener('wheel', e => e.stopPropagation(), { passive: true });
         });
     }
-    function renderGatewaysDatabase() {
-        const container = document.getElementById('gatewaysListContainer'); if(!container) return; container.innerHTML = ''; let currentSysMap = lastMapName; let count = 0;
-        let currentMapGateways = globalGateways[currentSysMap] || {};
-        if (Object.keys(currentMapGateways).length > 0) {
-            count++; let headerCurrent = document.createElement('div');
-            headerCurrent.innerHTML = `<span style="color:#4caf50; font-weight:bold; font-size:11px;">📍 JESTEŚ TUTAJ: ${currentSysMap}</span>`;
-            headerCurrent.style.padding = "4px 5px"; headerCurrent.style.background = "rgba(76, 175, 80, 0.1)"; headerCurrent.style.border = "1px solid #4caf50"; headerCurrent.style.marginBottom = "2px"; container.appendChild(headerCurrent);
-            for (let target in currentMapGateways) { let coords = currentMapGateways[target]; let row = document.createElement('div'); row.className = "list-item"; row.style.borderLeft = "3px solid #4caf50"; row.innerHTML = `<div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer; flex-grow:1;" onclick="goSinglePoint(${coords.x}, ${coords.y}, '${currentSysMap}')" title="Biegnij tam!"><span style="color:#00acc1; font-weight:bold;">DO: ${target}</span><span style="color:#a99a75;">Ostatnia klatka: X: ${coords.x}, Y: ${coords.y}</span></div><button class="icon-btn" style="padding:0 5px;" title="Usuń z bazy" onclick="deleteGateway('${currentSysMap}', '${target}')">🗑️</button>`; container.appendChild(row); }
-        }
-        let headerOther = document.createElement('div'); headerOther.innerHTML = `<span style="color:#d4af37; font-weight:bold; font-size:10px;">🗺️ POZOSTAŁE PRZEJŚCIA W PAMIĘCI:</span>`; headerOther.style.padding = "4px 5px"; headerOther.style.background = "#1a1a1a"; headerOther.style.marginTop = "8px"; headerOther.style.marginBottom = "4px"; container.appendChild(headerOther);
-        let otherCount = 0;
-        for (let sourceMap in globalGateways) {
-            if (sourceMap === currentSysMap) continue;
-            if (Object.keys(globalGateways[sourceMap]).length === 0) continue;
-            count++; otherCount++;
-            let groupWrap = document.createElement('div'); groupWrap.style.marginBottom = "2px"; let header = document.createElement('div'); header.className = "accordion-header"; header.innerHTML = `▶ Z mapy: ${sourceMap}`; let content = document.createElement('div'); content.style.display = "none"; content.style.paddingLeft = "4px"; content.style.borderLeft = "1px solid #333"; content.style.marginBottom = "4px";
-            header.onclick = () => { let isHidden = content.style.display === "none"; content.style.display = isHidden ? "block" : "none"; header.innerHTML = `${isHidden ? '▼' : '▶'} Z mapy: ${sourceMap}`; };
-            for (let target in globalGateways[sourceMap]) { let coords = globalGateways[sourceMap][target]; let row = document.createElement('div'); row.className = "list-item"; row.innerHTML = `<div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer; flex-grow:1;" onclick="goSinglePoint(${coords.x}, ${coords.y}, '${sourceMap}')" title="Musisz iść na mapę: ${sourceMap}"><span style="color:#00acc1; font-weight:bold;">DO: ${target}</span><span style="color:#a99a75;">Ostatnia klatka: X: ${coords.x}, Y: ${coords.y}</span></div><button class="icon-btn" style="padding:0 5px;" title="Usuń z bazy" onclick="deleteGateway('${sourceMap}', '${target}')">🗑️</button>`; content.appendChild(row); }
-            groupWrap.appendChild(header); groupWrap.appendChild(content); container.appendChild(groupWrap);
-        }
-        if (otherCount === 0) container.innerHTML += `<div style="padding:5px; text-align:center; color:#777; font-size:10px; font-style:italic;">Brak innych przejść.</div>`;
-        if (count === 0) container.innerHTML = `<div style="padding:5px; text-align:center; color:#777; font-size:10px; font-style:italic;">Brak zapisanych przejść w całej pamięci.<br><br>Włącz Smart Memory (🎥) i graj, a same się tu pojawią!</div>`;
-    }
-
-    function scanCurrentMapForGateways() {
-        if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return heroAlert("Brak danych mapy z silnika.");
-        let currentMap = Engine.map.d.name;
-        if (!currentMap) return;
-
-        let gatewaysFound = [];
-        let gws = {};
-        if (Engine.map.gateways) gws = Engine.map.gateways;
-        if (Engine.map.d.gw && Object.keys(gws).length === 0) gws = Engine.map.d.gw;
-
-        for (let id in gws) {
-            let gw = gws[id].d || gws[id];
-            let px = gw.x; let py = gw.y;
-            let tName = gw.name || gw.targetName || gw.title || "Ukryte przejście";
-            tName = tName.replace(/<[^>]*>?/gm, '').replace("Przejście do: ", "").split(" .")[0].trim();
-
-            if (px !== undefined && py !== undefined) {
-                gatewaysFound.push({x: px, y: py, name: tName});
-            }
-        }
-
-        let container = document.getElementById('gatewaysListContainer');
-        if (gatewaysFound.length === 0) return heroAlert("Skaner nie znalazł tu żadnych drzwi ani wejść do jaskiń.");
-
-        let header = document.createElement('div');
-        header.innerHTML = `<br><span style="color:#ffb300; font-weight:bold; font-size:10px;">🔍 WYKRYTE PRZEZ SKANER (Obecna Mapa):</span>`;
-        header.style.padding = "2px 5px"; header.style.background = "#1a1a1a";
-        container.insertBefore(header, container.firstChild);
-
-        gatewaysFound.forEach(gw => {
-            let row = document.createElement('div');
-            row.className = "list-item";
-            row.style.borderLeft = "3px solid #ffb300";
-            row.innerHTML = `
-                <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer;" onclick="goSinglePoint(${gw.x}, ${gw.y}, '${currentMap}')" title="Biegnij tam">
-                    <span style="color:#ffb300; font-weight:bold;">${gw.name}</span>
-                    <span style="color:#a99a75;">Stoi na: X: ${gw.x}, Y: ${gw.y}</span>
-                </div>
-                <button class="btn-sepia" onclick="saveGatewayToDB('${currentMap}', '${gw.name}', ${gw.x}, ${gw.y}); heroAlert('Zapisano pomyślnie!');">Zapisz Cel</button>
-            `;
-            container.insertBefore(row, header.nextSibling);
-        });
-        heroAlert(`Skaner wykrył ${gatewaysFound.length} przejść na mapie. Zobaczysz je na samej górze panelu.`);
-    }
-
-    function renderCordsList(activeIndex = -1) {
-        const container = document.getElementById('cordsListContainer'); if(!container) return; container.innerHTML = ''; let currentMap = lastMapName;
-        if (checkedMapsThisSession.has(currentMap)) { container.innerHTML = '<div style="padding:5px;text-align:center;color:#81c784;font-style:italic;">Mapa oznaczona jako sprawdzona (✔). Szukam drogi dalej.</div>'; return; }
-        if(currentCordsList.length === 0) { container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;font-style:italic;">Brak respów. Przechodzę przez mapę.</div>'; return; }
-        currentCordsList.forEach((c, index) => {
-            const row = document.createElement('div'); let classes = "list-item"; if (index === activeIndex) classes += " active"; else if (checkedPoints.has(index)) classes += " checked"; row.className = classes; let statusIcon = checkedPoints.has(index) ? " ✔" : "";
-            row.innerHTML = `<span style="color:#d4af37;">${index + 1}. [${c[0]}, ${c[1]}]${statusIcon}</span><div class="buttons-wrapper"><button class="btn-sepia btn-go-sepia" onclick="goSinglePoint(${c[0]}, ${c[1]}, '${currentMap}')">IDŹ</button></div>`; container.appendChild(row);
-        });
-    }
-
-  function optimizeRoute() {
-        if (!Engine || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
-
-        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-        let unvisited = [...currentCordsList];
-        let newRoute = [];
-        let finalPoint = null;
-
-        let hero = document.getElementById('selHero').value;
-        let currentSysMap = lastMapName;
-        let exitGw = null;
-
-        // Poszukiwanie bramy prowadzącej do następnej mapy
-        if (hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0 && currentRouteIndex !== -1) {
-            let mapList = heroMapOrder[hero];
-            let nextMap = mapList[(currentRouteIndex + 1) % mapList.length];
-            let path = getShortestPath(currentSysMap, nextMap);
-
-           if (path && path.length > 1) {
-                    let immediateNextMap = path[1];
-                    let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
-                    let isTeleport = botSettings.useTeleports && !door && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[immediateNextMap];
-
-                    if(door) {
-                        let targetX = door.x; let targetY = door.y;
-                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
-                        safeGoTo(targetX, targetY, false);
-                        return;
-                    } else if (isTeleport) {
-                        console.log(`%c[HERO] Używam teleportera w patrolu...`, "color: #9c27b0;");
-                        clearTimeout(smoothPatrolInterval);
-                        smoothPatrolInterval = setTimeout(() => handleTeleportNPC(immediateNextMap), 200);
-                        return;
-                    }
-                }
-        }
-
-        // Jeśli mamy wyjście i więcej niż 1 punkt, ustalamy ostatni punkt przed drzwiami
-        if (exitGw && unvisited.length > 1) {
-            let closestToExitIdx = 0;
-            let minDistToExit = Infinity;
-            for (let i = 0; i < unvisited.length; i++) {
-                let dist = Math.abs(unvisited[i][0] - exitGw.x) + Math.abs(unvisited[i][1] - exitGw.y);
-                if (dist < minDistToExit) {
-                    minDistToExit = dist;
-                    closestToExitIdx = i;
-                }
-            }
-            finalPoint = unvisited.splice(closestToExitIdx, 1)[0];
-        }
-
-        // Standardowe zachłanne sortowanie z obecnego miejsca dla reszty punktów
-        while (unvisited.length > 0) {
-            let nearestIdx = 0; let minDist = Infinity;
-            for (let i = 0; i < unvisited.length; i++) {
-                let dist = Math.abs(unvisited[i][0] - cx) + Math.abs(unvisited[i][1] - cy);
-                if (dist < minDist) { minDist = dist; nearestIdx = i; }
-            }
-            let nextPt = unvisited.splice(nearestIdx, 1)[0];
-            newRoute.push(nextPt);
-            cx = nextPt[0]; cy = nextPt[1];
-        }
-
-        // Na koniec dodajemy "finalPoint" wyliczony obok drzwi
-        if (finalPoint) newRoute.push(finalPoint);
-
-        currentCordsList = newRoute;
-    }
-
-    function safeGoTo(targetX, targetY, useRandom) {
-        let now = Date.now();
-        if (now < nextAllowedClickTime) return;
-
-        let x = Number(targetX); let y = Number(targetY);
-
-        if (useRandom) {
-            let radius = botSettings.randomRadius;
-            if (radius > 0) {
-                x += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
-                y += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
-                x = Math.max(0, x); y = Math.max(0, y);
-            }
-        }
-
-        if (typeof Engine !== 'undefined' && Engine.hero) {
-            Engine.hero.autoGoTo({x: x, y: y});
-            let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
-            nextAllowedClickTime = Date.now() + throttleDelay;
-        }
-    }
-
-    function stopPatrol(hardStop = false) {
-        isPatrolling = false;
-        isRushing = false;
-        clearTimeout(rushInterval);
-
-        let btn = document.getElementById('btnStartStop');
-        if (btn) {
-            btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>';
-            btn.style.color = "#4caf50";
-            btn.style.borderColor = "#4caf50";
-        }
-        checkedPoints.clear();
-        clearTimeout(smoothPatrolInterval);
-        renderCordsList(-1);
-
-        if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-            try {
-                if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
-                if (Engine.hero.d.path) Engine.hero.d.path = [];
-            } catch(e) {}
-        }
-    }
-
-    function startPatrol() {
-        let hero = document.getElementById('selHero').value; let mapList = heroMapOrder[hero];
-        if (hero && mapList) {
-            let currentSysMap = lastMapName;
-            if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) { currentRouteIndex = mapList.indexOf(currentSysMap); sessionStorage.setItem('hero_route_index', currentRouteIndex); updateUI(); }
-        }
-        isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
-        let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; executePatrolStep();
-    }
-
-    function executePatrolStep() {
-        if (!isPatrolling) return;
-
-        checkVisionRange();
-
-        while (patrolIndex < currentCordsList.length && checkedPoints.has(patrolIndex)) {
-            patrolIndex++;
-        }
-
-        let hero = document.getElementById('selHero').value;
-        let currentSysMap = lastMapName;
-
-        if (patrolIndex >= currentCordsList.length || currentCordsList.length === 0) {
-            clearTimeout(smoothPatrolInterval);
-
-            if (!checkedMapsThisSession.has(currentSysMap)) { checkedMapsThisSession.add(currentSysMap); saveCheckedMaps(); }
-
-            if(hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0) {
-                let mapList = heroMapOrder[hero];
-
-                let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
-                let finalDestinationMap = mapList[nextRouteIndex];
-
-                let path = getShortestPath(currentSysMap, finalDestinationMap);
-
-                if (path && path.length > 1) {
-                    let immediateNextMap = path[1];
-                    let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
-
-                    if(door) {
-                        let targetX = door.x; let targetY = door.y;
-                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
-
-                        safeGoTo(targetX, targetY, false);
-                        return;
-                    }
-                }
-
-                stopPatrol(true);
-                let fallbackMissing = path ? path[1] : finalDestinationMap;
-                heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy (wyjścia/powroty z podziemi). Kliknij 🎥 Nagrywam i przejdź tam!`);
-                return;
-            }
-
-            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true); heroAlert("✅ Trasa zrobiona!"); return;
-        }
-
-        renderCordsList(patrolIndex);
-        let target = currentCordsList[patrolIndex];
-        safeGoTo(target[0], target[1], true);
-        stuckCount = 0; clearTimeout(smoothPatrolInterval);
-
-        let pingDelay = Math.floor(Math.random() * (botSettings.stepMax - botSettings.stepMin + 1)) + botSettings.stepMin;
-        smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
-    }
-
-    function checkSmoothArrival() {
-        if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d) return;
-
-        checkVisionRange();
-
-        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-
-        if (checkedPoints.has(patrolIndex)) {
-            clearTimeout(smoothPatrolInterval);
-            patrolIndex++;
-            executePatrolStep();
-            return;
-        }
-
-        let target = currentCordsList[patrolIndex];
-        let dist = Math.abs(cx - target[0]) + Math.abs(cy - target[1]);
-
-        if (dist <= 1) {
-            clearTimeout(smoothPatrolInterval);
-            checkedPoints.add(patrolIndex);
-
-            let waitDelay = Math.floor(Math.random() * (botSettings.waitMax - botSettings.waitMin + 1)) + botSettings.waitMin;
-
-            patrolIndex++;
-            setTimeout(executePatrolStep, waitDelay);
-        } else {
-            if (cx === lastX && cy === lastY) {
-                stuckCount++;
-                if (stuckCount > 8) {
-                    clearTimeout(smoothPatrolInterval); checkedPoints.add(patrolIndex); patrolIndex++; executePatrolStep(); return;
-                }
-            } else {
-                stuckCount = 0;
-            }
-
-            let pingDelay = Math.floor(Math.random() * (botSettings.stepMax - botSettings.stepMin + 1)) + botSettings.stepMin;
-            smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
-        }
-        lastX = cx; lastY = cy;
-        lastX = cx; lastY = cy;
-    }
-
-
-// ==========================================
-    // LOGIKA EXP (Smart-Roam, Auto-Lvl, Aggro & Anty-Lag)
-    // ==========================================
-    window.isExping = false;
-    let expMapTransitionCooldown = 0;
-    let expLastActionTime = 0;
-    let expCurrentTargetId = null;
-
-    let expLastX = -1;
-    let expLastY = -1;
-    let expAntiLagTime = 0;
-
-    window.lastHeroExpLevel = 0;
-    window.mapClearTimes = window.mapClearTimes || {};
-
-    window.logExp = function(msg, color="#a99a75") {
-        let consoleDiv = document.getElementById('expConsole');
-        if (!consoleDiv) return;
-        let time = new Date().toLocaleTimeString('pl-PL', {hour12: false});
-        let entry = document.createElement('div');
-        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${msg}</span>`;
-        consoleDiv.appendChild(entry);
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
-    };
-
-    // --- MAGIA: GARGONEM POCKET BERSERK (Czyste nadpisanie pamięci) ---
-    window.toggleNativeAggroVisuals = function(state) {
-        try {
-            if (typeof Engine !== 'undefined' && Engine.settings && Engine.settings.d) {
-                // Bezpośrednia modyfikacja pamięci klienta (Omija serwer = brak błędów!)
-                Engine.settings.d.fight_auto_solo = state ? 1 : 0;
-                Engine.settings.d.fight_auto_level_min = botSettings.exp.minLvl;
-                Engine.settings.d.fight_auto_level_max = botSettings.exp.maxLvl;
-
-                // Filtry rzadszych potworów
-                Engine.settings.d.fight_auto_elites = (botSettings.exp.aggroE1 !== false) ? 1 : 0;
-                Engine.settings.d.fight_auto_elites2 = (botSettings.exp.aggroE2 === true) ? 1 : 0;
-
-                // Wymuszenie odświeżenia ikonek nad głowami mobów ("Główki Gargonema")
-                let npcs = Engine.npcs.check ? Engine.npcs.check() : Engine.npcs.d;
-                for(let id in npcs) {
-                    let npc = npcs[id];
-                    if (npc && npc.sprite && typeof npc.sprite.updateAutoFightIndicator === 'function') {
-                        npc.sprite.updateAutoFightIndicator();
-                    }
-                }
-            }
-            if (state) window.logExp("⚔️ Włączono Smart-Aggro (Zintegrowane z silnikiem).", "#ff9800");
-            else window.logExp("🛡️ Wyłączono Smart-Aggro.", "#ff9800");
-        } catch(e) {}
-    };
-
-    // Zabezpieczenie: Silnik gry potrafi czasem resetować ustawienia, przypominamy mu o nich co 2s
-    setInterval(() => {
-        let aggroCheckbox = document.getElementById('expAggro');
-        if(window.isExping && botSettings.exp.useAggro && aggroCheckbox && aggroCheckbox.checked) {
-            window.toggleNativeAggroVisuals(true);
-        }
-    }, 2000);
-
-    function runExpLogic() {
-        if (!window.isExping) return;
-        if (typeof Engine === 'undefined' || !Engine.hero || Engine.map.isLoading) return;
-
-        // --- AUTOMATYCZNY ZAKRES LEVELOWY ---
-        if (Engine.hero.d && Engine.hero.d.lvl) {
-            let currentLvl = Engine.hero.d.lvl;
-            if (window.lastHeroExpLevel === 0) {
-                window.lastHeroExpLevel = currentLvl;
-            } else if (currentLvl > window.lastHeroExpLevel) {
-                let diff = currentLvl - window.lastHeroExpLevel;
-                botSettings.exp.minLvl += diff;
-                botSettings.exp.maxLvl += diff;
-                saveSettings();
-
-                let minInp = document.getElementById('expMinL');
-                let maxInp = document.getElementById('expMaxL');
-                if (minInp) minInp.value = botSettings.exp.minLvl;
-                if (maxInp) maxInp.value = botSettings.exp.maxLvl;
-
-                window.logExp(`[AWANS!] Zaktualizowano przedział na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`, "#ffb300");
-                window.lastHeroExpLevel = currentLvl;
-
-                if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true);
-            }
-        }
-
-        let now = Date.now();
-
-        if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
-            expLastActionTime = now + 500;
-            expCurrentTargetId = null;
-            return;
-        }
-
-        if (now < expLastActionTime) return;
-
-        let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
-        let hx = Engine.hero.d.x, hy = Engine.hero.d.y;
-
-        const getAntiLagDelay = () => {
-            let min = botSettings.expAntiLagMin || 1500;
-            let max = botSettings.expAntiLagMax || 2500;
-            return Math.floor(Math.random() * (max - min + 1)) + min;
-        };
-
-        // --- WYSZUKIWANIE BRAM NA MAPIE ---
-        const isOnGateway = (x, y) => {
-            let gws = (Engine.map && Engine.map.gateways) ? Engine.map.gateways : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
-            for (let id in gws) {
-                let gw = gws[id].d || gws[id];
-                if (gw.x === x && gw.y === y) return true;
-            }
-            return false;
-        };
-
-        // --- DETEKCJA RUCHU I BEZRUCHU (ANTY-LAG) ---
-        if (hx !== expLastX || hy !== expLastY) {
-            expLastX = hx;
-            expLastY = hy;
-            expAntiLagTime = now + getAntiLagDelay(); // Jeśli idziemy, resetujemy timer
-        } else if (now > expAntiLagTime) {
-            // Jesteśmy w bezruchu za długo!
-
-            // Ratunek: Czy stoimy na przejściu między mapami?
-            if (isOnGateway(hx, hy)) {
-                window.logExp(`Stoję na przejściu! Odbiegam kawałek...`, "#ff9800");
-                let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
-                let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
-                Engine.hero.autoGoTo({x: stepX, y: stepY});
-
-                expAntiLagTime = now + 1500;
-                expMapTransitionCooldown = now + 1500;
-                expLastActionTime = now + 500;
-                return;
-            }
-
-            if (expCurrentTargetId) {
-                window.logExp(`Zawieszenie w drodze do potwora. Resetuję cel!`, "#f44336");
-                expCurrentTargetId = null;
-                expAntiLagTime = now + getAntiLagDelay();
-            } else {
-                // Jesteśmy w bezruchu (czekamy lub odpoczywamy), po prostu zresetujmy stoper.
-                expAntiLagTime = now + getAntiLagDelay();
-            }
-        }
-
-        // --- OCENA AKTUALNEGO CELU ---
-        let currentTargetDist = 999;
-        if (expCurrentTargetId && npcs[expCurrentTargetId]) {
-            let n = npcs[expCurrentTargetId].d || npcs[expCurrentTargetId];
-            if (!n.dead) {
-                currentTargetDist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
-            } else {
-                expCurrentTargetId = null; // Cel nie żyje, porzucamy
-            }
-        } else {
-            expCurrentTargetId = null;
-        }
-
-        // --- SZUKANIE NAJLEPSZEGO CELU ---
-        let closestDist = 999;
-        let closestTx = -1, closestTy = -1;
-        let closestName = "";
-        let closestId = null;
-
-        for (let id in npcs) {
-            let n = npcs[id].d || npcs[id];
-            if ((n.type === 2 || n.type === 3) && !n.dead) {
-                let lvl = parseInt(n.lvl) || 0;
-                if (lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
-
-                let wt = parseInt(n.wt) || 0;
-                if (wt === 0 && !botSettings.exp.normal) continue;
-                if (wt === 1 && !botSettings.exp.elite) continue;
-                if (wt >= 2) continue;
-
-                let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestTx = n.x;
-                    closestTy = n.y;
-                    closestId = id;
-                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : "Potwór";
-                }
-            }
-        }
-
-        // --- DECYZJA LOGICZNA ---
-        if (closestId && closestDist <= 999) {
-            // 1. Zmiana celu, jeśli znaleźliśmy lepszy (bliższy) LUB dopiero go złapaliśmy
-            if (!expCurrentTargetId || closestDist < currentTargetDist) {
-                if (expCurrentTargetId !== closestId) {
-                    expCurrentTargetId = closestId;
-                    window.logExp(`Namierzono: ${closestName} (${closestDist}m)`, "#00e5ff");
-                    Engine.hero.autoGoTo({x: closestTx, y: closestTy});
-                    expLastActionTime = now + 400; // Krótki delay, żeby gra przetworzyła ścieżkę
-                    return;
-                }
-            }
-
-            // 2. Jeśli mamy cel i jesteśmy tuż obok (1 kratka odstępu = atak)
-            if (expCurrentTargetId && currentTargetDist <= 1) {
-                let finalTx = npcs[expCurrentTargetId].d ? npcs[expCurrentTargetId].d.x : npcs[expCurrentTargetId].x;
-                let finalTy = npcs[expCurrentTargetId].d ? npcs[expCurrentTargetId].d.y : npcs[expCurrentTargetId].y;
-
-                // ZMIANA: Tylko wchodzimy na moba i nic nie klikamy.
-                // Silnik gry (wbudowany auto-fight) sam wyłapie kolizję i odpali walkę!
-                Engine.hero.autoGoTo({x: finalTx, y: finalTy});
-
-                // Zwiększamy opóźnienie do 1200ms, żeby dać grze czas na załadowanie
-                // okna bitwy i uniknąć spamu chodzenia w to samo miejsce.
-                expLastActionTime = now + 1200;
-                return;
-            }
-
-            // 3. Idziemy sobie spokojnie, cel jest ten sam i wciąż za daleko.
-            // Czekamy. Zero bezmyślnego spamu "autoGoTo"!
-            return;
-
-        } else {
-            // --- SMART-ROAM (ZMIANA MAPY, GDY JEST CZYSTO) ---
-            if (now < expMapTransitionCooldown) return;
-            expCurrentTargetId = null;
-
-            let maps = botSettings.exp.mapOrder;
-            let currMap = Engine.map.d.name;
-
-            if (maps.includes(currMap)) window.mapClearTimes[currMap] = Date.now();
-
-            if (maps.length > 1) {
-                let oldestMap = maps[0];
-                let oldestTime = window.mapClearTimes[oldestMap] || 0;
-
-                for (let i = 1; i < maps.length; i++) {
-                    let t = window.mapClearTimes[maps[i]] || 0;
-                    if (t < oldestTime) {
-                        oldestMap = maps[i];
-                        oldestTime = t;
-                    }
-                }
-
-                if (oldestMap === currMap) {
-                    if (now - expMapTransitionCooldown > 3000) {
-                        window.logExp("Wszystkie mapy czyste. Czekam...", "#777");
-                        expMapTransitionCooldown = now + 3000;
-                    }
-                    return;
-                }
-
-                let path = getShortestPath(currMap, oldestMap);
-                if (path && path.length > 1) {
-                    let nextStepMap = path[1];
-                    let door = globalGateways[currMap] && globalGateways[currMap][nextStepMap];
-
-                    if (door) {
-                        window.logExp(`[Przejście] ➝ ${nextStepMap}`, "#ba68c8");
-                        expAntiLagTime = now + getAntiLagDelay();
-                        Engine.hero.autoGoTo({x: door.x, y: door.y});
-                        expMapTransitionCooldown = now + 2000;
-                        expLastActionTime = now + 500;
-                    } else {
-                        expMapTransitionCooldown = now + 5000;
-                    }
-                } else {
-                    window.mapClearTimes[oldestMap] = Date.now();
-                    expMapTransitionCooldown = now + 2000;
-                }
-            } else {
-                if (now - expMapTransitionCooldown > 5000) {
-                    window.logExp("Wyczyszczono. Czekam na respawn...", "#777");
-                    expMapTransitionCooldown = now + 5000;
-                }
-            }
-        }
-    }
-
-    setInterval(runExpLogic, 150);
-    // --- BAZA DANYCH PROFILI EXPOWISK ---
-    window.saveCurrentExpProfile = function() {
-        let name = document.getElementById('inpProfileName').value.trim();
-        let desc = document.getElementById('inpProfileDesc').value.trim();
-        if(!name) return heroAlert("Podaj nazwę dla tego expowiska!");
-        if(botSettings.exp.mapOrder.length === 0) return heroAlert("Twoja obecna trasa EXP jest pusta.");
-
-        botSettings.expProfiles.push({ name: name, desc: desc, maps: [...botSettings.exp.mapOrder] });
-        localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
-
-        document.getElementById('inpProfileName').value = "";
-        document.getElementById('inpProfileDesc').value = "";
-        if(typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
-        heroAlert("✅ Expowisko zapisane pomyślnie w bazie!");
-    };
-
-    window.loadExpProfile = function(index) {
-        let p = botSettings.expProfiles[index];
-        if(p) {
-            botSettings.exp.mapOrder = [...p.maps];
-            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-
-            // Auto-wyliczanie min i max levela (+15 / -15)
-            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
-            if(lvlMatch && lvlMatch[1]) {
-                let baseLvl = parseInt(lvlMatch[1]);
-                botSettings.exp.minLvl = Math.max(1, baseLvl - 15);
-                botSettings.exp.maxLvl = baseLvl + 15;
-
-                let minInput = document.getElementById('expMinL');
-                let maxInput = document.getElementById('expMaxL');
-                if (minInput) minInput.value = botSettings.exp.minLvl;
-                if (maxInput) maxInput.value = botSettings.exp.maxLvl;
-            }
-
-            window.mapClearTimes = {};
-            saveSettings();
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-            heroAlert(`✅ Załadowano i NADPISANO trasę: ${p.name}\nAutomatycznie ustawiono poziom potworów na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
-        }
-    };
-
-    // NOWOŚĆ: Funkcja do łączenia expowisk ze sobą!
-    window.appendExpProfile = function(index) {
-        let p = botSettings.expProfiles[index];
-        if(p) {
-            // Dodawanie map bez duplikatów
-            p.maps.forEach(m => {
-                if (!botSettings.exp.mapOrder.includes(m)) {
-                    botSettings.exp.mapOrder.push(m);
-                }
-            });
-            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-
-            // Rozszerzanie zakresu poziomów
-            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
-            if(lvlMatch && lvlMatch[1]) {
-                let baseLvl = parseInt(lvlMatch[1]);
-                let newMin = Math.max(1, baseLvl - 15);
-                let newMax = baseLvl + 15;
-
-                botSettings.exp.minLvl = Math.min(botSettings.exp.minLvl, newMin);
-                botSettings.exp.maxLvl = Math.max(botSettings.exp.maxLvl, newMax);
-
-                let minInput = document.getElementById('expMinL');
-                let maxInput = document.getElementById('expMaxL');
-                if (minInput) minInput.value = botSettings.exp.minLvl;
-                if (maxInput) maxInput.value = botSettings.exp.maxLvl;
-            }
-
-            saveSettings();
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-            heroAlert(`➕ DOŁĄCZONO do obecnej trasy: ${p.name}\nZakres potworów został poszerzony i wynosi teraz: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
-        }
-    };
-
-    window.deleteExpProfile = function(index) {
-        heroConfirm("Czy na pewno chcesz usunąć to zapisane expowisko?", (res) => {
-            if(res) {
-                botSettings.expProfiles.splice(index, 1);
-                localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
-                if(typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
-            }
-        });
-    };
-
-    window.renderExpProfiles = function() {
-        let c = document.getElementById('expProfilesList'); if(!c) return;
-
-        // Żelazne zabezpieczenie przed pustą bazą (wymusza załadowanie 109 expowisk)
-        if (!botSettings.expProfiles || botSettings.expProfiles.length === 0) {
-            if (window.defaultExpProfiles && window.defaultExpProfiles.length > 0) {
-                botSettings.expProfiles = [...window.defaultExpProfiles];
-                localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
-            }
-        }
-
-        c.innerHTML = '';
-        if (botSettings.expProfiles.length === 0) {
-             c.innerHTML = '<div style="padding:10px; text-align:center; color:#777; font-size:10px;">Brak zapisanych tras. Odśwież stronę (F5).</div>';
-             return;
-        }
-
-        botSettings.expProfiles.forEach((p, i) => {
-            let wrap = document.createElement('div');
-            wrap.style.marginBottom = "4px";
-
-            let header = document.createElement('div');
-            header.style.cssText = "background: #1a1a1a; border: 1px solid #333; padding: 4px 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;";
-            header.innerHTML = `
-                <div style="display:flex; flex-direction:column; line-height:1.2;">
-                    <span style="color: #d4af37; font-weight: bold; font-size: 11px;">${p.name}</span>
-                </div>
-                <span style="font-size:10px; color:#a99a75;">▼</span>
-            `;
-
-            let content = document.createElement('div');
-            content.style.display = "none";
-            content.style.padding = "4px";
-            content.style.borderLeft = "1px solid #333";
-            content.style.background = "#141414";
-
-            let mapsHtml = p.maps.join(' <span style="color:#777;">➝</span> ');
-
-            content.innerHTML = `
-                ${p.desc ? `<div style="font-size:9px; color:#aaa; margin-bottom:4px;">Opis: ${p.desc}</div>` : ''}
-                <div style="font-size:9px; color:#888; margin-bottom:6px; line-height:1.3; word-wrap:break-word; white-space:normal;">
-                    Mapy: <span style="color:#a99a75">${mapsHtml}</span>
-                </div>
-                <div style="display:flex; gap:4px; flex-wrap: wrap;">
-                    <button class="btn-sepia" style="padding:4px 4px; background:#00838f; flex:1;" onclick="loadExpProfile(${i})" title="Całkowicie podmienia listę na to expowisko">📥 NADPISZ</button>
-                    <button class="btn-sepia" style="padding:4px 4px; background:#4caf50; flex:1;" onclick="appendExpProfile(${i})" title="Dopisuje mapy tego expowiska do już wczytanych">➕ DOŁĄCZ</button>
-                    <button class="btn-sepia" style="padding:4px 4px; background:#e53935; width:25px;" onclick="deleteExpProfile(${i})">✖</button>
-                </div>
-            `;
-
-            header.onclick = () => {
-                let isHidden = content.style.display === "none";
-
-                // Zwiń inne
-                document.querySelectorAll('#expProfilesList > div > div:nth-child(2)').forEach(el => el.style.display = 'none');
-                document.querySelectorAll('#expProfilesList > div > div:nth-child(1)').forEach(el => { el.style.background = '#1a1a1a'; el.style.borderColor = '#333'; });
-
-                if (isHidden) {
-                    content.style.display = "block";
-                    header.style.background = "rgba(212, 175, 55, 0.1)";
-                    header.style.borderColor = "#d4af37";
-                }
-            };
-
-            wrap.appendChild(header);
-            wrap.appendChild(content);
-            c.appendChild(wrap);
-        });
-    };
-    // --- FUNKCJE LISTY MAP EXP ---
-    window.addCurrentMapToExp = () => {
-        let m = Engine.map.d.name;
-        if (!botSettings.exp.mapOrder.includes(m)) {
-            botSettings.exp.mapOrder.push(m);
-            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-        }
-    };
-
-    window.addNeighborsToExp = () => {
-        let currMap = Engine.map.d.name; let added = 0;
-        if (!botSettings.exp.mapOrder.includes(currMap)) { botSettings.exp.mapOrder.push(currMap); added++; }
-        if (globalGateways[currMap]) {
-            for (let targetMap in globalGateways[currMap]) {
-                if (!botSettings.exp.mapOrder.includes(targetMap)) { botSettings.exp.mapOrder.push(targetMap); added++; }
-            }
-        }
-        let gws = (Engine.map && Engine.map.gateways) ? Engine.map.gateways : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
-        for (let id in gws) {
-            let gw = gws[id].d || gws[id]; let tName = gw.name || gw.targetName || "";
-            if (tName && typeof tName === 'string') {
-                let cleanName = tName.split(" .")[0].trim();
-                if (cleanName && cleanName !== currMap && !botSettings.exp.mapOrder.includes(cleanName)) {
-                    botSettings.exp.mapOrder.push(cleanName);
-                    if (gw.x !== undefined && gw.y !== undefined && typeof window.saveGatewayToDB === 'function') window.saveGatewayToDB(currMap, cleanName, gw.x, gw.y);
-                    added++;
-                }
-            }
-        }
-        if (added > 0) { localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); if (typeof window.renderExpMaps === 'function') window.renderExpMaps(); window.logExp(`Dodano ${added} map!`, "#4caf50"); }
-    };
-
-    window.removeExpMap = (index) => {
-        heroConfirm(`Usunąć mapę ze ścieżki expowiska?`, (res) => {
-            if (res) { botSettings.exp.mapOrder.splice(index, 1); localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); window.renderExpMaps(); }
-        });
-    };
-
-    window.clearExpMaps = () => {
-        botSettings.exp.mapOrder = [];
-        localStorage.setItem('exp_map_order_v64', '[]');
-        if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-    };
-window.renderMapOrderList = () => {
-        let c = document.getElementById('heroMapListContainer');
-        if (!c) return;
-
-        let hero = document.getElementById('selHero').value;
-        if (!hero || !heroMapOrder[hero] || heroMapOrder[hero].length === 0) {
-            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa, by zobaczyć trasę</div>';
-            return;
-        }
-
-        let currentMap = lastMapName;
-        c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
-            if (editingGatewayFor === mapName) {
-                let defaultX = "", defaultY = "";
-                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
-                if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
-                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div></div></div>`;
-            } else {
-                let isPathPossible = false;
-                for(let fromMap in globalGateways) { if(globalGateways[fromMap][mapName]) isPathPossible = true; }
-                let gatewayIndicator = isPathPossible ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>" : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
-
-                let activeClass = (currentRouteIndex === index) ? "active-route" : "";
-                let checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
-                let nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
-
-                return `<div class="list-item ${activeClass} ${checkClass}"><div class="map-name-wrap"><span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span><span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">${index + 1}. ${gatewayIndicator} ${mapName}</span></div><div class="buttons-wrapper"><input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)" title="Zmień pozycję na liście (1-10)"><button class="icon-btn" onclick="openInlineEditor('${mapName}')" title="Edytuj kordy przejścia">🚪</button></div></div>`;
-            }
-        }).join('');
-    };
-    window.renderExpMaps = () => {
-        let c = document.getElementById('expMapList'); if (!c) return;
-        let currentMap = lastMapName;
-        c.innerHTML = botSettings.exp.mapOrder.map((mapName, index) => {
-            if (editingGatewayFor === mapName) {
-                let defaultX = "", defaultY = ""; let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
-                if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
-                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div></div></div>`;
-            } else {
-                let isPathPossible = false;
-                for(let fromMap in globalGateways) { if(globalGateways[fromMap][mapName]) isPathPossible = true; }
-                let gatewayIndicator = isPathPossible ? "<span style='color:#4caf50;' title='Zapisano w bazie'>[🚪✔]</span>" : "<span style='color:#777;' title='Brakuje w bazie!'>[➕🚪]</span>";
-                return `<div class="list-item"><div class="map-name-wrap"><span class="btn-del-map" onclick="removeExpMap(${index})">✖</span><span class="map-name" style="color:#81c784; font-weight:bold;">${index + 1}. ${gatewayIndicator} ${mapName}</span></div><div class="buttons-wrapper"><button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button></div></div>`;
-            }
-        }).join('');
-    };
-// === TUTAJ WKLEJ NOWĄ FUNKCJĘ ===
-    window.renderTeleportOptions = function() {
-        let container = document.getElementById('tpCheckboxes');
-        if (!container) return; // Zabezpieczenie przed błędem
-        container.innerHTML = '';
-        for (let city in botSettings.unlockedTeleports) {
-            let checked = botSettings.unlockedTeleports[city] ? 'checked' : '';
-            container.innerHTML += `
-                <label style="color:#d4af37; font-size:11px; cursor:pointer; background:#1a1a1a; padding:5px; border:1px solid #333; display:flex; align-items:center; gap:6px;">
-                    <input type="checkbox" onchange="botSettings.unlockedTeleports['${city}'] = this.checked; localStorage.setItem('hero_teleports_v64', JSON.stringify(botSettings.unlockedTeleports));" ${checked}>
-                    ${city}
-                </label>
-            `;
-        }
-    };
     // === KONIEC WKLEJANIA ===
 
 })(); // Koniec kodu
