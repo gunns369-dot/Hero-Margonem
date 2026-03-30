@@ -806,31 +806,29 @@ let opacityValue = 0.95;
 
     // ==========================================
 
-    const bootloader = setInterval(() => {
-
+   const bootloader = setInterval(() => {
         if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.map && Engine.map.d && Engine.map.d.id) {
-
             clearInterval(bootloader);
-
             loadData();
-
             cleanOldGateways();
-
             initGUI();
-
             setInterval(autoDetectEngineData, 800);
-
             setInterval(heroPositionTracker, 100);
-
             setInterval(radarLoop, 150);
-
             document.addEventListener('keydown', handleGlobalKeydown);
-
             setupMapClickListener();
-
         }
-
     }, 2000);
+
+    // Zabezpieczenie brakującej funkcji, naprawia krytyczny CRASH!
+    function setupMapClickListener() {
+        document.body.addEventListener('click', (e) => {
+            if (isWaitingForBossClick && activeBossTarget) {
+                isWaitingForBossClick = false;
+                if(document.getElementById('bossClickBanner')) document.getElementById('bossClickBanner').remove();
+            }
+        });
+    }
 
 
 
@@ -1839,137 +1837,83 @@ window.rushToMap = function(targetMapName, x = null, y = null) {
 
 
 function executeRushStep() {
-
         if (!isRushing) return;
-
         let currentSysMap = lastMapName;
-
-
 
         if (currentSysMap === rushTarget) {
-
             stopPatrol(false);
-
             if (rushTargetX !== null && rushTargetY !== null) {
-
                 console.log("%c[HERO] Dotarto na mapę bosa! Podchodzę na zapisane koordynaty...", "color: #4caf50;");
-
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
-
             } else {
-
                 console.log("%c[HERO] Dotarto na wybraną mapę!", "color: #4caf50;");
-
             }
-
             return;
-
         }
-
-
 
         let path = getShortestPath(currentSysMap, rushTarget);
-
         if (!path || path.length < 2) {
-
             stopPatrol(false);
-
             console.log(`%c[HERO] Zgubiłem drogę! Brak ścieżki do ${rushTarget}.`, "color: #e53935;");
-
             return;
-
         }
 
-
-
         let nextMap = path[1];
-
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-
-
+        let isTeleport = botSettings.useTeleports && !door && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
 
         if (door) {
-
             let targetX = door.x; let targetY = door.y;
-
             if(door.allCoords && door.allCoords.length > 0) {
-
                 let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
-
                 targetX = rnd[0]; targetY = rnd[1];
-
             }
-
             safeGoTo(targetX, targetY, false);
-
             clearTimeout(rushInterval);
-
             rushInterval = setTimeout(checkRushArrival, 500);
-
+        } else if (isTeleport) {
+            console.log(`%c[HERO] Bieg przez teleporter do: [${nextMap}]...`, "color: #9c27b0;");
+            clearTimeout(rushInterval);
+            rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
         } else {
-
             stopPatrol(false);
-
             console.log(`%c[HERO] Brak zapisanej bramy do: [${nextMap}]`, "color: #e53935;");
-
         }
-
     }
 
-
-
     function checkRushArrival() {
-
         if (!isRushing || !Engine || !Engine.hero) return;
-
         let currentSysMap = lastMapName;
-
         if (currentSysMap === rushTarget) { executeRushStep(); return; }
 
-
-
         let path = getShortestPath(currentSysMap, rushTarget);
-
         if(!path || path.length < 2) return;
-
         let nextMap = path[1];
-
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+        let isTeleport = botSettings.useTeleports && !door && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
+
+        if (isTeleport) {
+            // Ignorujemy - handleTeleportNPC obsługuje swoją własną pętlę!
+            return; 
+        }
 
         if (!door) return;
 
-
-
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-
         let targetX = door.x; let targetY = door.y;
-
         let dist = Math.abs(cx - targetX) + Math.abs(cy - targetY);
 
-
-
         if (dist > 1) {
-
             if (cx === lastX && cy === lastY) {
-
                 stuckCount++;
-
                 if(stuckCount > 6) {
-
                     safeGoTo(targetX, targetY, false);
-
                     stuckCount = 0;
-
                 }
-
             } else { stuckCount = 0; }
-
         }
-
         lastX = cx; lastY = cy;
-
         rushInterval = setTimeout(checkRushArrival, 400);
-
     }
 
 
@@ -5076,32 +5020,25 @@ window.renderMapOrderList = () => {
 
 // === TUTAJ WKLEJ NOWĄ FUNKCJĘ ===
 
+    // Globalna funkcja do zapisu teleportów
+    window.toggleTeleportLock = function(city, isChecked) {
+        botSettings.unlockedTeleports[city] = isChecked;
+        localStorage.setItem('hero_teleports_v64', JSON.stringify(botSettings.unlockedTeleports));
+    };
+
     window.renderTeleportOptions = function() {
-
         let container = document.getElementById('tpCheckboxes');
-
-        if (!container) return; // Zabezpieczenie przed błędem
-
+        if (!container) return;
         container.innerHTML = '';
-
         for (let city in botSettings.unlockedTeleports) {
-
             let checked = botSettings.unlockedTeleports[city] ? 'checked' : '';
-
             container.innerHTML += `
-
                 <label style="color:#d4af37; font-size:11px; cursor:pointer; background:#1a1a1a; padding:5px; border:1px solid #333; display:flex; align-items:center; gap:6px;">
-
-                    <input type="checkbox" onchange="botSettings.unlockedTeleports['${city}'] = this.checked; localStorage.setItem('hero_teleports_v64', JSON.stringify(botSettings.unlockedTeleports));" ${checked}>
-
+                    <input type="checkbox" onchange="window.toggleTeleportLock('${city}', this.checked)" ${checked}>
                     ${city}
-
                 </label>
-
             `;
-
         }
-
     };
 
     // === KONIEC WKLEJANIA ===
