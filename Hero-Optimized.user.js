@@ -2057,7 +2057,7 @@ function executeRushStep() {
 
 
 window.handleTeleportNPC = function(targetMap) {
-        if (!isRushing && !isPatrolling) return;
+        if (!isRushing && !isPatrolling && !window.isExping) return;
         let currentSysMap = lastMapName;
         let tp = ZAKONNICY[currentSysMap];
         if (!tp) return;
@@ -2065,7 +2065,6 @@ window.handleTeleportNPC = function(targetMap) {
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
         let dist = Math.max(Math.abs(cx - tp.x), Math.abs(cy - tp.y));
 
-        // 1. Podchodzenie do Zakonnika
         if (dist > 1) {
             if (!Engine.hero.d.path || Engine.hero.d.path.length === 0) {
                 console.log(`%c[HERO] Podbiegam do Zakonnika na [${tp.x}, ${tp.y}]...`, "color: #9c27b0;");
@@ -2075,21 +2074,25 @@ window.handleTeleportNPC = function(targetMap) {
             return;
         }
 
-        // 2. Użycie wbudowanego modułu teleportacji (Bezpośrednio z tego pliku!)
         HeroTeleportModule.processDialog(
             targetMap,
-            () => stopPatrol(false),
+            () => {
+                if (window.isExping) { window.logExp("Teleport zablokowany! Brak opłaty.", "#e53935"); document.getElementById('btnStartExp').click(); }
+                else stopPatrol(false);
+            },
             () => {
                 if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(executeRushStep, 3500); }
                 else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(executePatrolStep, 3500); }
+                else if (window.isExping) { expMapTransitionCooldown = Date.now() + 4000; }
             },
             () => rescheduleTeleportCheck(targetMap)
         );
     };
 
     function rescheduleTeleportCheck(targetMap) {
-        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
-        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
+        if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => window.handleTeleportNPC(targetMap), 600); }
+        else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(targetMap), 600); }
+        else if (window.isExping) { setTimeout(() => window.handleTeleportNPC(targetMap), 600); }
     }
 
     // --- FUNKCJE WSPOMAGAJĄCE ---
@@ -4333,26 +4336,62 @@ selHero.addEventListener('change', (e) => {
 
 
 
-        let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
-
+let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
         let hx = Engine.hero.d.x, hy = Engine.hero.d.y;
 
-
-
         const getAntiLagDelay = () => {
-
             let min = botSettings.expAntiLagMin || 1500;
-
             let max = botSettings.expAntiLagMax || 2500;
-
             return Math.floor(Math.random() * (max - min + 1)) + min;
-
         };
 
+        // --- POWRÓT NA EXPOWISKO (GDY BOT JEST NA ZŁEJ MAPIE) ---
+        let maps = botSettings.exp.mapOrder;
+        let currMap = Engine.map.d.name;
 
+        if (maps.length > 0 && !maps.includes(currMap)) {
+            if (now < expMapTransitionCooldown) return;
+            
+            let targetExpMap = maps[0]; // Zawsze biegniemy do pierwszej mapy z listy
+            
+            if (now - expLastActionTime > 3000) { // Ograniczenie spamu w logach
+                window.logExp(`[Auto-Powrót] Biegne do: ${targetExpMap}...`, "#ff9800");
+                expLastActionTime = now;
+            }
+            
+            let path = getShortestPath(currMap, targetExpMap);
+            if (path && path.length > 1) {
+                let nextStepMap = path[1];
+                let tp = ZAKONNICY[currMap];
+                let door = globalGateways[currMap] && globalGateways[currMap][nextStepMap];
+                let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+                let isTeleport = tp && (botSettings.unlockedTeleports[nextStepMap] || isFakeDoor);
+
+                if (isTeleport) {
+                    window.logExp(`[Teleport] ➝ ${nextStepMap}`, "#9c27b0");
+                    expMapTransitionCooldown = now + 4000;
+                    window.handleTeleportNPC(nextStepMap);
+                } else if (door) {
+                    let targetX = door.x; let targetY = door.y;
+                    if(door.allCoords && door.allCoords.length > 0) {
+                        let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
+                        targetX = rnd[0]; targetY = rnd[1];
+                    }
+                    Engine.hero.autoGoTo({x: targetX, y: targetY});
+                    expMapTransitionCooldown = now + 2000;
+                    expAntiLagTime = now + getAntiLagDelay();
+                } else {
+                    window.logExp(`Brak zapisanej bramy do: ${nextStepMap}!`, "#e53935");
+                    document.getElementById('btnStartExp').click(); // Zatrzymanie bota
+                }
+            } else {
+                window.logExp(`Brak drogi do: ${targetExpMap}! Nagraj trasę 🎥.`, "#e53935");
+                document.getElementById('btnStartExp').click(); // Zatrzymanie bota
+            }
+            return; // Zablokowanie dalszego kodu (nie szukaj mobów na tej mapie)
+        }
 
         // --- WYSZUKIWANIE BRAM NA MAPIE ---
-
         const isOnGateway = (x, y) => {
 
             let gws = (Engine.map && Engine.map.gateways) ? Engine.map.gateways : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
