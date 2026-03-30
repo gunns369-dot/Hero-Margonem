@@ -1552,39 +1552,46 @@ let attackInterval = null;
    // ==========================================
     // AUTO-SKANER SILNIKA MARGONEM (Deep Engine Read)
     // ==========================================
+   // ==========================================
+    // AUTO-SKANER SILNIKA MARGONEM (Deep Engine Read - Grupujący wejścia)
+    // ==========================================
     function autoLearnGateways() {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
         let currMap = Engine.map.d.name;
         if (!currMap) return;
 
-        // Używamy modułu z zewnątrz, o ile zdążył się załadować z GitHuba
-        if (typeof window.HeroScannerModule !== 'undefined') {
-            let foundGateways = window.HeroScannerModule.scanCurrentMap(currMap, ZAKONNICY);
-            let added = false;
-            
-            foundGateways.forEach(gw => {
-                if (!globalGateways[currMap]) globalGateways[currMap] = {};
-                
-                if (!globalGateways[currMap][gw.targetMap]) {
-                    globalGateways[currMap][gw.targetMap] = { x: gw.x, y: gw.y, allCoords: [[gw.x, gw.y]] };
-                    added = true;
-                } else {
-                    // Dodawanie kolejnych kratek (drzwi potrafią zajmować kilka pól)
-                    let exists = globalGateways[currMap][gw.targetMap].allCoords.some(c => c[0] === gw.x && c[1] === gw.y);
-                    if (!exists) {
-                        globalGateways[currMap][gw.targetMap].allCoords.push([gw.x, gw.y]);
-                        added = true;
-                    }
-                }
-            });
+        // Natychmiastowe użycie naszego niezawodnego skanera
+        let gatewaysFound = HeroScannerModule.scanCurrentMap(currMap, ZAKONNICY);
+        let addedOrUpdated = false;
 
-            if (added) {
-                saveGateways();
-                if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
-                    renderGatewaysDatabase();
+        if (!globalGateways[currMap]) globalGateways[currMap] = {};
+
+        gatewaysFound.forEach(gw => {
+            let target = gw.targetMap;
+            let px = gw.x; let py = gw.y;
+
+            if (!globalGateways[currMap][target]) {
+                // Kompletnie nowy kierunek (mapa)
+                globalGateways[currMap][target] = { x: px, y: py, allCoords: [[px, py]] };
+                addedOrUpdated = true;
+            } else {
+                // Kierunek istnieje - dodajemy tylko nowe warianty kratek wejścia, by umożliwić randomizację!
+                if (!globalGateways[currMap][target].allCoords) {
+                    globalGateways[currMap][target].allCoords = [[globalGateways[currMap][target].x, globalGateways[currMap][target].y]];
+                }
+                let exists = globalGateways[currMap][target].allCoords.some(c => c[0] === px && c[1] === py);
+                if (!exists) {
+                    globalGateways[currMap][target].allCoords.push([px, py]);
+                    addedOrUpdated = true;
                 }
             }
+        });
+
+        if (addedOrUpdated) {
+            saveGateways();
+            updateUI(); // Odświeżenie bazy na żywo
         }
+    }
     }
     function autoDetectEngineData() {
 
