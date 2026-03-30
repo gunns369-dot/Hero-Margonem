@@ -1859,10 +1859,12 @@ function executeRushStep() {
         }
 
         let nextMap = path[1];
-        
-        // ZMIANA: Teleport ma całkowity priorytet!
-        let isTeleportRoute = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
+        let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+        
+        // ZMIANA: Wykrywanie, czy użytkownik przypadkiem nie nagrał zakonnika jako "drzwi"
+        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+        let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
 
         if (isTeleportRoute) {
             console.log(`%c[HERO] Bieg przez teleporter do: [${nextMap}]...`, "color: #9c27b0;");
@@ -1892,10 +1894,13 @@ function executeRushStep() {
         if(!path || path.length < 2) return;
         let nextMap = path[1];
         
-        let isTeleportRoute = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[nextMap];
-        if (isTeleportRoute) return; // Zignoruj sprawdzanie bramy - handleTeleportNPC obsługuje to samo!
-
+        let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+        let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
+
+        if (isTeleportRoute) return; // Zignoruj sprawdzanie bramy - nowa logika obsługuje teleport!
+
         if (!door) return;
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
@@ -1914,7 +1919,6 @@ function executeRushStep() {
         lastX = cx; lastY = cy;
         rushInterval = setTimeout(checkRushArrival, 400);
     }
-
 
 
     // ==========================================
@@ -3680,8 +3684,10 @@ selHero.addEventListener('change', (e) => {
 
            if (path && path.length > 1) {
                     let immediateNextMap = path[1];
-                    let isTeleport = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[immediateNextMap];
+                    let tp = ZAKONNICY[currentSysMap];
                     let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
+                    let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+                    let isTeleport = tp && (botSettings.unlockedTeleports[immediateNextMap] || isFakeDoor);
 
                     if (isTeleport) {
                         console.log(`%c[HERO] Używam teleportera w patrolu do [${immediateNextMap}]...`, "color: #9c27b0;");
@@ -3926,8 +3932,10 @@ selHero.addEventListener('change', (e) => {
 
                 if (path && path.length > 1) {
                     let immediateNextMap = path[1];
-                    let isTeleport = botSettings.useTeleports && ZAKONNICY[currentSysMap] && botSettings.unlockedTeleports[immediateNextMap];
+                    let tp = ZAKONNICY[currentSysMap];
                     let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
+                    let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+                    let isTeleport = tp && (botSettings.unlockedTeleports[immediateNextMap] || isFakeDoor);
 
                     if (isTeleport) {
                         console.log(`%c[HERO] Koniec respów na mapie. Teleport w patrolu do [${immediateNextMap}]...`, "color: #9c27b0;");
