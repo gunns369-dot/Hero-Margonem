@@ -20,37 +20,66 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-// WBUDOWANY SKANER PRZEJŚĆ (Omija blokady przeglądarki, czyta drzwi bez nazwy)
+// WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine)
     window.HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
-            if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return [];
-            let gws = {};
-            if (Engine.map.gateways) gws = Engine.map.gateways;
-            if (Engine.map.d.gw && Object.keys(gws).length === 0) gws = Engine.map.d.gw;
-
             let foundGateways = [];
-            for (let id in gws) {
-                let gw = gws[id].d || gws[id];
-                if (!gw) continue;
-                let px = gw.x; let py = gw.y;
-                if (px === undefined || py === undefined) continue;
+            let processedCoords = new Set(); // Blokada dublowania tych samych kratek
 
-                let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
-                if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) continue;
+            // 1. Pobieramy surowe dane (Próbujemy wszystkich ścieżek silnika gry)
+            let gwsObj = {};
+            if (typeof Engine !== 'undefined' && Engine.map) {
+                if (Engine.map.gateways) gwsObj = Engine.map.gateways;
+                else if (Engine.map.d && Engine.map.d.gw) gwsObj = Engine.map.d.gw;
+            } else if (typeof g !== 'undefined' && g.townname) {
+                gwsObj = g.townname; // Stary Interfejs (SI)
+            }
 
-                // Jeśli drzwi nie mają nazwy w kodzie, ratujemy je nazwą zastępczą
-                let rawName = gw.name || gw.targetName || gw.title || "Ukryte Przejście";
-
-                let cleanName = rawName.replace(/<[^>]*>?/gm, '').replace("Przejście do: ", "").replace("Przejście do ", "").split(" .")[0].trim();
-                
-                if (cleanName.length >= 2 && cleanName !== currentMapName && cleanName !== "Wyjście" && !cleanName.includes("Brak")) {
-                    foundGateways.push({ x: px, y: py, targetMap: cleanName });
+            // 2. Brutalne rozbijanie dziwnych obiektów Margonem na zwykłą listę
+            let gwsList = [];
+            try {
+                if (typeof gwsObj.values === 'function') gwsList = Array.from(gwsObj.values());
+                else gwsList = Object.values(gwsObj);
+            } catch(e) {
+                for (let key in gwsObj) {
+                    if (gwsObj.hasOwnProperty(key)) gwsList.push(gwsObj[key]);
                 }
             }
+
+            // 3. Skanowanie wszystkiego co ma współrzędne X i Y
+            gwsList.forEach(gw => {
+                let data = gw.d || gw;
+                if (!data) return;
+
+                let px = data.x; let py = data.y;
+                if (px === undefined || py === undefined) return;
+
+                // Ignorujemy Zakonnika (żeby nie psuł teleportów)
+                let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
+                if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) return;
+
+                let coordKey = px + "_" + py;
+                if (processedCoords.has(coordKey)) return; 
+                processedCoords.add(coordKey);
+
+                // Wyciąganie jakiegokolwiek tekstu, który może być nazwą
+                let rawName = data.name || data.targetName || data.title || data.tooltip || "";
+                let cleanName = rawName.toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
+
+                // ZMIANA: Jeśli drzwi nie mają nazwy (np. domki w mieście), nadajemy im unikalną nazwę z koordynatami!
+                if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
+                    cleanName = `Wejście [${px}, ${py}]`;
+                }
+
+                // Odrzucamy tylko ewidentne błędy
+                if (cleanName !== currentMapName && !cleanName.includes("Brak")) {
+                    foundGateways.push({ x: px, y: py, targetMap: cleanName });
+                }
+            });
+
             return foundGateways;
         }
     };
-
     // WBUDOWANY MODUŁ TELEPORTACJI (Złoty środek: Niezawodny, ale LUDZKI - Anty-Captcha)
     const HeroTeleportModule = {
         isClicking: false,
