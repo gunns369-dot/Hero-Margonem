@@ -3571,7 +3571,6 @@ document.getElementById('inpGoToMapTop').addEventListener('keydown', (e) => {
 
         });
 
-    }
 
 
 
