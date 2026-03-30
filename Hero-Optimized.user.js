@@ -20,13 +20,36 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-function loadScannerModule() {
-        const script = document.createElement('script');
-        // PAMIĘTAJ BY PODMIENIĆ TEN LINK, JEŚLI MASZ INNĄ ŚCIEŻKĘ:
-        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-scanner.js`;
-        document.head.appendChild(script);
-    }
-    loadScannerModule();
+// WBUDOWANY SKANER PRZEJŚĆ (Omija blokady przeglądarki)
+    window.HeroScannerModule = {
+        scanCurrentMap: function(currentMapName, zakkonicyData) {
+            if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return [];
+            let gws = {};
+            if (Engine.map.gateways) gws = Engine.map.gateways;
+            if (Engine.map.d.gw && Object.keys(gws).length === 0) gws = Engine.map.d.gw;
+
+            let foundGateways = [];
+            for (let id in gws) {
+                let gw = gws[id].d || gws[id];
+                if (!gw) continue;
+                let px = gw.x; let py = gw.y;
+                if (px === undefined || py === undefined) continue;
+
+                // Zabezpieczenie przed skanowaniem Zakonników
+                let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
+                if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) continue;
+
+                let rawName = gw.name || gw.targetName || gw.title || "";
+                if (!rawName || typeof rawName !== 'string') continue;
+
+                let cleanName = rawName.replace(/<[^>]*>?/gm, '').replace("Przejście do: ", "").replace("Przejście do ", "").split(" .")[0].trim();
+                if (cleanName.length > 2 && cleanName !== currentMapName && cleanName !== "Wyjście" && !cleanName.includes("Brak")) {
+                    foundGateways.push({ x: px, y: py, targetMap: cleanName });
+                }
+            }
+            return foundGateways;
+        }
+    };
 
     // WBUDOWANY MODUŁ TELEPORTACJI (Złoty środek: Niezawodny, ale LUDZKI - Anty-Captcha)
     const HeroTeleportModule = {
