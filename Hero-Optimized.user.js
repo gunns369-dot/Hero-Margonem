@@ -42,95 +42,68 @@
 
     loadCombatModule();
 
-// WBUDOWANY MODUŁ TELEPORTACJI (Z systemem ludzkiego klikania)
+// WBUDOWANY MODUŁ TELEPORTACJI 
     const HeroTeleportModule = {
-        isClicking: false, // Flaga zapobiegająca dublowaniu akcji
+        isClicking: false,
 
         processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
-            if (this.isClicking) return; // Jeśli bot właśnie "odlicza" w głowie do kliknięcia, nie przerywaj mu
+            if (this.isClicking) return; // Zapobiega dublowaniu kliknięć
 
             let options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
 
             if (options.length === 0) {
-                console.log("%c[HERO] Szukam Zakonnika w pobliżu...", "color: yellow;");
                 let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
                 let zakonnikId = null;
-                
                 for (let id in npcs) {
                     let n = npcs[id].d || npcs[id];
-                    if (n && n.nick) {
-                        let cleanNick = n.nick.replace(/<[^>]*>?/gm, '').toLowerCase();
-                        if (cleanNick.includes("zakonnik")) {
-                            zakonnikId = parseInt(id, 10);
-                            break;
-                        }
+                    if (n && n.nick && n.nick.replace(/<[^>]*>?/gm, '').toLowerCase().includes("zakonnik")) {
+                        zakonnikId = parseInt(id, 10); break;
                     }
                 }
-
                 if (zakonnikId) {
-                    console.log(`%c[HERO] Znalazłem Zakonnika (ID: ${zakonnikId}). Wymuszam rozmowę!`, "color: #4caf50; font-weight: bold;");
                     if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
                     else if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
-                } else {
-                    console.log("%c[HERO] BŁĄD: Nie widzę Zakonnika na tej mapie!", "color: red; font-weight: bold;");
                 }
-                
                 retryCallback();
                 return;
             }
 
-            // FUNKCJA WEWNĘTRZNA: Losowe opóźnienie "Ludzkie" (od 500ms do 1300ms)
             const humanClick = (element, nextStepFunction) => {
                 this.isClicking = true;
-                let humanDelay = Math.floor(Math.random() * (1300 - 500 + 1)) + 500;
-                
+                let humanDelay = Math.floor(Math.random() * (350 - 150 + 1)) + 150; // Błyskawiczne opóźnienie: 150 - 350ms
                 setTimeout(() => {
-                    if (typeof element.click === 'function') element.click(); 
-                    else {
-                        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-                    }
+                    if(typeof element.click === 'function') element.click();
                     this.isClicking = false;
                     if (nextStepFunction) nextStepFunction();
                 }, humanDelay);
             };
 
-            // 1. Sprawdzamy czy to początek rozmowy
             let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleport"));
             if (startOpt) {
-                console.log(`%c[HERO] Czekam naturalnie, aby kliknąć: ${startOpt.innerText.trim()}`, "color: #00acc1;");
                 humanClick(startOpt, retryCallback);
                 return;
             }
 
-            // 2. Szukamy miasta docelowego na liście
             let destOpt = options.find(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
             if (destOpt) {
                 if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
-                    console.log(`%c[HERO] Zablokowane! Brak zezwolenia do: ${targetMap}!`, "color: red; font-weight: bold;");
                     let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ") || el.innerText.toLowerCase().includes("niczego"));
-                    if (closeOpt) {
-                        humanClick(closeOpt, stopCallback);
-                    } else {
-                        stopCallback();
-                    }
+                    if (closeOpt) humanClick(closeOpt, stopCallback); else stopCallback();
                     return;
                 }
-                console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Przenoszę z naturalnym opóźnieniem!`, "color: #4caf50; font-weight: bold;");
                 humanClick(destOpt, continueCallback);
                 return;
             } 
             
-            // 3. Jeśli miasta nie ma na liście, klikamy dalej
             let moreOpt = options.find(el => el.innerText.toLowerCase().includes("inne") || el.innerText.toLowerCase().includes("dalej") || el.innerText.toLowerCase().includes("więcej"));
             if (moreOpt) {
-                console.log(`%c[HERO] Zmieniam stronę u Zakonnika...`, "color: #00acc1;");
                 humanClick(moreOpt, retryCallback);
                 return;
             }
             
             retryCallback(); 
         }
+    };
     };
 
     // ==========================================
@@ -4522,7 +4495,8 @@ let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Eng
                     closestTx = n.x;
                     closestTy = n.y;
                     closestId = id;
-                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : "Potwór";
+                    // Wycinamy tagi HTML oraz dopisek o metrach np. (15m)
+                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim() : "Potwór";
                 }
             }
         }
