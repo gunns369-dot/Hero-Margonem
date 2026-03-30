@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Hero, Elity II & Kolosy - Optimized Edition
-// @version      64.3
+// @version      64.5
 // @description  Automatyczne wykrywanie, inteligentny zasięg, natywny auto-atak, poprawne limity poziomowe, naprawiony scroll.
 // @author       Ty & Gemini
 // @match        https://*.margonem.pl/
