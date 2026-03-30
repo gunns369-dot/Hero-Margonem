@@ -2770,26 +2770,24 @@ window.handleTeleportNPC = function(targetMap) {
 
 
 
-                    <div class="nav-row" style="display: none; background: rgba(255, 152, 0, 0.1); border: 1px solid #ff9800; padding: 4px; border-radius: 2px; margin-bottom: 2px;">
-
-                        <label style="color:#ff9800; font-weight:bold; margin:0; cursor:pointer; font-size:10px; display:flex; align-items:center; gap:5px;">
-
-                            <input type="checkbox" id="expAggro" ${botSettings.exp.useAggro !== false ? 'checked' : ''}> Smart-Aggro (Błyskawiczny Atak)
-
-                        </label>
-
-                        <div style="display:flex; justify-content:space-between; margin-top:4px;">
-
-                            <label style="font-size:9px; color:#e0d8c0; margin:0; cursor:pointer;"><input type="checkbox" id="aggroN" ${botSettings.exp.aggroN !== false ? 'checked' : ''}> Zwykłe</label>
-
-                            <label style="font-size:9px; color:#e0d8c0; margin:0; cursor:pointer;"><input type="checkbox" id="aggroE1" ${botSettings.exp.aggroE1 !== false ? 'checked' : ''}> Elity I</label>
-
-                            <label style="font-size:9px; color:#e0d8c0; margin:0; cursor:pointer;"><input type="checkbox" id="aggroE2" ${botSettings.exp.aggroE2 ? 'checked' : ''}> Elity II (Obstawy)</label>
-
-                        </div>
-
-                    </div>
-
+                  <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
+    ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
+</div>
+<div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
+    <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
+        <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj auto-atak serwerowy
+    </label>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
+        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
+        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE1" ${botSettings.berserk?.e1 ? 'checked' : ''}> Elity I</label>
+        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE2" ${botSettings.berserk?.e2 ? 'checked' : ''}> Elity II</label>
+        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkHero" ${botSettings.berserk?.hero ? 'checked' : ''}> Herosi / Tytani</label>
+    </div>
+    <div style="display:flex; justify-content: space-between; gap: 5px;">
+        <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+        <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${botSettings.berserk?.minLvlOffset ?? -20}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+    </div>
+</div>
 
 
                     <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
@@ -3165,46 +3163,56 @@ window.handleTeleportNPC = function(targetMap) {
         document.getElementById('expE').onchange = (e) => { botSettings.exp.elite = e.target.checked; saveSettings(); };
 
 
-
-        // Zapisywanie Smart-Aggro + Natychmiastowa aktywacja wizualna główek!
-
-        if(document.getElementById('expAggro')) {
-
-            document.getElementById('expAggro').onchange = (e) => {
-
-                botSettings.exp.useAggro = e.target.checked;
-
-                saveSettings();
-
-                if(typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(e.target.checked);
-
-            };
-
-            document.getElementById('aggroN').onchange = (e) => {
-
-                botSettings.exp.aggroN = e.target.checked; saveSettings();
-
-                if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true);
-
-            };
-
-            document.getElementById('aggroE1').onchange = (e) => {
-
-                botSettings.exp.aggroE1 = e.target.checked; saveSettings();
-
-                if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true);
-
-            };
-
-            document.getElementById('aggroE2').onchange = (e) => {
-
-                botSettings.exp.aggroE2 = e.target.checked; saveSettings();
-
-                if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true);
-
-            };
-
+// Inicjalizacja braku zmiennej, jeśli to pierwszy start z nową aktualizacją
+        if (!botSettings.berserk) {
+            botSettings.berserk = { enabled: false, common: true, e1: false, e2: false, hero: false, minLvlOffset: -20, maxLvlOffset: 100 };
+            saveSettings();
         }
+
+        // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
+        window.updateServerBerserk = function() {
+            if (typeof window._g !== 'function') return;
+            let b = botSettings.berserk;
+            
+            // Wysyłanie pakietów konfiguracyjnych na serwer gry (dla trybu Solo[34] oraz Grupy[35])
+            [34, 35].forEach(id => {
+                window._g(`settings&action=update&id=${id}&v=${b.enabled ? 1 : 0}`);
+                if (b.enabled) {
+                    window._g(`settings&action=update&id=${id}&key=common&v=${b.common ? 1 : 0}`);
+                    window._g(`settings&action=update&id=${id}&key=elite&v=${b.e1 ? 1 : 0}`);
+                    window._g(`settings&action=update&id=${id}&key=elite2&v=${(b.e2 || b.hero) ? 1 : 0}`);
+                    window._g(`settings&action=update&id=${id}&key=lvlmin&v=${b.minLvlOffset}`);
+                    window._g(`settings&action=update&id=${id}&key=lvlmax&v=${b.maxLvlOffset}`);
+                }
+            });
+            
+            if (b.enabled && typeof window.logExp === 'function') window.logExp("⚔️ Aktywowano serwerowego Kieszonkowego Berserka!", "#ff9800");
+            else if (typeof window.logExp === 'function') window.logExp("🛡️ Wyłączono Kieszonkowego Berserka.", "#ff9800");
+
+            // Odświeżenie ikonek nad głowami mobów na NI
+            try {
+                if (typeof Engine !== 'undefined' && Engine.settings && Engine.settings.d) {
+                    Engine.settings.d.fight_auto_solo = b.enabled ? 1 : 0;
+                    Engine.settings.d.fight_auto_elites = b.e1 ? 1 : 0;
+                    Engine.settings.d.fight_auto_elites2 = (b.e2 || b.hero) ? 1 : 0;
+                    
+                    let npcs = Engine.npcs.check ? Engine.npcs.check() : Engine.npcs.d;
+                    for(let id in npcs) {
+                        let npc = npcs[id];
+                        if (npc && npc.sprite && typeof npc.sprite.updateAutoFightIndicator === 'function') npc.sprite.updateAutoFightIndicator();
+                    }
+                }
+            } catch(e) {}
+        };
+
+        // Zapisywanie zmian w panelu Berserka i wyzwalanie update'u na serwerze
+        document.getElementById('berserkEnabled').addEventListener('change', (e) => { botSettings.berserk.enabled = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+        document.getElementById('berserkCommon').addEventListener('change', (e) => { botSettings.berserk.common = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+        document.getElementById('berserkE1').addEventListener('change', (e) => { botSettings.berserk.e1 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+        document.getElementById('berserkE2').addEventListener('change', (e) => { botSettings.berserk.e2 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+        document.getElementById('berserkHero').addEventListener('change', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+        document.getElementById('berserkMaxLvl').addEventListener('change', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value) || 100; saveSettings(); window.updateServerBerserk(); });
+        document.getElementById('berserkMinLvl').addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = parseInt(e.target.value) || -20; saveSettings(); window.updateServerBerserk(); });
 
 
 
@@ -3376,8 +3384,7 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('btnResetRoute').addEventListener('click', () => { heroConfirm("Zresetować pętlę i zacząć od nowa?", (res) => { if(res) { checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); autoDetectEngineData(); updateUI(); }}); });
 
-        document.getElementById('btnAddTransit').addEventListener('click', () => { let hero = document.getElementById('selHero').value; if(!hero) return heroAlert("Wybierz herosa z listy!"); let inlineMenu = document.getElementById('inlineTransitEditor'); inlineMenu.style.display = inlineMenu.style.display === 'block' ? 'none' : 'block'; document.getElementById('newTransitMapName').value = ""; document.getElementById('newTransitPos').value = ""; document.getElementById('newTransitX').value = ""; document.getElementById('newTransitY').value = ""; });
-
+      
         document.getElementById('btnRecordRouteToggle').addEventListener('click', function() { botSettings.isRecording = !botSettings.isRecording; saveSettings(); let btn = this; let iconSpan = btn.querySelector('.btn-icon'); let textSpan = btn.querySelector('#txtRecBtn'); if(botSettings.isRecording) { btn.style.borderColor = '#e53935'; btn.style.color = '#ff5252'; iconSpan.innerText = '⏹'; textSpan.innerText = 'Nagrywam'; heroAlert("🔴 Nagrywanie Smart Memory WŁĄCZONE.\nSkrypt przechwyci każdą użytą bramę i zapisze do bazy."); } else { btn.style.borderColor = '#a99a75'; btn.style.color = '#e0d8c0'; iconSpan.innerText = '🎥'; textSpan.innerText = 'Nagraj'; heroAlert("⚪ Nagrywanie WYŁĄCZONE."); } });
 
 
