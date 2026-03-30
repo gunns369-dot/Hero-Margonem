@@ -42,7 +42,7 @@
 
     loadCombatModule();
 
-    // WBUDOWANY MODUŁ TELEPORTACJI (Zastępuje zewnętrzny plik)
+   // WBUDOWANY MODUŁ TELEPORTACJI (Zastępuje zewnętrzny plik)
     const HeroTeleportModule = {
         processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
             let dialogBox = document.querySelector('.dialog-texts') || document.querySelector('.dialog-content');
@@ -2068,7 +2068,7 @@ window.handleTeleportNPC = function(targetMap) {
             return;
         }
 
-      // 2. Użycie wbudowanego modułu teleportacji
+        // 2. Użycie wbudowanego modułu teleportacji (Bezpośrednio z tego pliku!)
         HeroTeleportModule.processDialog(
             targetMap,
             () => stopPatrol(false),
@@ -2078,6 +2078,7 @@ window.handleTeleportNPC = function(targetMap) {
             },
             () => rescheduleTeleportCheck(targetMap)
         );
+    };
 
     function rescheduleTeleportCheck(targetMap) {
         if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
