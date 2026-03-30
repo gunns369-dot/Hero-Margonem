@@ -1559,25 +1559,26 @@ let attackInterval = null;
 
         if (!globalGateways[currMap]) globalGateways[currMap] = {};
 
-        gatewaysFound.forEach(gw => {
-            let target = gw.targetMap;
-            let px = gw.x; let py = gw.y;
+     gatewaysFound.forEach(gw => {
+    let target = gw.targetMap;
+    let px = gw.x; let py = gw.y;
 
-            if (!globalGateways[currMap][target]) {
-                // Kompletnie nowy kierunek (mapa)
-                globalGateways[currMap][target] = { x: px, y: py, allCoords: [[px, py]] };
-                addedOrUpdated = true;
-            } else {
-                // Kierunek istnieje - dodajemy tylko nowe warianty kratek wejścia, by umożliwić randomizację!
-                if (!globalGateways[currMap][target].allCoords) {
-                    globalGateways[currMap][target].allCoords = [[globalGateways[currMap][target].x, globalGateways[currMap][target].y]];
-                }
-                let exists = globalGateways[currMap][target].allCoords.some(c => c[0] === px && c[1] === py);
-                if (!exists) {
-                    globalGateways[currMap][target].allCoords.push([px, py]);
-                    addedOrUpdated = true;
-                }
-        });
+    if (!globalGateways[currMap][target]) {
+        globalGateways[currMap][target] = { x: px, y: py, allCoords: [[px, py]] };
+        addedOrUpdated = true;
+    } else {
+        if (!globalGateways[currMap][target].allCoords) {
+            globalGateways[currMap][target].allCoords = [[globalGateways[currMap][target].x, globalGateways[currMap][target].y]];
+        }
+
+        let exists = globalGateways[currMap][target].allCoords.some(c => c[0] === px && c[1] === py);
+
+        if (!exists) {
+            globalGateways[currMap][target].allCoords.push([px, py]);
+            addedOrUpdated = true;
+        }
+    } // 🔥 TEGO BRAKOWAŁO
+});
 
         if (addedOrUpdated) {
             saveGateways();
