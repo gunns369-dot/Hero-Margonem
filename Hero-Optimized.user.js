@@ -980,7 +980,7 @@ let opacityValue = 0.95;
             loadData();
             cleanOldGateways();
             initGUI();
-        setupGoToSearch();
+        setupTopGoToSearch();
             setInterval(autoDetectEngineData, 800);
             setInterval(heroPositionTracker, 100);
             setInterval(radarLoop, 150);
@@ -2296,63 +2296,82 @@ function getAllKnownMaps() {
     return [...set].sort((a, b) => a.localeCompare(b, 'pl'));
 }
 
-function renderGoToSuggestions(filter = "") {
-    const box = document.getElementById('goToSuggestions');
+function renderTopGoToSuggestions(filter = "") {
+    const box = document.getElementById('goToSuggestionsTop');
     if (!box) return;
 
     const allMaps = getAllKnownMaps();
     const q = (filter || "").trim().toLowerCase();
 
     const filtered = q
-        ? allMaps.filter(m => m.toLowerCase().includes(q)).slice(0, 40)
-        : allMaps.slice(0, 20);
+        ? allMaps.filter(m => m.toLowerCase().includes(q)).slice(0, 30)
+        : allMaps.slice(0, 15);
 
     if (filtered.length === 0) {
         box.innerHTML = '<div style="padding:6px; color:#777; text-align:center;">Brak wyników</div>';
+        box.style.display = 'block';
         return;
     }
 
     box.innerHTML = filtered.map(mapName => `
-        <div class="list-item" style="cursor:pointer;" onclick="window.goToSelectedMap('${mapName.replace(/'/g, "\\'")}')">
+        <div class="list-item" style="cursor:pointer;" onclick="window.goToSelectedMapTop('${mapName.replace(/'/g, "\\'")}')">
             <span style="color:#d4af37;">${mapName}</span>
         </div>
     `).join('');
+
+    box.style.display = 'block';
 }
 
-window.goToSelectedMap = function(mapName) {
-    const input = document.getElementById('inpGoToMap');
+window.goToSelectedMapTop = function(mapName) {
+    const input = document.getElementById('inpGoToMapTop');
+    const panel = document.getElementById('goToTopPanel');
+    const box = document.getElementById('goToSuggestionsTop');
+
     if (input) input.value = mapName;
-    const box = document.getElementById('goToSuggestions');
     if (box) box.style.display = 'none';
 
     window.rushToMap(mapName);
+
+    if (panel) panel.style.display = 'none';
 };
 
-function setupGoToSearch() {
-    const input = document.getElementById('inpGoToMap');
-    const box = document.getElementById('goToSuggestions');
-    const btn = document.getElementById('btnGoToMap');
+function setupTopGoToSearch() {
+    const toggleBtn = document.getElementById('btnToggleGoToTop');
+    const panel = document.getElementById('goToTopPanel');
+    const input = document.getElementById('inpGoToMapTop');
+    const box = document.getElementById('goToSuggestionsTop');
 
-    if (!input || !box || !btn) return;
+    if (!toggleBtn || !panel || !input || !box) return;
+
+    toggleBtn.addEventListener('click', () => {
+        const isOpen = panel.style.display === 'flex';
+        panel.style.display = isOpen ? 'none' : 'flex';
+
+        if (!isOpen) {
+            input.value = '';
+            input.focus();
+            renderTopGoToSuggestions('');
+        } else {
+            box.style.display = 'none';
+        }
+    });
 
     input.addEventListener('input', () => {
-        box.style.display = 'block';
-        renderGoToSuggestions(input.value);
+        renderTopGoToSuggestions(input.value);
     });
 
-    input.addEventListener('focus', () => {
-        box.style.display = 'block';
-        renderGoToSuggestions(input.value);
-    });
-
-    btn.addEventListener('click', () => {
-        const mapName = (input.value || "").trim();
-        if (!mapName) return heroAlert("Wpisz nazwę mapy.");
-        window.rushToMap(mapName);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const mapName = (input.value || '').trim();
+            if (!mapName) return;
+            window.rushToMap(mapName);
+            panel.style.display = 'none';
+            box.style.display = 'none';
+        }
     });
 
     document.addEventListener('click', (e) => {
-        if (!box.contains(e.target) && e.target !== input) {
+        if (!panel.contains(e.target) && e.target !== toggleBtn) {
             box.style.display = 'none';
         }
     });
@@ -2492,12 +2511,15 @@ mainGui.innerHTML = `
 
             <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
 
-            <div style="display:flex; align-items:center; gap:4px;">
-                <input type="text" id="inpGoToMapTop" placeholder="Idź na..." style="width:95px; padding:4px; font-size:10px; background:#0f0f0f; border:1px solid #4a3f2b; color:#fff;">
-                <button id="btnGoToMapTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ</span></button>
-            </div>
+<div id="goToTopWrapper" style="display:flex; align-items:center; gap:4px;">
+    <button id="btnToggleGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ</span></button>
+    <div id="goToTopPanel" style="display:none; align-items:center; gap:4px;">
+        <input type="text" id="inpGoToMapTop" placeholder="Idź na..." style="width:110px; padding:4px; font-size:10px; background:#0f0f0f; border:1px solid #4a3f2b; color:#fff;">
+        <div id="goToSuggestionsTop" style="display:none; position:absolute; top:30px; background:#000; border:1px solid #3a3020; max-height:160px; overflow-y:auto; width:180px; z-index:99999; padding:2px;"></div>
+    </div>
+</div>
 
-            <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
+<button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
 
             <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
 
@@ -2544,19 +2566,9 @@ mainGui.innerHTML = `
 
 
                 <div class="location-wrapper" style="margin-top: 8px;">
-
-                    <span class="location-label">Stoisz na:</span>
-<div class="nav-row" style="margin-top:6px; position:relative; flex-direction:column; align-items:stretch;">
-    <label style="color:#00acc1; margin-bottom:4px;">IDŹ NA:</label>
-    <div style="display:flex; gap:4px;">
-        <input type="text" id="inpGoToMap" placeholder="Wpisz nazwę mapy..." style="flex:1;">
-        <button id="btnGoToMap" class="btn btn-go-sepia" style="width:70px;">IDŹ</button>
-    </div>
-    <div id="goToSuggestions" style="display:none; max-height:160px; overflow-y:auto; margin-top:4px; border:1px solid #3a3020; background:#000; padding:2px;"></div>
+    <span class="location-label">Stoisz na:</span>
+    <span id="currentMapNameDisplay">Ładowanie...</span>
 </div>
-                    <span id="currentMapNameDisplay">Ładowanie...</span>
-
-                </div>
 
 
 
