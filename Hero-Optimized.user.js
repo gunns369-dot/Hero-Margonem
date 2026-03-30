@@ -1626,7 +1626,7 @@ let attackInterval = null;
         updateUI();
     }
 }
-  function autoDetectEngineData() {
+function autoDetectEngineData() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return;
 
     let currentName = Engine.map.d.name;
@@ -1636,7 +1636,7 @@ let attackInterval = null;
     updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
 
     if (currentName !== lastMapName) {
-        // Fizyczne nagrywanie starych śladów z chodzenia wyłączone.
+        // Fizyczne nagrywanie starych śladów wyłączone.
         // Przejścia łapie autoLearnGateways().
 
         positionHistory = [];
@@ -1645,189 +1645,98 @@ let attackInterval = null;
 
         autoLearnGateways();
 
-        let domMap = document.getElementById('currentMapNameDisplay');
+        const domMap = document.getElementById('currentMapNameDisplay');
         if (domMap) domMap.innerText = currentName;
-            let domMap = document.getElementById('currentMapNameDisplay');
 
-            if (domMap) domMap.innerText = currentName;
+        const domHero = document.getElementById('selHero');
 
+        if (domHero && document.getElementById('heroModeToggle').classList.contains('active-tab')) {
+            let matchingHero = domHero.value;
+            let mapHasCurrent = matchingHero && heroData[matchingHero] && heroData[matchingHero][currentName];
 
+            if (!isPatrolling && !isRushing && !mapHasCurrent) {
+                let foundHero = null;
 
-            let domHero = document.getElementById('selHero');
-
-            if (domHero && document.getElementById('heroModeToggle').classList.contains('active-tab')) {
-
-                let matchingHero = domHero.value;
-
-                let mapHasCurrent = matchingHero && heroData[matchingHero] && heroData[matchingHero][currentName];
-
-
-
-                // 1. AUTO-WYKRYWANIE HEROSA NA BAZIE MAPY
-
-                if (!isPatrolling && !isRushing && !mapHasCurrent) {
-
-                    let foundHero = null;
-
-                    for (const h in heroData) {
-
-                        if (heroData[h][currentName]) { foundHero = h; break; }
-
+                for (const h in heroData) {
+                    if (heroData[h][currentName]) {
+                        foundHero = h;
+                        break;
                     }
-
-                    if (foundHero) {
-
-                        matchingHero = foundHero;
-
-                    }
-
                 }
 
+                if (foundHero) matchingHero = foundHero;
+            }
 
+            if (matchingHero) {
+                if (!heroMapOrder[matchingHero] || heroMapOrder[matchingHero].length === 0) {
+                    heroMapOrder[matchingHero] = Object.keys(heroData[matchingHero]);
+                    saveMapOrder();
+                }
 
-                // 2. ŁADOWANIE DANYCH ZNALEZIONEGO HEROSA
+                if (domHero.value !== matchingHero) {
+                    domHero.value = matchingHero;
+                    currentRouteIndex = -1;
+                    sessionStorage.removeItem('hero_route_index');
+                    checkedMapsThisSession.clear();
+                    saveCheckedMaps();
+                }
 
-                if (matchingHero) {
+                let mapList = heroMapOrder[matchingHero];
 
-                    // Wymuś bazę map jeśli pusta
+                if (currentRouteIndex !== -1 && mapList[currentRouteIndex] === currentName) {
+                    // jesteśmy na poprawnej mapie
+                } else if (
+                    currentRouteIndex !== -1 &&
+                    mapList[(currentRouteIndex + 1) % mapList.length] === currentName
+                ) {
+                    currentRouteIndex = (currentRouteIndex + 1) % mapList.length;
+                    sessionStorage.setItem('hero_route_index', currentRouteIndex);
+                } else if (mapList.includes(currentName)) {
+                    currentRouteIndex = mapList.indexOf(currentName);
+                    sessionStorage.setItem('hero_route_index', currentRouteIndex);
+                }
 
-                    if (!heroMapOrder[matchingHero] || heroMapOrder[matchingHero].length === 0) {
-
-                        heroMapOrder[matchingHero] = Object.keys(heroData[matchingHero]);
-
-                        saveMapOrder();
-
-                    }
-
-
-
-                    // Bezpieczna zmiana wyboru (bez wyzwalania rekursji "change")
-
-                    if (domHero.value !== matchingHero) {
-
-                        domHero.value = matchingHero;
-
-                        currentRouteIndex = -1;
-
-                        sessionStorage.removeItem('hero_route_index');
-
-                        checkedMapsThisSession.clear();
-
-                        saveCheckedMaps();
-
-                    }
-
-
-
-                    let mapList = heroMapOrder[matchingHero];
-
-                    if (currentRouteIndex !== -1 && mapList[currentRouteIndex] === currentName) {
-
-                        // Jesteśmy na poprawnej mapie z pętli
-
-                    } else if (currentRouteIndex !== -1 && mapList[(currentRouteIndex + 1) % mapList.length] === currentName) {
-
-                        currentRouteIndex = (currentRouteIndex + 1) % mapList.length;
-
-                        sessionStorage.setItem('hero_route_index', currentRouteIndex);
-
-                    } else {
-
-                        if (mapList.includes(currentName)) {
-
-                            currentRouteIndex = mapList.indexOf(currentName);
-
-                            sessionStorage.setItem('hero_route_index', currentRouteIndex);
-
-                        }
-
-                    }
-
-
-
-                    if (checkedMapsThisSession.has(currentName)) {
-
-                        currentCordsList = [];
-
-                    } else if(heroData[matchingHero] && heroData[matchingHero][currentName]) {
-
-                        currentCordsList = [...heroData[matchingHero][currentName]];
-
-                    } else {
-
-                        currentCordsList = [];
-
-                    }
-
-
-
-                    checkedPoints.clear();
-
-
-
-                    // Natychmiastowo buduj środkową listę!
-
-                    updateUI();
-
-
-
-                    // Generuj kordy
-
-                    setTimeout(() => {
-
-                        if(currentCordsList.length > 0) optimizeRoute();
-
-                        renderCordsList();
-
-                    }, 200);
-
-
-
-                } else {
-
+                if (checkedMapsThisSession.has(currentName)) {
                     currentCordsList = [];
-
-                    checkedPoints.clear();
-
-                    renderCordsList();
-
-                    updateUI();
-
+                } else if (heroData[matchingHero] && heroData[matchingHero][currentName]) {
+                    currentCordsList = [...heroData[matchingHero][currentName]];
+                } else {
+                    currentCordsList = [];
                 }
 
-            } else if (!document.getElementById('heroModeToggle').classList.contains('active-tab')) {
+                checkedPoints.clear();
+                updateUI();
 
-                 currentCordsList = [];
-
-                 checkedPoints.clear();
-
-                 renderCordsList();
-
-                 updateUI();
-
+                setTimeout(() => {
+                    if (currentCordsList.length > 0) optimizeRoute();
+                    renderCordsList();
+                }, 200);
+            } else {
+                currentCordsList = [];
+                checkedPoints.clear();
+                renderCordsList();
+                updateUI();
             }
-
-
-
-            if (isRushing) {
-
-                clearTimeout(rushInterval);
-
-                setTimeout(() => { if (isRushing) executeRushStep(); }, 800);
-
-            } else if (isPatrolling) {
-
-                patrolIndex = 0; checkedPoints.clear(); clearTimeout(smoothPatrolInterval);
-
-                let loadDelay = Math.floor(Math.random() * (botSettings.mapLoadMax - botSettings.mapLoadMin + 1)) + botSettings.mapLoadMin;
-
-                setTimeout(() => { if(isPatrolling) executePatrolStep(); }, loadDelay);
-
-            }
-
+        } else if (!document.getElementById('heroModeToggle').classList.contains('active-tab')) {
+            currentCordsList = [];
+            checkedPoints.clear();
+            renderCordsList();
+            updateUI();
         }
 
+        if (isRushing) {
+            clearTimeout(rushInterval);
+            setTimeout(() => {
+                if (isRushing) executeRushStep();
+            }, 800);
+        } else if (isPatrolling) {
+            clearTimeout(smoothPatrolInterval);
+            setTimeout(() => {
+                if (isPatrolling) executePatrolStep();
+            }, 300);
+        }
     }
+}
 
     // ==========================================
 
