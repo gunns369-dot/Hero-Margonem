@@ -3173,8 +3173,6 @@ mainGui.innerHTML = `
 
        // EXP - PRZYCISK START / STOP
 
-        const btnExp = document.getElementById('btnStartExp');
-
         if (btnExp) {
 
             btnExp.addEventListener('click', function() {
