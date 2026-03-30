@@ -2480,33 +2480,26 @@ function setupGoToSearch() {
 
 
 
-        let recStyle = botSettings.isRecording ? 'border-color:#e53935; color:#ff5252;' : '';
+       const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
 
-        let recIcon = botSettings.isRecording ? '⏹' : '🎥';
+mainGui.innerHTML = `
 
-        let recText = botSettings.isRecording ? 'Nagrywam' : 'Nagraj';
+    <div class="gui-header">
 
+        <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.2</div>
 
+        <div class="header-buttons">
 
-        const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
+            <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
 
-        mainGui.innerHTML = `
+            <div style="display:flex; align-items:center; gap:4px;">
+                <input type="text" id="inpGoToMapTop" placeholder="Idź na..." style="width:95px; padding:4px; font-size:10px; background:#0f0f0f; border:1px solid #4a3f2b; color:#fff;">
+                <button id="btnGoToMapTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ</span></button>
+            </div>
 
-            <div class="gui-header">
+            <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
 
-                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.2</div>
-
-                <div class="header-buttons">
-
-                    <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
-
-                    <button id="btnRecordRouteToggle" style="${recStyle}"><span class="btn-icon">${recIcon}</span><span id="txtRecBtn">${recText}</span></button>
-
-                    <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
-
-                    <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
-
-                    <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;"><span class="btn-icon">✖</span></button>
+            <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
 
                 </div>
 
@@ -3197,7 +3190,19 @@ selHero.addEventListener('change', (e) => {
       
 
         document.getElementById('btnStartStop').addEventListener('click', () => {
+document.getElementById('btnGoToMapTop').addEventListener('click', () => {
+    const mapName = (document.getElementById('inpGoToMapTop').value || '').trim();
+    if (!mapName) return heroAlert("Wpisz nazwę mapy.");
+    window.rushToMap(mapName);
+});
 
+document.getElementById('inpGoToMapTop').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const mapName = (document.getElementById('inpGoToMapTop').value || '').trim();
+        if (!mapName) return;
+        window.rushToMap(mapName);
+    }
+});
             if (isPatrolling || isRushing) stopPatrol(false);
 
             else {
