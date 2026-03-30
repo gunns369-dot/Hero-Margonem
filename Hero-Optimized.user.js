@@ -1066,43 +1066,44 @@ function rebuildMissingHeroRoutes(forceAll = false) {
 }
 
 
-    function updateUI() {
+   function updateUI() {
 
-        if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
-
-            renderGatewaysDatabase();
-
-        }
-        if (document.getElementById('recommendedExpList')) {
-    renderRecommendedExpMaps();
-}
-
-        if (document.getElementById('heroMapListContainer') && document.getElementById('heroMapListContainer').parentElement.style.display !== 'none') {
-
-            if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
-
-        }
-
-        if (document.getElementById('e2Container') && document.getElementById('e2Container').style.display !== 'none') {
-
-            renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8');
-
-        }
-
-        if (document.getElementById('kolosyContainer') && document.getElementById('kolosyContainer').style.display !== 'none') {
-
-            renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
-
-        }
-
-        if (document.getElementById('expContainer') && document.getElementById('expContainer').style.display !== 'none') {
-
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-
-        }
-
+    if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
+        renderGatewaysDatabase();
     }
 
+    if (document.getElementById('recommendedExpList')) {
+        renderRecommendedExpMaps();
+    }
+
+    if (document.getElementById('heroMapListContainer')) {
+        if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+    }
+
+    if (document.getElementById('e2ListContainer')) {
+        renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8');
+    }
+
+    if (document.getElementById('kolosyListContainer')) {
+        renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
+    }
+
+    if (document.getElementById('expMapList') && typeof window.renderExpMaps === 'function') {
+        window.renderExpMaps();
+    }
+
+    if (document.getElementById('expProfilesList') && typeof window.renderExpProfiles === 'function') {
+        window.renderExpProfiles();
+    }
+
+    if (document.getElementById('e2SuitableContainer')) {
+        updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
+    }
+
+    if (document.getElementById('kolosySuitableContainer')) {
+        updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
+    }
+}
 
 
 function cleanOldGateways() {
@@ -2665,7 +2666,7 @@ mainGui.innerHTML = `
                     </div>
                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
-               <div id="expProfilesContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
+              <div id="expProfilesContainer" style="display:flex; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
                     <label style="color:#a99a75; font-size:11px; margin-top:2px;">Zapisane Expowiska (Baza gry):</label>
                     <div id="expProfilesList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; padding:2px;"></div>
                 </div>
@@ -2874,49 +2875,7 @@ mainGui.innerHTML = `
 
 
 
-    function setupLogic() {
-
-        // ZAKŁADKI (TABS)
-
-       const tabs = ['hero', 'e2', 'kolosy', 'exp', 'teleports'];
-
-        tabs.forEach(tab => {
-
-            let toggle = document.getElementById(tab + 'ModeToggle');
-
-            if(toggle) {
-
-                toggle.addEventListener('click', function() {
-
-                    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active-tab'));
-
-                    this.classList.add('active-tab');
-
-                    document.getElementById('heroContainer').style.display = tab === 'hero' ? 'flex' : 'none';
-
-                    document.getElementById('e2Container').style.display = tab === 'e2' ? 'flex' : 'none';
-
-                    document.getElementById('kolosyContainer').style.display = tab === 'kolosy' ? 'flex' : 'none';
-
-                    document.getElementById('expContainer').style.display = tab === 'exp' ? 'flex' : 'none';
-
-                    document.getElementById('teleportsContainer').style.display = tab === 'teleports' ? 'flex' : 'none';
-
-                    if (tab === 'teleports') renderTeleportOptions();
-
-                    // Radar i Auto-Atak widoczne TYLKO w zakładce Herosi
-
-                    document.getElementById('radarControlsWrapper').style.display = (tab === 'hero') ? 'block' : 'none';
-
-
-
-                    activeBossTarget = null;
-
-                    if(tab === 'exp' && typeof renderExpMaps === 'function') renderExpMaps();
-if(tab === 'exp') {
-    if (typeof renderExpProfiles === 'function') renderExpProfiles();
-    renderRecommendedExpMaps();
-}
+  function setupLogic() {
 
                 });
 
