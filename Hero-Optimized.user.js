@@ -20,7 +20,7 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-// WBUDOWANY SKANER PRZEJŚĆ (Omija blokady przeglądarki)
+// WBUDOWANY SKANER PRZEJŚĆ (Omija blokady przeglądarki, czyta drzwi bez nazwy)
     window.HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
             if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return [];
@@ -35,15 +35,15 @@
                 let px = gw.x; let py = gw.y;
                 if (px === undefined || py === undefined) continue;
 
-                // Zabezpieczenie przed skanowaniem Zakonników
                 let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
                 if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) continue;
 
-                let rawName = gw.name || gw.targetName || gw.title || "";
-                if (!rawName || typeof rawName !== 'string') continue;
+                // Jeśli drzwi nie mają nazwy w kodzie, ratujemy je nazwą zastępczą
+                let rawName = gw.name || gw.targetName || gw.title || "Ukryte Przejście";
 
                 let cleanName = rawName.replace(/<[^>]*>?/gm, '').replace("Przejście do: ", "").replace("Przejście do ", "").split(" .")[0].trim();
-                if (cleanName.length > 2 && cleanName !== currentMapName && cleanName !== "Wyjście" && !cleanName.includes("Brak")) {
+                
+                if (cleanName.length >= 2 && cleanName !== currentMapName && cleanName !== "Wyjście" && !cleanName.includes("Brak")) {
                     foundGateways.push({ x: px, y: py, targetMap: cleanName });
                 }
             }
