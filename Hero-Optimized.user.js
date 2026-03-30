@@ -42,13 +42,75 @@
 
     loadCombatModule();
 
-    function loadTeleportModule() {
-        const script = document.createElement('script');
-        // TUTAJ WKLEJ LINK RAW DO NOWEGO PLIKU hero-teleport.js:
-        script.src = `https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/hero-teleport.js`;
-        document.head.appendChild(script);
-    }
-    loadTeleportModule();
+    // WBUDOWANY MODUŁ TELEPORTACJI (Zastępuje zewnętrzny plik)
+    const HeroTeleportModule = {
+        processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
+            let dialogBox = document.querySelector('.dialog-texts') || document.querySelector('.dialog-content');
+            let isDialogOpen = dialogBox && dialogBox.offsetParent !== null;
+
+            if (!isDialogOpen) {
+                console.log("%c[HERO] Szukam Zakonnika w pobliżu...", "color: yellow;");
+                let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
+                let zakonnikId = null;
+                
+                for (let id in npcs) {
+                    let n = npcs[id].d || npcs[id];
+                    if (n && n.nick) {
+                        let cleanNick = n.nick.replace(/<[^>]*>?/gm, '').toLowerCase();
+                        if (cleanNick.includes("zakonnik")) {
+                            zakonnikId = parseInt(id, 10);
+                            break;
+                        }
+                    }
+                }
+
+                if (zakonnikId) {
+                    console.log(`%c[HERO] Znalazłem Zakonnika (ID: ${zakonnikId}). Wymuszam pakiet rozmowy z serwerem!`, "color: #4caf50; font-weight: bold;");
+                    if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
+                    else if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
+                } else {
+                    console.log("%c[HERO] BŁĄD: Nie widzę Zakonnika na tej mapie!", "color: red; font-weight: bold;");
+                }
+                retryCallback();
+                return;
+            }
+
+            let options = Array.from(document.querySelectorAll('.dialog-texts li, .dialog-options li, .answer, [data-option]'));
+            if (options.length > 0) {
+                let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleport"));
+                if (startOpt) {
+                    console.log(`%c[HERO] Klikam: ${startOpt.innerText.trim()}`, "color: #00acc1;");
+                    startOpt.click(); 
+                    retryCallback();
+                    return;
+                }
+
+                let destOpt = options.find(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
+                if (destOpt) {
+                    if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
+                        console.log(`%c[HERO] Zablokowane! Brak zezwolenia do: ${targetMap}!`, "color: red; font-weight: bold;");
+                        let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ"));
+                        if (closeOpt) closeOpt.click();
+                        stopCallback(); 
+                        return;
+                    }
+                    console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Przenoszę!`, "color: #4caf50; font-weight: bold;");
+                    destOpt.click();
+                    continueCallback(); 
+                    return;
+                } else {
+                    let moreOpt = options.find(el => el.innerText.toLowerCase().includes("inne") || el.innerText.toLowerCase().includes("dalej") || el.innerText.toLowerCase().includes("pokaż więcej"));
+                    if(moreOpt) {
+                        console.log(`%c[HERO] Szukam miasta na kolejnej stronie...`, "color: #00acc1;");
+                        moreOpt.click();
+                        retryCallback();
+                        return;
+                    }
+                }
+            }
+            retryCallback(); 
+        }
+    };
 
     // ==========================================
 
@@ -2006,22 +2068,16 @@ window.handleTeleportNPC = function(targetMap) {
             return;
         }
 
-        // 2. Przekazanie pałeczki do zewnętrznego modułu
-        if (typeof window.HeroTeleportModule !== 'undefined') {
-            window.HeroTeleportModule.processDialog(
-                targetMap,
-                () => stopPatrol(false), // Co ma zrobić w przypadku zablokowania
-                () => { // Co ma zrobić gdy pomyślnie kliknie teleportację (czeka na mapę)
-                    if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(executeRushStep, 3500); }
-                    else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(executePatrolStep, 3500); }
-                },
-                () => rescheduleTeleportCheck(targetMap) // Co ma zrobić by ponowić skan okienka
-            );
-        } else {
-            console.log("Moduł teleportacji z GitHuba jeszcze się ładuje...");
-            rescheduleTeleportCheck(targetMap);
-        }
-    };
+      // 2. Użycie wbudowanego modułu teleportacji
+        HeroTeleportModule.processDialog(
+            targetMap,
+            () => stopPatrol(false),
+            () => {
+                if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(executeRushStep, 3500); }
+                else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(executePatrolStep, 3500); }
+            },
+            () => rescheduleTeleportCheck(targetMap)
+        );
 
     function rescheduleTeleportCheck(targetMap) {
         if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => handleTeleportNPC(targetMap), 600); }
