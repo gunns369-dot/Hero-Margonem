@@ -1241,6 +1241,9 @@ window.handleTeleportNPC = function(targetMap) {
     // ==========================================
     // INTERFEJS UŻYTKOWNIKA (UI)
     // ==========================================
+    // ==========================================
+    // INTERFEJS UŻYTKOWNIKA (UI)
+    // ==========================================
     function initGUI() {
         const style = document.createElement('style');
         style.innerHTML = `
@@ -1306,7 +1309,7 @@ window.handleTeleportNPC = function(targetMap) {
         const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
         mainGui.innerHTML = `
             <div class="gui-header">
-                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.2</div>
+                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v65</div>
                 <div class="header-buttons">
                     <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
                     <button id="btnRecordRouteToggle" style="${recStyle}"><span class="btn-icon">${recIcon}</span><span id="txtRecBtn">${recText}</span></button>
@@ -1340,10 +1343,22 @@ window.handleTeleportNPC = function(targetMap) {
                     <span id="currentMapNameDisplay">Ładowanie...</span>
                 </div>
 
-                <div id="heroMapListContainer"><div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div></div>
-<div style="display:flex; margin-top:5px;">
-    <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; flex-grow:1; padding: 4px;" title="Zresetuj pętlę">🔁 ZRESETUJ AKTUALNĄ PĘTLĘ TRASY</button>
-</div>
+                <div id="heroContainer" style="display:flex; flex-direction:column; flex-grow:1;">
+                    <div class="nav-row"><label>Szukany Heros:</label><select id="selHero" style="flex-grow: 1;"><option value="">-- Wybierz --</option></select></div>
+                    <div class="nav-row" style="display: flex; flex-direction: column; flex-grow: 1;">
+                        <label style="color:#00acc1;">Kolejność Przechodzenia Map:</label>
+                        <div id="heroMapListContainer"><div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div></div>
+                        <div id="inlineTransitEditor" style="display:none; padding:8px; border:1px solid #00acc1; background:rgba(0, 172, 193, 0.1); margin-top:5px; border-radius:2px;">
+                            <label style="color:#00acc1; font-weight:bold; margin-bottom:4px; display:block;">Edytuj Przejście:</label>
+                            <input type="text" id="newTransitMapName" placeholder="Nazwa mapy docelowej..." style="margin-bottom:4px;">
+                            <input type="number" id="newTransitPos" placeholder="Pozycja na liście (puste = na koniec)" style="margin-bottom:6px;">
+                            <div style="display:flex; gap:4px; margin-bottom:6px;"><input type="number" id="newTransitX" placeholder="X" style="width:40px;"><input type="number" id="newTransitY" placeholder="Y" style="width:40px;"><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('newTransitX').value = Engine.hero.d.x; document.getElementById('newTransitY').value = Engine.hero.d.y;">📍 Stąd</button></div>
+                            <div style="display:flex; gap:4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway(document.getElementById('newTransitMapName').value)">ZAPISZ MAPĘ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div>
+                        </div>
+                        <div style="display:flex; gap:5px; margin-top:5px;">
+                            <button id="btnAutoRoute" class="btn btn-go-sepia" style="flex-grow:1;" onclick="openAutoRouteModal()">🪄 KREATOR TRASY</button>
+                            <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; width: auto;" title="Zresetuj pętlę">🔁</button>
+                        </div>
                     </div>
                     <div class="nav-row" style="margin-top: 10px; display: flex; flex-direction: column;"><label style="color:#d4af37;">Koordynaty (Zasięg: 7 kratek):</label><div id="cordsListContainer"></div></div>
                 </div>
@@ -1371,35 +1386,31 @@ window.handleTeleportNPC = function(targetMap) {
                         <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
                     </div>
 
-                   <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
-    ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
-</div>
-<div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
-    <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
-        <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj auto-atak serwerowy
-    </label>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE1" ${botSettings.berserk?.e1 ? 'checked' : ''}> Elity I</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE2" ${botSettings.berserk?.e2 ? 'checked' : ''}> Elity II</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkHero" ${botSettings.berserk?.hero ? 'checked' : ''}> Herosi / Tytani</label>
-    </div>
-    <div style="display:flex; justify-content: space-between; gap: 5px;">
-        <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-        <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${botSettings.berserk?.minLvlOffset ?? -20}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-    </div>
-</div>
+                    <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
+                        ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
+                    </div>
+                    <div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
+                        <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
+                            <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj auto-atak serwerowy
+                        </label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE1" ${botSettings.berserk?.e1 ? 'checked' : ''}> Elity I</label>
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE2" ${botSettings.berserk?.e2 ? 'checked' : ''}> Elity II</label>
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkHero" ${botSettings.berserk?.hero ? 'checked' : ''}> Herosi / Tytani</label>
+                        </div>
+                        <div style="display:flex; justify-content: space-between; gap: 5px;">
+                            <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+                            <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${botSettings.berserk?.minLvlOffset ?? -20}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+                        </div>
+                    </div>
 
-                    <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
+                    <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy dla expowisk:</label>
                     <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:0;">
                         <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
                         <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
                     </div>
-                    <input type="hidden" id="expRange" value="999">
-                    <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px;">
-                        <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
-                        <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
-                    </div>
+                    
                     <label style="color:#a99a75; font-size:11px; margin-top:2px;">Kolejność map na expowisku (Smart-Roam):</label>
                     <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
                     <div style="display:flex; gap:4px;">
@@ -1407,7 +1418,7 @@ window.handleTeleportNPC = function(targetMap) {
                         <button class="btn-sepia" style="flex:1; padding:4px; background:#00838f;" onclick="addNeighborsToExp()" title="Skanuje bramy i dodaje wszystkie sąsiadujące mapy!">🪄 SĄSIADÓW</button>
                         <button class="btn-sepia" style="background:#8e0000; width:50px; padding:4px;" onclick="clearExpMaps()">CZYŚĆ</button>
                     </div>
-                   <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
+                   <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START AUTO-EXP</button>
                 </div>
                 <div id="expProfilesContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
                     <div style="background:rgba(212, 175, 55, 0.1); border:1px solid #d4af37; padding:6px; margin-bottom:4px; border-radius:2px;">
@@ -1549,7 +1560,8 @@ window.handleTeleportNPC = function(targetMap) {
                 });
             }
         });
-// Inicjalizacja braku zmiennej, jeśli to pierwszy start z nową aktualizacją
+
+        // Inicjalizacja braku zmiennej, jeśli to pierwszy start z nową aktualizacją
         if (!botSettings.berserk) {
             botSettings.berserk = { enabled: false, common: true, e1: false, e2: false, hero: false, minLvlOffset: -20, maxLvlOffset: 100 };
             saveSettings();
@@ -1599,6 +1611,7 @@ window.handleTeleportNPC = function(targetMap) {
         document.getElementById('berserkHero').addEventListener('change', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); window.updateServerBerserk(); });
         document.getElementById('berserkMaxLvl').addEventListener('change', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value) || 100; saveSettings(); window.updateServerBerserk(); });
         document.getElementById('berserkMinLvl').addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = parseInt(e.target.value) || -20; saveSettings(); window.updateServerBerserk(); });
+        
        // EXP - PRZYCISK START / STOP
         const btnExp = document.getElementById('btnStartExp');
         if (btnExp) {
@@ -1606,12 +1619,12 @@ window.handleTeleportNPC = function(targetMap) {
                 window.isExping = !window.isExping;
 
                 if (window.isExping) {
-                    this.innerHTML = "⏹ STOP";
+                    this.innerHTML = "⏹ STOP AUTO-EXP";
                     this.style.borderColor = "#f44336";
                     this.style.color = "#f44336";
                     if(typeof window.logExp === 'function') window.logExp("Uruchomiono tryb automatyczny!", "#4caf50");
                 } else {
-                    this.innerHTML = "▶ START";
+                    this.innerHTML = "▶ START AUTO-EXP";
                     this.style.borderColor = "#4caf50";
                     this.style.color = "#4caf50";
                     if(typeof window.logExp === 'function') window.logExp("Zatrzymano tryb automatyczny.", "#f44336");
@@ -1619,27 +1632,10 @@ window.handleTeleportNPC = function(targetMap) {
             });
         }
 
-        // ZAPISYWANIE USTAWIEŃ EXP I REAGOWANIE NA ZMIANY
-        document.getElementById('expMinL').onchange = (e) => { botSettings.exp.minLvl = parseInt(e.target.value) || 1; saveSettings(); if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true); };
-        document.getElementById('expMaxL').onchange = (e) => { botSettings.exp.maxLvl = parseInt(e.target.value) || 300; saveSettings(); if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true); };
-        document.getElementById('expRange').onchange = (e) => { botSettings.exp.berserk = parseInt(e.target.value) || 20; saveSettings(); };
-        document.getElementById('expN').onchange = (e) => { botSettings.exp.normal = e.target.checked; saveSettings(); };
-        document.getElementById('expE').onchange = (e) => { botSettings.exp.elite = e.target.checked; saveSettings(); };
-
-
         // ZAPISYWANIE USTAWIEŃ EXP
         document.getElementById('expMinL').onchange = (e) => { botSettings.exp.minLvl = parseInt(e.target.value) || 1; saveSettings(); };
         document.getElementById('expMaxL').onchange = (e) => { botSettings.exp.maxLvl = parseInt(e.target.value) || 300; saveSettings(); };
-        document.getElementById('expRange').onchange = (e) => { botSettings.exp.berserk = parseInt(e.target.value) || 20; saveSettings(); };
-        document.getElementById('expN').onchange = (e) => { botSettings.exp.normal = e.target.checked; saveSettings(); };
-        document.getElementById('expE').onchange = (e) => { botSettings.exp.elite = e.target.checked; saveSettings(); };
 
-        if(document.getElementById('expAggro')) {
-            document.getElementById('expAggro').onchange = (e) => { botSettings.exp.useAggro = e.target.checked; saveSettings(); };
-            document.getElementById('aggroN').onchange = (e) => { botSettings.exp.aggroN = e.target.checked; saveSettings(); };
-            document.getElementById('aggroE1').onchange = (e) => { botSettings.exp.aggroE1 = e.target.checked; saveSettings(); };
-            document.getElementById('aggroE2').onchange = (e) => { botSettings.exp.aggroE2 = e.target.checked; saveSettings(); };
-        }
         // SZUKAJKA I WYBÓR HEROSA
         document.getElementById('e2Search').addEventListener('input', () => renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8'));
         document.getElementById('kolosySearch').addEventListener('input', () => renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19'));
@@ -1647,7 +1643,7 @@ window.handleTeleportNPC = function(targetMap) {
         const selHero = document.getElementById('selHero');
         for (const hero in heroData) { let opt = document.createElement('option'); opt.value = hero; opt.innerText = heroLevels[hero] ? `${hero} (${heroLevels[hero]})` : hero; selHero.appendChild(opt); }
 
-selHero.addEventListener('change', (e) => {
+        selHero.addEventListener('change', (e) => {
             const hero = e.target.value;
             document.getElementById('cordsListContainer').innerHTML = '';
 
@@ -1767,123 +1763,6 @@ selHero.addEventListener('change', (e) => {
             win.addEventListener('wheel', e => e.stopPropagation(), { passive: true });
         });
     }
-
-    // ==========================================
-    // RENDEROWANIE BAZY I TRASY
-    // ==========================================
-    function renderBossList(containerId, dataArray, searchId, headerColor) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-
-        let filterText = (document.getElementById(searchId).value || "").toLowerCase();
-        container.innerHTML = '';
-
-        let filtered = dataArray.filter(e => e.name.toLowerCase().includes(filterText) || e.level.toString().includes(filterText));
-
-        if (filtered.length === 0) {
-            container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak wyników.</div>';
-            return;
-        }
-
-        filtered.forEach(boss => {
-            const rowWrapper = document.createElement('div');
-            rowWrapper.style.display = "block";
-            rowWrapper.style.marginBottom = "4px";
-
-            let isTargeted = activeBossTarget === boss.name;
-            let bgColor = isTargeted ? "rgba(255, 255, 255, 0.1)" : "#1a1a1a";
-            let bColor = isTargeted ? headerColor : "#333";
-
-            // --- NAPRAWA BŁĘDU "[Brak Kordów]" ---
-            let finalMap = boss.path[boss.path.length-1];
-            let savedInfo = `<span style="color:#777; font-size:9px;">[Brak Kordów]</span>`;
-            let rushArgs = `'${finalMap}'`;
-            let targetX = null;
-            let targetY = null;
-
-            // 1. Priorytet: Nowa Baza (właściwość "resp" z pliku bossy.json)
-            if (boss.resp && boss.resp[finalMap] && boss.resp[finalMap].length > 0) {
-                targetX = boss.resp[finalMap][0][0];
-                targetY = boss.resp[finalMap][0][1];
-                savedInfo = `<span style="color:#4caf50; font-size:9px;">[Baza: ${finalMap} - X:${targetX}, Y:${targetY}]</span>`;
-                rushArgs = `'${finalMap}', ${targetX}, ${targetY}`;
-            }
-            // 2. Fallback: Jeśli zapisałeś coś sam w grze (w localStorage)
-            else if (bossSavedCoords[boss.name]) {
-                targetX = bossSavedCoords[boss.name].x;
-                targetY = bossSavedCoords[boss.name].y;
-                finalMap = bossSavedCoords[boss.name].map; // Upewniamy się, że biegniemy tam, gdzie zapisał użytkownik
-                savedInfo = `<span style="color:#ffb300; font-size:9px;">[Zapisano: ${finalMap} - X:${targetX}, Y:${targetY}]</span>`;
-                rushArgs = `'${finalMap}', ${targetX}, ${targetY}`;
-            }
-
-            const header = document.createElement('div');
-            header.style.cssText = `background: ${bgColor}; border: 1px solid ${bColor}; padding: 4px 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;`;
-            header.innerHTML = `
-                <div style="display:flex; flex-direction:column; line-height:1.2;">
-                    <span style="color: ${headerColor}; font-weight: bold; font-size: 11px;">${boss.name} <span style="color:#a99a75;font-weight:normal;">(${boss.level} ${boss.prof})</span></span>
-                    ${savedInfo}
-                </div>
-                <span style="font-size:10px; color:#a99a75;">▼</span>
-            `;
-
-            const content = document.createElement('div');
-            content.style.display = isTargeted ? "block" : "none";
-            content.style.padding = "4px";
-            content.style.borderLeft = "1px solid #333";
-            content.style.background = "#141414";
-
-            let htmlPath = "";
-            boss.path.forEach((map, idx) => { let arrow = idx < boss.path.length - 1 ? " ➝ " : ""; htmlPath += `<span style="color:#a99a75;">${map}</span>${arrow}`; });
-
-            let bStyle = "height:22px; line-height:20px; border:1px solid #111; border-radius:3px; font-size:10px; font-weight:bold; cursor:pointer; color:#fff; text-shadow:1px 1px 0 rgba(0,0,0,0.8); box-sizing:border-box; margin:0; padding:0; box-shadow:inset 0 1px 2px rgba(255,255,255,0.2);";
-
-            content.innerHTML = `
-                <div style="font-size:10px; color:#aaa; margin-bottom:3px; display:flex; justify-content:space-between;">
-                    <span>Limit: <b style="color:#fff">${boss.limit === 999 ? 'Brak' : boss.limit}</b></span>
-                    <span>PvP: <b style="color:#fff">${boss.pvp}</b></span>
-                </div>
-                <div style="font-size:9px; color:#888; margin-bottom:6px; line-height:1.3; word-wrap:break-word; white-space:normal;">
-                 Trasa: <span style="color:#a99a75">${htmlPath}</span>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:4px;">
-                    <div style="display:flex; gap:4px;">
-                        <button style="${bStyle} background:#00838f; width:80px;" onclick="event.stopPropagation(); saveCurrentCoordsForBoss('${boss.name}')" title="Nadpisz koordynaty z bazy">📌 ZAPISZ RĘCZNIE</button>
-                        ${bossSavedCoords[boss.name] ? `
-                            <button style="${bStyle} background:#e53935; width:30px;" onclick="event.stopPropagation(); deleteBossCoords('${boss.name}')" title="Usuń zapis użytkownika (przywróci domyślną bazę)">✖</button>
-                        ` : ''}
-                    </div>
-                    <div style="display:flex; gap:4px;">
-                        <button style="${bStyle} background:#4e342e; width:95px;" onclick="rushToMap(${rushArgs})">🏃 BIEG DO MAPY</button>
-                        ${targetX !== null ? `
-                            <button style="${bStyle} background:#4caf50; width:80px;" onclick="goSinglePoint(${targetX}, ${targetY}, '${finalMap}')">🎯 DO KORDU</button>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-
-            header.onclick = () => {
-                let isHidden = content.style.display === "none";
-
-                document.querySelectorAll(`#${containerId} > div > div:nth-child(2)`).forEach(c => c.style.display = 'none');
-                document.querySelectorAll(`#${containerId} > div > div:nth-child(1)`).forEach(h => { h.style.background = '#1a1a1a'; h.style.borderColor = '#333'; });
-
-                if (isHidden) {
-                    content.style.display = "block";
-                    header.style.background = "rgba(255, 255, 255, 0.1)";
-                    header.style.borderColor = headerColor;
-                    activeBossTarget = boss.name;
-                } else {
-                    activeBossTarget = null;
-                }
-            };
-
-            rowWrapper.appendChild(header);
-            rowWrapper.appendChild(content);
-            container.appendChild(rowWrapper);
-        });
-    }
-
     function renderGatewaysDatabase() {
         const container = document.getElementById('gatewaysListContainer'); if(!container) return; container.innerHTML = ''; let currentSysMap = lastMapName; let count = 0;
         let currentMapGateways = globalGateways[currentSysMap] || {};
