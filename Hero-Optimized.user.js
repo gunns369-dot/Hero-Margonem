@@ -20,45 +20,80 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-// OSTATECZNY SKANER (Priorytet: Niebieskie kropki / Map Layers)
+// OSTATECZNY SKANER (Głębokie skanowanie siatki mapy - NI Optimized)
     const HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
             let foundGateways = [];
             let processedCoords = new Set();
-
-            if (typeof Engine === 'undefined' || !Engine.map) return [];
-
-            // 1. POBIERANIE DANYCH Z SILNIKA (3 METODY)
             
-            // Metoda A: Skanowanie fizycznej siatki kolizji i przejść (NAJSKUTECZNIEJSZA NA NI)
-            if (Engine.map.d && Engine.map.d.gw) {
-                let gws = Engine.map.d.gw;
-                for (let id in gws) {
-                    this.pushGateway(gws[id], foundGateways, processedCoords, currentMapName, zakkonicyData);
+            if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return [];
+
+            const mapData = Engine.map.d;
+            const width = mapData.width;
+            const height = mapData.height;
+
+            // 1. SKANOWANIE SIATKI PRZEJŚĆ (To są właśnie te niebieskie kropki na NI)
+            // Silnik NI trzyma je w map.d.gw w formacie: { "x,y": "Nazwa Mapy" } lub w obiektach
+            let rawGws = mapData.gw || {};
+            
+            for (let coordKey in rawGws) {
+                let targetName = rawGws[coordKey];
+                let x, y;
+
+                if (coordKey.includes(',')) {
+                    let parts = coordKey.split(',');
+                    x = parseInt(parts[0]); y = parseInt(parts[1]);
+                } else {
+                    let gwObj = rawGws[coordKey];
+                    x = gwObj.x; y = gwObj.y;
+                    targetName = gwObj.name || gwObj.targetName || "Przejście";
+                }
+
+                if (isNaN(x) || isNaN(y)) continue;
+                this.pushGateway(x, y, targetName, foundGateways, processedCoords, currentMapName, zakkonicyData);
+            }
+
+            // 2. SKANOWANIE OBIEKTÓW INTERAKTYWNYCH (Drzwi/Jaskinie/Namioty)
+            if (Engine.map.gateways && Engine.map.gateways.all) {
+                for (let id in Engine.map.gateways.all) {
+                    let g = Engine.map.gateways.all[id];
+                    this.pushGateway(g.x, g.y, g.name || g.targetName, foundGateways, processedCoords, currentMapName, zakkonicyData);
                 }
             }
 
-            // Metoda B: Skanowanie obiektów graficznych przejść (Niebieskie kropki)
-            if (Engine.map.gateways && typeof Engine.map.gateways.all === 'object') {
-                let gws = Engine.map.gateways.all;
-                for (let id in gws) {
-                    this.pushGateway(gws[id], foundGateways, processedCoords, currentMapName, zakkonicyData);
-                }
-            }
-
-            // Metoda C: Skanowanie ukrytej tablicy (Gdy Metoda A i B zawiodą)
-            if (foundGateways.length === 0 && Engine.map.d && Engine.map.d.townname) {
-                let towns = Engine.map.d.townname;
-                for (let key in towns) {
-                    let parts = key.split(','); // Format "x,y"
-                    if (parts.length === 2) {
-                        this.pushGateway({x: parseInt(parts[0]), y: parseInt(parts[1]), name: towns[key]}, foundGateways, processedCoords, currentMapName, zakkonicyData);
+            // 3. FALLBACK - Skanowanie tablicy nazw (Stary sposób)
+            if (foundGateways.length < 2 && mapData.townname) {
+                for (let key in mapData.townname) {
+                    let p = key.split(',');
+                    if (p.length === 2) {
+                        this.pushGateway(parseInt(p[0]), parseInt(p[1]), mapData.townname[key], foundGateways, processedCoords, currentMapName, zakkonicyData);
                     }
                 }
             }
 
             return foundGateways;
         },
+
+        pushGateway: function(x, y, rawName, list, set, currMap, tpData) {
+            let key = x + "_" + y;
+            if (set.has(key)) return;
+            set.add(key);
+
+            // Ignoruj Zakonnika
+            let tp = tpData ? tpData[currMap] : null;
+            if (tp && Math.max(Math.abs(x - tp.x), Math.abs(y - tp.y)) <= 2) return;
+
+            let name = (rawName || "").toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
+            
+            if (!name || name.length < 2 || name === "Wyjście") {
+                name = `Wejście [${x},${y}]`;
+            }
+
+            if (name !== currMap && !name.includes("Brak")) {
+                list.push({ x: x, y: y, targetMap: name });
+            }
+        }
+    };
 
         // Funkcja pomocnicza do czyszczenia i dodawania danych
         pushGateway: function(gw, list, set, currMap, tpData) {
@@ -3560,31 +3595,32 @@ selHero.addEventListener('change', (e) => {
 
 
 
-   function scanCurrentMapForGateways() {
+function scanCurrentMapForGateways() {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return heroAlert("Błąd: Silnik gry nie jest gotowy.");
         let currentMap = Engine.map.d.name;
         
+        // Wywołanie agresywnego skanera
         let gatewaysFound = HeroScannerModule.scanCurrentMap(currentMap, ZAKONNICY);
         let container = document.getElementById('gatewaysListContainer');
         if (!container) return;
 
+        // Czyścimy poprzednie wyniki (te z żółtym paskiem), aby nie spamować listy
+        container.querySelectorAll('.list-item').forEach(el => {
+            if (el.style.borderLeftColor === 'rgb(255, 179, 0)') el.remove();
+        });
+
         if (gatewaysFound.length === 0) {
-            return heroAlert("Skaner nie wykrył żadnych przejść. Spróbuj podejść bliżej niebieskich kropek na mapie.");
+            return heroAlert("Skaner nie wykrył żadnych nowych przejść. Spróbuj podejść do niebieskiej kropki.");
         }
 
-        // Czyścimy stare wyniki skanowania (te z żółtym paskiem), ale zostawiamy bazę danych
-        let oldScans = container.querySelectorAll('.scanner-result-header, .scanner-result-item');
-        oldScans.forEach(el => el.remove());
-
         let header = document.createElement('div');
-        header.className = "scanner-result-header";
         header.innerHTML = `<br><span style="color:#ffb300; font-weight:bold; font-size:10px;">🔍 WYKRYTE PRZEJŚCIA (${gatewaysFound.length}):</span>`;
         header.style.padding = "2px 5px"; header.style.background = "#1a1a1a";
         container.insertBefore(header, container.firstChild);
 
         gatewaysFound.forEach(gw => {
             let row = document.createElement('div');
-            row.className = "list-item scanner-result-item";
+            row.className = "list-item";
             row.style.borderLeft = "3px solid #ffb300";
             row.innerHTML = `
                 <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer;" onclick="goSinglePoint(${gw.x}, ${gw.y}, '${currentMap}')">
@@ -3596,9 +3632,8 @@ selHero.addEventListener('change', (e) => {
             container.insertBefore(row, header.nextSibling);
         });
         
-        heroAlert(`Sukces! Znaleziono ${gatewaysFound.length} przejść.`);
+        heroAlert(`Sukces! Skaner wyciągnął z silnika ${gatewaysFound.length} przejść.`);
     }
-
 
 
     function renderCordsList(activeIndex = -1) {
