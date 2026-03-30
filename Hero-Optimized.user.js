@@ -42,13 +42,15 @@
 
     loadCombatModule();
 
-   // WBUDOWANY MODUŁ TELEPORTACJI (Zastępuje zewnętrzny plik)
+   // WBUDOWANY MODUŁ TELEPORTACJI (Pełne wsparcie dla Nowego Interfejsu - NI)
     const HeroTeleportModule = {
         processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
-            let dialogBox = document.querySelector('.dialog-texts') || document.querySelector('.dialog-content');
-            let isDialogOpen = dialogBox && dialogBox.offsetParent !== null;
+            
+            // Szukamy WSZYSTKICH możliwych wariantów odpowiedzi (wspiera NI oraz SI)
+            let options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
 
-            if (!isDialogOpen) {
+            // Jeśli nie widzi żadnych opcji = okno jest zamknięte. Otwieramy je!
+            if (options.length === 0) {
                 console.log("%c[HERO] Szukam Zakonnika w pobliżu...", "color: yellow;");
                 let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
                 let zakonnikId = null;
@@ -65,49 +67,72 @@
                 }
 
                 if (zakonnikId) {
-                    console.log(`%c[HERO] Znalazłem Zakonnika (ID: ${zakonnikId}). Wymuszam pakiet rozmowy z serwerem!`, "color: #4caf50; font-weight: bold;");
+                    console.log(`%c[HERO] Znalazłem Zakonnika (ID: ${zakonnikId}). Wymuszam rozmowę!`, "color: #4caf50; font-weight: bold;");
+                    // Bezpośrednie wymuszenie dialogu
                     if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
                     else if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
                 } else {
                     console.log("%c[HERO] BŁĄD: Nie widzę Zakonnika na tej mapie!", "color: red; font-weight: bold;");
                 }
+                
                 retryCallback();
                 return;
             }
 
-            let options = Array.from(document.querySelectorAll('.dialog-texts li, .dialog-options li, .answer, [data-option]'));
-            if (options.length > 0) {
-                let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleport"));
-                if (startOpt) {
-                    console.log(`%c[HERO] Klikam: ${startOpt.innerText.trim()}`, "color: #00acc1;");
-                    startOpt.click(); 
-                    retryCallback();
-                    return;
+            // Jeśli dotarliśmy tutaj, to znaczy że opcje SĄ na ekranie!
+            
+            // 1. Sprawdzamy czy to początek rozmowy (wybór opcji "teleportować")
+            let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleport"));
+            if (startOpt) {
+                console.log(`%c[HERO] Klikam: ${startOpt.innerText.trim()}`, "color: #00acc1;");
+                
+                // Solidne kliknięcie wspierające każdy interfejs
+                if (typeof startOpt.click === 'function') startOpt.click(); 
+                else {
+                    startOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    startOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
                 }
-
-                let destOpt = options.find(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
-                if (destOpt) {
-                    if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
-                        console.log(`%c[HERO] Zablokowane! Brak zezwolenia do: ${targetMap}!`, "color: red; font-weight: bold;");
-                        let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ"));
-                        if (closeOpt) closeOpt.click();
-                        stopCallback(); 
-                        return;
-                    }
-                    console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Przenoszę!`, "color: #4caf50; font-weight: bold;");
-                    destOpt.click();
-                    continueCallback(); 
-                    return;
-                } else {
-                    let moreOpt = options.find(el => el.innerText.toLowerCase().includes("inne") || el.innerText.toLowerCase().includes("dalej") || el.innerText.toLowerCase().includes("pokaż więcej"));
-                    if(moreOpt) {
-                        console.log(`%c[HERO] Szukam miasta na kolejnej stronie...`, "color: #00acc1;");
-                        moreOpt.click();
-                        retryCallback();
-                        return;
-                    }
-                }
+                retryCallback();
+                return;
             }
+
+            // 2. Szukamy miasta docelowego na liście
+            let destOpt = options.find(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
+            if (destOpt) {
+                if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
+                    console.log(`%c[HERO] Zablokowane! Brak zezwolenia do: ${targetMap}!`, "color: red; font-weight: bold;");
+                    let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ") || el.innerText.toLowerCase().includes("niczego"));
+                    if (closeOpt) {
+                        if (typeof closeOpt.click === 'function') closeOpt.click();
+                        else closeOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    }
+                    stopCallback(); 
+                    return;
+                }
+                console.log(`%c[HERO] 🚀 Cel: ${targetMap} -> Przenoszę!`, "color: #4caf50; font-weight: bold;");
+                if (typeof destOpt.click === 'function') destOpt.click();
+                else {
+                    destOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    destOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                }
+                continueCallback(); 
+                return;
+            } 
+            
+            // 3. Jeśli miasta nie ma na liście, szukamy przycisku "Inne / Dalej"
+            let moreOpt = options.find(el => el.innerText.toLowerCase().includes("inne") || el.innerText.toLowerCase().includes("dalej") || el.innerText.toLowerCase().includes("więcej"));
+            if (moreOpt) {
+                console.log(`%c[HERO] Szukam miasta na kolejnej stronie...`, "color: #00acc1;");
+                if (typeof moreOpt.click === 'function') moreOpt.click();
+                else {
+                    moreOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    moreOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                }
+                retryCallback();
+                return;
+            }
+            
+            // Czekamy na załadowanie elementów
             retryCallback(); 
         }
     };
