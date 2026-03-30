@@ -2902,7 +2902,6 @@ mainGui.innerHTML = `
                 if (expContainer) expContainer.style.display = tab === 'exp' ? 'flex' : 'none';
                 if (teleportsContainer) teleportsContainer.style.display = tab === 'teleports' ? 'flex' : 'none';
 
-                // Baza expowisk ma być częścią zakładki EXP
                 if (expProfilesContainer) {
                     expProfilesContainer.style.display = tab === 'exp' ? 'flex' : 'none';
                 }
@@ -2940,6 +2939,137 @@ mainGui.innerHTML = `
             });
         }
     });
+
+    const btnExp = document.getElementById('btnStartExp');
+    if (btnExp) {
+        btnExp.addEventListener('click', function() {
+            window.isExping = !window.isExping;
+
+            if (window.isExping) {
+                this.innerHTML = "⏹ STOP";
+                this.style.borderColor = "#f44336";
+                this.style.color = "#f44336";
+                if (typeof window.logExp === 'function') window.logExp("Uruchomiono tryb automatyczny!", "#4caf50");
+            } else {
+                this.innerHTML = "▶ START";
+                this.style.borderColor = "#4caf50";
+                this.style.color = "#4caf50";
+                if (typeof window.logExp === 'function') window.logExp("Zatrzymano tryb automatyczny.", "#f44336");
+            }
+        });
+    }
+
+    document.getElementById('expMinL').onchange = (e) => { botSettings.exp.minLvl = parseInt(e.target.value) || 1; saveSettings(); };
+    document.getElementById('expMaxL').onchange = (e) => { botSettings.exp.maxLvl = parseInt(e.target.value) || 300; saveSettings(); };
+    document.getElementById('expRange').onchange = (e) => { botSettings.exp.berserk = parseInt(e.target.value) || 20; saveSettings(); };
+    document.getElementById('expN').onchange = (e) => { botSettings.exp.normal = e.target.checked; saveSettings(); };
+    document.getElementById('expE').onchange = (e) => { botSettings.exp.elite = e.target.checked; saveSettings(); };
+
+    if (document.getElementById('expAggro')) {
+        document.getElementById('expAggro').onchange = (e) => { botSettings.exp.useAggro = e.target.checked; saveSettings(); };
+        document.getElementById('aggroN').onchange = (e) => { botSettings.exp.aggroN = e.target.checked; saveSettings(); };
+        document.getElementById('aggroE1').onchange = (e) => { botSettings.exp.aggroE1 = e.target.checked; saveSettings(); };
+        document.getElementById('aggroE2').onchange = (e) => { botSettings.exp.aggroE2 = e.target.checked; saveSettings(); };
+    }
+
+    const e2Search = document.getElementById('e2Search');
+    if (e2Search) {
+        e2Search.addEventListener('input', () => renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8'));
+    }
+
+    const kolosySearch = document.getElementById('kolosySearch');
+    if (kolosySearch) {
+        kolosySearch.addEventListener('input', () => renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19'));
+    }
+
+    const selHero = document.getElementById('selHero');
+    if (selHero) {
+        for (const hero in heroData) {
+            let opt = document.createElement('option');
+            opt.value = hero;
+            opt.innerText = heroLevels[hero] ? `${hero} (${heroLevels[hero]})` : hero;
+            selHero.appendChild(opt);
+        }
+
+        selHero.addEventListener('change', (e) => {
+            const hero = e.target.value;
+            const cordsListContainer = document.getElementById('cordsListContainer');
+            if (cordsListContainer) cordsListContainer.innerHTML = '';
+
+            if (hero && heroData[hero]) {
+                if (!heroMapOrder[hero] || heroMapOrder[hero].length === 0) {
+                    heroMapOrder[hero] = Object.keys(heroData[hero]);
+                    saveMapOrder();
+                }
+
+                currentRouteIndex = -1;
+                sessionStorage.removeItem('hero_route_index');
+                checkedMapsThisSession.clear();
+                saveCheckedMaps();
+
+                let currMap = (typeof Engine !== 'undefined' && Engine.map && Engine.map.d) ? Engine.map.d.name : lastMapName;
+
+                if (heroData[hero][currMap]) {
+                    currentCordsList = [...heroData[hero][currMap]];
+                    checkedPoints.clear();
+                    setTimeout(() => {
+                        optimizeRoute();
+                        renderCordsList();
+                    }, 150);
+                } else {
+                    currentCordsList = [];
+                    checkedPoints.clear();
+                    renderCordsList();
+                }
+
+                updateUI();
+            } else {
+                const heroMapListContainer = document.getElementById('heroMapListContainer');
+                if (heroMapListContainer) {
+                    heroMapListContainer.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div>';
+                }
+            }
+        });
+    }
+
+    const btnOpenSettings = document.getElementById('btnOpenSettings');
+    if (btnOpenSettings) {
+        btnOpenSettings.addEventListener('click', () => {
+            let p = document.getElementById('heroSettingsGUI');
+            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+        });
+    }
+
+    const btnOpenMaps = document.getElementById('btnOpenMaps');
+    if (btnOpenMaps) {
+        btnOpenMaps.addEventListener('click', () => {
+            let p = document.getElementById('heroGatewaysGUI');
+            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            if (p.style.display === 'flex') renderGatewaysDatabase();
+        });
+    }
+
+    const btnMinimizeMain = document.getElementById('btnMinimizeMain');
+    if (btnMinimizeMain) {
+        btnMinimizeMain.addEventListener('click', toggleMainVisibility);
+    }
+
+    const btnScanGateways = document.getElementById('btnScanGateways');
+    if (btnScanGateways) {
+        btnScanGateways.addEventListener('click', scanCurrentMapForGateways);
+    }
+
+    if (typeof setupTopGoToSearch === 'function') {
+        setupTopGoToSearch();
+    }
+
+    if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+    renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8');
+    renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
+    if (typeof renderExpMaps === 'function') renderExpMaps();
+    if (typeof renderExpProfiles === 'function') renderExpProfiles();
+    if (typeof renderRecommendedExpMaps === 'function') renderRecommendedExpMaps();
+}
 
     const btnExp = document.getElementById('btnStartExp');
     if (btnExp) {
