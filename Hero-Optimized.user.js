@@ -3169,14 +3169,8 @@ mainGui.innerHTML = `
     renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
     if (typeof renderExpMaps === 'function') renderExpMaps();
     if (typeof renderExpProfiles === 'function') renderExpProfiles();
-    if (typeof renderRecommendedExpMaps === 'function') renderRecommendedExpMaps();
-
-             
-            }
-
-        });
-
-
+       if (typeof renderRecommendedExpMaps === 'function') renderRecommendedExpMaps();
+}
 
        // EXP - PRZYCISK START / STOP
 
