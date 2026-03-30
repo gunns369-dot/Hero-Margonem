@@ -20,39 +20,42 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-// OSTATECZNY SKANER (Głębokie skanowanie siatki mapy - NI Optimized)
+// 3. AGRESYWNY SKANER PÓL (NI OPTIMIZED - SKANUJE SIATKĘ MAPY)
     const HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
-            let foundGateways = [];
-            let processedCoords = new Set();
-            
+            let found = [];
+            let set = new Set();
             if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return [];
 
-            const mapData = Engine.map.d;
-            const width = mapData.width;
-            const height = mapData.height;
-
-            // 1. SKANOWANIE SIATKI PRZEJŚĆ (To są właśnie te niebieskie kropki na NI)
-            // Silnik NI trzyma je w map.d.gw w formacie: { "x,y": "Nazwa Mapy" } lub w obiektach
-            let rawGws = mapData.gw || {};
-            
-            for (let coordKey in rawGws) {
-                let targetName = rawGws[coordKey];
-                let x, y;
-
-                if (coordKey.includes(',')) {
-                    let parts = coordKey.split(',');
-                    x = parseInt(parts[0]); y = parseInt(parts[1]);
-                } else {
-                    let gwObj = rawGws[coordKey];
-                    x = gwObj.x; y = gwObj.y;
-                    targetName = gwObj.name || gwObj.targetName || "Przejście";
-                }
-
-                if (isNaN(x) || isNaN(y)) continue;
-                this.pushGateway(x, y, targetName, foundGateways, processedCoords, currentMapName, zakkonicyData);
+            // METODA 1: Skanowanie siatki kolizji (Niebieskie kropki na NI)
+            let gws = Engine.map.d.gw || {};
+            for (let key in gws) {
+                let x, y, name;
+                if (key.includes(',')) {
+                    let p = key.split(','); x = parseInt(p[0]); y = parseInt(p[1]); name = gws[key];
+                } else { x = gws[key].x; y = gws[key].y; name = gws[key].name || gws[key].targetName; }
+                this.pushGateway(x, y, name, found, set, currentMapName, zakkonicyData);
             }
 
+            // METODA 2: Skanowanie obiektów graficznych
+            if (Engine.map.gateways && Engine.map.gateways.all) {
+                for (let id in Engine.map.gateways.all) {
+                    let g = Engine.map.gateways.all[id];
+                    this.pushGateway(g.x, g.y, g.name || g.targetName, found, set, currentMapName, zakkonicyData);
+                }
+            }
+            return found;
+        },
+        pushGateway: function(x, y, rawName, list, set, currMap, tpData) {
+            if (isNaN(x) || isNaN(y)) return;
+            let tp = tpData ? tpData[currMap] : null;
+            if (tp && Math.max(Math.abs(x - tp.x), Math.abs(y - tp.y)) <= 2) return;
+            let k = x + "_" + y; if (set.has(k)) return; set.add(k);
+            let name = (rawName || "").toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").split(" .")[0].trim();
+            if (!name || name.length < 2 || name === "Wyjście") name = `Wejście [${x},${y}]`;
+            if (name !== currMap && !name.includes("Brak")) list.push({ x: x, y: y, targetMap: name });
+        }
+    };
             // 2. SKANOWANIE OBIEKTÓW INTERAKTYWNYCH (Drzwi/Jaskinie/Namioty)
             if (Engine.map.gateways && Engine.map.gateways.all) {
                 for (let id in Engine.map.gateways.all) {
