@@ -20,60 +20,85 @@
         document.head.appendChild(script);
     }
     loadCombatModule();
-// WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - Zabezpieczony przed SyntaxError)
-    const HeroScannerModule = {
-        scanCurrentMap: function(currentMapName, zakkonicyData) {
-            let foundGateways = [];
-            let processedCoords = new Set();
-            let gwsObj = {};
-            
-            if (typeof Engine !== 'undefined' && Engine.map) {
-                if (Engine.map.gateways) gwsObj = Engine.map.gateways;
-                else if (Engine.map.d && Engine.map.d.gw) gwsObj = Engine.map.d.gw;
-            } else if (typeof g !== 'undefined' && g.townname) { 
-                gwsObj = g.townname; 
-            }
+// WBUDOWANY MODUŁ TELEPORTACJI (Złoty środek: Niezawodny, LUDZKI - Anty-Captcha i Anty-Blokada NI)
+    const HeroTeleportModule = {
+        isClicking: false,
 
-            let gwsList = [];
-            try {
-                if (typeof gwsObj.values === 'function') gwsList = Array.from(gwsObj.values());
-                else gwsList = Object.values(gwsObj);
-            } catch(e) {
-                for (let key in gwsObj) { if (gwsObj.hasOwnProperty(key)) gwsList.push(gwsObj[key]); }
-            }
+        processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
+            if (this.isClicking) return; // Zapobiega dublowaniu kliknięć i wysyłaniu za dużo pakietów
 
-            gwsList.forEach(gw => {
-                let data = gw.d || gw;
-                if (!data) return;
-                let px = data.x; let py = data.y;
-                if (px === undefined || py === undefined) return;
+            let options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
 
-                // Ignorowanie Zakonników
-                let tp = zakkonicyData ? zakkonicyData[currentMapName] : null;
-                if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) return;
-
-                // Blokada dublikatów
-                let coordKey = px + "_" + py;
-                if (processedCoords.has(coordKey)) return; 
-                processedCoords.add(coordKey);
-
-                // Wyciąganie nazwy
-                let rawName = data.name || data.targetName || data.title || data.tooltip || "";
-                let cleanName = rawName.toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
+            // Okno zamknięte - szukamy NPC i "klikamy" w niego z opóźnieniem
+            if (options.length === 0) {
+                let npcs = (typeof Engine !== 'undefined' && Engine.npcs) ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : {};
+                let zakonnikId = null;
+                for (let id in npcs) {
+                    let n = npcs[id].d || npcs[id];
+                    if (n && n.nick && n.nick.replace(/<[^>]*>?/gm, '').toLowerCase().includes("zakonnik")) {
+                        zakonnikId = parseInt(id, 10); break;
+                    }
+                }
                 
-                if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
-                    cleanName = `Wejście [${px}, ${py}]`;
+                if (zakonnikId) {
+                    this.isClicking = true; // Blokujemy skrypt, żeby nie wysłał 10 pakietów w sekundę
+                    
+                    // Ludzkie opóźnienie przed podejściem i rozpoczęciem rozmowy (400 - 800ms)
+                    let approachDelay = Math.floor(Math.random() * (800 - 400 + 1)) + 400;
+                    setTimeout(() => {
+                        if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(zakonnikId);
+                        else if (typeof window._g === 'function') window._g(`talk&id=${zakonnikId}`);
+                        this.isClicking = false;
+                        retryCallback();
+                    }, approachDelay);
+                } else {
+                    retryCallback();
                 }
+                return;
+            }
 
-                if (cleanName !== currentMapName && !cleanName.includes("Brak")) {
-                    foundGateways.push({ x: px, y: py, targetMap: cleanName });
+            // Funkcja klikająca: ZABEZPIECZONA pod Nowy Interfejs (Wymusza zdarzenia myszy)
+            const humanClick = (element, nextStepFunction) => {
+                this.isClicking = true;
+                // Zwiększamy pauzę, by oszukać anty-cheata: 600 - 1200ms
+                let humanDelay = Math.floor(Math.random() * (1200 - 600 + 1)) + 600; 
+                setTimeout(() => {
+                    // Margonem NI ignoruje zwykłe .click(), wymaga pełnego cyklu myszki!
+                    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                    if (typeof element.click === 'function') element.click();
+
+                    this.isClicking = false;
+                    if (nextStepFunction) nextStepFunction();
+                }, humanDelay);
+            };
+
+            let startOpt = options.find(el => el.innerText.toLowerCase().includes("teleport"));
+            if (startOpt) {
+                humanClick(startOpt, retryCallback);
+                return;
+            }
+
+            let destOpt = options.find(el => el.innerText.toLowerCase().includes(targetMap.toLowerCase()));
+            if (destOpt) {
+                if (destOpt.innerText.toLowerCase().includes("brak zezwolenia")) {
+                    let closeOpt = options.find(el => el.innerText.toLowerCase().includes("nigdzie") || el.innerText.toLowerCase().includes("zakończ") || el.innerText.toLowerCase().includes("niczego"));
+                    if (closeOpt) humanClick(closeOpt, stopCallback); else stopCallback();
+                    return;
                 }
-            });
+                humanClick(destOpt, continueCallback);
+                return;
+            } 
             
-            return foundGateways;
+            let moreOpt = options.find(el => el.innerText.toLowerCase().includes("inne") || el.innerText.toLowerCase().includes("dalej") || el.innerText.toLowerCase().includes("więcej"));
+            if (moreOpt) {
+                humanClick(moreOpt, retryCallback);
+                return;
+            }
+            
+            retryCallback(); 
         }
     };
-
         pushGateway: function(x, y, rawName, list, set, currMap, tpData) {
             let key = x + "_" + y;
             if (set.has(key)) return;
