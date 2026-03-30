@@ -1603,17 +1603,16 @@ let attackInterval = null;
 
         if (currentName !== lastMapName) {
 
+          if (currentName !== lastMapName) {
+            // Fizyczne nagrywanie starych śladów (Smart Memory z chodzenia) wyłączone!
+            // Całą robotę w tle wykonuje teraz bezbłędny Auto-Skaner, który wrzuca wszystko do pamięci.
+            /*
             if (lastMapName !== "" && positionHistory.length > 0) {
-
                 let validPos = null;
-
                 for (let i = positionHistory.length - 1; i >= 0; i--) { if (positionHistory[i].map === lastMapName) { validPos = positionHistory[i]; break; } }
-
                 if (validPos && botSettings.isRecording) { saveGatewayToDB(lastMapName, currentName, validPos.x, validPos.y); }
-
             }
-
-
+            */
 
             positionHistory = [];
 
@@ -3591,35 +3590,48 @@ function scanCurrentMapForGateways() {
         let container = document.getElementById('gatewaysListContainer');
         if (!container) return;
 
-        if (gatewaysFound.length === 0) {
-            return heroAlert("Skaner nie wykrył żadnych przejść. Spróbuj podejść bliżej niebieskich kropek na mapie.");
-        }
+        // Grupujemy wyniki, żeby nie spamować listy, gdy jedna jaskinia ma np. 5 kratek wejścia
+        let grouped = {};
+        gatewaysFound.forEach(gw => {
+            if (!grouped[gw.targetMap]) grouped[gw.targetMap] = [];
+            grouped[gw.targetMap].push({x: gw.x, y: gw.y});
+        });
 
-        // Czyścimy stare wyniki skanowania (te z żółtym paskiem), ale zostawiamy bazę danych
+        // Wymuszamy autozapis wywołany ręcznie
+        autoLearnGateways();
+
+        // Czyścimy stare wyniki wyszukiwania
         let oldScans = container.querySelectorAll('.scanner-result-header, .scanner-result-item');
         oldScans.forEach(el => el.remove());
 
+        let uniqueCount = Object.keys(grouped).length;
+        if (uniqueCount === 0) {
+            return heroAlert("Skaner nie wykrył żadnych nowych przejść.");
+        }
+
         let header = document.createElement('div');
         header.className = "scanner-result-header";
-        header.innerHTML = `<br><span style="color:#ffb300; font-weight:bold; font-size:10px;">🔍 WYKRYTE PRZEJŚCIA (${gatewaysFound.length}):</span>`;
+        header.innerHTML = `<br><span style="color:#ffb300; font-weight:bold; font-size:10px;">🔍 ZESKANOWANO KIERUNKI (${uniqueCount}):</span>`;
         header.style.padding = "2px 5px"; header.style.background = "#1a1a1a";
         container.insertBefore(header, container.firstChild);
 
-        gatewaysFound.forEach(gw => {
+        for (let tMap in grouped) {
+            let coordsList = grouped[tMap];
+            let firstGw = coordsList[0];
             let row = document.createElement('div');
             row.className = "list-item scanner-result-item";
             row.style.borderLeft = "3px solid #ffb300";
             row.innerHTML = `
-                <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer;" onclick="goSinglePoint(${gw.x}, ${gw.y}, '${currentMap}')">
-                    <span style="color:#ffb300; font-weight:bold;">${gw.targetMap}</span>
-                    <span style="color:#a99a75;">Pozycja: X: ${gw.x}, Y: ${gw.y}</span>
+                <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer;" onclick="goSinglePoint(${firstGw.x}, ${firstGw.y}, '${currentMap}')">
+                    <span style="color:#ffb300; font-weight:bold;">${tMap}</span>
+                    <span style="color:#a99a75;">Kratek wejścia: ${coordsList.length} (Zapisano do bazy!)</span>
                 </div>
-                <button class="btn-sepia" onclick="saveGatewayToDB('${currentMap}', '${gw.targetMap}', ${gw.x}, ${gw.y}); heroAlert('Zapisano!'); this.parentElement.remove();">ZAPISZ</button>
+                <button class="btn-sepia" onclick="this.parentElement.remove();">UKRYJ</button>
             `;
             container.insertBefore(row, header.nextSibling);
-        });
+        }
         
-        heroAlert(`Sukces! Znaleziono ${gatewaysFound.length} przejść.`);
+        heroAlert(`Sukces!\nZeskanowano i pogrupowano wejścia.\nDodano do bazy: ${uniqueCount} kierunków (łącznie ${gatewaysFound.length} kratek wejścia do wylosowania przez bota).`);
     }
 
     function renderCordsList(activeIndex = -1) {
