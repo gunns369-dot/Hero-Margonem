@@ -3170,7 +3170,6 @@ mainGui.innerHTML = `
     if (typeof renderExpMaps === 'function') renderExpMaps();
     if (typeof renderExpProfiles === 'function') renderExpProfiles();
        if (typeof renderRecommendedExpMaps === 'function') renderRecommendedExpMaps();
-}
 
        // EXP - PRZYCISK START / STOP
 
