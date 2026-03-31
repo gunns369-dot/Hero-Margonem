@@ -2629,49 +2629,56 @@ mainGui.innerHTML = `
                     <div id="kolosyListContainer"></div>
                 </div>
 
-              <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px;">
-    <div style="background:#111; border:1px solid #333; padding:4px; font-size:11px; color:#d4af37;">
-        ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
-    </div>
+            <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px;">
+                    <div class="accordion-header" id="accBerserk" onclick="window.toggleSettingsAcc('accBerserk')">▶ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)</div>
+                    <div id="accBerserkContent" style="display:none; padding:4px; background:rgba(0,0,0,0.2); border:1px solid #333; margin-bottom:4px;">
+                        <div class="nav-row" style="display:flex; justify-content:space-around; flex-wrap:wrap; gap:4px; margin-bottom:4px;">
+                            <label><input type="checkbox" id="berserkEnabled" ${botSettings.berserk.enabled ? 'checked' : ''}> Włącz</label>
+                            <label><input type="checkbox" id="berserkCommon" ${botSettings.berserk.common ? 'checked' : ''}> Zwykłe</label>
+                            <label><input type="checkbox" id="berserkE1" ${botSettings.berserk.e1 ? 'checked' : ''}> Elity 1</label>
+                            <label><input type="checkbox" id="berserkE2" ${botSettings.berserk.e2 ? 'checked' : ''}> Elity 2</label>
+                            <label><input type="checkbox" id="berserkHero" ${botSettings.berserk.hero ? 'checked' : ''}> Herosi</label>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            <label style="flex:1; color:#a99a75; font-size:11px;">Zasięg w dół (- Lvl): <input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk.minLvlOffset)}"></label>
+                            <label style="flex:1; color:#a99a75; font-size:11px;">Zasięg w górę (+ Lvl): <input type="number" id="berserkMaxLvl" value="${botSettings.berserk.maxLvlOffset}"></label>
+                        </div>
+                    </div>
 
-    <div class="nav-row">
-        <label>Przedział poziomowy (Automatyczny +1 przy awansie):</label>
-    </div>
+                    <div class="nav-row">
+                        <label>Przedział poziomowy dla Smart-Roam (+1 przy awansie):</label>
+                    </div>
+                    <div style="display:flex; gap:4px;">
+                        <label style="flex:1; color:#a99a75; font-size:11px;">Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
+                        <label style="flex:1; color:#a99a75; font-size:11px;">Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
+                    </div>
 
-    <div style="display:flex; gap:4px;">
-        <label style="flex:1; color:#a99a75; font-size:11px;">Min Lvl:
-            <input type="number" id="expMinL" value="${botSettings.exp.minLvl}">
-        </label>
-        <label style="flex:1; color:#a99a75; font-size:11px;">Max Lvl:
-            <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}">
-        </label>
-    </div>
+                    <input type="hidden" id="expRange" value="999">
 
-    <input type="hidden" id="expRange" value="999">
+                    <div class="nav-row" style="display:flex; justify-content:space-around; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px;">
+                        <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
+                        <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
+                    </div>
 
-    <div class="nav-row" style="display:flex; justify-content:space-around; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px;">
-        <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
-        <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
-    </div>
+                    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Kolejność map na expowisku (Smart-Roam):</label>
+                    <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:90px; max-height:130px; padding:2px;"></div>
 
-    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Kolejność map na expowisku (Smart-Roam):</label>
-    <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:90px; max-height:130px; padding:2px;"></div>
+                    <div style="display:flex; gap:4px;">
+                        <button class="btn-sepia" style="flex:1; padding:4px;" onclick="window.addCurrentMapToExp()" title="Dodaje tylko obecną mapę">➕ TĄ MAPĘ</button>
+                        <button class="btn-sepia" style="flex:1; padding:4px; background:#00695c;" onclick="window.loadRecommendedExpToRoute()" title="Wczytuje polecane expowiska na Twój poziom">⭐ POLECANE EXPOWISKA</button>
+                        <button class="btn-sepia" style="background:#8e0000; width:60px; padding:4px;" onclick="window.clearExpMaps()">CZYŚĆ</button>
+                    </div>
 
-    <div style="display:flex; gap:4px;">
-        <button class="btn-sepia" style="flex:1; padding:4px;" onclick="addCurrentMapToExp()" title="Dodaje tylko obecną mapę">➕ TĄ MAPĘ</button>
-        <button class="btn-sepia" style="flex:1; padding:4px; background:#00695c;" onclick="loadRecommendedExpToRoute()" title="Wczytuje polecane expowiska na Twój poziom">⭐ POLECANE EXPOWISKA</button>
-        <button class="btn-sepia" style="background:#8e0000; width:60px; padding:4px;" onclick="clearExpMaps()">CZYŚĆ</button>
-    </div>
+                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding:6px; font-size:12px; border:1px solid #4caf50; color:#4caf50; font-weight:bold;">▶ START</button>
 
-    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding:6px; font-size:12px; border:1px solid #4caf50; color:#4caf50; font-weight:bold;">▶ START</button>
+                    <label style="color:#8bc34a; font-size:11px; margin-top:6px;">Polecane expowiska:</label>
+                    <div id="recommendedExpList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:90px; max-height:150px; padding:2px;"></div>
 
-    <label style="color:#8bc34a; font-size:11px; margin-top:6px;">Polecane expowiska:</label>
-    <div id="recommendedExpList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:90px; max-height:150px; padding:2px;"></div>
-
-    <label style="color:#a99a75; font-size:11px; margin-top:6px;">Zapisane Expowiska (Baza gry):</label>
-    <div id="expProfilesList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:140px; max-height:260px; padding:2px;"></div>
-</div>
-
+                    <div class="accordion-header" id="accSavedExp" onclick="window.toggleSettingsAcc('accSavedExp')" style="margin-top:6px; margin-bottom:2px;">▼ ZAPISANE EXPOWISKA (BAZA GRY)</div>
+                    <div id="accSavedExpContent" style="display:block;">
+                        <div id="expProfilesList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:140px; max-height:260px; padding:2px;"></div>
+                    </div>
+                </div>
                 <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
                     <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
                         <span style="color:#00acc1; font-weight:bold; font-size:11px;">Zakonnicy Planu Astralnego</span><br>
@@ -3131,14 +3138,27 @@ if (selHero) {
             } catch(e) {}
         };
 
-        // Zapisywanie zmian w panelu Berserka i wyzwalanie update'u na serwerze
-        document.getElementById('berserkEnabled').addEventListener('change', (e) => { botSettings.berserk.enabled = e.target.checked; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkCommon').addEventListener('change', (e) => { botSettings.berserk.common = e.target.checked; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkE1').addEventListener('change', (e) => { botSettings.berserk.e1 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkE2').addEventListener('change', (e) => { botSettings.berserk.e2 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkHero').addEventListener('change', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkMaxLvl').addEventListener('change', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value) || 100; saveSettings(); window.updateServerBerserk(); });
-        document.getElementById('berserkMinLvl').addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = -(parseInt(e.target.value) || 20); saveSettings(); window.updateServerBerserk(); });
+       // Zapisywanie zmian w panelu Berserka i wyzwalanie update'u na serwerze
+        const bEnabled = document.getElementById('berserkEnabled');
+        if (bEnabled) bEnabled.addEventListener('change', (e) => { botSettings.berserk.enabled = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+
+        const bCommon = document.getElementById('berserkCommon');
+        if (bCommon) bCommon.addEventListener('change', (e) => { botSettings.berserk.common = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+
+        const bE1 = document.getElementById('berserkE1');
+        if (bE1) bE1.addEventListener('change', (e) => { botSettings.berserk.e1 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+
+        const bE2 = document.getElementById('berserkE2');
+        if (bE2) bE2.addEventListener('change', (e) => { botSettings.berserk.e2 = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+
+        const bHero = document.getElementById('berserkHero');
+        if (bHero) bHero.addEventListener('change', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); window.updateServerBerserk(); });
+
+        const bMaxLvl = document.getElementById('berserkMaxLvl');
+        if (bMaxLvl) bMaxLvl.addEventListener('change', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value) || 100; saveSettings(); window.updateServerBerserk(); });
+
+        const bMinLvl = document.getElementById('berserkMinLvl');
+        if (bMinLvl) bMinLvl.addEventListener('change', (e) => { botSettings.berserk.minLvlOffset = -(parseInt(e.target.value) || 20); saveSettings(); window.updateServerBerserk(); });
 
 
         // ZAPISYWANIE USTAWIEŃ EXP
@@ -5395,7 +5415,10 @@ window.fixHeroLoading = function() {
         }
     }
 
-    if (!hero || !heroData[hero]) return;
+    if (!hero || !heroData[hero]) {
+        if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+        return;
+    }
 
     fixHeroMapOrder(hero);
 
@@ -5411,29 +5434,31 @@ window.fixHeroLoading = function() {
 
     if (typeof optimizeRoute === 'function') optimizeRoute();
     if (typeof renderCordsList === 'function') renderCordsList();
+    if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
     if (typeof updateUI === 'function') updateUI();
 };
 
-// 🔥 podmiana eventu selecta (NAPRAWA)
+// 🔥 podmiana eventu selecta (NAPRAWA - TYLKO JEDEN LISTENER!)
 (function() {
     const selHero = document.getElementById('selHero');
     if (!selHero) return;
 
-    selHero.addEventListener('change', function() {
+    // Usuwamy stare listenery by uniknąć konfliktów poprzez podmienienie węzła
+    const newSelHero = selHero.cloneNode(true);
+    selHero.parentNode.replaceChild(newSelHero, selHero);
+
+    newSelHero.addEventListener('change', function() {
         window.fixHeroLoading();
     });
 })();
-setTimeout(() => {
-    if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
-}, 50);
+
 // 🔥 auto start po załadowaniu
 setTimeout(() => {
-    window.fixHeroLoading();
-}, 500);
-setTimeout(() => {
     rebuildMissingHeroRoutes(false);
-    updateUI();
+    window.fixHeroLoading();
+    if (typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
     if (typeof autoDetectEngineData === 'function') autoDetectEngineData();
+    updateUI();
 }, 700);
 
-})(); // Koniec kodu
+})(); // Koniec kodu (IIFE)
