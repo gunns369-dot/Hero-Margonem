@@ -2623,53 +2623,48 @@ mainGui.innerHTML = `
                     <div id="kolosyListContainer"></div>
                 </div>
 
-               <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
-                    <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 250px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
-                        <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
-                    </div>
-
-                  <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
-    ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
-</div>
-<div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
-    <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
-        <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj Berserka
-    </label>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE1" ${botSettings.berserk?.e1 ? 'checked' : ''}> Elity I</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE2" ${botSettings.berserk?.e2 ? 'checked' : ''}> Elity II</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkHero" ${botSettings.berserk?.hero ? 'checked' : ''}> Herosi / Tytani</label>
+              <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px;">
+    <div style="background:#111; border:1px solid #333; padding:4px; font-size:11px; color:#d4af37;">
+        ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
     </div>
-    <div style="display:flex; justify-content: space-between; gap: 5px;">
-        <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-        <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-    </div>
-</div>
 
-                    <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
-                    <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:0;">
-                        <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
-                        <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
-                    </div>
-                    <input type="hidden" id="expRange" value="999">
-                    <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px;">
-                        <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
-                        <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
-                    </div>
-                    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Kolejność map na expowisku (Smart-Roam):</label>
-                    <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
-                    <div style="display:flex; gap:4px;">
-                        <button class="btn-sepia" style="flex:1; padding:4px;" onclick="addCurrentMapToExp()" title="Dodaje tylko obecną mapę">➕ TĄ MAPĘ</button>
-                        <button class="btn-sepia" style="flex:1; padding:4px; background:#00838f;" onclick="addNeighborsToExp()" title="Skanuje bramy i dodaje wszystkie sąsiadujące mapy!">🪄 SĄSIADÓW</button>
-                        <button class="btn-sepia" style="background:#8e0000; width:50px; padding:4px;" onclick="clearExpMaps()">CZYŚĆ</button>
-                    </div>
-                   <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
-                </div>
-              <div id="expProfilesContainer" style="display:flex; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
-                    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Zapisane Expowiska (Baza gry):</label>
-                    <div id="expProfilesList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; padding:2px;"></div>
-                </div>
+    <div class="nav-row">
+        <label>Przedział poziomowy (Automatyczny +1 przy awansie):</label>
+    </div>
+
+    <div style="display:flex; gap:4px;">
+        <label style="flex:1; color:#a99a75; font-size:11px;">Min Lvl:
+            <input type="number" id="expMinL" value="${botSettings.exp.minLvl}">
+        </label>
+        <label style="flex:1; color:#a99a75; font-size:11px;">Max Lvl:
+            <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}">
+        </label>
+    </div>
+
+    <input type="hidden" id="expRange" value="999">
+
+    <div class="nav-row" style="display:flex; justify-content:space-around; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px;">
+        <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
+        <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
+    </div>
+
+    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Kolejność map na expowisku (Smart-Roam):</label>
+    <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:90px; max-height:130px; padding:2px;"></div>
+
+    <div style="display:flex; gap:4px;">
+        <button class="btn-sepia" style="flex:1; padding:4px;" onclick="addCurrentMapToExp()" title="Dodaje tylko obecną mapę">➕ TĄ MAPĘ</button>
+        <button class="btn-sepia" style="flex:1; padding:4px; background:#00695c;" onclick="loadRecommendedExpToRoute()" title="Wczytuje polecane expowiska na Twój poziom">⭐ POLECANE EXPOWISKA</button>
+        <button class="btn-sepia" style="background:#8e0000; width:60px; padding:4px;" onclick="clearExpMaps()">CZYŚĆ</button>
+    </div>
+
+    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding:6px; font-size:12px; border:1px solid #4caf50; color:#4caf50; font-weight:bold;">▶ START</button>
+
+    <label style="color:#8bc34a; font-size:11px; margin-top:6px;">Polecane expowiska:</label>
+    <div id="recommendedExpList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:90px; max-height:150px; padding:2px;"></div>
+
+    <label style="color:#a99a75; font-size:11px; margin-top:6px;">Zapisane Expowiska (Baza gry):</label>
+    <div id="expProfilesList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:140px; max-height:260px; padding:2px;"></div>
+</div>
 
                 <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
                     <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
@@ -2894,17 +2889,7 @@ mainGui.innerHTML = `
                 const expContainer = document.getElementById('expContainer');
                 const teleportsContainer = document.getElementById('teleportsContainer');
                 const radarControlsWrapper = document.getElementById('radarControlsWrapper');
-                const expProfilesContainer = document.getElementById('expProfilesContainer');
-
-                if (heroContainer) heroContainer.style.display = tab === 'hero' ? 'flex' : 'none';
-                if (e2Container) e2Container.style.display = tab === 'e2' ? 'flex' : 'none';
-                if (kolosyContainer) kolosyContainer.style.display = tab === 'kolosy' ? 'flex' : 'none';
-                if (expContainer) expContainer.style.display = tab === 'exp' ? 'flex' : 'none';
-                if (teleportsContainer) teleportsContainer.style.display = tab === 'teleports' ? 'flex' : 'none';
-
-                if (expProfilesContainer) {
-                    expProfilesContainer.style.display = tab === 'exp' ? 'flex' : 'none';
-                }
+        
 
                 if (radarControlsWrapper) {
                     radarControlsWrapper.style.display = (tab === 'hero') ? 'block' : 'none';
@@ -4892,143 +4877,79 @@ let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Eng
 
 
 
-    window.renderExpProfiles = function() {
+  window.renderExpProfiles = function() {
+    let c = document.getElementById('expProfilesList');
+    if (!c) return;
 
-        let c = document.getElementById('expProfilesList'); if(!c) return;
+    if (!botSettings.expProfiles || botSettings.expProfiles.length === 0) {
+        if (window.defaultExpProfiles && window.defaultExpProfiles.length > 0) {
+            botSettings.expProfiles = [...window.defaultExpProfiles];
+            localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
+        }
+    }
 
+    c.innerHTML = '';
 
+    if (!botSettings.expProfiles || botSettings.expProfiles.length === 0) {
+        c.innerHTML = '<div style="padding:10px; text-align:center; color:#777; font-size:10px;">Brak zapisanych tras. Odśwież stronę (F5).</div>';
+        return;
+    }
 
-        // Żelazne zabezpieczenie przed pustą bazą (wymusza załadowanie 109 expowisk)
+    botSettings.expProfiles.forEach((p, i) => {
+        const wrap = document.createElement('div');
+        wrap.style.marginBottom = "4px";
+        wrap.style.border = "1px solid #2c2418";
+        wrap.style.background = "#101010";
 
-        if (!botSettings.expProfiles || botSettings.expProfiles.length === 0) {
+        const header = document.createElement('div');
+        header.style.cssText = "background:#1a1a1a; border-bottom:1px solid #333; padding:4px 5px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;";
+        header.innerHTML = `
+            <div style="display:flex; flex-direction:column; line-height:1.2;">
+                <span style="color:#d4af37; font-weight:bold; font-size:11px;">${p.name}</span>
+                <span style="color:#777; font-size:9px;">${(p.maps || []).length} map</span>
+            </div>
+            <span style="font-size:10px; color:#a99a75;">▼</span>
+        `;
 
-            if (window.defaultExpProfiles && window.defaultExpProfiles.length > 0) {
+        const content = document.createElement('div');
+        content.style.display = "none";
+        content.style.padding = "5px";
+        content.style.background = "#141414";
+        content.style.fontSize = "10px";
 
-                botSettings.expProfiles = [...window.defaultExpProfiles];
+        const mapsHtml = (p.maps || []).join(' <span style="color:#555;">➝</span> ');
 
-                localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
+        content.innerHTML = `
+            ${p.desc ? `<div style="font-size:9px; color:#aaa; margin-bottom:4px;">Opis: ${p.desc}</div>` : ''}
+            <div style="font-size:9px; color:#888; margin-bottom:6px; line-height:1.4; word-break:break-word;">
+                Mapy: <span style="color:#a99a75">${mapsHtml}</span>
+            </div>
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                <button class="btn-sepia" style="padding:4px; background:#00838f; flex:1;" onclick="loadExpProfile(${i})">📥 NADPISZ</button>
+                <button class="btn-sepia" style="padding:4px; background:#4caf50; flex:1;" onclick="appendExpProfile(${i})">➕ DOŁĄCZ</button>
+                <button class="btn-sepia" style="padding:4px; background:#e53935; width:28px;" onclick="deleteExpProfile(${i})">✖</button>
+            </div>
+        `;
 
+        header.onclick = () => {
+            const isHidden = content.style.display === "none";
+            document.querySelectorAll('#expProfilesList > div > div:nth-child(2)').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('#expProfilesList > div > div:nth-child(1)').forEach(el => {
+                el.style.background = '#1a1a1a';
+                el.style.borderColor = '#333';
+            });
+
+            if (isHidden) {
+                content.style.display = "block";
+                header.style.background = "rgba(212, 175, 55, 0.1)";
             }
-
-        }
-
-
-
-        c.innerHTML = '';
-
-        if (botSettings.expProfiles.length === 0) {
-
-             c.innerHTML = '<div style="padding:10px; text-align:center; color:#777; font-size:10px;">Brak zapisanych tras. Odśwież stronę (F5).</div>';
-
-             return;
-
-        }
-
-
-
-        botSettings.expProfiles.forEach((p, i) => {
-
-            let wrap = document.createElement('div');
-
-            wrap.style.marginBottom = "4px";
-
-
-
-            let header = document.createElement('div');
-
-            header.style.cssText = "background: #1a1a1a; border: 1px solid #333; padding: 4px 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;";
-
-            header.innerHTML = `
-
-                <div style="display:flex; flex-direction:column; line-height:1.2;">
-
-                    <span style="color: #d4af37; font-weight: bold; font-size: 11px;">${p.name}</span>
-
-                </div>
-
-                <span style="font-size:10px; color:#a99a75;">▼</span>
-
-            `;
-
-
-
-            let content = document.createElement('div');
-
-            content.style.display = "none";
-
-            content.style.padding = "4px";
-
-            content.style.borderLeft = "1px solid #333";
-
-            content.style.background = "#141414";
-
-
-
-            let mapsHtml = p.maps.join(' <span style="color:#777;">➝</span> ');
-
-
-
-            content.innerHTML = `
-
-                ${p.desc ? `<div style="font-size:9px; color:#aaa; margin-bottom:4px;">Opis: ${p.desc}</div>` : ''}
-
-                <div style="font-size:9px; color:#888; margin-bottom:6px; line-height:1.3; word-wrap:break-word; white-space:normal;">
-
-                    Mapy: <span style="color:#a99a75">${mapsHtml}</span>
-
-                </div>
-
-                <div style="display:flex; gap:4px; flex-wrap: wrap;">
-
-                    <button class="btn-sepia" style="padding:4px 4px; background:#00838f; flex:1;" onclick="loadExpProfile(${i})" title="Całkowicie podmienia listę na to expowisko">📥 NADPISZ</button>
-
-                    <button class="btn-sepia" style="padding:4px 4px; background:#4caf50; flex:1;" onclick="appendExpProfile(${i})" title="Dopisuje mapy tego expowiska do już wczytanych">➕ DOŁĄCZ</button>
-
-                    <button class="btn-sepia" style="padding:4px 4px; background:#e53935; width:25px;" onclick="deleteExpProfile(${i})">✖</button>
-
-                </div>
-
-            `;
-
-
-
-            header.onclick = () => {
-
-                let isHidden = content.style.display === "none";
-
-
-
-                // Zwiń inne
-
-                document.querySelectorAll('#expProfilesList > div > div:nth-child(2)').forEach(el => el.style.display = 'none');
-
-                document.querySelectorAll('#expProfilesList > div > div:nth-child(1)').forEach(el => { el.style.background = '#1a1a1a'; el.style.borderColor = '#333'; });
-
-
-
-                if (isHidden) {
-
-                    content.style.display = "block";
-
-                    header.style.background = "rgba(212, 175, 55, 0.1)";
-
-                    header.style.borderColor = "#d4af37";
-
-                }
-
-            };
-
-
-
-            wrap.appendChild(header);
-
-            wrap.appendChild(content);
-
-            c.appendChild(wrap);
-
-        });
-
-    };
+        };
+
+        wrap.appendChild(header);
+        wrap.appendChild(content);
+        c.appendChild(wrap);
+    });
+};
 
     // --- FUNKCJE LISTY MAP EXP ---
 
@@ -5180,34 +5101,82 @@ window.renderMapOrderList = () => {
 function renderRecommendedExpMaps() {
     const container = document.getElementById('recommendedExpList');
     if (!container) return;
+
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) {
         container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak danych o poziomie.</div>';
         return;
     }
 
     const lvl = Engine.hero.d.lvl;
-    const minLvl = lvl - 5;
+    const minLvl = lvl - 3;
     const maxLvl = lvl + 15;
 
-    const matches = (botSettings.expProfiles || [])
-        .filter(p => {
-            const m = (p.name || "").match(/(\d+)\s*lvl/i);
-            if (!m) return false;
-            const req = parseInt(m[1], 10);
-            return req >= minLvl && req <= maxLvl;
-        });
+    const matches = (botSettings.expProfiles || []).filter(p => {
+        const m = (p.name || "").match(/(\d+)\s*lvl/i);
+        if (!m) return false;
+        const req = parseInt(m[1], 10);
+        return req >= minLvl && req <= maxLvl;
+    });
 
     if (matches.length === 0) {
         container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak polecanych expowisk.</div>';
         return;
     }
 
-    container.innerHTML = matches.map(p => `
-        <div class="list-item">
-            <span style="color:#8bc34a;">${p.name}</span>
+    container.innerHTML = matches.map((p, i) => `
+        <div class="list-item" style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+            <span style="color:#8bc34a; font-size:11px;">${p.name}</span>
+            <button class="btn-sepia" style="padding:3px 6px; background:#00695c;" onclick="loadRecommendedExpProfile(${i})">WCZYTAJ</button>
         </div>
     `).join('');
+
+    window._recommendedExpProfilesCache = matches;
 }
+   window.loadRecommendedExpProfile = function(index) {
+    const arr = window._recommendedExpProfilesCache || [];
+    const p = arr[index];
+    if (!p) return;
+
+    botSettings.exp.mapOrder = [...(p.maps || [])];
+    localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+
+    const lvlMatch = (p.name || "").match(/\((\d+)\s*lvl\)/i);
+    if (lvlMatch && lvlMatch[1]) {
+        const baseLvl = parseInt(lvlMatch[1], 10);
+        botSettings.exp.minLvl = Math.max(1, baseLvl - 3);
+        botSettings.exp.maxLvl = baseLvl + 15;
+
+        const minInput = document.getElementById('expMinL');
+        const maxInput = document.getElementById('expMaxL');
+        if (minInput) minInput.value = botSettings.exp.minLvl;
+        if (maxInput) maxInput.value = botSettings.exp.maxLvl;
+    }
+
+    saveSettings();
+    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    heroAlert(`⭐ Wczytano polecane expowisko: ${p.name}`);
+};
+
+window.loadRecommendedExpToRoute = function() {
+    const arr = window._recommendedExpProfilesCache || [];
+    if (!arr.length) {
+        heroAlert("Brak polecanych expowisk dla Twojego poziomu.");
+        return;
+    }
+
+    botSettings.exp.mapOrder = [];
+    arr.forEach(p => {
+        (p.maps || []).forEach(m => {
+            if (!botSettings.exp.mapOrder.includes(m)) {
+                botSettings.exp.mapOrder.push(m);
+            }
+        });
+    });
+
+    localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    heroAlert(`⭐ Dodano wszystkie polecane expowiska do trasy (${arr.length}).`);
+}; 
     window.renderExpMaps = () => {
 
         let c = document.getElementById('expMapList'); if (!c) return;
