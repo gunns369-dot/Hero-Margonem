@@ -4187,15 +4187,48 @@ function getAntiLagDelay() {
 
     return [];
 }
+    function isMapInSelectedExpowisko(mapName) {
+    const maps = botSettings?.exp?.mapOrder || [];
+    return Array.isArray(maps) && maps.includes(mapName);
+}
+    function setExpBerserkState(shouldEnable) {
+    if (!botSettings?.serverBerserk?.enabled) return;
+
+    const current = !!window.isServerBerserkActive;
+
+    if (shouldEnable && !current) {
+        try {
+            if (typeof window.enableServerBerserk === 'function') {
+                window.enableServerBerserk();
+            } else if (typeof window.toggleServerBerserk === 'function') {
+                window.toggleServerBerserk(true);
+            }
+            window.isServerBerserkActive = true;
+            window.logExp(`⚔ Aktywowano serwerowego Kieszonkowego Berserka!`, "#ff9800");
+        } catch (e) {}
+        return;
+    }
+
+    if (!shouldEnable && current) {
+        try {
+            if (typeof window.disableServerBerserk === 'function') {
+                window.disableServerBerserk();
+            } else if (typeof window.toggleServerBerserk === 'function') {
+                window.toggleServerBerserk(false);
+            }
+            window.isServerBerserkActive = false;
+            window.logExp(`🛡 Wyłączono Kieszonkowego Berserka.`, "#90caf9");
+        } catch (e) {}
+    }
+}
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading) return;
 
     const now = Date.now();
     const hero = Engine.hero.d;
-    const currMap = Engine.map.d.name;
-    const hx = hero.x;
-    const hy = hero.y;
+  const isExpMap = isMapInSelectedExpowisko(currMap);
+setExpBerserkState(isExpMap);
 
     if (now < expLastActionTime) return;
 
@@ -4270,9 +4303,9 @@ function runExpLogic() {
         expAntiLagTime = now + getAntiLagDelay();
     }
 
-    // SKAN MOBÓW — tylko jedna wersja, bez mieszania systemów
-    const arr = getExpNpcList();
-    let availableMobs = [];
+   // SKAN MOBÓW tylko na mapach należących do wybranego expowiska
+const arr = isExpMap ? getExpNpcList() : [];
+let availableMobs = [];
 
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
@@ -4308,10 +4341,6 @@ function runExpLogic() {
         return a.manhattan - b.manhattan;
     });
 
-    if (!window._lastExpDebugLog || now - window._lastExpDebugLog > 2000) {
-        window._lastExpDebugLog = now;
-        window.logExp(`[DEBUG EXP] mapa=${currMap}, moby=${availableMobs.length}`, "#8bc34a");
-    }
 
     // Jeśli są moby, NIE IDZIEMY do przejścia
     if (availableMobs.length > 0) {
@@ -4462,28 +4491,39 @@ function runExpLogic() {
 
     let distToDoor = Math.max(Math.abs(dx - hx), Math.abs(dy - hy));
 
-    if (distToDoor > 0) {
-        if (now >= expGatewayLockUntil) {
-            if (displayTarget) displayTarget.innerText = `Przejście do: ${nextStepMap}`;
-            window.logExp(`[Czysta mapa] Idę do przejścia: ${nextStepMap}`, "#ba68c8");
-            Engine.hero.autoGoTo({ x: dx, y: dy });
+ if (distToDoor > 0) {
+    if (displayTarget) {
+        displayTarget.innerText = `Przejście do: ${nextStepMap}`;
+    }
 
-            expGatewayLockUntil = now + 900;
-            expMapTransitionCooldown = now + 1200;
-            expLastActionTime = now + 350;
-            expAttackLockUntil = 0;
-        }
+    // jeśli już się porusza, nie klikaj ponownie przejścia
+    if (isHeroMoving) {
+        expLastActionTime = now + 150;
         return;
     }
 
     if (now >= expGatewayLockUntil) {
-        window.logExp(`[Zmiana mapy] ➝ ${nextStepMap}`, "#ba68c8");
+        window.logExp(`[Czysta mapa] Idę do przejścia: ${nextStepMap}`, "#ba68c8");
         Engine.hero.autoGoTo({ x: dx, y: dy });
 
-        expGatewayLockUntil = now + 1800;
-        expMapTransitionCooldown = now + 2500;
-        expLastActionTime = now + 800;
+        expGatewayLockUntil = now + 1200;
+        expMapTransitionCooldown = now + 1400;
+        expLastActionTime = now + 400;
+        expAttackLockUntil = 0;
     }
+    return;
+}
+
+  if (!isHeroMoving && now >= expGatewayLockUntil) {
+    window.logExp(`[Zmiana mapy] ➝ ${nextStepMap}`, "#ba68c8");
+    Engine.hero.autoGoTo({ x: dx, y: dy });
+
+    expGatewayLockUntil = now + 2200;
+    expMapTransitionCooldown = now + 2600;
+    expLastActionTime = now + 900;
+} else {
+    expLastActionTime = now + 150;
+}
 }
     setInterval(runExpLogic, 150);
 
