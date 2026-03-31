@@ -2338,38 +2338,51 @@ window.goToSelectedMapTop = function(mapName) {
 
 function setupTopGoToSearch() {
     const toggleBtn = document.getElementById('btnToggleGoToTop');
-    const panel = document.getElementById('goToTopPanel');
-    const input = document.getElementById('inpGoToMapTop');
-    const box = document.getElementById('goToSuggestionsTop');
-
-    if (!toggleBtn || !panel || !input || !box) return;
+    if (!toggleBtn) return;
 
     toggleBtn.addEventListener('click', () => {
-        const isOpen = panel.style.display === 'flex';
-        panel.style.display = isOpen ? 'none' : 'flex';
+        const allMaps = getAllKnownMaps();
 
-        if (!isOpen) {
-            input.value = '';
+        const modalHtml = `
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <input type="text" id="modalGoToInput" placeholder="Wpisz nazwę mapy..." style="width:100%; padding:6px; background:#111; color:#fff; border:1px solid #555;">
+                <div id="modalGoToList" style="max-height:220px; overflow-y:auto; border:1px solid #333; background:#000; padding:2px;"></div>
+            </div>
+        `;
+
+        heroModal('alert', modalHtml);
+
+        setTimeout(() => {
+            const input = document.getElementById('modalGoToInput');
+            const list = document.getElementById('modalGoToList');
+            if (!input || !list) return;
+
+            const render = (q = '') => {
+                const filtered = allMaps
+                    .filter(m => m.toLowerCase().includes(q.toLowerCase()))
+                    .slice(0, 40);
+
+                list.innerHTML = filtered.map(mapName => `
+                    <div class="list-item" style="cursor:pointer; padding:4px;" onclick="window.rushToMap('${mapName.replace(/'/g, "\\'")}')">
+                        <span style="color:#d4af37;">${mapName}</span>
+                    </div>
+                `).join('');
+            };
+
+            input.addEventListener('input', () => render(input.value));
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const val = input.value.trim();
+                    if (val) window.rushToMap(val);
+                }
+            });
+
+            render('');
             input.focus();
-            renderTopGoToSuggestions('');
-        } else {
-            box.style.display = 'none';
-        }
+        }, 50);
     });
-
-    input.addEventListener('input', () => {
-        renderTopGoToSuggestions(input.value);
-    });
-
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            const mapName = (input.value || '').trim();
-            if (!mapName) return;
-            window.rushToMap(mapName);
-            panel.style.display = 'none';
-            box.style.display = 'none';
-        }
-    });
+}
 
     document.addEventListener('click', (e) => {
         if (!panel.contains(e.target) && e.target !== toggleBtn) {
@@ -2870,64 +2883,74 @@ mainGui.innerHTML = `
 
 
 
- function setupLogic() {
-
+function setupLogic() {
     const tabs = ['hero', 'e2', 'kolosy', 'exp', 'teleports'];
 
     tabs.forEach(tab => {
-        let toggle = document.getElementById(tab + 'ModeToggle');
+        const toggle = document.getElementById(tab + 'ModeToggle');
+        if (!toggle) return;
 
-        if (toggle) {
-            toggle.addEventListener('click', function() {
+        toggle.addEventListener('click', function () {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active-tab'));
+            this.classList.add('active-tab');
 
-                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active-tab'));
-                this.classList.add('active-tab');
+            const heroContainer = document.getElementById('heroContainer');
+            const e2Container = document.getElementById('e2Container');
+            const kolosyContainer = document.getElementById('kolosyContainer');
+            const expContainer = document.getElementById('expContainer');
+            const teleportsContainer = document.getElementById('teleportsContainer');
+            const radarControlsWrapper = document.getElementById('radarControlsWrapper');
 
-                const heroContainer = document.getElementById('heroContainer');
-                const e2Container = document.getElementById('e2Container');
-                const kolosyContainer = document.getElementById('kolosyContainer');
-                const expContainer = document.getElementById('expContainer');
-                const teleportsContainer = document.getElementById('teleportsContainer');
-                const radarControlsWrapper = document.getElementById('radarControlsWrapper');
-        
+            if (heroContainer) heroContainer.style.display = tab === 'hero' ? 'flex' : 'none';
+            if (e2Container) e2Container.style.display = tab === 'e2' ? 'flex' : 'none';
+            if (kolosyContainer) kolosyContainer.style.display = tab === 'kolosy' ? 'flex' : 'none';
+            if (expContainer) expContainer.style.display = tab === 'exp' ? 'flex' : 'none';
+            if (teleportsContainer) teleportsContainer.style.display = tab === 'teleports' ? 'flex' : 'none';
+            if (radarControlsWrapper) radarControlsWrapper.style.display = tab === 'hero' ? 'block' : 'none';
 
-                if (radarControlsWrapper) {
-                    radarControlsWrapper.style.display = (tab === 'hero') ? 'block' : 'none';
-                }
+            activeBossTarget = null;
 
-                activeBossTarget = null;
+            if (tab === 'hero') {
+                if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+                renderCordsList();
+            }
 
-                if (tab === 'hero') {
-                    if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
-                    renderCordsList();
-                }
+            if (tab === 'e2') {
+                renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8');
+                updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
+            }
 
-                if (tab === 'e2') {
-                    renderBossList('e2ListContainer', elityIIData, 'e2Search', '#ba68c8');
-                    updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
-                }
+            if (tab === 'kolosy') {
+                renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
+                updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
+            }
 
-                if (tab === 'kolosy') {
-                    renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19');
-                    updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
-                }
+            if (tab === 'exp') {
+                if (typeof renderExpMaps === 'function') renderExpMaps();
+                if (typeof renderExpProfiles === 'function') renderExpProfiles();
+                if (typeof renderRecommendedExpMaps === 'function') renderRecommendedExpMaps();
+            }
 
-                if (tab === 'exp') {
-                    if (typeof renderExpMaps === 'function') renderExpMaps();
-                    if (typeof renderExpProfiles === 'function') renderExpProfiles();
-                    if (typeof renderRecommendedExpMaps === 'function') renderRecommendedExpMaps();
-                }
-
-                if (tab === 'teleports') {
-                    renderTeleportOptions();
-                }
-            });
-        }
+            if (tab === 'teleports') {
+                renderTeleportOptions();
+            }
+        });
     });
+
+    const btnStartStop = document.getElementById('btnStartStop');
+    if (btnStartStop) {
+        btnStartStop.addEventListener('click', () => {
+            if (isPatrolling || isRushing) {
+                stopPatrol(false);
+            } else {
+                startPatrol();
+            }
+        });
+    }
 
     const btnExp = document.getElementById('btnStartExp');
     if (btnExp) {
-        btnExp.addEventListener('click', function() {
+        btnExp.addEventListener('click', function () {
             window.isExping = !window.isExping;
 
             if (window.isExping) {
@@ -2944,18 +2967,17 @@ mainGui.innerHTML = `
         });
     }
 
-    document.getElementById('expMinL').onchange = (e) => { botSettings.exp.minLvl = parseInt(e.target.value) || 1; saveSettings(); };
-    document.getElementById('expMaxL').onchange = (e) => { botSettings.exp.maxLvl = parseInt(e.target.value) || 300; saveSettings(); };
-    document.getElementById('expRange').onchange = (e) => { botSettings.exp.berserk = parseInt(e.target.value) || 20; saveSettings(); };
-    document.getElementById('expN').onchange = (e) => { botSettings.exp.normal = e.target.checked; saveSettings(); };
-    document.getElementById('expE').onchange = (e) => { botSettings.exp.elite = e.target.checked; saveSettings(); };
+    const expMinL = document.getElementById('expMinL');
+    const expMaxL = document.getElementById('expMaxL');
+    const expRange = document.getElementById('expRange');
+    const expN = document.getElementById('expN');
+    const expE = document.getElementById('expE');
 
-    if (document.getElementById('expAggro')) {
-        document.getElementById('expAggro').onchange = (e) => { botSettings.exp.useAggro = e.target.checked; saveSettings(); };
-        document.getElementById('aggroN').onchange = (e) => { botSettings.exp.aggroN = e.target.checked; saveSettings(); };
-        document.getElementById('aggroE1').onchange = (e) => { botSettings.exp.aggroE1 = e.target.checked; saveSettings(); };
-        document.getElementById('aggroE2').onchange = (e) => { botSettings.exp.aggroE2 = e.target.checked; saveSettings(); };
-    }
+    if (expMinL) expMinL.onchange = (e) => { botSettings.exp.minLvl = parseInt(e.target.value) || 1; saveSettings(); };
+    if (expMaxL) expMaxL.onchange = (e) => { botSettings.exp.maxLvl = parseInt(e.target.value) || 300; saveSettings(); };
+    if (expRange) expRange.onchange = (e) => { botSettings.exp.berserk = parseInt(e.target.value) || 20; saveSettings(); };
+    if (expN) expN.onchange = (e) => { botSettings.exp.normal = e.target.checked; saveSettings(); };
+    if (expE) expE.onchange = (e) => { botSettings.exp.elite = e.target.checked; saveSettings(); };
 
     const e2Search = document.getElementById('e2Search');
     if (e2Search) {
@@ -2969,8 +2991,10 @@ mainGui.innerHTML = `
 
     const selHero = document.getElementById('selHero');
     if (selHero) {
+        selHero.innerHTML = '<option value="">-- Wybierz --</option>';
+
         for (const hero in heroData) {
-            let opt = document.createElement('option');
+            const opt = document.createElement('option');
             opt.value = hero;
             opt.innerText = heroLevels[hero] ? `${hero} (${heroLevels[hero]})` : hero;
             selHero.appendChild(opt);
@@ -2992,7 +3016,9 @@ mainGui.innerHTML = `
                 checkedMapsThisSession.clear();
                 saveCheckedMaps();
 
-                let currMap = (typeof Engine !== 'undefined' && Engine.map && Engine.map.d) ? Engine.map.d.name : lastMapName;
+                const currMap = (typeof Engine !== 'undefined' && Engine.map && Engine.map.d)
+                    ? Engine.map.d.name
+                    : lastMapName;
 
                 if (heroData[hero][currMap]) {
                     currentCordsList = [...heroData[hero][currMap]];
@@ -3007,12 +3033,16 @@ mainGui.innerHTML = `
                     renderCordsList();
                 }
 
+                if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
                 updateUI();
             } else {
                 const heroMapListContainer = document.getElementById('heroMapListContainer');
                 if (heroMapListContainer) {
                     heroMapListContainer.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div>';
                 }
+                currentCordsList = [];
+                checkedPoints.clear();
+                renderCordsList();
             }
         });
     }
@@ -3020,15 +3050,16 @@ mainGui.innerHTML = `
     const btnOpenSettings = document.getElementById('btnOpenSettings');
     if (btnOpenSettings) {
         btnOpenSettings.addEventListener('click', () => {
-            let p = document.getElementById('heroSettingsGUI');
-            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            const p = document.getElementById('heroSettingsGUI');
+            if (p) p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
         });
     }
 
     const btnOpenMaps = document.getElementById('btnOpenMaps');
     if (btnOpenMaps) {
         btnOpenMaps.addEventListener('click', () => {
-            let p = document.getElementById('heroGatewaysGUI');
+            const p = document.getElementById('heroGatewaysGUI');
+            if (!p) return;
             p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
             if (p.style.display === 'flex') renderGatewaysDatabase();
         });
