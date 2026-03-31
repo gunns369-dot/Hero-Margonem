@@ -5173,5 +5173,5 @@ let btnOpenTp = document.getElementById('btnOpenTeleports');
                 stopPatrol(true);
             }
         }
-    }
+
 })(); // Koniec kodu
