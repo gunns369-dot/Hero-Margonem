@@ -1676,9 +1676,6 @@ function autoDetectEngineData() {
     updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
 
     if (currentName !== lastMapName) {
-        // Fizyczne nagrywanie starych śladów wyłączone.
-        // Przejścia łapie autoLearnGateways().
-
         positionHistory = [];
         lastMapName = currentName;
         heroFoundAlerted = false;
@@ -1694,22 +1691,25 @@ function autoDetectEngineData() {
             let matchingHero = domHero.value;
             let mapHasCurrent = matchingHero && heroData[matchingHero] && heroData[matchingHero][currentName];
 
+            // AUTO-WYKRYWANIE HEROSA NA BAZIE MAPY
             if (!isPatrolling && !isRushing && !mapHasCurrent) {
                 let foundHero = null;
 
                 for (const h in heroData) {
-                    if (heroData[h][currentName]) {
+                    if (heroData[h] && heroData[h][currentName]) {
                         foundHero = h;
                         break;
                     }
                 }
 
-                if (foundHero) matchingHero = foundHero;
+                if (foundHero) {
+                    matchingHero = foundHero;
+                }
             }
 
             if (matchingHero) {
-                if (!heroMapOrder[matchingHero] || heroMapOrder[matchingHero].length === 0) {
-                    heroMapOrder[matchingHero] = Object.keys(heroData[matchingHero]);
+                if (!heroMapOrder[matchingHero] || !Array.isArray(heroMapOrder[matchingHero]) || heroMapOrder[matchingHero].length === 0) {
+                    heroMapOrder[matchingHero] = Object.keys(heroData[matchingHero] || {});
                     saveMapOrder();
                 }
 
@@ -1777,7 +1777,6 @@ function autoDetectEngineData() {
         }
     }
 }
-
     // ==========================================
 
     // RUSH MODE
@@ -5098,78 +5097,67 @@ window.loadExpProfile = function(index) {
         `).join('');
     };
 
-    window.renderMapOrderList = () => {
-        const c = document.getElementById('heroMapListContainer');
-        if (!c) return;
+window.renderMapOrderList = () => {
+    let c = document.getElementById('heroMapListContainer');
+    if (!c) return;
 
-        const sel = document.getElementById('selHero');
-        let hero = sel ? (sel.value || '').trim() : '';
+    let hero = document.getElementById('selHero').value;
 
-        if (!hero && lastMapName) {
-            for (const h in heroData) {
-                if (heroData[h] && heroData[h][lastMapName]) {
-                    hero = h;
-                    if (sel) sel.value = h;
-                    break;
-                }
+    if (!hero && lastMapName) {
+        for (const h in heroData) {
+            if (heroData[h] && heroData[h][lastMapName]) {
+                hero = h;
+                document.getElementById('selHero').value = h;
+                break;
             }
         }
+    }
 
-        if (!hero || !heroData[hero]) {
-            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div>';
-            return;
-        }
+    if (!hero || !heroData[hero]) {
+        c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div>';
+        return;
+    }
 
-        if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
-            heroMapOrder[hero] = Object.keys(heroData[hero] || {});
-            saveMapOrder();
-        }
+    if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
+        heroMapOrder[hero] = Object.keys(heroData[hero] || {});
+        saveMapOrder();
+    }
 
-        const route = heroMapOrder[hero];
-        if (!route || route.length === 0) {
-            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak zapisanej trasy</div>';
-            return;
-        }
+    let currentMap = lastMapName;
 
-        const currentMap = lastMapName;
+    c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
+        if (editingGatewayFor === mapName) {
+            let defaultX = "", defaultY = "";
+            let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
+            if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
 
-        c.innerHTML = route.map((mapName, index) => {
-            if (editingGatewayFor === mapName) {
-                let defaultX = "", defaultY = "";
-                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
-                if (refDoor) {
-                    defaultX = refDoor.x;
-                    defaultY = refDoor.y;
-                }
-
-                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
-                    <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
-                        <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
-                            <label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
-                            <label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
-                            <button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;">📍 Stąd</button>
-                        </div>
-                        <div style="display:flex; gap:4px; margin-top:4px;">
-                            <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button>
-                            <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button>
-                        </div>
+            return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
+                <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
+                    <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                        <label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                        <label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                        <button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;">📍 Stąd</button>
                     </div>
-                </div>`;
-            }
-
+                    <div style="display:flex; gap: 4px; margin-top: 4px;">
+                        <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button>
+                        <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button>
+                    </div>
+                </div>
+            </div>`;
+        } else {
             let isPathPossible = false;
             for (let fromMap in globalGateways) {
                 if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) isPathPossible = true;
             }
 
-            const gatewayIndicator = isPathPossible
+            let gatewayIndicator = isPathPossible
                 ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>"
                 : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
 
-            const activeClass = (currentRouteIndex === index) ? "active-route" : "";
-            const checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
-            const nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
+            let activeClass = (currentRouteIndex === index) ? "active-route" : "";
+            let checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
+            let nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
 
             return `<div class="list-item ${activeClass} ${checkClass}">
                 <div class="map-name-wrap">
@@ -5183,8 +5171,9 @@ window.loadExpProfile = function(index) {
                     <button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button>
                 </div>
             </div>`;
-        }).join('');
-    };
+        }
+    }).join('');
+};
 function renderRecommendedExpMaps() {
     const container = document.getElementById('recommendedExpList');
     if (!container) return;
@@ -5410,6 +5399,10 @@ window.fixHeroLoading = function() {
 setTimeout(() => {
     window.fixHeroLoading();
 }, 500);
-
+setTimeout(() => {
+    rebuildMissingHeroRoutes(false);
+    updateUI();
+    if (typeof autoDetectEngineData === 'function') autoDetectEngineData();
+}, 700);
 
 })(); // Koniec kodu
