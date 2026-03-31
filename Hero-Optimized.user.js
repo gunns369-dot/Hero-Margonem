@@ -4153,7 +4153,7 @@ function runExpLogic() {
         const currMap = Engine.map.d.name;
         const hx = hero.x, hy = hero.y;
         
-        // 0. Sprawdzenie stanu walki - absolutny priorytet
+        // 0. Sprawdzenie stanu walki
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 600;
             expNoMobScans = 0;
@@ -4162,7 +4162,7 @@ function runExpLogic() {
 
         if (now < expLastActionTime) return;
 
-        // Auto-Lvl i sprawdzenie zaznaczonych rzadkości w interfejsie
+        // Auto-Lvl i GUI Check
         let minL = parseInt(botSettings.exp.minLvl, 10) || 1;
         let maxL = parseInt(botSettings.exp.maxLvl, 10) || 500;
         
@@ -4171,7 +4171,6 @@ function runExpLogic() {
         const wantNormal = chkNormal ? chkNormal.checked : botSettings.exp.normal;
         const wantElite = chkElite ? chkElite.checked : botSettings.exp.elite;
 
-        // Aktualizacja levelu (Awans)
         if (hero.lvl && hero.lvl > window.lastHeroExpLevel) {
             if (window.lastHeroExpLevel > 0) {
                 let diff = hero.lvl - window.lastHeroExpLevel;
@@ -4180,44 +4179,54 @@ function runExpLogic() {
                 saveSettings();
                 if(document.getElementById('expMinL')) document.getElementById('expMinL').value = botSettings.exp.minLvl;
                 if(document.getElementById('expMaxL')) document.getElementById('expMaxL').value = botSettings.exp.maxLvl;
-                window.logExp(`[Awans!] Zaktualizowano zakres potworów na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}`, "#ffb300");
+                window.logExp(`[Awans!] Zaktualizowano zakres potworów: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}`, "#ffb300");
             }
             window.lastHeroExpLevel = hero.lvl;
         }
 
-        // 1. Pobieranie twardych danych serwerowych o potworach
-        let rawNpcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
-        if (!rawNpcs) return;
-
+        // 1. Pobieranie danych o potworach na mapie (Elastycznie pod NI/SI)
         let availableMobs = [];
+        let npcList = [];
         
-        for (let key in rawNpcs) {
-            let n = rawNpcs[key].d || rawNpcs[key];
-            if (!n) continue;
-            
-            // Typ 2 = agresywny potwór, Typ 3 = neutralny potwór. Inne (NPC/Obiekty) odrzucamy od razu!
-            if (n.type !== 2 && n.type !== 3) continue;
-            
-            // Odrzucamy martwe (st === 1), zablokowane walką z graczem (st === 2) i błędy usuwania (del)
-            if (n.dead || n.del || rawNpcs[key].del || n.st === 1 || n.st === 2) continue;
-            
-            let lvl = parseInt(n.lvl, 10);
-            if (isNaN(lvl) || lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
+        if (typeof Engine.npcs.getList === 'function') {
+            npcList = Engine.npcs.getList();
+        } else if (typeof Engine.npcs.check === 'function') {
+            let chk = Engine.npcs.check();
+            npcList = chk ? Object.values(chk) : [];
+        } else if (Engine.npcs.d) {
+            npcList = Object.values(Engine.npcs.d);
+        }
 
-            // Sprawdzanie rzadkości (wt). Jak gra zepsuje zmienną, zakładamy że to zwykły potwór (0)
+        for (let i = 0; i < npcList.length; i++) {
+            let npc = npcList[i];
+            if (!npc) continue;
+            let n = npc.d || npc;
+            if (!n) continue;
+
+            // Odrzucamy błędy, martwe potwory i te, które walczą z kimś innym (st 1 lub 2)
+            if (n.dead || n.del || npc.del || n.st === 1 || n.st === 2) continue;
+            
+            // Odrzucamy graczy (zazwyczaj type 4) oraz statyczne obiekty i drzwi (type 0 i 1)
+            if (n.type === 4 || n.type === 0 || n.type === 1) continue; 
+            
+            // Filtrujemy po LEVELU (jeśli coś nie ma levelu, ignorujemy)
+            let lvl = parseInt(n.lvl, 10);
+            if (isNaN(lvl) || lvl <= 0) continue; 
+            if (lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
+
+            // Filtrujemy po RZADKOŚCI
             let wt = parseInt(n.wt, 10);
-            if (isNaN(wt)) wt = 0;
+            if (isNaN(wt)) wt = 0; 
             
             if (wt === 0 && !wantNormal) continue;
             if (wt === 1 && !wantElite) continue;
-            if (wt >= 2) continue; // Twardo blokujemy Herosów i E2 przy expieniu!
+            if (wt >= 2) continue; 
             
-            // Obliczanie dystansu
             let dist = Math.max(Math.abs(hx - n.x), Math.abs(hy - n.y));
-            let realDist = Math.abs(hx - n.x) + Math.abs(hy - n.y); // Dystans kroków
+            let realDist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
             
             availableMobs.push({ 
-                id: n.id || key, 
+                id: n.id || npc.id, 
                 x: n.x, 
                 y: n.y, 
                 dist: dist, 
@@ -4228,23 +4237,20 @@ function runExpLogic() {
 
         let displayTarget = document.getElementById('expTargetDisplay');
 
-        // 2. MAMY POTWORY NA MAPIE! (Atak lub podchodzenie)
+        // 2. MAMY POTWORY NA MAPIE (Podchodzenie / Atak)
         if (availableMobs.length > 0) {
-            // Resetujemy licznik czyszczenia - dopóki są moby, bot stąd nie ucieknie!
             window.mapClearTimes[currMap] = 0; 
             expNoMobScans = 0;
             
-            // Sortujemy tak, aby na pierwszym miejscu był zawsze najbliższy mob
             availableMobs.sort((a, b) => a.dist !== b.dist ? a.dist - b.dist : a.realDist - b.realDist);
             let target = availableMobs[0];
             
             if (target.dist > 1) {
-                // Podchodzimy do potwora
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick.replace(/<[^>]*>?/gm, '')}`;
+                if (displayTarget) displayTarget.innerText = `Biegnę: ${target.nick.replace(/<[^>]*>?/gm, '')}`;
                 Engine.hero.autoGoTo({x: target.x, y: target.y});
-                expLastActionTime = now + 350;
+                expLastActionTime = now + 400;
                 
-                // Mechanizm Anty-Lag (jesli blokuje krzakiem)
+                // AntyLag ruchu
                 if(hx === expLastX && hy === expLastY) {
                     if (now > expAntiLagTime) {
                         Engine.hero.autoGoTo({x: hx + (Math.random()>0.5?1:-1), y: hy + (Math.random()>0.5?1:-1)});
@@ -4255,16 +4261,14 @@ function runExpLogic() {
                     expAntiLagTime = now + 1500;
                 }
             } else {
-                // Atak (Jesteśmy tuż obok)
                 if (displayTarget) displayTarget.innerText = `Atakuję!`;
-                Engine.hero.autoGoTo({x: target.x, y: target.y}); // Postać musi "spojrzeć" na moba
+                Engine.hero.autoGoTo({x: target.x, y: target.y}); 
 
                 if (!botSettings.exp.useAggro) {
                     if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(parseInt(target.id, 10));
                     else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
                 }
-                
-                expLastActionTime = now + 800; // Cooldown 0.8s na wejście do walki
+                expLastActionTime = now + 800; 
             }
             return;
         }
@@ -4272,7 +4276,6 @@ function runExpLogic() {
         // 3. BRAK POTWORÓW - SMART-ROAM
         expNoMobScans++;
 
-        // Dajmy grze pół sekundy na załadowanie mobów po wyjściu z walki
         if (expNoMobScans < 5) {
             expLastActionTime = now + 200;
             return;
@@ -4289,7 +4292,6 @@ function runExpLogic() {
             let oldestMap = mapsOrder[0];
             let oldestTime = window.mapClearTimes[oldestMap] || 0;
 
-            // Szukamy mapy, na której nie byliśmy najdłużej
             for (let i = 1; i < mapsOrder.length; i++) {
                 let t = window.mapClearTimes[mapsOrder[i]] || 0;
                 if (t < oldestTime) {
@@ -4299,9 +4301,8 @@ function runExpLogic() {
             }
 
             if (oldestMap === currMap) {
-                // Jeśli wszystkie mapy są czyste - stój w miejscu i czekaj
                 if (now - expMapTransitionCooldown > 3000) {
-                    window.logExp("Trasa wyczyszczona. Czekam na odrodzenie potworów...", "#777");
+                    window.logExp("Wszystkie mapy z trasy czyste. Czekam...", "#777");
                     expMapTransitionCooldown = now + 3000;
                 }
                 return;
@@ -4319,19 +4320,38 @@ function runExpLogic() {
                         dx = rnd[0]; dy = rnd[1];
                     }
                     
-                    Engine.hero.autoGoTo({x: dx, y: dy});
-                    window.logExp(`[Wyczyszczono] ➝ Zmieniam mapę na: ${nextMap}`, "#ba68c8");
-                    expMapTransitionCooldown = now + 2000;
-                    expLastActionTime = now + 600;
+                    let distToDoor = Math.abs(hx - dx) + Math.abs(hy - dy);
+                    
+                    if (distToDoor > 1) {
+                        // Bot dopiero biegnie do drzwi
+                        Engine.hero.autoGoTo({x: dx, y: dy});
+                        
+                        // AntyLag ruchu do drzwi
+                        if(hx === expLastX && hy === expLastY) {
+                            if (now > expAntiLagTime) {
+                                Engine.hero.autoGoTo({x: hx + (Math.random()>0.5?1:-1), y: hy + (Math.random()>0.5?1:-1)});
+                                expAntiLagTime = now + 1500;
+                            }
+                        } else {
+                            expLastX = hx; expLastY = hy;
+                            expAntiLagTime = now + 1500;
+                        }
+                        expLastActionTime = now + 400;
+                    } else {
+                        // Bot jest już przy drzwiach - wchodzi!
+                        Engine.hero.autoGoTo({x: dx, y: dy});
+                        window.logExp(`[Wyczyszczono] ➝ Zmieniam mapę na: ${nextMap}`, "#ba68c8");
+                        expMapTransitionCooldown = now + 3000;
+                        expLastActionTime = now + 1000;
+                    }
                 } else {
-                    window.logExp(`BŁĄD RADARU: Skrypt nie zna przejścia z ${currMap} do ${nextMap}! Użyj wbudowanego Skanera!`, "#f44336");
+                    window.logExp(`BŁĄD RADARU: Brak przejścia z ${currMap} do ${nextMap}!`, "#f44336");
                     expMapTransitionCooldown = now + 5000;
                 }
             }
         } else {
-            // Skrypt ma tylko jedną mapę do bicia
             if (now - expMapTransitionCooldown > 5000) {
-                window.logExp("Brak mobów na mapie. Czekam na respawn...", "#777");
+                window.logExp("Brak mobów. Czekam na respawn...", "#777");
                 expMapTransitionCooldown = now + 5000;
             }
         }
