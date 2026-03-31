@@ -2376,28 +2376,17 @@ window.handleTeleportNPC = function(targetMap) {
 
 
 
-        const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
-
+const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
         mainGui.innerHTML = `
-
             <div class="gui-header">
-
-                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.2</div>
-
+                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.3</div>
                 <div class="header-buttons">
-
                     <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
-
-                    <button id="btnRecordRouteToggle" style="${recStyle}"><span class="btn-icon">${recIcon}</span><span id="txtRecBtn">${recText}</span></button>
-
+                    <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
                     <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
-
                     <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
-
                     <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;"><span class="btn-icon">✖</span></button>
-
                 </div>
-
             </div>
 
 
@@ -2661,7 +2650,24 @@ window.handleTeleportNPC = function(targetMap) {
                </div>
 
             </div>`;
+const goToGui = document.createElement('div'); 
+        goToGui.id = 'heroGoToGUI'; 
+        goToGui.className = 'hero-window'; 
+        goToGui.style.display = 'none';
+        goToGui.style.top = '60px'; 
+        goToGui.style.left = '400px'; 
+        goToGui.style.width = '320px'; 
+        goToGui.style.maxHeight = '560px'; 
+        goToGui.style.resize = 'both';
 
+        goToGui.innerHTML = `
+            <div class="gui-header">➡ Idź do mapy <button class="btn-close" onclick="document.getElementById('heroGoToGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
+                <input type="text" id="inpGoToSearch" placeholder="Szukaj mapy..." style="width:100%; padding:6px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; border-radius:2px; outline:none; font-size:11px; margin-bottom:8px; box-sizing:border-box;">
+                <div id="goToMapsListContainer" style="overflow-y:auto; flex-grow:1; display:flex; flex-direction:column; gap:2px; border:1px solid #3a3020; background:#141414; padding:2px;"></div>
+            </div>
+        `;
+        document.body.appendChild(goToGui);
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
 
@@ -3077,9 +3083,68 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('btnResetRoute').addEventListener('click', () => { heroConfirm("Zresetować pętlę i zacząć od nowa?", (res) => { if(res) { checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); autoDetectEngineData(); updateUI(); }}); });
 
-      
-        document.getElementById('btnRecordRouteToggle').addEventListener('click', function() { botSettings.isRecording = !botSettings.isRecording; saveSettings(); let btn = this; let iconSpan = btn.querySelector('.btn-icon'); let textSpan = btn.querySelector('#txtRecBtn'); if(botSettings.isRecording) { btn.style.borderColor = '#e53935'; btn.style.color = '#ff5252'; iconSpan.innerText = '⏹'; textSpan.innerText = 'Nagrywam'; heroAlert("🔴 Nagrywanie Smart Memory WŁĄCZONE.\nSkrypt przechwyci każdą użytą bramę i zapisze do bazy."); } else { btn.style.borderColor = '#a99a75'; btn.style.color = '#e0d8c0'; iconSpan.innerText = '🎥'; textSpan.innerText = 'Nagraj'; heroAlert("⚪ Nagrywanie WYŁĄCZONE."); } });
+      // --- FUNKCJE DLA PRZYCISKU "IDŹ DO" ---
+        function getAllKnownMaps() {
+            const set = new Set();
+            // Z Herosów
+            for (const hero in heroData) { Object.keys(heroData[hero] || {}).forEach(m => set.add(m)); }
+            // Z Elit i Kolosów
+            if (typeof elityIIData !== 'undefined') elityIIData.forEach(e => (e.path || []).forEach(m => set.add(m)));
+            if (typeof kolosyData !== 'undefined') kolosyData.forEach(e => (e.path || []).forEach(m => set.add(m)));
+            // Z bazy bram
+            for (const src in globalGateways) {
+                set.add(src);
+                for (const target in globalGateways[src]) set.add(target);
+            }
+            return [...set].sort((a, b) => a.localeCompare(b, 'pl'));
+        }
 
+        window.renderGoToMapsList = function(filter = "") {
+            const container = document.getElementById('goToMapsListContainer');
+            if (!container) return;
+            const allMaps = getAllKnownMaps();
+            const q = filter.trim().toLowerCase();
+            const filtered = q ? allMaps.filter(m => m.toLowerCase().includes(q)) : allMaps;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div style="padding:5px; text-align:center; color:#777; font-size:10px;">Brak map w bazie spełniających kryteria.</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(mapName => `
+                <div class="list-item" style="cursor:pointer; border-left: 3px solid #00acc1;" onclick="document.getElementById('heroGoToGUI').style.display='none'; rushToMap('${mapName.replace(/'/g, "\\'")}')">
+                    <span style="color:#d4af37; font-weight:bold;">${mapName}</span>
+                    <span style="color:#00acc1; font-size:10px; font-weight:bold;">🏃 BIEGNIJ</span>
+                </div>
+            `).join('');
+        };
+
+        const btnGoToTop = document.getElementById('btnGoToTop');
+        if (btnGoToTop) {
+            btnGoToTop.addEventListener('click', () => {
+                const gui = document.getElementById('heroGoToGUI');
+                if (gui.style.display === 'none') {
+                    // Zamknij inne okna, żeby nie było tłoku
+                    const settings = document.getElementById('heroSettingsGUI');
+                    const maps = document.getElementById('heroGatewaysGUI');
+                    if (settings) settings.style.display = 'none';
+                    if (maps) maps.style.display = 'none';
+
+                    gui.style.display = 'flex';
+                    window.renderGoToMapsList(document.getElementById('inpGoToSearch').value);
+                    setTimeout(() => document.getElementById('inpGoToSearch').focus(), 100);
+                } else {
+                    gui.style.display = 'none';
+                }
+            });
+        }
+
+        const inpGoToSearch = document.getElementById('inpGoToSearch');
+        if (inpGoToSearch) {
+            inpGoToSearch.addEventListener('input', (e) => {
+                window.renderGoToMapsList(e.target.value);
+            });
+        }
 
 
         document.getElementById('btnStartStop').addEventListener('click', () => {
