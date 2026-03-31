@@ -4902,4 +4902,169 @@ let btnOpenTp = document.getElementById('btnOpenTeleports');
             }
         });
     }
+    // ==========================================
+    // POPRAWIONA LOGIKA EXP (BIEGANIE DO POTWORÓW)
+    // ==========================================
+    function expPatrolLoop() {
+        if (!window.isExping || !isPatrolling || botSettings.activeTab !== 'exp' || isRushing) return;
+        
+        // Zabezpieczenie przed przerywaniem walki
+        if (typeof Engine !== 'undefined' && Engine.battle && (Engine.battle.show || Engine.battle.d)) {
+            expLastActionTime = Date.now() + 500;
+            expCurrentTargetId = null;
+            return;
+        }
+
+        let now = Date.now();
+        if (now < expLastActionTime) return;
+
+        let hx = Engine.hero.d.x, hy = Engine.hero.d.y;
+
+        // --- KROK 1: Sprawdź cel w pamięci (zabezpieczenie przed lagami) ---
+        let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
+        
+        if (expCurrentTargetId && npcs[expCurrentTargetId]) {
+            if (now > expAntiLagTime) {
+                window.logExp(`Ignoruję potwora (może zablokowany?). Szukam nowego!`, "#f44336");
+                expCurrentTargetId = null;
+                expLastActionTime = now + 500;
+                return;
+            }
+            
+            let n = npcs[expCurrentTargetId].d || npcs[expCurrentTargetId];
+            if (!n.dead) {
+                let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+                
+                if (dist > 1) {
+                    return; // Bot jest w drodze do potwora, nic nie rób
+                } else {
+                    // Dotarł do moba, zaatakuj!
+                    window.logExp(`Atakuję: ${n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : 'Potwora'}`, "#ff5252");
+                    Engine.hero.autoGoTo({x: n.x, y: n.y}); // Upewniamy się, że patrzy na moba
+                    
+                    if (!botSettings.exp.useAggro) {
+                        if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(expCurrentTargetId);
+                        else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${expCurrentTargetId}`);
+                    }
+                    
+                    expLastActionTime = now + 800; // Opóźnienie po ataku
+                    return;
+                }
+            } else {
+                expCurrentTargetId = null; // Potwór nie żyje, wyczyść cel
+            }
+        } else {
+            expCurrentTargetId = null;
+        }
+
+        // --- KROK 2: Znajdź najbliższego potwora z mapy ---
+        let closestDist = 999;
+        let closestTx = -1, closestTy = -1;
+        let closestName = "";
+        let closestId = null;
+
+        for (let id in npcs) {
+            let n = npcs[id].d || npcs[id];
+            
+            // Szukamy tylko potworów (type 2 i 3) i odrzucamy martwe
+            if ((n.type === 2 || n.type === 3) && !n.dead && !n.del && !npcs[id].del) {
+                let lvl = parseInt(n.lvl) || 0;
+                if (lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
+
+                let wt = parseInt(n.wt) || 0;
+                if (wt === 0 && !botSettings.exp.normal) continue;
+                if (wt === 1 && !botSettings.exp.elite) continue;
+                if (wt >= 2) continue; // Omijamy herosów/tytanów przy czystym expieniu
+
+                let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestTx = n.x;
+                    closestTy = n.y;
+                    closestId = id;
+                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : "Potwór";
+                }
+            }
+        }
+
+        // --- KROK 3: Biegniemy do potwora LUB idziemy do drzwi ---
+        let displayTarget = document.getElementById('expTargetDisplay');
+
+        if (closestId && closestDist <= 999) {
+            // Znaleźliśmy moba
+            expCurrentTargetId = closestId;
+            let antiLagRange = (botSettings.expAntiLagMax && botSettings.expAntiLagMin) ? 
+                Math.floor(Math.random() * (botSettings.expAntiLagMax - botSettings.expAntiLagMin + 1)) + botSettings.expAntiLagMin : 2000;
+            expAntiLagTime = now + antiLagRange;
+            
+            if (displayTarget) displayTarget.innerText = `Biegnę do: ${closestName}`;
+            
+            Engine.hero.autoGoTo({x: closestTx, y: closestTy});
+            expLastActionTime = now + 400;
+            
+        } else {
+            // Brak potworów na mapie - logika Smart-Roam (przechodzenie przez drzwi)
+            if (displayTarget) displayTarget.innerText = `Szukam przejścia...`;
+            
+            if (now < expMapTransitionCooldown) return;
+            
+            let maps = botSettings.exp.mapOrder;
+            let currMap = lastMapName;
+
+            if (maps && maps.length > 0) {
+                if (maps.includes(currMap)) window.mapClearTimes[currMap] = Date.now();
+
+                if (maps.length > 1) {
+                    let oldestMap = maps[0];
+                    let oldestTime = window.mapClearTimes[oldestMap] || 0;
+
+                    for (let i = 1; i < maps.length; i++) {
+                        let t = window.mapClearTimes[maps[i]] || 0;
+                        if (t < oldestTime) { oldestMap = maps[i]; oldestTime = t; }
+                    }
+
+                    if (oldestMap === currMap) {
+                        if (now - expMapTransitionCooldown > 3000) {
+                            window.logExp("Wszystkie mapy czyste. Czekam...", "#777");
+                            expMapTransitionCooldown = now + 3000;
+                        }
+                        return;
+                    }
+
+                    let path = getShortestPath(currMap, oldestMap);
+                    if (path && path.length > 1) {
+                        let nextStepMap = path[1];
+                        let door = globalGateways[currMap] && globalGateways[currentMap][nextStepMap];
+
+                        if (door) {
+                            window.logExp(`[Brak mobów] ➝ Zmieniam na: ${nextStepMap}`, "#ba68c8");
+                            let targetX = door.x; let targetY = door.y;
+                            if(door.allCoords && door.allCoords.length > 0) { 
+                                let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; 
+                                targetX = rnd[0]; targetY = rnd[1]; 
+                            }
+                            
+                            Engine.hero.autoGoTo({x: targetX, y: targetY});
+                            expMapTransitionCooldown = now + 2000;
+                            expLastActionTime = now + 500;
+                        } else {
+                            window.logExp(`Błąd! Nie połączyłeś przejść z ${currMap} do ${nextStepMap}!`, "#f44336");
+                            expMapTransitionCooldown = now + 5000;
+                        }
+                    } else {
+                        window.mapClearTimes[oldestMap] = Date.now();
+                        expMapTransitionCooldown = now + 2000;
+                    }
+                } else {
+                    if (now - expMapTransitionCooldown > 5000) {
+                        window.logExp("Wyczyszczono jedyną mapę. Czekam na respawn...", "#777");
+                        expMapTransitionCooldown = now + 5000;
+                    }
+                }
+            } else {
+                window.logExp("Lista map EXP jest pusta! Dodaj mapę by bot miał gdzie przejść.", "#ffb300");
+                stopPatrol(true);
+            }
+        }
+    }
 })(); // Koniec kodu
