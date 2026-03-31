@@ -5098,16 +5098,19 @@ window.loadExpProfile = function(index) {
     };
 
 window.renderMapOrderList = () => {
-    let c = document.getElementById('heroMapListContainer');
+    const c = document.getElementById('heroMapListContainer');
     if (!c) return;
 
-    let hero = document.getElementById('selHero').value;
+    const sel = document.getElementById('selHero');
+    let hero = sel ? (sel.value || '').trim() : '';
 
+    // Ten sam schemat co w kreatorze: jeśli brak wybranego herosa,
+    // spróbuj dopasować po aktualnej mapie.
     if (!hero && lastMapName) {
         for (const h in heroData) {
             if (heroData[h] && heroData[h][lastMapName]) {
                 hero = h;
-                document.getElementById('selHero').value = h;
+                if (sel) sel.value = h;
                 break;
             }
         }
@@ -5118,18 +5121,46 @@ window.renderMapOrderList = () => {
         return;
     }
 
-    if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
-        heroMapOrder[hero] = Object.keys(heroData[hero] || {});
+    // 🔥 KLUCZOWA NAPRAWA:
+    // użyj tej samej bazy co kreator trasy
+    const creatorTargets = Object.keys(heroData[hero] || {});
+
+    // jeśli heroMapOrder jest puste lub niepełne, odbuduj je z heroData
+    if (
+        !heroMapOrder[hero] ||
+        !Array.isArray(heroMapOrder[hero]) ||
+        heroMapOrder[hero].length === 0
+    ) {
+        heroMapOrder[hero] = [...creatorTargets];
         saveMapOrder();
+    } else {
+        // naprawa częściowo uszkodzonej trasy:
+        // zostaw poprawne elementy w istniejącej kolejności
+        // i dołóż brakujące z bazy heroData
+        const validSaved = heroMapOrder[hero].filter(mapName => creatorTargets.includes(mapName));
+        const missing = creatorTargets.filter(mapName => !validSaved.includes(mapName));
+        const repaired = [...validSaved, ...missing];
+
+        if (
+            repaired.length !== heroMapOrder[hero].length ||
+            repaired.some((m, i) => m !== heroMapOrder[hero][i])
+        ) {
+            heroMapOrder[hero] = repaired;
+            saveMapOrder();
+        }
     }
 
-    let currentMap = lastMapName;
+    const route = heroMapOrder[hero];
+    const currentMap = lastMapName;
 
-    c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
+    c.innerHTML = route.map((mapName, index) => {
         if (editingGatewayFor === mapName) {
             let defaultX = "", defaultY = "";
             let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
-            if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
+            if (refDoor) {
+                defaultX = refDoor.x;
+                defaultY = refDoor.y;
+            }
 
             return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
                 <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
@@ -5139,39 +5170,42 @@ window.renderMapOrderList = () => {
                         <label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
                         <button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;">📍 Stąd</button>
                     </div>
-                    <div style="display:flex; gap: 4px; margin-top: 4px;">
+                    <div style="display:flex; gap:4px; margin-top:4px;">
                         <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button>
                         <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button>
                     </div>
                 </div>
             </div>`;
-        } else {
-            let isPathPossible = false;
-            for (let fromMap in globalGateways) {
-                if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) isPathPossible = true;
-            }
-
-            let gatewayIndicator = isPathPossible
-                ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>"
-                : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
-
-            let activeClass = (currentRouteIndex === index) ? "active-route" : "";
-            let checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
-            let nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
-
-            return `<div class="list-item ${activeClass} ${checkClass}">
-                <div class="map-name-wrap">
-                    <span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span>
-                    <span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">
-                        ${index + 1}. ${gatewayIndicator} ${mapName}
-                    </span>
-                </div>
-                <div class="buttons-wrapper">
-                    <input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)">
-                    <button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button>
-                </div>
-            </div>`;
         }
+
+        let isPathPossible = false;
+        for (let fromMap in globalGateways) {
+            if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) {
+                isPathPossible = true;
+                break;
+            }
+        }
+
+        const gatewayIndicator = isPathPossible
+            ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>"
+            : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
+
+        const activeClass = (currentRouteIndex === index) ? "active-route" : "";
+        const checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
+        const nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
+
+        return `<div class="list-item ${activeClass} ${checkClass}">
+            <div class="map-name-wrap">
+                <span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span>
+                <span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">
+                    ${index + 1}. ${gatewayIndicator} ${mapName}
+                </span>
+            </div>
+            <div class="buttons-wrapper">
+                <input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)">
+                <button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button>
+            </div>
+        </div>`;
     }).join('');
 };
 function renderRecommendedExpMaps() {
