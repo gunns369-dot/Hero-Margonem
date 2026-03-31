@@ -4091,56 +4091,59 @@ function expDetectMobKind(n) {
     return "normal";
 }
 
-function expGetValidMobs(hero, minL, maxL, wantNormal, wantElite) {
-    const arr = typeof Engine.npcs.getDrawableList === 'function'
-        ? Engine.npcs.getDrawableList()
-        : Object.values((typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : (Engine.npcs.d || {}));
+function getExpMobsFromDrawableList(hero, minL, maxL) {
+    const arr = Engine.npcs.getDrawableList?.() || [];
 
     return arr
-        .map(npc => ({ npcObj: npc, nData: npc.d || npc }))
-        .filter(obj => {
-            const n = obj.nData;
+        .map(n => n.d || n)
+        .filter(n => {
             if (!n) return false;
-            if (n.dead || n.del || obj.npcObj.del) return false;
-            if (typeof n.x !== "number" || typeof n.y !== "number") return false;
+            if (typeof n.x !== 'number' || typeof n.y !== 'number') return false;
 
-            const rawName = (n.nick || n.name || "").replace(/<[^>]*>?/gm, "").trim();
-            if (!rawName) return false;
+            const name = (n.nick || n.name || '').replace(/<[^>]*>?/gm, '').trim();
+            if (!name) return false;
 
             const lvl = parseInt(n.lvl, 10);
             if (isNaN(lvl) || lvl <= 0) return false;
             if (lvl < minL || lvl > maxL) return false;
 
-            const kind = expDetectMobKind(n);
-            if (kind === "normal" && !wantNormal) return false;
-            if (kind === "elite1" && !wantElite) return false;
-            if (kind === "hero_or_better") return false;
-
             return true;
         })
-        .map(obj => {
-            const n = obj.nData;
-            const cleanName = (n.nick || n.name)
-                .replace(/<[^>]*>?/gm, '')
-                .replace(/\s*\(\d+m\)$/, '')
-                .trim();
-
-            return {
-                id: n.id || obj.npcObj.id,
-                nazwa: cleanName,
-                lvl: parseInt(n.lvl, 10) || 0,
-                x: n.x,
-                y: n.y,
-                dystans: Math.abs(hero.x - n.x) + Math.abs(hero.y - n.y),
-                atakDystans: Math.max(Math.abs(hero.x - n.x), Math.abs(hero.y - n.y)),
-                kind: expDetectMobKind(n)
-            };
-        })
+        .map(n => ({
+            id: n.id,
+            nazwa: (n.nick || n.name).replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim(),
+            lvl: parseInt(n.lvl, 10) || 0,
+            x: n.x,
+            y: n.y,
+            dystans: Math.abs(hero.x - n.x) + Math.abs(hero.y - n.y),
+            attackDist: Math.max(Math.abs(hero.x - n.x), Math.abs(hero.y - n.y)),
+            raw: n
+        }))
         .sort((a, b) => {
-            if (a.atakDystans !== b.atakDystans) return a.atakDystans - b.atakDystans;
-            if (a.dystans !== b.dystans) return a.dystans - b.dystans;
-            return a.lvl - b.lvl;
+            if (a.attackDist !== b.attackDist) return a.attackDist - b.attackDist;
+            return a.dystans - b.dystans;
         });
+}
+
+function getNearestStepToMob(hero, target) {
+    const spots = [
+        { x: target.x - 1, y: target.y },
+        { x: target.x + 1, y: target.y },
+        { x: target.x, y: target.y - 1 },
+        { x: target.x, y: target.y + 1 },
+        { x: target.x - 1, y: target.y - 1 },
+        { x: target.x + 1, y: target.y - 1 },
+        { x: target.x - 1, y: target.y + 1 },
+        { x: target.x + 1, y: target.y + 1 }
+    ];
+
+    spots.sort((a, b) => {
+        const da = Math.abs(hero.x - a.x) + Math.abs(hero.y - a.y);
+        const db = Math.abs(hero.x - b.x) + Math.abs(hero.y - b.y);
+        return da - db;
+    });
+
+    return spots[0];
 }
 function runExpLogic() {
         if (!window.isExping) return;
@@ -4220,52 +4223,82 @@ function runExpLogic() {
             return;
         }
 
-         // 6. WYKRYWANIE POTWORÓW
-        let validMobs = [];
-        if (isExpMap) {
-            validMobs = expGetValidMobs(hero, minL, maxL, wantNormal, wantElite);
-        }
+        // 6. WYKRYWANIE POTWORÓW ZGODNIE Z TWOJĄ LOGIKĄ (+ FILTRY UI)
+let validMobs = [];
+if (isExpMap) {
+    const arr = typeof Engine.npcs.getDrawableList === 'function' 
+        ? Engine.npcs.getDrawableList() 
+        : Object.values((typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d || {});
+    
+    validMobs = arr
+        .map(npc => ({ npcObj: npc, nData: npc.d || npc }))
+        .filter(obj => {
+            let n = obj.nData;
+            if (!n || n.dead || n.del || obj.npcObj.del) return false; 
+            if (!n.nick && !n.name) return false;
+            if (n.type === 4 || n.type === 1 || n.type === 0) return false;
+            let lvl = parseInt(n.lvl);
+            if (isNaN(lvl) || lvl <= 0) return false;
+            if (lvl < minL || lvl > maxL) return false;
 
-               // 7. DECYZJA: WALKA CZY PODRÓŻ DO CELU
+            let wt = parseInt(n.wt) || 0;
+            if (wt === 0 && !wantNormal) return false; 
+            if (wt === 1 && !wantElite) return false; 
+            if (wt > 1) return false;
+
+            return true;
+        })
+        .map(obj => {
+            let n = obj.nData;
+            let cleanName = (n.nick || n.name).replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim();
+            let dist = Math.abs(hero.x - n.x) + Math.abs(hero.y - n.y);
+            return { id: n.id || obj.npcObj.id, nazwa: cleanName, lvl: n.lvl, x: n.x, y: n.y, dystans: dist };
+        })
+        .sort((a, b) => a.dystans - b.dystans);
+}
+
+              // 7. DECYZJA: WALKA CZY PODRÓŻ DO CELU
         if (validMobs.length > 0) {
-            let target = validMobs[0];
+            const target = validMobs[0];
 
-            // skoro mamy cel, nie pozwalamy logice zmiany mapy uznać mapy za "czystą"
-            expMapTransitionCooldown = now + 1200;
+            expCurrentTargetId = target.id || null;
+            expMapTransitionCooldown = now + 1500;
 
-            if (expCurrentTargetId !== target.id) {
-                expCurrentTargetId = target.id;
-                window.logExp(`[Cel] ${target.nazwa} (${target.lvl} lvl) -> Dystans: ${target.dystans} kratek`, "#00e5ff");
+            if (window.DEBUG_EXP === true) {
+                console.log("[EXP] target:", target);
             }
 
-            const attackRange = Math.max(Math.abs(hero.x - target.x), Math.abs(hero.y - target.y));
+            const attackDist = Math.max(Math.abs(hero.x - target.x), Math.abs(hero.y - target.y));
 
-            // jeśli jesteśmy przy mobie, atak
-            if (attackRange <= 1) {
-                if (typeof window._g === 'function') {
+            if (attackDist <= 1) {
+                window.logExp(`[Atak] ${target.nazwa} (${target.lvl})`, "#00e676");
+
+                if (typeof window._g === 'function' && target.id) {
                     window._g(`fight&a=attack&id=${target.id}`);
-                } else if (typeof Engine.npcs.interact === 'function') {
+                } else if (typeof Engine.npcs.interact === 'function' && target.id) {
                     Engine.npcs.interact(target.id);
                 }
+
                 expLastActionTime = now + 1200;
                 return;
             }
 
-            const moveTile = expGetNearbyAttackTile(hero, target);
-            let isMovingToTarget = false;
+            const step = getNearestStepToMob(hero, target);
 
+            let isMovingToTarget = false;
             if (Engine.hero.d.path && Engine.hero.d.path.length > 0) {
                 const finalNode = Engine.hero.d.path[Engine.hero.d.path.length - 1];
                 if (
                     (finalNode.x === target.x && finalNode.y === target.y) ||
-                    (finalNode.x === moveTile.x && finalNode.y === moveTile.y)
+                    (finalNode.x === step.x && finalNode.y === step.y)
                 ) {
                     isMovingToTarget = true;
                 }
             }
 
             if (!isMovingToTarget) {
-                Engine.hero.autoGoTo({ x: moveTile.x, y: moveTile.y });
+                window.logExp(`[Cel] ${target.nazwa} (${target.lvl}) -> (${target.x},${target.y})`, "#00e5ff");
+                Engine.hero.autoGoTo({ x: step.x, y: step.y });
                 expLastActionTime = now + 700;
             } else {
                 expLastActionTime = now + 200;
@@ -4273,9 +4306,20 @@ function runExpLogic() {
 
             return;
         }
-               // 8. DECYZJA: BRAK POTWORÓW -> ZMIANA MAPY
+                       // 8. DECYZJA: BRAK POTWORÓW -> ZMIANA MAPY
         if (validMobs.length > 0) return;
         if (now < expMapTransitionCooldown) return;
+
+        if (window.DEBUG_EXP === true) {
+            console.log("[EXP] brak validMobs -> przejście mapowe", {
+                currMap,
+                maps,
+                isExpMap,
+                now,
+                expMapTransitionCooldown
+            });
+        }
+
         expCurrentTargetId = null;
 
         let targetExpMap = null;
