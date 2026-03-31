@@ -2999,7 +2999,7 @@ if (selHero) {
     }
 
     selHero.addEventListener('change', (e) => {
-        const hero = e.target.value;
+        const hero = (e.target.value || '').trim();
 
         if (!hero || !heroData[hero]) {
             currentCordsList = [];
@@ -3039,6 +3039,15 @@ if (selHero) {
         if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
         updateUI();
     });
+
+    if (!selHero.value && lastMapName) {
+        for (const h in heroData) {
+            if (heroData[h] && heroData[h][lastMapName]) {
+                selHero.value = h;
+                break;
+            }
+        }
+    }
 }
     const btnOpenSettings = document.getElementById('btnOpenSettings');
     if (btnOpenSettings) {
@@ -4736,6 +4745,7 @@ window.loadExpProfile = function(index) {
     saveSettings();
 
     if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    if (typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
     if (typeof window.renderRecommendedExpMaps === 'function') window.renderRecommendedExpMaps();
     updateUI();
 
@@ -4994,94 +5004,6 @@ window.loadExpProfile = function(index) {
     };
 
 window.renderMapOrderList = () => {
-    const c = document.getElementById('heroMapListContainer');
-    if (!c) return;
-
-    const sel = document.getElementById('selHero');
-    let hero = sel ? sel.value : '';
-
-    // Auto-dobór herosa po obecnej mapie, jeśli select pusty
-    if (!hero && lastMapName) {
-        for (const h in heroData) {
-            if (heroData[h] && heroData[h][lastMapName]) {
-                hero = h;
-                if (sel) sel.value = h;
-                break;
-            }
-        }
-    }
-
-    if (!hero || !heroData[hero]) {
-        c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa, by zobaczyć trasę</div>';
-        return;
-    }
-
-    // Napraw brakującej trasy z pamięci
-    if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
-        heroMapOrder[hero] = Object.keys(heroData[hero] || {});
-        saveMapOrder();
-    }
-
-    const route = heroMapOrder[hero];
-    if (!route || route.length === 0) {
-        c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak zapisanej trasy dla tego herosa</div>';
-        return;
-    }
-
-    const currentMap = lastMapName;
-
-    c.innerHTML = route.map((mapName, index) => {
-        if (editingGatewayFor === mapName) {
-            let defaultX = "", defaultY = "";
-            let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
-            if (refDoor) {
-                defaultX = refDoor.x;
-                defaultY = refDoor.y;
-            }
-
-            return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
-                <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
-                    <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
-                        <label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
-                        <label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
-                        <button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;">📍 Stąd</button>
-                    </div>
-                    <div style="display:flex; gap:4px; margin-top:4px;">
-                        <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button>
-                        <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button>
-                    </div>
-                </div>
-            </div>`;
-        }
-
-        let isPathPossible = false;
-        for (let fromMap in globalGateways) {
-            if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) isPathPossible = true;
-        }
-
-        const gatewayIndicator = isPathPossible
-            ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>"
-            : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
-
-        const activeClass = (currentRouteIndex === index) ? "active-route" : "";
-        const checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
-        const nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
-
-        return `<div class="list-item ${activeClass} ${checkClass}">
-            <div class="map-name-wrap">
-                <span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span>
-                <span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">
-                    ${index + 1}. ${gatewayIndicator} ${mapName}
-                </span>
-            </div>
-            <div class="buttons-wrapper">
-                <input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)">
-                <button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button>
-            </div>
-        </div>`;
-    }).join('');
-};
 function renderRecommendedExpMaps() {
     const container = document.getElementById('recommendedExpList');
     if (!container) return;
@@ -5139,6 +5061,7 @@ window.loadRecommendedExpProfile = function(index) {
     saveSettings();
 
     if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    if (typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
     if (typeof window.renderRecommendedExpMaps === 'function') window.renderRecommendedExpMaps();
     updateUI();
 
