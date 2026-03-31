@@ -4143,7 +4143,50 @@ function getNearestStepToMob(hero, target) {
 
     return spots[0];
 }
-   
+function getAntiLagDelay() {
+    const min = parseInt(botSettings?.expAntiLagMin ?? 1500, 10);
+    const max = parseInt(botSettings?.expAntiLagMax ?? 2500, 10);
+
+    const safeMin = Number.isFinite(min) ? min : 1500;
+    const safeMax = Number.isFinite(max) ? max : 2500;
+
+    if (safeMax <= safeMin) return safeMin;
+    return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+}   
+    function getExpNpcList() {
+    try {
+        const drawable = Engine?.npcs?.getDrawableList?.();
+        if (Array.isArray(drawable) && drawable.length > 0) {
+            return drawable;
+        }
+    } catch (e) {}
+
+    try {
+        const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : null;
+        if (checked && typeof checked === 'object') {
+            return Object.keys(checked).map(id => {
+                const raw = checked[id];
+                const n = raw?.d || raw || {};
+                if (n.id == null) n.id = id;
+                return n;
+            });
+        }
+    } catch (e) {}
+
+    try {
+        const direct = Engine?.npcs?.d;
+        if (direct && typeof direct === 'object') {
+            return Object.keys(direct).map(id => {
+                const raw = direct[id];
+                const n = raw?.d || raw || {};
+                if (n.id == null) n.id = id;
+                return n;
+            });
+        }
+    } catch (e) {}
+
+    return [];
+}
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.map || Engine.map.isLoading) return;
@@ -4349,21 +4392,44 @@ function runExpLogic() {
         return;
     }
 
-    // --- KROK 3: BRAK MOBÓW -> JESZCZE NIE OD RAZU PRZEJŚCIE ---
-    if (now - expMapEnteredAt < 1200) {
-        expLastActionTime = now + 120;
-        return;
-    }
+   // 3. SKANOWANIE MAPY
+const arr = getExpNpcList();
+let availableMobs = [];
+let scannedNpcCount = 0;
 
-    expEmptyScans++;
+arr.forEach(npcObj => {
+    let n = npcObj?.d || npcObj;
+    if (!n) return;
 
-    let displayTarget = document.getElementById('expTargetDisplay');
-    if (displayTarget) displayTarget.innerText = `Mapa czysta? Sprawdzam... (${expEmptyScans}/6)`;
+    scannedNpcCount++;
 
-    if (expEmptyScans < 6) {
-        expLastActionTime = now + 180;
-        return;
-    }
+    // pomijamy ewidentne NPC / martwe / śmieciowe byty
+    if (n.type === 4 || n.dead || n.del || n.st === 1 || n.st === 2) return;
+
+    let lvl = parseInt(n.lvl, 10);
+    if (isNaN(lvl) || lvl <= 0) return;
+
+    if (lvl < minL || lvl > maxL) return;
+
+    let wt = parseInt(n.wt, 10);
+    if (isNaN(wt)) wt = 0;
+
+    if (wt === 0 && !wantNormal) return;
+    if (wt === 1 && !wantElite) return;
+    if (wt >= 2) return;
+
+    let dist = Math.max(Math.abs(hx - n.x), Math.abs(hy - n.y));
+
+    availableMobs.push({
+        id: npcObj.id || n.id,
+        x: n.x,
+        y: n.y,
+        dist: dist,
+        lvl: lvl,
+        wt: wt,
+        nick: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').trim()
+    });
+});
 
     // --- KROK 4: MAPA NAPRAWDĘ PUSTA -> PRZEJŚCIE PO KOLEJNOŚCI EXPOWISKA ---
     if (now < expMapTransitionCooldown) return;
@@ -5071,6 +5137,12 @@ let btnOpenTp = document.getElementById('btnOpenTeleports');
 
         // --- KROK 3: Biegniemy do potwora LUB idziemy do drzwi ---
         let displayTarget = document.getElementById('expTargetDisplay');
+
+// debug co pewien czas
+if (!window._lastExpDebugLog || now - window._lastExpDebugLog > 2000) {
+    window._lastExpDebugLog = now;
+    window.logExp(`[DEBUG EXP] NPC scan: ${scannedNpcCount}, pasujące moby: ${availableMobs.length}, mapa: ${currMap}`, "#8bc34a");
+}
 
         if (closestId && closestDist <= 999) {
             // Znaleźliśmy moba
