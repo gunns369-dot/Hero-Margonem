@@ -3202,7 +3202,80 @@ selHero.addEventListener('change', (e) => {
             win.addEventListener('wheel', e => e.stopPropagation(), { passive: true });
 
         });
+// --- NOWE PRZYCISKI BAZY I POLECANYCH ---
+        let btnExpBase = document.getElementById('btnOpenExpBase');
+        if (btnExpBase) {
+            btnExpBase.addEventListener('click', () => {
+                let p = document.getElementById('heroExpBaseGUI');
+                p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+                if(p.style.display === 'flex' && typeof window.renderExpProfiles === 'function') {
+                    window.renderExpProfiles();
+                }
+            });
+        }
 
+        let btnRecExp = document.getElementById('btnOpenRecommendedExp');
+        if (btnRecExp) {
+            btnRecExp.addEventListener('click', () => {
+                let p = document.getElementById('heroExpRecGUI');
+                p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+                if(p.style.display === 'flex' && typeof window.renderRecommendedExp === 'function') {
+                    window.renderRecommendedExp();
+                }
+            });
+        }
+
+        let btnAddRec = document.getElementById('btnAddSelectedRec');
+        if (btnAddRec) {
+            btnAddRec.addEventListener('click', () => {
+                let checkboxes = document.querySelectorAll('.chk-rec-profile:checked');
+                if(checkboxes.length === 0) return heroAlert("Nie zaznaczono żadnego expowiska!");
+
+                let addedCount = 0;
+                let minL = 9999;
+                let maxL = 0;
+
+                checkboxes.forEach(chk => {
+                    let idx = parseInt(chk.getAttribute('data-index'));
+                    let p = botSettings.expProfiles[idx];
+                    if(p) {
+                        p.maps.forEach(m => {
+                            if (!botSettings.exp.mapOrder.includes(m)) {
+                                botSettings.exp.mapOrder.push(m);
+                                addedCount++;
+                            }
+                        });
+                        let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+                        if(lvlMatch && lvlMatch[1]) {
+                            let baseLvl = parseInt(lvlMatch[1]);
+                            minL = Math.min(minL, Math.max(1, baseLvl - 5));
+                            maxL = Math.max(maxL, baseLvl + 15);
+                        }
+                    }
+                });
+
+                if(addedCount > 0) {
+                    localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+                    
+                    if(minL !== 9999) {
+                        botSettings.exp.minLvl = Math.min(botSettings.exp.minLvl, minL);
+                        botSettings.exp.maxLvl = Math.max(botSettings.exp.maxLvl, maxL);
+                        let eMin = document.getElementById('expMinL');
+                        let eMax = document.getElementById('expMaxL');
+                        if (eMin) eMin.value = botSettings.exp.minLvl;
+                        if (eMax) eMax.value = botSettings.exp.maxLvl;
+                        saveSettings();
+                        if(botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
+                    }
+
+                    if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+                    heroAlert(`✅ Pomyślnie połączono i dodano ${addedCount} nowych map do trasy!\nZaktualizowano również przedział poziomowy.`);
+                    document.getElementById('heroExpRecGUI').style.display = 'none';
+                } else {
+                    heroAlert("Wybrane mapy są już na Twojej liście Smart-Roam.");
+                }
+            });
+        }
     }
 
 
@@ -4854,22 +4927,6 @@ window.clearExpMaps = () => {
         }
     };
 // --- NOWA LOGIKA BAZY I POLECANYCH EXPOWISK ---
-    document.getElementById('btnOpenExpBase').addEventListener('click', () => {
-        let p = document.getElementById('heroExpBaseGUI');
-        p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
-        if(p.style.display === 'flex') {
-            if(typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
-        }
-    });
-
-    document.getElementById('btnOpenRecommendedExp').addEventListener('click', () => {
-        let p = document.getElementById('heroExpRecGUI');
-        p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
-        if(p.style.display === 'flex') {
-            window.renderRecommendedExp();
-        }
-    });
-
     window.renderRecommendedExp = function() {
         let c = document.getElementById('expRecList');
         if(!c) return;
@@ -4904,52 +4961,4 @@ window.clearExpMaps = () => {
         }
     };
 
-    document.getElementById('btnAddSelectedRec').addEventListener('click', () => {
-        let checkboxes = document.querySelectorAll('.chk-rec-profile:checked');
-        if(checkboxes.length === 0) return heroAlert("Nie zaznaczono żadnego expowiska!");
-
-        let addedCount = 0;
-        let minL = 9999;
-        let maxL = 0;
-
-        checkboxes.forEach(chk => {
-            let idx = parseInt(chk.getAttribute('data-index'));
-            let p = botSettings.expProfiles[idx];
-            if(p) {
-                p.maps.forEach(m => {
-                    if (!botSettings.exp.mapOrder.includes(m)) {
-                        botSettings.exp.mapOrder.push(m);
-                        addedCount++;
-                    }
-                });
-
-                // Szukanie poziomu, żeby ustawić nowy limit expa
-                let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
-                if(lvlMatch && lvlMatch[1]) {
-                    let baseLvl = parseInt(lvlMatch[1]);
-                    minL = Math.min(minL, Math.max(1, baseLvl - 5));
-                    maxL = Math.max(maxL, baseLvl + 15);
-                }
-            }
-        });
-
-        if(addedCount > 0) {
-            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-            
-            if(minL !== 9999) {
-                botSettings.exp.minLvl = Math.min(botSettings.exp.minLvl, minL);
-                botSettings.exp.maxLvl = Math.max(botSettings.exp.maxLvl, maxL);
-                document.getElementById('expMinL').value = botSettings.exp.minLvl;
-                document.getElementById('expMaxL').value = botSettings.exp.maxLvl;
-                saveSettings();
-                if(botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
-            }
-
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-            heroAlert(`✅ Pomyślnie połączono i dodano ${addedCount} nowych map do trasy!\nZaktualizowano również przedział poziomowy.`);
-            document.getElementById('heroExpRecGUI').style.display = 'none';
-        } else {
-            heroAlert("Wybrane mapy są już na Twojej liście Smart-Roam.");
-        }
-    });
 })(); // Koniec kodu
