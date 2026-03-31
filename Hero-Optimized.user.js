@@ -4107,53 +4107,52 @@ function runExpLogic() {
         if (maps.length === 0) return;
         let isExpMap = maps.includes(currMap);
 
-        // 4. NOWY MODUŁ WYKRYWANIA (Na podstawie getDrawableList)
+        // 4. NOWY MODUŁ WYKRYWANIA (Na bazie Twojej listy getDrawableList)
         let validMobs = [];
 
         if (isExpMap) {
+            // Pobieranie tablicy wprost z renderera gry
             let arr = typeof Engine.npcs.getDrawableList === 'function' ? Engine.npcs.getDrawableList() : Object.values((typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d || {});
             
             validMobs = arr
-                .map(npc => {
-                    let n = npc.d || npc;
-                    return { npcObj: npc, nData: n, id: n.id || npc.id };
-                })
-                .filter(obj => {
-                    let n = obj.nData;
-                    if (!n || n.dead || n.del || obj.npcObj.del) return false;
-                    if (n.type !== 2 && n.type !== 3) return false; // Tylko potwory
+                .map(n => n.d || n)
+                .filter(n => n && (n.nick || n.name)) // Musi mieć nazwę
+                .filter(n => {
+                    if (n.dead || n.del) return false;
+                    // Omijamy graczy (typ 4) i śmieci. Moby to 2 i 3 (czasem niezdefiniowane)
+                    if (n.type !== 2 && n.type !== 3 && n.type !== undefined) return false;
 
                     let lvl = parseInt(n.lvl) || 0;
-                    if (lvl < minL || lvl > maxL) return false;
+                    if (lvl === 0) return false; // Wyklucza obiekty bez podanego levela
+                    if (lvl < minL || lvl > maxL) return false; // Twoje filtry z interfejsu (Min/Max Lvl)
 
                     let wt = parseInt(n.wt) || 0; // 0 = Zwykły, 1 = Elita
-                    if (wt === 0 && !wantNormal) return false;
-                    if (wt === 1 && !wantElite) return false;
-                    if (wt > 1) return false; // Ignoruje E2/Herosów w trybie expa
+                    if (wt === 0 && !wantNormal) return false; // Sprawdza Twoje ptaszki "Zwykłe"
+                    if (wt === 1 && !wantElite) return false; // Sprawdza Twoje ptaszki "Elity I"
+                    if (wt > 1) return false; // E2 i Herosi są poza auto-expem
 
-                    return true; // Przeszedł filtry
+                    return true;
                 })
-                .map(obj => {
-                    let n = obj.nData;
-                    // Liczenie dystansu Czebyszewa (Margonemowski max z X i Y)
-                    let dist = Math.max(Math.abs(hx - n.x), Math.abs(hy - n.y));
-                    let cleanName = (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim();
-                    return { id: obj.id, nazwa: cleanName, lvl: n.lvl, x: n.x, y: n.y, dist: dist };
+                .map(n => {
+                    let cleanName = (n.nick || n.name).replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim();
+                    let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y); // Twój wzór na dystans
+                    return { id: n.id, nazwa: cleanName, lvl: n.lvl, x: n.x, y: n.y, dystans: dist };
                 })
-                .sort((a, b) => a.dist - b.dist); // Sortowanie od najbliższego
+                .sort((a, b) => a.dystans - b.dystans); // Sortowanie od najbliższego
         }
 
         // 5. DECYZJA: WALKA
         if (validMobs.length > 0) {
-            let bestMob = validMobs[0]; // Pierwszy po posortowaniu = Najbliższy
+            let bestMob = validMobs[0]; // Pierwszy po posortowaniu to ten z najmniejszym dystansem
             
             // Logowanie do konsoli tylko jak zmieni się cel
             if (expCurrentTargetId !== bestMob.id) {
                 expCurrentTargetId = bestMob.id;
-                window.logExp(`[Cel] ${bestMob.nazwa} (${bestMob.lvl} lvl) -> Dystans: ${bestMob.dist} kratki`, "#00e5ff");
+                window.logExp(`[Cel] ${bestMob.nazwa} (${bestMob.lvl} lvl) -> Dystans: ${bestMob.dystans} kratek`, "#00e5ff");
             }
 
-            if (bestMob.dist <= 1) {
+            // Margonemowy max() potrzebny tylko do weryfikacji 1-kratkowego zasięgu ataku
+            if (Math.max(Math.abs(hx - bestMob.x), Math.abs(hy - bestMob.y)) <= 1) {
                 // ATAK!
                 if (typeof window._g === 'function') window._g(`fight&a=attack&id=${bestMob.id}`);
                 else if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(bestMob.id);
@@ -4163,10 +4162,10 @@ function runExpLogic() {
                 Engine.hero.autoGoTo({x: bestMob.x, y: bestMob.y});
                 expLastActionTime = now + 600;
 
-                // Moduł Anty-Lag w drodze do moba
+                // Moduł Anty-Lag (jeśli bot zablokuje się o kamień, odbije się w bok)
                 if (hx === expLastX && hy === expLastY) {
                     if (now > expAntiLagTime) {
-                        window.logExp(`[Zator] Blokada w drodze. Odbijam postać...`, "#ff9800");
+                        window.logExp(`[Zator] Zablokowano postać. Próbuję ominąć przeszkodę...`, "#ff9800");
                         Engine.hero.autoGoTo({x: hx + (Math.random() > 0.5 ? 1 : -1), y: hy + (Math.random() > 0.5 ? 1 : -1)});
                         expAntiLagTime = now + 2000;
                     }
@@ -4175,21 +4174,22 @@ function runExpLogic() {
                     expAntiLagTime = now + 2500;
                 }
             }
-            return; // Kończy obieg dopóki ma kogo bić
+            return; // Zakończ przebieg, niech goni moba
         }
 
-        // 6. DECYZJA: ZMIANA MAPY LUB OCZEKIWANIE (Gdy brak mobów z listy)
+        // 6. DECYZJA: ZMIANA MAPY LUB OCZEKIWANIE (Brak mobów z listy / poza mapą expowiska)
         if (now < expMapTransitionCooldown) return;
         expCurrentTargetId = null;
 
         let targetExpMap = null;
 
         if (!isExpMap) {
-            targetExpMap = maps[0]; // Gna na początek listy, jeśli zgubił droge
+            targetExpMap = maps[0]; // Gna na początek listy
         } else {
+            // Wyczyszczono mapę
             window.mapClearTimes[currMap] = now;
             let currentIndex = maps.indexOf(currMap);
-            let nextIndex = (currentIndex + 1) % maps.length; // Zapętla na kolejną mapę z ustawionej listy
+            let nextIndex = (currentIndex + 1) % maps.length; // Zapętla na kolejną mapę!
             targetExpMap = maps[nextIndex];
             
             if (now - expLastActionTime > 3500) {
@@ -4206,7 +4206,7 @@ function runExpLogic() {
             return;
         }
 
-        // Ścieżkowanie do nowej mapy
+        // Bieg na wyliczoną mapę
         let path = getShortestPath(currMap, targetExpMap);
         if (path && path.length > 1) {
             let nextStepMap = path[1];
@@ -4228,7 +4228,7 @@ function runExpLogic() {
 
                 if (hx === targetX && hy === targetY) {
                     window.logExp(`[Przejście] Przecinam bramę...`, "#ba68c8");
-                    Engine.hero.autoGoTo({x: hx + 1, y: hy}); // Krok w bok odblokowuje stojącą na przejściu postać
+                    Engine.hero.autoGoTo({x: hx + 1, y: hy}); // Krok w bok, aby wejść na bramę jeśli stoisz na niej w miejscu
                     expMapTransitionCooldown = now + 1500;
                 } else {
                     let isHeroMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
@@ -4241,10 +4241,10 @@ function runExpLogic() {
                 expLastActionTime = now + 1000;
             } else {
                 window.logExp(`Brak zapisanej bramy do: ${nextStepMap}! Nagraj ręcznie (🎥).`, "#e53935");
-                document.getElementById('btnStartExp').click(); 
+                document.getElementById('btnStartExp').click(); // Zatrzymuje bota przed awarią
             }
         } else {
-            window.logExp(`Zgubiono ślad do [${targetExpMap}]! Nagraj braki.`, "#e53935");
+            window.logExp(`Zgubiono ślad do [${targetExpMap}]! Przerywam by uniknąć zapętlenia.`, "#e53935");
             document.getElementById('btnStartExp').click(); 
         }
     }
