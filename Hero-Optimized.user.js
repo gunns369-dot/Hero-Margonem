@@ -2982,64 +2982,64 @@ if (teleportsContainer) teleportsContainer.style.display = tab === 'teleports' ?
         kolosySearch.addEventListener('input', () => renderBossList('kolosyListContainer', kolosyData, 'kolosySearch', '#e64a19'));
     }
 
-    const selHero = document.getElementById('selHero');
-    if (selHero) {
-        selHero.innerHTML = '<option value="">-- Wybierz --</option>';
+const selHero = document.getElementById('selHero');
+if (selHero) {
+    selHero.innerHTML = '';
 
-        for (const hero in heroData) {
-            const opt = document.createElement('option');
-            opt.value = hero;
-            opt.innerText = heroLevels[hero] ? `${hero} (${heroLevels[hero]})` : hero;
-            selHero.appendChild(opt);
-        }
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.innerText = '-- Wybierz --';
+    selHero.appendChild(emptyOpt);
 
-        selHero.addEventListener('change', (e) => {
-            const hero = e.target.value;
-            const cordsListContainer = document.getElementById('cordsListContainer');
-            if (cordsListContainer) cordsListContainer.innerHTML = '';
-
-            if (hero && heroData[hero]) {
-                if (!heroMapOrder[hero] || heroMapOrder[hero].length === 0) {
-                    heroMapOrder[hero] = Object.keys(heroData[hero]);
-                    saveMapOrder();
-                }
-
-                currentRouteIndex = -1;
-                sessionStorage.removeItem('hero_route_index');
-                checkedMapsThisSession.clear();
-                saveCheckedMaps();
-
-                const currMap = (typeof Engine !== 'undefined' && Engine.map && Engine.map.d)
-                    ? Engine.map.d.name
-                    : lastMapName;
-
-                if (heroData[hero][currMap]) {
-                    currentCordsList = [...heroData[hero][currMap]];
-                    checkedPoints.clear();
-                    setTimeout(() => {
-                        optimizeRoute();
-                        renderCordsList();
-                    }, 150);
-                } else {
-                    currentCordsList = [];
-                    checkedPoints.clear();
-                    renderCordsList();
-                }
-
-                if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
-                updateUI();
-            } else {
-                const heroMapListContainer = document.getElementById('heroMapListContainer');
-                if (heroMapListContainer) {
-                    heroMapListContainer.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div>';
-                }
-                currentCordsList = [];
-                checkedPoints.clear();
-                renderCordsList();
-            }
-        });
+    for (const hero in heroData) {
+        const opt = document.createElement('option');
+        opt.value = hero;
+        opt.innerText = heroLevels[hero] ? `${hero} (${heroLevels[hero]})` : hero;
+        selHero.appendChild(opt);
     }
 
+    selHero.addEventListener('change', (e) => {
+        const hero = e.target.value;
+
+        if (!hero || !heroData[hero]) {
+            currentCordsList = [];
+            checkedPoints.clear();
+            renderCordsList();
+            if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+            return;
+        }
+
+        if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
+            heroMapOrder[hero] = Object.keys(heroData[hero] || {});
+            saveMapOrder();
+        }
+
+        currentRouteIndex = -1;
+        sessionStorage.removeItem('hero_route_index');
+        checkedMapsThisSession.clear();
+        saveCheckedMaps();
+
+        const currMap = (typeof Engine !== 'undefined' && Engine.map && Engine.map.d)
+            ? Engine.map.d.name
+            : lastMapName;
+
+        if (heroData[hero][currMap]) {
+            currentCordsList = [...heroData[hero][currMap]];
+            checkedPoints.clear();
+            setTimeout(() => {
+                optimizeRoute();
+                renderCordsList();
+            }, 150);
+        } else {
+            currentCordsList = [];
+            checkedPoints.clear();
+            renderCordsList();
+        }
+
+        if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+        updateUI();
+    });
+}
     const btnOpenSettings = document.getElementById('btnOpenSettings');
     if (btnOpenSettings) {
         btnOpenSettings.addEventListener('click', () => {
@@ -4713,54 +4713,34 @@ let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Eng
 
 
 
-    window.loadExpProfile = function(index) {
+window.loadExpProfile = function(index) {
+    const p = botSettings.expProfiles[index];
+    if (!p || !Array.isArray(p.maps)) return;
 
-        let p = botSettings.expProfiles[index];
+    botSettings.exp.mapOrder = [...p.maps];
+    localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
 
-        if(p) {
+    const lvlMatch = (p.name || "").match(/\((\d+)\s*lvl\)/i);
+    if (lvlMatch && lvlMatch[1]) {
+        const baseLvl = parseInt(lvlMatch[1], 10);
+        botSettings.exp.minLvl = Math.max(1, baseLvl - 3);
+        botSettings.exp.maxLvl = baseLvl + 15;
 
-            botSettings.exp.mapOrder = [...p.maps];
+        const minInput = document.getElementById('expMinL');
+        const maxInput = document.getElementById('expMaxL');
+        if (minInput) minInput.value = botSettings.exp.minLvl;
+        if (maxInput) maxInput.value = botSettings.exp.maxLvl;
+    }
 
-            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+    window.mapClearTimes = {};
+    saveSettings();
 
+    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    if (typeof window.renderRecommendedExpMaps === 'function') window.renderRecommendedExpMaps();
+    updateUI();
 
-
-            // Auto-wyliczanie min i max levela (+15 / -15)
-
-            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
-
-            if(lvlMatch && lvlMatch[1]) {
-
-                let baseLvl = parseInt(lvlMatch[1]);
-                botSettings.exp.minLvl = Math.max(1, baseLvl - 5);
-                botSettings.exp.maxLvl = baseLvl + 15;
-
-
-
-                let minInput = document.getElementById('expMinL');
-
-                let maxInput = document.getElementById('expMaxL');
-
-                if (minInput) minInput.value = botSettings.exp.minLvl;
-
-                if (maxInput) maxInput.value = botSettings.exp.maxLvl;
-
-            }
-
-
-
-            window.mapClearTimes = {};
-
-            saveSettings();
-
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-
-            heroAlert(`✅ Załadowano i NADPISANO trasę: ${p.name}\nAutomatycznie ustawiono poziom potworów na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`);
-
-        }
-
-    };
-
+    heroAlert(`✅ Załadowano expowisko: ${p.name}`);
+};
 
 
     // NOWOŚĆ: Funkcja do łączenia expowisk ze sobą!
@@ -5014,64 +4994,94 @@ let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Eng
     };
 
 window.renderMapOrderList = () => {
+    const c = document.getElementById('heroMapListContainer');
+    if (!c) return;
 
-        let c = document.getElementById('heroMapListContainer');
+    const sel = document.getElementById('selHero');
+    let hero = sel ? sel.value : '';
 
-        if (!c) return;
-
-
-
-        let hero = document.getElementById('selHero').value;
-
-        if (!hero || !heroMapOrder[hero] || heroMapOrder[hero].length === 0) {
-
-            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa, by zobaczyć trasę</div>';
-
-            return;
-
+    // Auto-dobór herosa po obecnej mapie, jeśli select pusty
+    if (!hero && lastMapName) {
+        for (const h in heroData) {
+            if (heroData[h] && heroData[h][lastMapName]) {
+                hero = h;
+                if (sel) sel.value = h;
+                break;
+            }
         }
+    }
 
+    if (!hero || !heroData[hero]) {
+        c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa, by zobaczyć trasę</div>';
+        return;
+    }
 
+    // Napraw brakującej trasy z pamięci
+    if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
+        heroMapOrder[hero] = Object.keys(heroData[hero] || {});
+        saveMapOrder();
+    }
 
-        let currentMap = lastMapName;
+    const route = heroMapOrder[hero];
+    if (!route || route.length === 0) {
+        c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak zapisanej trasy dla tego herosa</div>';
+        return;
+    }
 
-        c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
+    const currentMap = lastMapName;
 
-            if (editingGatewayFor === mapName) {
-
-                let defaultX = "", defaultY = "";
-
-                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
-
-                if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
-
-                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div></div></div>`;
-
-            } else {
-
-                let isPathPossible = false;
-
-                for(let fromMap in globalGateways) { if(globalGateways[fromMap][mapName]) isPathPossible = true; }
-
-                let gatewayIndicator = isPathPossible ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>" : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
-
-
-
-                let activeClass = (currentRouteIndex === index) ? "active-route" : "";
-
-                let checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
-
-                let nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
-
-
-
-                return `<div class="list-item ${activeClass} ${checkClass}"><div class="map-name-wrap"><span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span><span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">${index + 1}. ${gatewayIndicator} ${mapName}</span></div><div class="buttons-wrapper"><input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)" title="Zmień pozycję na liście (1-10)"><button class="icon-btn" onclick="openInlineEditor('${mapName}')" title="Edytuj kordy przejścia">🚪</button></div></div>`;
-
+    c.innerHTML = route.map((mapName, index) => {
+        if (editingGatewayFor === mapName) {
+            let defaultX = "", defaultY = "";
+            let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
+            if (refDoor) {
+                defaultX = refDoor.x;
+                defaultY = refDoor.y;
             }
 
-        }).join('');
+            return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
+                <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
+                    <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                        <label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                        <label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                        <button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;">📍 Stąd</button>
+                    </div>
+                    <div style="display:flex; gap:4px; margin-top:4px;">
+                        <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button>
+                        <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button>
+                    </div>
+                </div>
+            </div>`;
+        }
 
-    };
+        let isPathPossible = false;
+        for (let fromMap in globalGateways) {
+            if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) isPathPossible = true;
+        }
+
+        const gatewayIndicator = isPathPossible
+            ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>"
+            : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
+
+        const activeClass = (currentRouteIndex === index) ? "active-route" : "";
+        const checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
+        const nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
+
+        return `<div class="list-item ${activeClass} ${checkClass}">
+            <div class="map-name-wrap">
+                <span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span>
+                <span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">
+                    ${index + 1}. ${gatewayIndicator} ${mapName}
+                </span>
+            </div>
+            <div class="buttons-wrapper">
+                <input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)">
+                <button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button>
+            </div>
+        </div>`;
+    }).join('');
+};
 function renderRecommendedExpMaps() {
     const container = document.getElementById('recommendedExpList');
     if (!container) return;
@@ -5106,12 +5116,12 @@ function renderRecommendedExpMaps() {
 
     window._recommendedExpProfilesCache = matches;
 }
-   window.loadRecommendedExpProfile = function(index) {
+window.loadRecommendedExpProfile = function(index) {
     const arr = window._recommendedExpProfilesCache || [];
     const p = arr[index];
-    if (!p) return;
+    if (!p || !Array.isArray(p.maps)) return;
 
-    botSettings.exp.mapOrder = [...(p.maps || [])];
+    botSettings.exp.mapOrder = [...p.maps];
     localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
 
     const lvlMatch = (p.name || "").match(/\((\d+)\s*lvl\)/i);
@@ -5127,7 +5137,11 @@ function renderRecommendedExpMaps() {
     }
 
     saveSettings();
+
     if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    if (typeof window.renderRecommendedExpMaps === 'function') window.renderRecommendedExpMaps();
+    updateUI();
+
     heroAlert(`⭐ Wczytano polecane expowisko: ${p.name}`);
 };
 
