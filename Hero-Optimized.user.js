@@ -2384,12 +2384,6 @@ function setupTopGoToSearch() {
     });
 }
 
-    document.addEventListener('click', (e) => {
-        if (!panel.contains(e.target) && e.target !== toggleBtn) {
-            box.style.display = 'none';
-        }
-    });
-}
 
     // ==========================================
 
