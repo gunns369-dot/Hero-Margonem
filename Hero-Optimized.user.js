@@ -1744,75 +1744,37 @@ function autoDetectEngineData() {
 
     // ==========================================
 
-window.rushToMap = function(targetMapName, x = null, y = null) {
-
+window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) {
         let currentSysMap = lastMapName;
 
-
-
         if (currentSysMap === targetMapName) {
-
             if (x !== null && y !== null) {
-
-                console.log("%c[HERO] Już stoisz na tej mapie! Podchodzę pod resp...", "color: #4caf50;");
-
+                window.heroAlert(`Jesteś już na mapie: ${targetMapName}!\nPodchodzę pod koordynaty respu: [${x}, ${y}].`);
                 safeGoTo(x, y, false);
-
                 return;
-
             }
-
-            return console.log("%c[HERO] Już stoisz na tej mapie!", "color: #4caf50;");
-
+            return window.heroAlert(`Jesteś już na docelowej mapie: ${targetMapName}!`);
         }
-
-
-
-        let path = getShortestPath(currentSysMap, targetMapName);
-
-        if (!path) {
-
-            return console.log(`%c[HERO] Brak zapisanej drogi do: [${targetMapName}]!\nSkorzystaj z nagrywania (🎥), aby nauczyć bota trasy.`, "color: #e53935; font-weight: bold;");
-
-        }
-
-
 
         stopPatrol(true);
-
         isRushing = true;
-
         rushTarget = targetMapName;
-
         rushTargetX = x;
-
         rushTargetY = y;
-
-
+        window.rushFullPath = fullPath || []; // Zapisujemy nitkę do pamięci
 
         let btn = document.getElementById('btnStartStop');
-
         if (btn) {
-
             btn.innerHTML = '<span class="btn-icon">⏹</span><span>Stop RUSH</span>';
-
             btn.style.color = "#00acc1";
-
             btn.style.borderColor = "#00acc1";
-
         }
 
-
-
         console.log(`%c[HERO] 🏃 Rozpoczynam bieg na mapę: [${targetMapName}]`, "color: #00acc1; font-weight: bold;");
-
-        executeRushStep(); // Uruchamia logikę biegu, którą wyczyściliśmy z okienek w poprzedniej łatce
-
+        window.executeRushStep(); 
     };
 
-
-
-function executeRushStep() {
+    window.executeRushStep = function() {
         if (!isRushing) return;
         let currentSysMap = lastMapName;
 
@@ -1827,18 +1789,44 @@ function executeRushStep() {
             return;
         }
 
+        let nextMap = null;
         let path = getShortestPath(currentSysMap, rushTarget);
-        if (!path || path.length < 2) {
+
+        // 1. Priorytet: Znamy bezpośrednią, najkrótszą drogę z bazy
+        if (path && path.length > 1) {
+            nextMap = path[1];
+        } 
+        // 2. Jeśli nie znamy drogi, używamy nowej logiki "Po nitce" z bazy gry
+        else if (window.rushFullPath && window.rushFullPath.length > 0) {
+            let idx = window.rushFullPath.indexOf(currentSysMap);
+            
+            if (idx !== -1 && idx < window.rushFullPath.length - 1) {
+                // Jesteśmy NA NITCE! Idziemy po prostu do kolejnej mapy z tablicy
+                nextMap = window.rushFullPath[idx + 1];
+                console.log(`%c[HERO] Idę po nitce... Następna mapa: ${nextMap}`, "color: #ff9800;");
+            } else {
+                // Nie jesteśmy na nitce. Szukamy drogi do miasta docelowego (początku nitki)
+                let startMap = window.rushFullPath[0];
+                let pathToStart = getShortestPath(currentSysMap, startMap);
+                if (pathToStart && pathToStart.length > 1) {
+                    nextMap = pathToStart[1];
+                    console.log(`%c[HERO] Biegne na początek nitki (${startMap})... Kierunek: ${nextMap}`, "color: #ff9800;");
+                } else if (currentSysMap === startMap) {
+                     nextMap = window.rushFullPath[1]; // Jesteśmy na starcie, ładujemy mapę nr 2
+                }
+            }
+        }
+
+        if (!nextMap) {
             stopPatrol(false);
-            console.log(`%c[HERO] Zgubiłem drogę! Brak ścieżki do ${rushTarget}.`, "color: #e53935;");
+            window.heroAlert(`🚨 Zgubiłem się!\n\nStoisz na: [${currentSysMap}]\nCel: [${rushTarget}]\n\nBrak powiązania między obecną mapą, a początkiem trasy bosa.`);
             return;
         }
 
-        let nextMap = path[1];
+        window.rushNextMap = nextMap; // Zapamiętujemy dla zabezpieczenia anty-lag
+
         let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-        
-        // ZMIANA: Wykrywanie, czy użytkownik przypadkiem nie nagrał zakonnika jako "drzwi"
         let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
         let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
 
@@ -1854,28 +1842,27 @@ function executeRushStep() {
             }
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
-            rushInterval = setTimeout(checkRushArrival, 500);
+            rushInterval = setTimeout(window.checkRushArrival, 500);
         } else {
             stopPatrol(false);
-            console.log(`%c[HERO] Brak zapisanej bramy do: [${nextMap}]`, "color: #e53935;");
+            window.heroAlert(`🚨 Ślepy Zaułek!\n\nJestem na mapie [${currentSysMap}].\nAlgorytm nakazał mi iść do [${nextMap}], ale skaner nie zdążył wyłapać tu takiego przejścia lub drzwi wymagają klucza!`);
         }
-    }
+    };
 
-    function checkRushArrival() {
+    window.checkRushArrival = function() {
         if (!isRushing || !Engine || !Engine.hero) return;
         let currentSysMap = lastMapName;
-        if (currentSysMap === rushTarget) { executeRushStep(); return; }
+        if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
 
-        let path = getShortestPath(currentSysMap, rushTarget);
-        if(!path || path.length < 2) return;
-        let nextMap = path[1];
+        let nextMap = window.rushNextMap;
+        if (!nextMap) return;
         
         let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
         let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
 
-        if (isTeleportRoute) return; // Zignoruj sprawdzanie bramy - nowa logika obsługuje teleport!
+        if (isTeleportRoute) return;
 
         if (!door) return;
 
@@ -1893,9 +1880,8 @@ function executeRushStep() {
             } else { stuckCount = 0; }
         }
         lastX = cx; lastY = cy;
-        rushInterval = setTimeout(checkRushArrival, 400);
-    }
-
+        rushInterval = setTimeout(window.checkRushArrival, 400);
+    };
 
     // ==========================================
 
@@ -3352,7 +3338,8 @@ selHero.addEventListener('change', (e) => {
                 rushArgs = `'${finalMap}', ${targetX}, ${targetY}`;
 
             }
-
+// Dodajemy pełną "nitkę" do argumentów biegu
+            rushArgs += `, ${JSON.stringify(boss.path)}`;
 
 
             const header = document.createElement('div');
@@ -3427,16 +3414,11 @@ selHero.addEventListener('change', (e) => {
 
                     </div>
 
-                    <div style="display:flex; gap:4px;">
-
-                        <button style="${bStyle} background:#4e342e; width:95px;" onclick="rushToMap(${rushArgs})">🏃 BIEG DO MAPY</button>
-
+                  <div style="display:flex; gap:4px;">
+                        <button style="${bStyle} background:#4e342e; width:95px;" onclick="event.stopPropagation(); window.rushToMap(${rushArgs})">🏃 BIEG DO MAPY</button>
                         ${targetX !== null ? `
-
-                            <button style="${bStyle} background:#4caf50; width:80px;" onclick="goSinglePoint(${targetX}, ${targetY}, '${finalMap}')">🎯 DO KORDU</button>
-
+                            <button style="${bStyle} background:#4caf50; width:80px;" onclick="event.stopPropagation(); window.goSinglePoint(${targetX}, ${targetY}, '${finalMap.replace(/'/g, "\\'")}')">🎯 DO KORDU</button>
                         ` : ''}
-
                     </div>
 
                 </div>
