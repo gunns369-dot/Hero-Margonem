@@ -4306,6 +4306,7 @@ if (isExpMap) {
 
             return;
         }
+    window.logExp(`[DEBUG] currMap=${currMap} | isExpMap=${isExpMap} | validMobs=${validMobs.length} | maps=${maps.join(" -> ")}`, "#ffd54f");
                        // 8. DECYZJA: BRAK POTWORÓW -> ZMIANA MAPY
         if (validMobs.length > 0) return;
         if (now < expMapTransitionCooldown) return;
@@ -4324,15 +4325,32 @@ if (isExpMap) {
 
         let targetExpMap = null;
 
-        if (!isExpMap) {
-            targetExpMap = maps[0]; 
+           if (!isExpMap) {
+            targetExpMap = maps[0];
         } else {
-            // Wybito wszystkie legalne cele - wchodzimy na kolejną mapę!
             window.mapClearTimes[currMap] = now;
-            let currentIndex = maps.indexOf(currMap);
-            let nextIndex = (currentIndex + 1) % maps.length; 
-            targetExpMap = maps[nextIndex];
-            
+
+            let oldestMap = maps[0];
+            let oldestTime = window.mapClearTimes[oldestMap] || 0;
+
+            for (let i = 1; i < maps.length; i++) {
+                let t = window.mapClearTimes[maps[i]] || 0;
+                if (t < oldestTime) {
+                    oldestMap = maps[i];
+                    oldestTime = t;
+                }
+            }
+
+            if (oldestMap === currMap) {
+                if (now - expMapTransitionCooldown > 3000) {
+                    window.logExp("Wszystkie mapy czyste. Czekam...", "#777");
+                    expMapTransitionCooldown = now + 3000;
+                }
+                return;
+            }
+
+            targetExpMap = oldestMap;
+
             if (now - expLastActionTime > 3000) {
                 window.logExp(`Wybito mapę. Przechodzę do: ${targetExpMap}`, "#a99a75");
                 expLastActionTime = now;
