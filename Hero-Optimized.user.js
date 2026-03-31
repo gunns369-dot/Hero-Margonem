@@ -4915,95 +4915,276 @@ window.loadExpProfile = function(index) {
     });
 };
 
-    // --- FUNKCJE LISTY MAP EXP ---
+     // --- FUNKCJE LISTY MAP EXP ---
 
     window.addCurrentMapToExp = () => {
-
         let m = Engine.map.d.name;
 
         if (!botSettings.exp.mapOrder.includes(m)) {
-
             botSettings.exp.mapOrder.push(m);
-
             localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-
-            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-
+            if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
         }
-
     };
 
-
-
     window.addNeighborsToExp = () => {
+        let currMap = Engine.map.d.name;
+        let added = 0;
 
-        let currMap = Engine.map.d.name; let added = 0;
-
-        if (!botSettings.exp.mapOrder.includes(currMap)) { botSettings.exp.mapOrder.push(currMap); added++; }
-
-        if (globalGateways[currMap]) {
-
-            for (let targetMap in globalGateways[currMap]) {
-
-                if (!botSettings.exp.mapOrder.includes(targetMap)) { botSettings.exp.mapOrder.push(targetMap); added++; }
-
-            }
-
+        if (!botSettings.exp.mapOrder.includes(currMap)) {
+            botSettings.exp.mapOrder.push(currMap);
+            added++;
         }
 
-        let gws = (Engine.map && Engine.map.gateways) ? Engine.map.gateways : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
+        if (globalGateways[currMap]) {
+            for (let targetMap in globalGateways[currMap]) {
+                if (!botSettings.exp.mapOrder.includes(targetMap)) {
+                    botSettings.exp.mapOrder.push(targetMap);
+                    added++;
+                }
+            }
+        }
+
+        let gws = (Engine.map && Engine.map.gateways)
+            ? Engine.map.gateways
+            : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
 
         for (let id in gws) {
-
-            let gw = gws[id].d || gws[id]; let tName = gw.name || gw.targetName || "";
+            let gw = gws[id].d || gws[id];
+            let tName = gw.name || gw.targetName || "";
 
             if (tName && typeof tName === 'string') {
-
                 let cleanName = tName.split(" .")[0].trim();
 
                 if (cleanName && cleanName !== currMap && !botSettings.exp.mapOrder.includes(cleanName)) {
-
                     botSettings.exp.mapOrder.push(cleanName);
 
-                    if (gw.x !== undefined && gw.y !== undefined && typeof window.saveGatewayToDB === 'function') window.saveGatewayToDB(currMap, cleanName, gw.x, gw.y);
+                    if (gw.x !== undefined && gw.y !== undefined && typeof window.saveGatewayToDB === 'function') {
+                        window.saveGatewayToDB(currMap, cleanName, gw.x, gw.y);
+                    }
 
                     added++;
-
                 }
-
             }
-
         }
 
-        if (added > 0) { localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); if (typeof window.renderExpMaps === 'function') window.renderExpMaps(); window.logExp(`Dodano ${added} map!`, "#4caf50"); }
-
+        if (added > 0) {
+            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+            if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            window.logExp(`Dodano ${added} map!`, "#4caf50");
+        }
     };
-
-
 
     window.removeExpMap = (index) => {
-
         heroConfirm(`Usunąć mapę ze ścieżki expowiska?`, (res) => {
-
-            if (res) { botSettings.exp.mapOrder.splice(index, 1); localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder)); window.renderExpMaps(); }
-
+            if (res) {
+                botSettings.exp.mapOrder.splice(index, 1);
+                localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            }
         });
-
     };
-
-
 
     window.clearExpMaps = () => {
-
         botSettings.exp.mapOrder = [];
-
         localStorage.setItem('exp_map_order_v64', '[]');
-
-        if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-
+        if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
     };
 
-window.renderMapOrderList = () => {
+    function renderRecommendedExpMaps() {
+        const container = document.getElementById('recommendedExpList');
+        if (!container) return;
+
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) {
+            container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak danych o poziomie.</div>';
+            return;
+        }
+
+        const lvl = Engine.hero.d.lvl;
+        const minLvl = lvl - 3;
+        const maxLvl = lvl + 15;
+
+        const matches = (botSettings.expProfiles || []).filter(p => {
+            const m = (p.name || "").match(/(\d+)\s*lvl/i);
+            if (!m) return false;
+            const req = parseInt(m[1], 10);
+            return req >= minLvl && req <= maxLvl;
+        });
+
+        if (matches.length === 0) {
+            container.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak polecanych expowisk.</div>';
+            return;
+        }
+
+        container.innerHTML = matches.map((p, i) => `
+            <div class="list-item" style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                <span style="color:#8bc34a; font-size:11px;">${p.name}</span>
+                <button class="btn-sepia" style="padding:3px 6px; background:#00695c;" onclick="loadRecommendedExpProfile(${i})">WCZYTAJ</button>
+            </div>
+        `).join('');
+
+        window._recommendedExpProfilesCache = matches;
+    }
+
+    window.loadRecommendedExpProfile = function(index) {
+        const arr = window._recommendedExpProfilesCache || [];
+        const p = arr[index];
+        if (!p || !Array.isArray(p.maps)) return;
+
+        botSettings.exp.mapOrder = [...p.maps];
+        localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+
+        const lvlMatch = (p.name || "").match(/\((\d+)\s*lvl\)/i);
+        if (lvlMatch && lvlMatch[1]) {
+            const baseLvl = parseInt(lvlMatch[1], 10);
+            botSettings.exp.minLvl = Math.max(1, baseLvl - 3);
+            botSettings.exp.maxLvl = baseLvl + 15;
+
+            const minInput = document.getElementById('expMinL');
+            const maxInput = document.getElementById('expMaxL');
+            if (minInput) minInput.value = botSettings.exp.minLvl;
+            if (maxInput) maxInput.value = botSettings.exp.maxLvl;
+        }
+
+        saveSettings();
+
+        if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+        if (typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
+        if (typeof window.renderRecommendedExpMaps === 'function') window.renderRecommendedExpMaps();
+        updateUI();
+
+        heroAlert(`⭐ Wczytano polecane expowisko: ${p.name}`);
+    };
+
+    window.loadRecommendedExpToRoute = function() {
+        const arr = window._recommendedExpProfilesCache || [];
+        if (!arr.length) {
+            heroAlert("Brak polecanych expowisk dla Twojego poziomu.");
+            return;
+        }
+
+        botSettings.exp.mapOrder = [];
+        arr.forEach(p => {
+            (p.maps || []).forEach(m => {
+                if (!botSettings.exp.mapOrder.includes(m)) {
+                    botSettings.exp.mapOrder.push(m);
+                }
+            });
+        });
+
+        localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+        if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+        updateUI();
+
+        heroAlert(`⭐ Dodano wszystkie polecane expowiska do trasy (${arr.length}).`);
+    };
+
+    window.renderExpMaps = function() {
+        const c = document.getElementById('expMapList');
+        if (!c) return;
+
+        if (!botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
+            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak map w trasie expowiska</div>';
+            return;
+        }
+
+        c.innerHTML = botSettings.exp.mapOrder.map((m, i) => `
+            <div class="list-item">
+                <div class="map-name-wrap">
+                    <span class="btn-del-map" onclick="removeExpMap(${i})">✖</span>
+                    <span class="map-name" style="color:#d4af37; font-weight:bold;">${i + 1}. ${m}</span>
+                </div>
+            </div>
+        `).join('');
+    };
+
+    window.renderMapOrderList = () => {
+        const c = document.getElementById('heroMapListContainer');
+        if (!c) return;
+
+        const sel = document.getElementById('selHero');
+        let hero = sel ? (sel.value || '').trim() : '';
+
+        if (!hero && lastMapName) {
+            for (const h in heroData) {
+                if (heroData[h] && heroData[h][lastMapName]) {
+                    hero = h;
+                    if (sel) sel.value = h;
+                    break;
+                }
+            }
+        }
+
+        if (!hero || !heroData[hero]) {
+            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div>';
+            return;
+        }
+
+        if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
+            heroMapOrder[hero] = Object.keys(heroData[hero] || {});
+            saveMapOrder();
+        }
+
+        const route = heroMapOrder[hero];
+        if (!route || route.length === 0) {
+            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak zapisanej trasy</div>';
+            return;
+        }
+
+        const currentMap = lastMapName;
+
+        c.innerHTML = route.map((mapName, index) => {
+            if (editingGatewayFor === mapName) {
+                let defaultX = "", defaultY = "";
+                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
+                if (refDoor) {
+                    defaultX = refDoor.x;
+                    defaultY = refDoor.y;
+                }
+
+                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
+                    <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
+                        <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                            <label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                            <label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                            <button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;">📍 Stąd</button>
+                        </div>
+                        <div style="display:flex; gap:4px; margin-top:4px;">
+                            <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button>
+                            <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button>
+                        </div>
+                    </div>
+                </div>`;
+            }
+
+            let isPathPossible = false;
+            for (let fromMap in globalGateways) {
+                if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) isPathPossible = true;
+            }
+
+            const gatewayIndicator = isPathPossible
+                ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>"
+                : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
+
+            const activeClass = (currentRouteIndex === index) ? "active-route" : "";
+            const checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
+            const nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
+
+            return `<div class="list-item ${activeClass} ${checkClass}">
+                <div class="map-name-wrap">
+                    <span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span>
+                    <span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">
+                        ${index + 1}. ${gatewayIndicator} ${mapName}
+                    </span>
+                </div>
+                <div class="buttons-wrapper">
+                    <input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)">
+                    <button class="icon-btn" onclick="openInlineEditor('${mapName}')">🚪</button>
+                </div>
+            </div>`;
+        }).join('');
+    };
 function renderRecommendedExpMaps() {
     const container = document.getElementById('recommendedExpList');
     if (!container) return;
