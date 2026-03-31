@@ -5099,18 +5099,17 @@ window.loadExpProfile = function(index) {
 
 window.renderMapOrderList = () => {
     const c = document.getElementById('heroMapListContainer');
-    if (!c) return;
-
     const sel = document.getElementById('selHero');
-    let hero = sel ? (sel.value || '').trim() : '';
+    if (!c || !sel) return;
 
-    // Ten sam schemat co w kreatorze: jeśli brak wybranego herosa,
-    // spróbuj dopasować po aktualnej mapie.
+    let hero = (sel.value || '').trim();
+
+    // fallback: wykryj herosa po aktualnej mapie
     if (!hero && lastMapName) {
         for (const h in heroData) {
             if (heroData[h] && heroData[h][lastMapName]) {
                 hero = h;
-                if (sel) sel.value = h;
+                sel.value = h;
                 break;
             }
         }
@@ -5121,39 +5120,35 @@ window.renderMapOrderList = () => {
         return;
     }
 
-    // 🔥 KLUCZOWA NAPRAWA:
-    // użyj tej samej bazy co kreator trasy
-    const creatorTargets = Object.keys(heroData[hero] || {});
+    // TO JEST SCHEMAT KREATORA TRASY:
+    // zawsze budujemy pełną bazę map z heroData
+    const baseMaps = Object.keys(heroData[hero] || {});
 
-    // jeśli heroMapOrder jest puste lub niepełne, odbuduj je z heroData
-    if (
-        !heroMapOrder[hero] ||
-        !Array.isArray(heroMapOrder[hero]) ||
-        heroMapOrder[hero].length === 0
-    ) {
-        heroMapOrder[hero] = [...creatorTargets];
-        saveMapOrder();
-    } else {
-        // naprawa częściowo uszkodzonej trasy:
-        // zostaw poprawne elementy w istniejącej kolejności
-        // i dołóż brakujące z bazy heroData
-        const validSaved = heroMapOrder[hero].filter(mapName => creatorTargets.includes(mapName));
-        const missing = creatorTargets.filter(mapName => !validSaved.includes(mapName));
-        const repaired = [...validSaved, ...missing];
+    if (!baseMaps.length) {
+        c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Brak map dla tego herosa</div>';
+        return;
+    }
 
-        if (
-            repaired.length !== heroMapOrder[hero].length ||
-            repaired.some((m, i) => m !== heroMapOrder[hero][i])
-        ) {
-            heroMapOrder[hero] = repaired;
-            saveMapOrder();
+    // jeśli zapisanej kolejności nie ma lub jest niepełna/uszkodzona,
+    // naprawiamy ją na podstawie pełnej bazy z heroData
+    let savedRoute = Array.isArray(heroMapOrder[hero]) ? heroMapOrder[hero] : [];
+
+    // zostaw tylko mapy istniejące w heroData
+    savedRoute = savedRoute.filter(m => baseMaps.includes(m));
+
+    // dołóż brakujące mapy z heroData
+    for (const m of baseMaps) {
+        if (!savedRoute.includes(m)) {
+            savedRoute.push(m);
         }
     }
 
-    const route = heroMapOrder[hero];
+    heroMapOrder[hero] = savedRoute;
+    saveMapOrder();
+
     const currentMap = lastMapName;
 
-    c.innerHTML = route.map((mapName, index) => {
+    c.innerHTML = savedRoute.map((mapName, index) => {
         if (editingGatewayFor === mapName) {
             let defaultX = "", defaultY = "";
             let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
@@ -5428,7 +5423,9 @@ window.fixHeroLoading = function() {
         window.fixHeroLoading();
     });
 })();
-
+setTimeout(() => {
+    if (typeof window.renderMapOrderList === 'function') window.renderMapOrderList();
+}, 50);
 // 🔥 auto start po załadowaniu
 setTimeout(() => {
     window.fixHeroLoading();
