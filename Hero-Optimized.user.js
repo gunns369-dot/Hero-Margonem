@@ -5324,8 +5324,92 @@ window.loadRecommendedExpToRoute = function() {
         }
     };
 
-    // === KONIEC WKLEJANIA ===
+// ===============================
+// 🔥 NAPRAWA ŁADOWANIA HEROSÓW
+// ===============================
 
+// bezpieczne pobieranie aktualnej mapy
+function getCurrentMapSafe() {
+    try {
+        if (typeof Engine !== 'undefined' && Engine.map && Engine.map.d) {
+            return Engine.map.d.name;
+        }
+    } catch(e) {}
+    return window.lastMapName || null;
+}
+
+// automatyczne wykrycie herosa na podstawie mapy
+function autoDetectHeroFromMap() {
+    const currentMap = getCurrentMapSafe();
+    if (!currentMap) return null;
+
+    for (const hero in heroData) {
+        if (heroData[hero] && heroData[hero][currentMap]) {
+            return hero;
+        }
+    }
+
+    return null;
+}
+
+// naprawa inicjalizacji heroMapOrder
+function fixHeroMapOrder(hero) {
+    if (!heroData[hero]) return;
+
+    if (!heroMapOrder[hero] || !Array.isArray(heroMapOrder[hero]) || heroMapOrder[hero].length === 0) {
+        heroMapOrder[hero] = Object.keys(heroData[hero]);
+        saveMapOrder();
+    }
+}
+
+// 🔥 główna funkcja naprawy UI herosa
+window.fixHeroLoading = function() {
+    const selHero = document.getElementById('selHero');
+    if (!selHero) return;
+
+    let hero = selHero.value;
+
+    // jeśli nic nie wybrane → auto-detect
+    if (!hero) {
+        hero = autoDetectHeroFromMap();
+        if (hero) {
+            selHero.value = hero;
+        }
+    }
+
+    if (!hero || !heroData[hero]) return;
+
+    fixHeroMapOrder(hero);
+
+    const currentMap = getCurrentMapSafe();
+
+    if (heroData[hero][currentMap]) {
+        currentCordsList = [...heroData[hero][currentMap]];
+    } else {
+        currentCordsList = [];
+    }
+
+    checkedPoints.clear();
+
+    if (typeof optimizeRoute === 'function') optimizeRoute();
+    if (typeof renderCordsList === 'function') renderCordsList();
+    if (typeof updateUI === 'function') updateUI();
+};
+
+// 🔥 podmiana eventu selecta (NAPRAWA)
+(function() {
+    const selHero = document.getElementById('selHero');
+    if (!selHero) return;
+
+    selHero.addEventListener('change', function() {
+        window.fixHeroLoading();
+    });
+})();
+
+// 🔥 auto start po załadowaniu
+setTimeout(() => {
+    window.fixHeroLoading();
+}, 500);
 
 
 })(); // Koniec kodu
