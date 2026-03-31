@@ -2344,7 +2344,7 @@ window.handleTeleportNPC = function(targetMap) {
 
 
 const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
-       mainGui.innerHTML = `
+     mainGui.innerHTML = `
             <div class="gui-header">
                 <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.3</div>
                 <div class="header-buttons">
@@ -2361,25 +2361,25 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                 <div id="e2ModeToggle" class="nav-tab">💀 ELITY II</div>
                 <div id="kolosyModeToggle" class="nav-tab">👹 KOLOSY</div>
                 <div id="expModeToggle" class="nav-tab">⚔️ EXP</div>
-                <div id="teleportsModeToggle" class="nav-tab">🚀 TELEPORTY</div>
+                <div id="teleportsModeToggle" class="nav-tab">🚀 TP/EQ/HP</div>
             </div>
 
             <div class="gui-content" id="mainRoutingPanel">
-                <div id="radarControlsWrapper">
-                    <div class="nav-row" style="background: rgba(183, 28, 28, 0.2); padding:5px; border-radius:2px; border:1px solid #8e0000;">
-                        <label style="color: #ff5252; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkRadar" ${botSettings.radarEnabled ? 'checked' : ''}> Wykrywacz (Radar)</label>
-                    </div>
-                    <div class="nav-row" style="display: none; background: rgba(76, 175, 80, 0.1); padding:5px; border-radius:2px; border:1px solid #4caf50; margin-top:2px;">
-                        <label style="color: #4caf50; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkAutoAttack" ${botSettings.autoAttack ? 'checked' : ''}> Auto-atak</label>
-                    </div>
-                </div>
-
-                <div class="location-wrapper" style="margin-top: 8px;">
+                <div class="location-wrapper" style="margin-bottom: 8px;">
                     <span class="location-label">Stoisz na:</span>
                     <span id="currentMapNameDisplay">Ładowanie...</span>
                 </div>
 
                 <div id="heroContainer" style="display:flex; flex-direction:column; flex-grow:1;">
+                    <div id="radarControlsWrapper" style="margin-bottom: 8px;">
+                        <div class="nav-row" style="background: rgba(183, 28, 28, 0.2); padding:5px; border-radius:2px; border:1px solid #8e0000;">
+                            <label style="color: #ff5252; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkRadar" ${botSettings.radarEnabled ? 'checked' : ''}> Wykrywacz (Radar)</label>
+                        </div>
+                        <div class="nav-row" style="display: none; background: rgba(76, 175, 80, 0.1); padding:5px; border-radius:2px; border:1px solid #4caf50; margin-top:2px;">
+                            <label style="color: #4caf50; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkAutoAttack" ${botSettings.autoAttack ? 'checked' : ''}> Auto-atak</label>
+                        </div>
+                    </div>
+
                     <div class="nav-row"><label>Szukany Heros:</label><select id="selHero" style="flex-grow: 1;"><option value="">-- Wybierz --</option></select></div>
                     <div class="nav-row" style="display: flex; flex-direction: column; flex-grow: 1;">
                         <label style="color:#00acc1;">Kolejność Przechodzenia Map:</label>
@@ -2462,11 +2462,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                 </div>
 
                 <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
-                    <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
-                        <span style="color:#00acc1; font-weight:bold; font-size:11px;">Zakonnicy Planu Astralnego</span><br>
-                        <span style="color:#a99a75; font-size:9px;">Zaznacz miasta, do których wykupiłeś zezwolenie na teleport. Algorytm trasy sam ich użyje!</span>
-                    </div>
-                    <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;"></div>
+                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                 </div>
             </div>
         `;
@@ -2621,7 +2617,25 @@ const expBaseGui = document.createElement('div');
             </div>
         `;
         document.body.appendChild(expRecGui);
-
+const teleportsGui = document.createElement('div');
+        teleportsGui.id = 'heroTeleportsGUI';
+        teleportsGui.className = 'hero-window';
+        teleportsGui.style.display = 'none';
+        teleportsGui.style.top = '60px'; 
+        teleportsGui.style.left = '400px'; 
+        teleportsGui.style.width = '320px'; 
+        teleportsGui.style.maxHeight = '560px';
+        teleportsGui.innerHTML = `
+            <div class="gui-header">🚀 Teleporty <button class="btn-close" onclick="document.getElementById('heroTeleportsGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
+                <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
+                    <span style="color:#00acc1; font-weight:bold; font-size:11px;">Zakonnicy Planu Astralnego</span><br>
+                    <span style="color:#a99a75; font-size:9px;">Zaznacz miasta, do których wykupiłeś zezwolenie na teleport. Algorytm trasy sam ich użyje!</span>
+                </div>
+                <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;"></div>
+            </div>
+        `;
+        document.body.appendChild(teleportsGui);
         setupModals(); setupMultiDrag(); setupGearDrag(); setupLogic();
 
     }
@@ -4960,5 +4974,14 @@ window.clearExpMaps = () => {
             c.innerHTML = html;
         }
     };
-
+let btnOpenTp = document.getElementById('btnOpenTeleports');
+    if (btnOpenTp) {
+        btnOpenTp.addEventListener('click', () => {
+            let p = document.getElementById('heroTeleportsGUI');
+            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') {
+                window.renderTeleportOptions();
+            }
+        });
+    }
 })(); // Koniec kodu
