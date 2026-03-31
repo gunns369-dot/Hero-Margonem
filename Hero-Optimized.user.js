@@ -5460,5 +5460,110 @@ setTimeout(() => {
     if (typeof autoDetectEngineData === 'function') autoDetectEngineData();
     updateUI();
 }, 700);
+// ===============================
+// 🔥 KULOODPORNE RENDEROWANIE LISTY MAP HEROSA
+// ===============================
+window.renderMapOrderList = function() {
+    try {
+        const c = document.getElementById('heroMapListContainer');
+        const sel = document.getElementById('selHero');
+        if (!c || !sel) return;
 
+        let hero = sel.value;
+
+        // Zabezpieczenie, gdyby wartość selecta ściągnęła napis z poziomem (np. "Mietek Żul (32)")
+        if (hero && hero.includes('(')) {
+            hero = hero.split('(')[0].trim();
+        }
+
+        // Jeśli z jakiegoś powodu wciąż nie mamy herosa
+        if (!hero || !heroData[hero]) {
+            c.innerHTML = '<div style="padding:10px;text-align:center;color:#777;">Wybierz herosa, aby załadować trasę.</div>';
+            return;
+        }
+
+        const baseMaps = Object.keys(heroData[hero]);
+        if (baseMaps.length === 0) {
+            c.innerHTML = '<div style="padding:10px;text-align:center;color:#777;">Ten heros nie ma przypisanych map w bazie.</div>';
+            return;
+        }
+
+        // Budowanie lub naprawianie zapisanej kolejności
+        let savedRoute = Array.isArray(heroMapOrder[hero]) ? heroMapOrder[hero] : [];
+        savedRoute = savedRoute.filter(m => baseMaps.includes(m));
+
+        for (const m of baseMaps) {
+            if (!savedRoute.includes(m)) savedRoute.push(m);
+        }
+
+        heroMapOrder[hero] = savedRoute;
+        if (typeof saveMapOrder === 'function') saveMapOrder();
+
+        const currentMap = window.lastMapName || '';
+
+        // Renderowanie HTML
+        c.innerHTML = savedRoute.map((mapName, index) => {
+            // Otwarty edytor bramy dla konkretnej mapy
+            if (window.editingGatewayFor === mapName) {
+                let defaultX = "", defaultY = "";
+                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
+                if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
+                
+                return `
+                <div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
+                    <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
+                        <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                            <label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                            <label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label>
+                            <button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;">📍 Stąd</button>
+                        </div>
+                        <div style="display:flex; gap:4px; margin-top:4px;">
+                            <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${mapName.replace(/'/g, "\\'")}')">ZAPISZ</button>
+                            <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button>
+                        </div>
+                    </div>
+                </div>`;
+            }
+
+            // Sprawdzanie, czy istnieje połącznie w bazie
+            let isPathPossible = false;
+            for (let fromMap in globalGateways) {
+                if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) {
+                    isPathPossible = true; break;
+                }
+            }
+
+            const gatewayIndicator = isPathPossible ? "<span style='color:#4caf50;' title='Zapisano przejście w bazie'>[🚪✔]</span>" : "<span style='color:#777;' title='Brak powiązań do tej mapy!'>[➕🚪]</span>";
+            const isActive = (window.currentRouteIndex === index);
+            const isChecked = window.checkedMapsThisSession && window.checkedMapsThisSession.has(mapName);
+            
+            const activeClass = isActive ? "active-route" : "";
+            const checkClass = isChecked ? "checked" : "";
+            const nameColor = isActive ? "#00acc1" : "#d4af37";
+
+            return `
+            <div class="list-item ${activeClass} ${checkClass}">
+                <div class="map-name-wrap">
+                    <span class="btn-del-map" onclick="window.removeMapFromOrder(${index})">✖</span>
+                    <span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="window.setManualRouteIndex(${index}, '${mapName.replace(/'/g, "\\'")}')">
+                        ${index + 1}. ${gatewayIndicator} ${mapName}
+                    </span>
+                </div>
+                <div class="buttons-wrapper">
+                    <input type="number" class="order-input" value="${index + 1}" onchange="window.changeMapOrder(${index}, this.value)">
+                    <button class="icon-btn" onclick="window.openInlineEditor('${mapName.replace(/'/g, "\\'")}')">🚪</button>
+                </div>
+            </div>`;
+        }).join('');
+        
+    } catch (e) {
+        console.error("[HERO] Błąd renderowania listy map:", e);
+    }
+};
+
+// Wymuś solidne załadowanie widoku sekundę po starcie skryptu
+setTimeout(() => {
+    window.renderMapOrderList();
+}, 1000);
 })(); // Koniec kodu (IIFE)
