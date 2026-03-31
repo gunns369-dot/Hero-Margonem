@@ -3609,126 +3609,63 @@ function scanCurrentMapForGateways() {
 
 
 
-  function optimizeRoute() {
-
-        if (!Engine || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
-
-
+function optimizeRoute() {
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-
         let unvisited = [...currentCordsList];
-
         let newRoute = [];
-
         let finalPoint = null;
 
-
-
-        let hero = document.getElementById('selHero').value;
-
+        let hero = document.getElementById('selHero') ? document.getElementById('selHero').value : null;
         let currentSysMap = lastMapName;
-
         let exitGw = null;
 
-
-
-        // Poszukiwanie bramy prowadzącej do następnej mapy
-
+        // Szukamy bramy wyjściowej, aby ostatni punkt respu na liście był tuż obok niej
+        // (TYLKO OBLICZENIA, BEZ RUCHU POSTACI!)
         if (hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0 && currentRouteIndex !== -1) {
-
             let mapList = heroMapOrder[hero];
-
             let nextMap = mapList[(currentRouteIndex + 1) % mapList.length];
-
             let path = getShortestPath(currentSysMap, nextMap);
 
-
-
-           if (path && path.length > 1) {
-                    let immediateNextMap = path[1];
-                    let tp = ZAKONNICY[currentSysMap];
-                    let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
-                    let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-                    let isTeleport = tp && (botSettings.unlockedTeleports[immediateNextMap] || isFakeDoor);
-
-                    if (isTeleport) {
-                        console.log(`%c[HERO] Używam teleportera w patrolu do [${immediateNextMap}]...`, "color: #9c27b0;");
-                        clearTimeout(smoothPatrolInterval);
-                        smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(immediateNextMap), 200);
-                        return;
-                    } else if(door) {
-                        let targetX = door.x; let targetY = door.y;
-                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
-                        safeGoTo(targetX, targetY, false);
-                        return;
-                    }
+            if (path && path.length > 1) {
+                let immediateNextMap = path[1];
+                if (globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap]) {
+                    exitGw = globalGateways[currentSysMap][immediateNextMap];
                 }
-
+            }
         }
 
-
-
-        // Jeśli mamy wyjście i więcej niż 1 punkt, ustalamy ostatni punkt przed drzwiami
-
+        // Jeśli mamy wyjście i więcej niż 1 punkt do sprawdzenia, ustalamy punkt najbliżej bramy jako OSTATNI
         if (exitGw && unvisited.length > 1) {
-
             let closestToExitIdx = 0;
-
             let minDistToExit = Infinity;
-
             for (let i = 0; i < unvisited.length; i++) {
-
                 let dist = Math.abs(unvisited[i][0] - exitGw.x) + Math.abs(unvisited[i][1] - exitGw.y);
-
                 if (dist < minDistToExit) {
-
                     minDistToExit = dist;
-
                     closestToExitIdx = i;
-
                 }
-
             }
-
             finalPoint = unvisited.splice(closestToExitIdx, 1)[0];
-
         }
 
-
-
-        // Standardowe zachłanne sortowanie z obecnego miejsca dla reszty punktów
-
+        // Standardowe zachłanne sortowanie z obecnego miejsca (najbliższy -> kolejny najbliższy)
         while (unvisited.length > 0) {
-
             let nearestIdx = 0; let minDist = Infinity;
-
             for (let i = 0; i < unvisited.length; i++) {
-
                 let dist = Math.abs(unvisited[i][0] - cx) + Math.abs(unvisited[i][1] - cy);
-
                 if (dist < minDist) { minDist = dist; nearestIdx = i; }
-
             }
-
             let nextPt = unvisited.splice(nearestIdx, 1)[0];
-
             newRoute.push(nextPt);
-
             cx = nextPt[0]; cy = nextPt[1];
-
         }
 
-
-
-        // Na koniec dodajemy "finalPoint" wyliczony obok drzwi
-
+        // Na koniec doklejamy punkt wyjściowy (ten przy bramie)
         if (finalPoint) newRoute.push(finalPoint);
 
-
-
         currentCordsList = newRoute;
-
     }
 
 
