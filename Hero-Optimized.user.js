@@ -1870,62 +1870,35 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
 
     // ==========================================
 
-    function getShortestPath(start, end) {
-
+   function getShortestPath(start, end) {
         if (start === end) return [start];
-
         let queue = [[start]]; let visited = new Set([start]);
-
         while (queue.length > 0) {
-
             let path = queue.shift(); let node = path[path.length - 1];
 
-
-
             // 1. Logika standardowych przejść
-
             if (globalGateways[node]) {
-
                 for (let neighbor in globalGateways[node]) {
-
+                    if (neighbor === node) continue; // NAPRAWA: Ignoruj przejścia na tę samą mapę!
                     if (!visited.has(neighbor)) {
-
                         visited.add(neighbor); let newPath = [...path, neighbor];
-
                         if (neighbor === end) return newPath;
-
                         queue.push(newPath);
-
                     }
-
                 }
-
             }
-
             // 2. Wirtualne ścieżki przez teleporty Zakonników
-
             if (botSettings.useTeleports && ZAKONNICY[node]) {
-
                 for (let tpMap in botSettings.unlockedTeleports) {
-
                     if (botSettings.unlockedTeleports[tpMap] && !visited.has(tpMap) && tpMap !== node) {
-
                         visited.add(tpMap); let newPath = [...path, tpMap];
-
                         if (tpMap === end) return newPath;
-
                         queue.push(newPath);
-
                     }
-
                 }
-
             }
-
         }
-
         return null;
-
     }
 
 
@@ -4096,6 +4069,9 @@ function runExpLogic() {
         if (!window.isExping) return;
         if (typeof Engine === 'undefined' || !Engine.hero || Engine.map.isLoading) return;
 
+        let minL = botSettings.exp.minLvl || 1;
+        let maxL = botSettings.exp.maxLvl || 500;
+
         // --- AUTOMATYCZNY ZAKRES LEVELOWY ---
         if (Engine.hero.d && Engine.hero.d.lvl) {
             let currentLvl = Engine.hero.d.lvl;
@@ -4103,8 +4079,8 @@ function runExpLogic() {
                 window.lastHeroExpLevel = currentLvl;
             } else if (currentLvl > window.lastHeroExpLevel) {
                 let diff = currentLvl - window.lastHeroExpLevel;
-                botSettings.exp.minLvl += diff;
-                botSettings.exp.maxLvl += diff;
+                botSettings.exp.minLvl = minL + diff;
+                botSettings.exp.maxLvl = maxL + diff;
                 saveSettings();
 
                 let minInp = document.getElementById('expMinL');
@@ -4114,15 +4090,14 @@ function runExpLogic() {
 
                 window.logExp(`[AWANS!] Zaktualizowano przedział na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}.`, "#ffb300");
                 window.lastHeroExpLevel = currentLvl;
-                if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true);
             }
         }
 
         let now = Date.now();
 
-        // Przerywamy akcje jeśli trwa walka
+        // Przerywamy akcje, jeśli trwa walka
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
-            expLastActionTime = now + 500;
+            expLastActionTime = now + 600;
             expCurrentTargetId = null;
             return;
         }
@@ -4140,16 +4115,17 @@ function runExpLogic() {
 
         // --- ZARZĄDZANIE BERSERKIEM W ZALEŻNOŚCI OD MAPY ---
         if (botSettings.berserk.userEnabled) {
+            let chk = document.getElementById('berserkEnabled');
             if (isExpMap && !botSettings.berserk.enabled) {
                 botSettings.berserk.enabled = true;
-                document.getElementById('berserkEnabled').checked = true;
+                if (chk) chk.checked = true;
                 window.updateServerBerserk();
-                window.logExp("Wkroczono na expowisko. Aktywacja Berserka!", "#4caf50");
+                window.logExp("Wkroczono na expowisko. Włączam Berserka!", "#4caf50");
             } else if (!isExpMap && botSettings.berserk.enabled) {
                 botSettings.berserk.enabled = false;
-                document.getElementById('berserkEnabled').checked = false;
+                if (chk) chk.checked = false;
                 window.updateServerBerserk();
-                window.logExp("Podróż poza expowiskiem. Dezaktywacja Berserka!", "#ff9800");
+                window.logExp("Opuszczono expowisko. Wyłączam Berserka!", "#ff9800");
             }
         }
 
@@ -4175,7 +4151,7 @@ function runExpLogic() {
             expAntiLagTime = now + getAntiLagDelay(); 
         } else if (now > expAntiLagTime) {
             if (isOnGateway(hx, hy)) {
-                window.logExp(`Stoję na przejściu! Odbiegam kawałek...`, "#ff9800");
+                window.logExp(`Zacięcie na przejściu! Odbiegam...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
                 Engine.hero.autoGoTo({x: stepX, y: stepY});
@@ -4187,12 +4163,10 @@ function runExpLogic() {
             }
 
             if (expCurrentTargetId) {
-                window.logExp(`Zawieszenie w drodze do potwora. Resetuję cel!`, "#f44336");
+                window.logExp(`Zacięcie w drodze do potwora. Resetuję cel.`, "#f44336");
                 expCurrentTargetId = null;
-                expAntiLagTime = now + getAntiLagDelay();
-            } else {
-                expAntiLagTime = now + getAntiLagDelay();
             }
+            expAntiLagTime = now + getAntiLagDelay();
         }
 
         // --- OCENA AKTUALNEGO CELU ---
@@ -4217,57 +4191,63 @@ function runExpLogic() {
         if (isExpMap) {
             for (let id in npcs) {
                 let n = npcs[id].d || npcs[id];
-                if ((n.type === 2 || n.type === 3) && !n.dead) {
-                    let lvl = parseInt(n.lvl) || 0;
-                    if (lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
+                // Odpadają NPC (typ 4) i martwe obiekty
+                if (n.type === 4 || n.dead) continue; 
+                
+                let lvl = parseInt(n.lvl) || 0;
+                if (lvl < minL || lvl > maxL) continue; // Filtr levela
 
-                    let wt = parseInt(n.wt) || 0;
-                    if (wt === 0 && !botSettings.exp.normal) continue;
-                    if (wt === 1 && !botSettings.exp.elite) continue;
-                    if (wt >= 2) continue;
+                let wt = parseInt(n.wt) || 0;
+                if (wt === 0 && !botSettings.exp.normal) continue;
+                if (wt === 1 && !botSettings.exp.elite) continue;
+                if (wt > 1) continue; // Ignoruje bossy, herosów itp. na zwykłym expie
 
-                    let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
-                    if (dist < closestDist) {
-                        closestDist = dist;
-                        closestTx = n.x;
-                        closestTy = n.y;
-                        closestId = id;
-                        closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim() : "Potwór";
-                    }
+                let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestTx = n.x;
+                    closestTy = n.y;
+                    closestId = id;
+                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim() : "Potwór";
                 }
             }
         }
 
         // --- DECYZJA LOGICZNA: WALKA CZY PODRÓŻ ---
         if (closestId && closestDist <= 999) {
-            // Walczymy
+            // Decyzja o zaatakowaniu/podejściu
             if (!expCurrentTargetId || closestDist < currentTargetDist) {
                 if (expCurrentTargetId !== closestId) {
                     expCurrentTargetId = closestId;
                     let m_lvl = npcs[closestId].d ? npcs[closestId].d.lvl : npcs[closestId].lvl;
-                    window.logExp(`Namierzono: ${closestName} (${m_lvl} lvl) [Kratek: ${closestDist}]`, "#00e5ff");
+                    window.logExp(`Atakuję: ${closestName} (${m_lvl} lvl)`, "#00e5ff");
                     Engine.hero.autoGoTo({x: closestTx, y: closestTy});
-                    expLastActionTime = now + 800; 
+                    expLastActionTime = now + 600; 
                     return;
                 }
             }
 
+            // Atak bezpośredni, gdy jesteśmy obok (zabezpieczenie)
             if (expCurrentTargetId && currentTargetDist <= 1) {
-                if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(expCurrentTargetId);
-                expLastActionTime = now + 1500; 
+                if (typeof window._g === 'function') {
+                    window._g(`fight&a=attack&id=${expCurrentTargetId}`);
+                } else if (typeof Engine.npcs.interact === 'function') {
+                    Engine.npcs.interact(expCurrentTargetId);
+                }
+                expLastActionTime = now + 1200; 
                 return;
             }
 
-            return; // Bot idzie do celu, dajmy mu czas
+            return; // Dajmy botowi dojść do celu
         } else {
-            // Wyczyściliśmy mapę LUB jesteśmy poza expowiskiem - czas na podróż
+            // BRAK POTWORÓW LUB JESTEŚMY POZA EXPOWISKIEM -> IDZIEMY DALEJ
             if (now < expMapTransitionCooldown) return;
             expCurrentTargetId = null;
 
             let targetExpMap = null;
 
             if (!isExpMap) {
-                // Skrót - idziemy do najbliższej mapy z expowiska
+                // Szybki skrót - znajdź najbliższą mapę należącą do expowiska
                 let shortestLen = Infinity;
                 for (let m of maps) {
                     let p = getShortestPath(currMap, m);
@@ -4277,11 +4257,10 @@ function runExpLogic() {
                     }
                 }
             } else {
-                // Wyczyszczono mapę z expowiska
+                // Wybito wszystko na tej mapie. Odhacz i idź do najdawniej odwiedzonej
                 window.mapClearTimes[currMap] = Date.now();
-                window.logExp(`Wybito wszystko na mapie: ${currMap}.`, "#a99a75");
+                window.logExp(`Wybito mapę: ${currMap}. Idę dalej...`, "#a99a75");
                 
-                // Szukamy "najstarszej" sprawdzanej mapy z naszej listy
                 let oldestMap = maps[0];
                 let oldestTime = window.mapClearTimes[oldestMap] || 0;
                 for (let i = 1; i < maps.length; i++) {
@@ -4294,16 +4273,16 @@ function runExpLogic() {
                 targetExpMap = oldestMap;
             }
 
-            // Zapobieganie pętli czekania
+            // Blokada błędów / braku map
             if (!targetExpMap || targetExpMap === currMap) {
                 if (now - expMapTransitionCooldown > 3000) {
-                    window.logExp("Wszystkie mapy czyste lub problem z drogą. Czekam...", "#777");
+                    window.logExp("Wszystkie mapy czyste. Oczekuję na resp...", "#777");
                     expMapTransitionCooldown = now + 3000;
                 }
                 return;
             }
 
-            // Realizujemy ruch do wyliczonej mapy
+            // Realizujemy ruch w stronę wyliczonej mapy
             let path = getShortestPath(currMap, targetExpMap);
             if (path && path.length > 1) {
                 let nextStepMap = path[1];
@@ -4328,15 +4307,15 @@ function runExpLogic() {
                         Engine.hero.autoGoTo({x: targetX, y: targetY});
                     }
                     expAntiLagTime = now + getAntiLagDelay();
-                    expMapTransitionCooldown = now + 2000;
+                    expMapTransitionCooldown = now + 1500;
                     expLastActionTime = now + 1000;
                 } else {
-                    window.logExp(`Brak zapisanej bramy do: ${nextStepMap}! Podejdź ręcznie i nagraj (🎥)`, "#e53935");
-                    document.getElementById('btnStartExp').click(); // Zatrzymanie bota
+                    window.logExp(`Brak bramy z ${currMap} do ${nextStepMap}! Nagraj ją ręcznie.`, "#e53935");
+                    document.getElementById('btnStartExp').click(); // Wyłącz bota, by go nie zapętlić
                 }
             } else {
-                window.logExp(`Brak znanej drogi do: ${targetExpMap}! Nagraj trasę 🎥.`, "#e53935");
-                document.getElementById('btnStartExp').click(); // Zatrzymanie bota
+                window.logExp(`Brak połączonej drogi do: ${targetExpMap}! Nagraj trasę 🎥.`, "#e53935");
+                document.getElementById('btnStartExp').click(); // Wyłącz bota, by go nie zapętlić
             }
         }
     }
