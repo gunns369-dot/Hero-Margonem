@@ -2901,12 +2901,11 @@ function setupLogic() {
             const teleportsContainer = document.getElementById('teleportsContainer');
             const radarControlsWrapper = document.getElementById('radarControlsWrapper');
 
-            if (heroContainer) heroContainer.style.display = tab === 'hero' ? 'flex' : 'none';
-            if (e2Container) e2Container.style.display = tab === 'e2' ? 'flex' : 'none';
-            if (kolosyContainer) kolosyContainer.style.display = tab === 'kolosy' ? 'flex' : 'none';
-            if (expContainer) expContainer.style.display = tab === 'exp' ? 'flex' : 'none';
-            if (teleportsContainer) teleportsContainer.style.display = tab === 'teleports' ? 'flex' : 'none';
-            if (radarControlsWrapper) radarControlsWrapper.style.display = tab === 'hero' ? 'block' : 'none';
+          if (heroContainer) heroContainer.style.display = tab === 'hero' ? 'flex' : 'none';
+if (e2Container) e2Container.style.display = tab === 'e2' ? 'flex' : 'none';
+if (kolosyContainer) kolosyContainer.style.display = tab === 'kolosy' ? 'flex' : 'none';
+if (expContainer) expContainer.style.display = tab === 'exp' ? 'flex' : 'none';
+if (teleportsContainer) teleportsContainer.style.display = tab === 'teleports' ? 'flex' : 'none';
 
             activeBossTarget = null;
 
@@ -3087,56 +3086,6 @@ function setupLogic() {
     if (typeof renderRecommendedExpMaps === 'function') renderRecommendedExpMaps();
 }
     
-       // EXP - PRZYCISK START / STOP
-
-        if (btnExp) {
-
-            btnExp.addEventListener('click', function() {
-
-                window.isExping = !window.isExping;
-
-
-
-                if (window.isExping) {
-
-                    this.innerHTML = "⏹ STOP";
-
-                    this.style.borderColor = "#f44336";
-
-                    this.style.color = "#f44336";
-
-                    if(typeof window.logExp === 'function') window.logExp("Uruchomiono tryb automatyczny!", "#4caf50");
-
-                } else {
-
-                    this.innerHTML = "▶ START";
-
-                    this.style.borderColor = "#4caf50";
-
-                    this.style.color = "#4caf50";
-
-                    if(typeof window.logExp === 'function') window.logExp("Zatrzymano tryb automatyczny.", "#f44336");
-
-                }
-
-            });
-
-        }
-
-
-
-        // ZAPISYWANIE USTAWIEŃ EXP I REAGOWANIE NA ZMIANY
-
-        document.getElementById('expMinL').onchange = (e) => { botSettings.exp.minLvl = parseInt(e.target.value) || 1; saveSettings(); if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true); };
-
-        document.getElementById('expMaxL').onchange = (e) => { botSettings.exp.maxLvl = parseInt(e.target.value) || 300; saveSettings(); if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true); };
-
-        document.getElementById('expRange').onchange = (e) => { botSettings.exp.berserk = parseInt(e.target.value) || 20; saveSettings(); };
-
-        document.getElementById('expN').onchange = (e) => { botSettings.exp.normal = e.target.checked; saveSettings(); };
-
-        document.getElementById('expE').onchange = (e) => { botSettings.exp.elite = e.target.checked; saveSettings(); };
-
 
 // Inicjalizacja braku zmiennej, jeśli to pierwszy start z nową aktualizacją
         if (!botSettings.berserk) {
