@@ -4227,9 +4227,19 @@ function runExpLogic() {
     const hx = hero.x;
     const hy = hero.y;
 
-    // ŹRÓDŁO NPC — DZIAŁAJĄCA WERSJA ZE STAREGO SKRYPTU
-    const npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
-    if (!npcs) return;
+   // --- PATCH: UNIWERSALNE POBIERANIE LISTY NPC (NI + SI) ---
+    let npcArray = [];
+    if (typeof Engine.npcs.getList === 'function') {
+        npcArray = Engine.npcs.getList();
+    } else if (typeof Engine.npcs.getDrawableList === 'function') {
+        npcArray = Engine.npcs.getDrawableList();
+    } else {
+        let rawNpcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
+        if (rawNpcs) {
+            for (let k in rawNpcs) npcArray.push(rawNpcs[k]);
+        }
+    }
+    if (!npcArray || npcArray.length === 0) return;
 
     // ANTY-LAG
     if (hx !== expLastX || hy !== expLastY) {
@@ -4246,15 +4256,17 @@ function runExpLogic() {
     }
 
     // 1. JEŚLI MAMY CEL, TO GO KOŃCZYMY
-    if (expCurrentTargetId && npcs[expCurrentTargetId]) {
+    let currentTargetObj = npcArray.find(npc => (npc.d ? npc.d.id : npc.id) == expCurrentTargetId);
+    if (expCurrentTargetId && currentTargetObj) {
         if (now > expAntiLagTime) {
             expCurrentTargetId = null;
             expLastActionTime = now + 400;
             return;
         }
 
-        const n = npcs[expCurrentTargetId].d || npcs[expCurrentTargetId];
-        if (!n.dead && !n.del) {
+        const n = currentTargetObj.d || currentTargetObj;
+        // Zabezpieczenie NI: st === 1 (martwy), st === 2 (w walce z innym graczem)
+        if (!n.dead && !n.del && n.st !== 1) {
             const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
 
             if (dist > 1) {
@@ -4278,7 +4290,7 @@ function runExpLogic() {
         expCurrentTargetId = null;
     }
 
-    // 2. ZNAJDŹ NAJBLIŻSZEGO POTWORA — STARA, SPRAWDZONA LOGIKA
+    // 2. ZNAJDŹ NAJBLIŻSZEGO POTWORA — NOWA LOGIKA
     let closestDist = 999;
     let closestTx = -1;
     let closestTy = -1;
@@ -4286,26 +4298,30 @@ function runExpLogic() {
     let closestId = null;
 
     if (isExpMap) {
-        for (let id in npcs) {
-            const npcObj = npcs[id];
+        for (let i = 0; i < npcArray.length; i++) {
+            const npcObj = npcArray[i];
             const n = npcObj.d || npcObj;
             if (!n) continue;
 
-            if ((n.type === 2 || n.type === 3) && !n.dead && !n.del && !npcObj.del) {
+            // Odrzucamy martwe, usunięte i będące w innej walce (st === 2)
+            if ((n.type === 2 || n.type === 3) && !n.dead && !n.del && !npcObj.del && n.st !== 1 && n.st !== 2) {
+                
                 const lvl = parseInt(n.lvl, 10) || 0;
+                if (lvl === 0) continue; // Odfiltrowuje zwykłych NPC i handlarzy (oni nie mają lvl)
                 if (lvl < minL || lvl > maxL) continue;
 
                 const wt = parseInt(n.wt, 10) || 0;
                 if (wt === 0 && !wantNormal) continue;
                 if (wt === 1 && !wantElite) continue;
-                if (wt >= 2) continue;
+                if (wt >= 2) continue; // Ignoruje E2/Herosów przy expieniu
 
                 const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
                 if (dist < closestDist) {
                     closestDist = dist;
                     closestTx = n.x;
                     closestTy = n.y;
-                    closestId = id;
+                    // POPRAWKA KRYTYCZNA: Pobieramy prawdziwe ID potwora z właściwości obiektu!
+                    closestId = n.id || npcObj.id; 
                     closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : (n.name || "Potwór");
                 }
             }
@@ -4325,7 +4341,7 @@ function runExpLogic() {
             Engine.hero.autoGoTo({ x: closestTx, y: closestTy });
             expLastActionTime = now + 400;
         } else {
-            window.logExp(`Osiągnięto cel: ${closestName}`, "#00e676");
+            window.logExp(`Atakuję: ${closestName}`, "#00e676");
             Engine.hero.autoGoTo({ x: closestTx, y: closestTy });
 
             if (!botSettings.exp.useAggro) {
