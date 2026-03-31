@@ -2344,7 +2344,7 @@ window.handleTeleportNPC = function(targetMap) {
 
 
 const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
-        mainGui.innerHTML = `
+       mainGui.innerHTML = `
             <div class="gui-header">
                 <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.3</div>
                 <div class="header-buttons">
@@ -2356,81 +2356,42 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                 </div>
             </div>
 
-
-
            <div class="tabs-wrapper">
-
                 <div id="heroModeToggle" class="nav-tab active-tab">🐲 HEROSI</div>
-
                 <div id="e2ModeToggle" class="nav-tab">💀 ELITY II</div>
-
                 <div id="kolosyModeToggle" class="nav-tab">👹 KOLOSY</div>
-
                 <div id="expModeToggle" class="nav-tab">⚔️ EXP</div>
-
-                <div id="expProfilesModeToggle" class="nav-tab">🔖 BAZA</div>
-
                 <div id="teleportsModeToggle" class="nav-tab">🚀 TELEPORTY</div>
-
             </div>
 
-
-
             <div class="gui-content" id="mainRoutingPanel">
-
                 <div id="radarControlsWrapper">
-
                     <div class="nav-row" style="background: rgba(183, 28, 28, 0.2); padding:5px; border-radius:2px; border:1px solid #8e0000;">
-
                         <label style="color: #ff5252; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkRadar" ${botSettings.radarEnabled ? 'checked' : ''}> Wykrywacz (Radar)</label>
-
                     </div>
-
                     <div class="nav-row" style="display: none; background: rgba(76, 175, 80, 0.1); padding:5px; border-radius:2px; border:1px solid #4caf50; margin-top:2px;">
-
                         <label style="color: #4caf50; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkAutoAttack" ${botSettings.autoAttack ? 'checked' : ''}> Auto-atak</label>
-
                     </div>
-
                 </div>
-
-
 
                 <div class="location-wrapper" style="margin-top: 8px;">
-
                     <span class="location-label">Stoisz na:</span>
-
                     <span id="currentMapNameDisplay">Ładowanie...</span>
-
                 </div>
 
-
-
                 <div id="heroContainer" style="display:flex; flex-direction:column; flex-grow:1;">
-
                     <div class="nav-row"><label>Szukany Heros:</label><select id="selHero" style="flex-grow: 1;"><option value="">-- Wybierz --</option></select></div>
-
                     <div class="nav-row" style="display: flex; flex-direction: column; flex-grow: 1;">
-
                         <label style="color:#00acc1;">Kolejność Przechodzenia Map:</label>
-
                         <div id="heroMapListContainer"><div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div></div>
-
                         <div id="inlineTransitEditor" style="display:none; padding:8px; border:1px solid #00acc1; background:rgba(0, 172, 193, 0.1); margin-top:5px; border-radius:2px;">
-
                             <label style="color:#00acc1; font-weight:bold; margin-bottom:4px; display:block;">Dodaj Przejście:</label>
-
                             <input type="text" id="newTransitMapName" placeholder="Nazwa mapy docelowej..." style="margin-bottom:4px;">
-
                             <input type="number" id="newTransitPos" placeholder="Pozycja na liście (puste = na koniec)" style="margin-bottom:6px;">
-
                             <div style="display:flex; gap:4px; margin-bottom:6px;"><input type="number" id="newTransitX" placeholder="X" style="width:40px;"><input type="number" id="newTransitY" placeholder="Y" style="width:40px;"><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('newTransitX').value = Engine.hero.d.x; document.getElementById('newTransitY').value = Engine.hero.d.y;">📍 Stąd</button></div>
-
                             <div style="display:flex; gap:4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveNewTransit()">ZAPISZ MAPĘ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="document.getElementById('inlineTransitEditor').style.display='none'">✖</button></div>
-
                         </div>
-
-                       <div style="display:flex; gap:5px; margin-top:5px;">
+                        <div style="display:flex; gap:5px; margin-top:5px;">
                             <button id="btnAutoRoute" class="btn btn-go-sepia" style="flex-grow:1;" onclick="openAutoRouteModal()">🪄 KREATOR TRASY</button>
                             <button id="btnResetRoute" class="btn btn-sepia" style="background:#8e0000; width: auto;" title="Zresetuj pętlę i przywróć z bazy">🔁 ZRESETUJ BAZĘ</button>
                         </div>
@@ -2456,29 +2417,29 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <div id="kolosyListContainer"></div>
                 </div>
 
-               <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
+                <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
                     <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 250px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
                         <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
                     </div>
 
-                  <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
-    ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
-</div>
-<div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
-    <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
-        <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj Berserka
-    </label>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE1" ${botSettings.berserk?.e1 ? 'checked' : ''}> Elity I</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE2" ${botSettings.berserk?.e2 ? 'checked' : ''}> Elity II</label>
-        <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkHero" ${botSettings.berserk?.hero ? 'checked' : ''}> Herosi / Tytani</label>
-    </div>
-    <div style="display:flex; justify-content: space-between; gap: 5px;">
-        <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-        <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
-    </div>
-</div>
+                    <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
+                        ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
+                    </div>
+                    <div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
+                        <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
+                            <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj Berserka
+                        </label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-left: 5px; margin-bottom: 8px;">
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkCommon" ${botSettings.berserk?.common ? 'checked' : ''}> Zwykłe potwory</label>
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE1" ${botSettings.berserk?.e1 ? 'checked' : ''}> Elity I</label>
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkE2" ${botSettings.berserk?.e2 ? 'checked' : ''}> Elity II</label>
+                            <label style="color:#e0d8c0; font-size:10px; cursor: pointer;"><input type="checkbox" id="berserkHero" ${botSettings.berserk?.hero ? 'checked' : ''}> Herosi / Tytani</label>
+                        </div>
+                        <div style="display:flex; justify-content: space-between; gap: 5px;">
+                            <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+                            <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+                        </div>
+                    </div>
 
                     <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                     <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:0;">
@@ -2490,18 +2451,14 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
                         <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                     </div>
-                    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Kolejność map na expowisku (Smart-Roam):</label>
+                    <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map (Smart-Roam): <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
                     <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
-                    <div style="display:flex; gap:4px;">
-                        <button class="btn-sepia" style="flex:1; padding:4px;" onclick="addCurrentMapToExp()" title="Dodaje tylko obecną mapę">➕ TĄ MAPĘ</button>
-                        <button class="btn-sepia" style="flex:1; padding:4px; background:#00838f;" onclick="addNeighborsToExp()" title="Skanuje bramy i dodaje wszystkie sąsiadujące mapy!">🪄 SĄSIADÓW</button>
-                        <button class="btn-sepia" style="background:#8e0000; width:50px; padding:4px;" onclick="clearExpMaps()">CZYŚĆ</button>
+                    
+                    <div style="display:flex; gap:4px; margin-top:2px;">
+                        <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
+                        <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
                     </div>
-                   <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
-                </div>
-               <div id="expProfilesContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
-                    <label style="color:#a99a75; font-size:11px; margin-top:2px;">Zapisane Expowiska (Baza gry):</label>
-                    <div id="expProfilesList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; padding:2px;"></div>
+                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
 
                 <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
@@ -2511,13 +2468,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
                     <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;"></div>
                 </div>
-
-                </div>
-
-                </div>
-
             </div>
-
         `;
 
         document.body.appendChild(mainGui);
@@ -2637,7 +2588,39 @@ const goToGui = document.createElement('div');
         document.body.appendChild(goToGui);
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
+const expBaseGui = document.createElement('div');
+        expBaseGui.id = 'heroExpBaseGUI';
+        expBaseGui.className = 'hero-window';
+        expBaseGui.style.display = 'none';
+        expBaseGui.style.top = '60px'; 
+        expBaseGui.style.left = '400px'; 
+        expBaseGui.style.width = '320px'; 
+        expBaseGui.style.maxHeight = '560px';
+        expBaseGui.innerHTML = `
+            <div class="gui-header">🔖 Baza Expowisk <button class="btn-close" onclick="document.getElementById('heroExpBaseGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
+                <div id="expProfilesList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; padding:2px;"></div>
+            </div>
+        `;
+        document.body.appendChild(expBaseGui);
 
+        const expRecGui = document.createElement('div');
+        expRecGui.id = 'heroExpRecGUI';
+        expRecGui.className = 'hero-window';
+        expRecGui.style.display = 'none';
+        expRecGui.style.top = '60px'; 
+        expRecGui.style.left = '400px'; 
+        expRecGui.style.width = '320px'; 
+        expRecGui.style.maxHeight = '560px';
+        expRecGui.innerHTML = `
+            <div class="gui-header">⭐ Polecane Expowiska <button class="btn-close" onclick="document.getElementById('heroExpRecGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
+                <div style="font-size:10px; color:#a99a75; margin-bottom:5px;">Wybrane dla Twojego poziomu (od -5 do +15):</div>
+                <div id="expRecList" style="flex:1; border:1px solid #3a3020; background:#141414; overflow-y:auto; padding:4px; display:flex; flex-direction:column; gap:4px;"></div>
+                <button id="btnAddSelectedRec" class="btn btn-go-sepia" style="margin-top:5px; padding:6px; font-weight:bold; color:#4caf50;">➕ DODAJ ZAZNACZONE DO TRASY</button>
+            </div>
+        `;
+        document.body.appendChild(expRecGui);
 
         setupModals(); setupMultiDrag(); setupGearDrag(); setupLogic();
 
@@ -2729,7 +2712,7 @@ const goToGui = document.createElement('div');
 
         // ZAKŁADKI (TABS)
 
-       const tabs = ['hero', 'e2', 'kolosy', 'exp', 'expProfiles', 'teleports'];
+       const tabs = ['hero', 'e2', 'kolosy', 'exp', 'teleports'];
 
         tabs.forEach(tab => {
 
@@ -4870,5 +4853,103 @@ window.clearExpMaps = () => {
             `;
         }
     };
+// --- NOWA LOGIKA BAZY I POLECANYCH EXPOWISK ---
+    document.getElementById('btnOpenExpBase').addEventListener('click', () => {
+        let p = document.getElementById('heroExpBaseGUI');
+        p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+        if(p.style.display === 'flex') {
+            if(typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
+        }
+    });
 
+    document.getElementById('btnOpenRecommendedExp').addEventListener('click', () => {
+        let p = document.getElementById('heroExpRecGUI');
+        p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+        if(p.style.display === 'flex') {
+            window.renderRecommendedExp();
+        }
+    });
+
+    window.renderRecommendedExp = function() {
+        let c = document.getElementById('expRecList');
+        if(!c) return;
+        
+        let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
+        let minTarget = playerLvl - 5;
+        let maxTarget = playerLvl + 15;
+
+        let html = '';
+        botSettings.expProfiles.forEach((p, index) => {
+            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+            if(lvlMatch && lvlMatch[1]) {
+                let baseLvl = parseInt(lvlMatch[1]);
+                if(baseLvl >= minTarget && baseLvl <= maxTarget) {
+                    html += `
+                        <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px;">
+                            <input type="checkbox" class="chk-rec-profile" data-index="${index}" style="margin-top:2px;">
+                            <div style="display:flex; flex-direction:column;">
+                                <b style="color:#00acc1;">${p.name}</b>
+                                <span style="color:#888; font-size:9px;">Mapy: ${p.maps.join(', ')}</span>
+                            </div>
+                        </label>
+                    `;
+                }
+            }
+        });
+
+        if(html === '') {
+            c.innerHTML = '<div style="text-align:center; color:#777; padding:10px; font-size:10px;">Brak gotowych expowisk w bazie dla Twojego przedziału poziomowego.</div>';
+        } else {
+            c.innerHTML = html;
+        }
+    };
+
+    document.getElementById('btnAddSelectedRec').addEventListener('click', () => {
+        let checkboxes = document.querySelectorAll('.chk-rec-profile:checked');
+        if(checkboxes.length === 0) return heroAlert("Nie zaznaczono żadnego expowiska!");
+
+        let addedCount = 0;
+        let minL = 9999;
+        let maxL = 0;
+
+        checkboxes.forEach(chk => {
+            let idx = parseInt(chk.getAttribute('data-index'));
+            let p = botSettings.expProfiles[idx];
+            if(p) {
+                p.maps.forEach(m => {
+                    if (!botSettings.exp.mapOrder.includes(m)) {
+                        botSettings.exp.mapOrder.push(m);
+                        addedCount++;
+                    }
+                });
+
+                // Szukanie poziomu, żeby ustawić nowy limit expa
+                let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+                if(lvlMatch && lvlMatch[1]) {
+                    let baseLvl = parseInt(lvlMatch[1]);
+                    minL = Math.min(minL, Math.max(1, baseLvl - 5));
+                    maxL = Math.max(maxL, baseLvl + 15);
+                }
+            }
+        });
+
+        if(addedCount > 0) {
+            localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+            
+            if(minL !== 9999) {
+                botSettings.exp.minLvl = Math.min(botSettings.exp.minLvl, minL);
+                botSettings.exp.maxLvl = Math.max(botSettings.exp.maxLvl, maxL);
+                document.getElementById('expMinL').value = botSettings.exp.minLvl;
+                document.getElementById('expMaxL').value = botSettings.exp.maxLvl;
+                saveSettings();
+                if(botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
+            }
+
+            if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            heroAlert(`✅ Pomyślnie połączono i dodano ${addedCount} nowych map do trasy!\nZaktualizowano również przedział poziomowy.`);
+            document.getElementById('heroExpRecGUI').style.display = 'none';
+        } else {
+            heroAlert("Wybrane mapy są już na Twojej liście Smart-Roam.");
+        }
+    });
 })(); // Koniec kodu
