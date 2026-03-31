@@ -4227,34 +4227,32 @@ function runExpLogic() {
     const hx = hero.x;
     const hy = hero.y;
 
-  // --- ŁATKA V2: KULOODPORNE POBIERANIE NPC ---
+// --- ŁATKA V3: KULOODPORNE POBIERANIE I FILTROWANIE MOBÓW ---
     let safeNpcs = [];
-    let rawNpcs = (typeof Engine !== 'undefined' && Engine.npcs) ? ((typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d) : null;
-    
-    if (rawNpcs) {
-        if (Array.isArray(rawNpcs) || typeof rawNpcs.forEach === 'function') {
-            // Jeśli gra zwróciła to jako tablicę (niektóre wersje NI)
-            let arr = Array.isArray(rawNpcs) ? rawNpcs : Array.from(rawNpcs);
-            for(let i=0; i<arr.length; i++) {
+    if (typeof Engine !== 'undefined' && Engine.npcs) {
+        // Metoda NI: Pobiera fizycznie renderowane obiekty na ekranie (omija błędy API)
+        if (typeof Engine.npcs.getDrawableList === 'function') {
+            let arr = Engine.npcs.getDrawableList();
+            for (let i = 0; i < arr.length; i++) {
                 let data = arr[i].d || arr[i];
-                let realId = data.id || arr[i].id;
-                if (realId) safeNpcs.push({ id: realId, data: data });
+                if (data) safeNpcs.push({ id: arr[i].id || data.id, data: data });
             }
         } else {
-            // Jeśli gra zwróciła to jako obiekt/słownik (Standard SI oraz większość NI)
-            for (let key in rawNpcs) {
-                if (!rawNpcs.hasOwnProperty(key)) continue;
-                let data = rawNpcs[key].d || rawNpcs[key];
-                // Kluczowy moment: pobieramy ID z danych LUB przypisujemy mu klucz słownika
-                let realId = data.id || rawNpcs[key].id || key;
-                if (realId) safeNpcs.push({ id: realId, data: data });
+            // Metoda SI: Standardowe sprawdzanie
+            let rawNpcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
+            if (rawNpcs) {
+                for (let key in rawNpcs) {
+                    if (!rawNpcs.hasOwnProperty(key)) continue;
+                    let data = rawNpcs[key].d || rawNpcs[key];
+                    if (data) safeNpcs.push({ id: rawNpcs[key].id || data.id || key, data: data });
+                }
             }
         }
     }
 
     if (safeNpcs.length === 0) return;
 
-    // ANTY-LAG
+    // ANTY-LAG RUCHU
     if (hx !== expLastX || hy !== expLastY) {
         expLastX = hx;
         expLastY = hy;
@@ -4268,30 +4266,29 @@ function runExpLogic() {
         return;
     }
 
-    // 1. JEŚLI MAMY CEL, TO GO KOŃCZYMY
+    // 1. DOKOŃCZ OBECNY CEL (JEŚLI ISTNIEJE I JEST DOSTĘPNY)
     let currentTarget = safeNpcs.find(npc => npc.id == expCurrentTargetId);
     if (expCurrentTargetId && currentTarget) {
         if (now > expAntiLagTime) {
+            window.logExp(`Ignoruję potwora (Zablokowany punkt). Szukam dalej!`, "#f44336");
             expCurrentTargetId = null;
-            expLastActionTime = now + 400;
+            expLastActionTime = now + 500;
             return;
         }
 
         const n = currentTarget.data;
-        // Omijamy martwe i zajęte walką z innymi graczami (st === 2)
+        // Weryfikacja: nie martwy (st:1), nie w walce gracza (st:2)
         if (!n.dead && !n.del && n.st !== 1 && n.st !== 2) {
             const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
 
             if (dist > 1) {
-                return; // W drodze
+                return; // Bot biegnie, pozwalamy mu
             } else {
-                Engine.hero.autoGoTo({ x: n.x, y: n.y });
-
+                Engine.hero.autoGoTo({ x: n.x, y: n.y }); // Patrzymy w stronę moba
                 if (!botSettings.exp.useAggro) {
                     if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(parseInt(expCurrentTargetId, 10));
                     else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${expCurrentTargetId}`);
                 }
-
                 expLastActionTime = now + 800;
                 expNoMobScans = 0;
                 return;
@@ -4303,7 +4300,7 @@ function runExpLogic() {
         expCurrentTargetId = null;
     }
 
-    // 2. ZNAJDŹ NAJBLIŻSZEGO POTWORA
+    // 2. SZUKAJ NAJBLIŻSZEGO POTWORA
     let closestDist = 999;
     let closestTx = -1, closestTy = -1;
     let closestName = "";
@@ -4313,30 +4310,32 @@ function runExpLogic() {
         for (let i = 0; i < safeNpcs.length; i++) {
             const n = safeNpcs[i].data;
             
-            // Filtry potworów
-            if ((n.type === 2 || n.type === 3) && !n.dead && !n.del && n.st !== 1 && n.st !== 2) {
-                const lvl = parseInt(n.lvl, 10) || 0;
-                if (lvl === 0) continue; // Odrzucamy NPC bez poziomu
-                if (lvl < minL || lvl > maxL) continue;
+            // Omijamy usunięte, martwe (st:1), w walce (st:2), graczy (type:4) i elementy mapy (type:0)
+            if (n.dead || n.del || n.st === 1 || n.st === 2 || n.type === 4 || n.type === 0) continue;
 
-                const wt = parseInt(n.wt, 10) || 0;
-                if (wt === 0 && !wantNormal) continue;
-                if (wt === 1 && !wantElite) continue;
-                if (wt >= 2) continue; // Odrzucamy herosów przy auto-expie
+            const lvl = parseInt(n.lvl, 10) || 0;
+            if (lvl === 0) continue; // Jeśli nie ma levelu = handlarz/Zakonnik, pomiń.
+            if (lvl < minL || lvl > maxL) continue; // Pomiń potwory spoza naszego zasięgu (zakładka EXP)
 
-                const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestTx = n.x;
-                    closestTy = n.y;
-                    closestId = safeNpcs[i].id; // Korzystamy z twardego ID zapisanego w naszym bezpiecznym ekstraktorze
-                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : (n.name || "Potwór");
-                }
+            const wt = parseInt(n.wt, 10) || 0;
+            if (wt === 0 && !wantNormal) continue; // Filtruj zwykłe
+            if (wt === 1 && !wantElite) continue;  // Filtruj elity 1
+            if (wt >= 2) continue; // Ignoruj Herosów i E2 przy expieniu!
+
+            const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestTx = n.x;
+                closestTy = n.y;
+                closestId = safeNpcs[i].id;
+                closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : (n.name || "Potwór");
             }
         }
     }
 
-    // 3. MOB MA PIERWSZEŃSTWO
+    // 3. ATAKUJ ZNALEZIONY CEL
+    let displayTarget = document.getElementById('expTargetDisplay');
+    
     if (closestId && closestDist <= 999) {
         expCurrentTargetId = closestId;
         expAntiLagTime = now + getAntiLagDelay();
@@ -4345,11 +4344,11 @@ function runExpLogic() {
         expNoMobScans = 0;
 
         if (closestDist > 1) {
-            window.logExp(`Podchodzę do: ${closestName} (${closestDist}m)`, "#00e5ff");
+            if (displayTarget) displayTarget.innerText = `Biegnę do: ${closestName}`;
             Engine.hero.autoGoTo({ x: closestTx, y: closestTy });
             expLastActionTime = now + 400;
         } else {
-            window.logExp(`Atakuję: ${closestName}`, "#00e676");
+            if (displayTarget) displayTarget.innerText = `Atakuję: ${closestName}`;
             Engine.hero.autoGoTo({ x: closestTx, y: closestTy });
 
             if (!botSettings.exp.useAggro) {
