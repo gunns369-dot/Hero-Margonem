@@ -2724,53 +2724,30 @@ const teleportsGui = document.createElement('div');
 
     function setupLogic() {
 
-        // ZAKŁADKI (TABS)
-
+     // ZAKŁADKI (TABS) - POPRAWIONE BEZPIECZNE PRZEŁĄCZANIE
        const tabs = ['hero', 'e2', 'kolosy', 'exp', 'teleports'];
+       tabs.forEach(tab => {
+           let toggle = document.getElementById(tab + 'ModeToggle');
+           if(toggle) {
+               toggle.addEventListener('click', function() {
+                   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active-tab'));
+                   this.classList.add('active-tab');
+                   
+                   // Bezpieczne sprawdzanie czy kontener istnieje przed jego pokazaniem
+                   let heroC = document.getElementById('heroContainer'); if(heroC) heroC.style.display = tab === 'hero' ? 'flex' : 'none';
+                   let e2C = document.getElementById('e2Container'); if(e2C) e2C.style.display = tab === 'e2' ? 'flex' : 'none';
+                   let kolosyC = document.getElementById('kolosyContainer'); if(kolosyC) kolosyC.style.display = tab === 'kolosy' ? 'flex' : 'none';
+                   let expC = document.getElementById('expContainer'); if(expC) expC.style.display = tab === 'exp' ? 'flex' : 'none';
+                   let tpC = document.getElementById('teleportsContainer'); if(tpC) tpC.style.display = tab === 'teleports' ? 'flex' : 'none';
+                   
+                   // Radar widoczny TYLKO w zakładce Herosi
+                   let radarW = document.getElementById('radarControlsWrapper'); if(radarW) radarW.style.display = (tab === 'hero') ? 'block' : 'none';
 
-        tabs.forEach(tab => {
-
-            let toggle = document.getElementById(tab + 'ModeToggle');
-
-            if(toggle) {
-
-                toggle.addEventListener('click', function() {
-
-                    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active-tab'));
-
-                    this.classList.add('active-tab');
-
-                    document.getElementById('heroContainer').style.display = tab === 'hero' ? 'flex' : 'none';
-
-                    document.getElementById('e2Container').style.display = tab === 'e2' ? 'flex' : 'none';
-
-                    document.getElementById('kolosyContainer').style.display = tab === 'kolosy' ? 'flex' : 'none';
-
-                    document.getElementById('expContainer').style.display = tab === 'exp' ? 'flex' : 'none';
-
-                    document.getElementById('expProfilesContainer').style.display = tab === 'expProfiles' ? 'flex' : 'none';
-
-                    document.getElementById('teleportsContainer').style.display = tab === 'teleports' ? 'flex' : 'none';
-
-                    if (tab === 'teleports') renderTeleportOptions();
-
-                    // Radar i Auto-Atak widoczne TYLKO w zakładce Herosi
-
-                    document.getElementById('radarControlsWrapper').style.display = (tab === 'hero') ? 'block' : 'none';
-
-
-
-                    activeBossTarget = null;
-
-                    if(tab === 'exp' && typeof renderExpMaps === 'function') renderExpMaps();
-
-                    if(tab === 'expProfiles' && typeof renderExpProfiles === 'function') renderExpProfiles();
-
-                });
-
-            }
-
-        });
+                   activeBossTarget = null;
+                   if(tab === 'exp' && typeof renderExpMaps === 'function') renderExpMaps();
+               });
+           }
+       });
 
 
 
