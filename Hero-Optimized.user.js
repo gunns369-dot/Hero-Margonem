@@ -918,7 +918,7 @@ let opacityValue = 0.95;
 
     function checkVisionRange() {
 
-        if (typeof Engine === 'undefined' || !isPatrolling || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
+        if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d || currentCordsList.length === 0) return;
 
 
 
@@ -968,14 +968,8 @@ let opacityValue = 0.95;
 
     // ==========================================
 
-  const bootloader = setInterval(() => {
-    if (
-        typeof Engine !== 'undefined' &&
-        Engine.hero &&
-        Engine.hero.d &&
-        Engine.map &&
-        Engine.map.d
-    ) {
+   const bootloader = setInterval(() => {
+        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.map && Engine.map.d && Engine.map.d.id) {
             clearInterval(bootloader);
             loadData();
             cleanOldGateways();
@@ -1000,24 +994,32 @@ let opacityValue = 0.95;
 
 
 
-   function loadData() {
-    let s1 = localStorage.getItem('hero_settings_db_v64') || localStorage.getItem('hero_settings_db_v61');
-    if (s1) {
-        let parsed = JSON.parse(s1);
-        if (parsed.waitMin === undefined) { parsed.waitMin = 200; parsed.waitMax = 500; }
-        if (parsed.autoAttack === undefined) { parsed.autoAttack = false; }
-        delete parsed.combatKey;
-        botSettings = {...botSettings, ...parsed};
+    function loadData() {
+
+        let s1 = localStorage.getItem('hero_settings_db_v64') || localStorage.getItem('hero_settings_db_v61');
+
+        if (s1) {
+
+            let parsed = JSON.parse(s1);
+
+            if (parsed.waitMin === undefined) { parsed.waitMin = 200; parsed.waitMax = 500; }
+
+            if (parsed.autoAttack === undefined) { parsed.autoAttack = false; }
+
+            // Usuwamy combatKey ze starych zapisów
+
+            delete parsed.combatKey;
+
+            botSettings = {...botSettings, ...parsed};
+
+        }
+
+        let s2 = localStorage.getItem('hero_global_gateways_v20'); if (s2) globalGateways = JSON.parse(s2);
+
+        let s3 = localStorage.getItem('hero_map_order_v20'); if (s3) heroMapOrder = JSON.parse(s3);
+
     }
 
-    let s2 = localStorage.getItem('hero_global_gateways_v20');
-    if (s2) globalGateways = JSON.parse(s2);
-
-    let s3 = localStorage.getItem('hero_map_order_v20');
-    if (s3) heroMapOrder = JSON.parse(s3);
-
-    rebuildMissingHeroRoutes(false);
-}
 
 
     function saveSettings() { localStorage.setItem('hero_settings_db_v64', JSON.stringify(botSettings)); }
@@ -1025,44 +1027,7 @@ let opacityValue = 0.95;
     function saveGateways() { localStorage.setItem('hero_global_gateways_v20', JSON.stringify(globalGateways)); }
 
     function saveMapOrder() { localStorage.setItem('hero_map_order_v20', JSON.stringify(heroMapOrder)); }
-function rebuildMissingHeroRoutes(forceAll = false) {
-    let changed = false;
 
-    for (const hero in heroData) {
-        const defaultRoute = Object.keys(heroData[hero] || {});
-        if (defaultRoute.length === 0) continue;
-
-        const savedRoute = heroMapOrder[hero];
-
-        // Jeśli wymuszamy pełny reset albo trasa nie istnieje / jest pusta
-        if (
-            forceAll ||
-            !Array.isArray(savedRoute) ||
-            savedRoute.length === 0
-        ) {
-            heroMapOrder[hero] = [...defaultRoute];
-            changed = true;
-            continue;
-        }
-
-        // Naprawa częściowo uszkodzonej trasy:
-        // 1) usuwamy mapy, których nie ma już w heroData
-        // 2) dokładamy brakujące mapy z bazy domyślnej
-        const validSaved = savedRoute.filter(mapName => defaultRoute.includes(mapName));
-        const missing = defaultRoute.filter(mapName => !validSaved.includes(mapName));
-        const repaired = [...validSaved, ...missing];
-
-        if (
-            repaired.length !== savedRoute.length ||
-            repaired.some((m, i) => m !== savedRoute[i])
-        ) {
-            heroMapOrder[hero] = repaired;
-            changed = true;
-        }
-    }
-
-    if (changed) saveMapOrder();
-}
 
 
     function updateUI() {
@@ -1524,7 +1489,7 @@ let attackInterval = null;
 
     window.toggleBossCoordPicker = function(bossName) {
 
-        if (typeof Engine === 'undefined' || !Engine.map) return;
+        if (!Engine || !Engine.map) return;
 
         activeBossTarget = bossName;
 
@@ -1564,7 +1529,7 @@ let attackInterval = null;
 
         let container = document.getElementById(containerId);
 
-        if (typeof Engine === 'undefined' || !container || !Engine.hero) return;
+        if (!container || !Engine || !Engine.hero) return;
 
 
 
