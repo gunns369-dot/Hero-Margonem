@@ -4143,88 +4143,7 @@ function getNearestStepToMob(hero, target) {
 
     return spots[0];
 }
-    function expCollectMobCandidates() {
-    const raw = [];
-
-    // Źródło 1: check()/d
-    try {
-        const npcsA = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
-        if (npcsA) {
-            for (const id in npcsA) {
-                raw.push({ id, src: npcsA[id] });
-            }
-        }
-    } catch (e) {}
-
-    // Źródło 2: drawable list
-    try {
-        const arr = (typeof Engine.npcs.getDrawableList === 'function') ? Engine.npcs.getDrawableList() : [];
-        if (arr && arr.length) {
-            for (const el of arr) {
-                raw.push({ id: (el && (el.id || (el.d && el.d.id))) || null, src: el });
-            }
-        }
-    } catch (e) {}
-
-    const uniq = new Map();
-
-    for (const item of raw) {
-        const n = item && item.src ? (item.src.d || item.src) : null;
-        if (!n) continue;
-
-        const x = Number(n.x);
-        const y = Number(n.y);
-        const lvl = parseInt(n.lvl, 10);
-        const name = (n.nick || n.name || "").replace(/<[^>]*>?/gm, '').trim();
-
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        if (!name) continue;
-        if (!Number.isFinite(lvl) || lvl <= 0) continue;
-        if (n.dead || n.del || (item.src && item.src.del)) continue;
-
-        // Klucz unikalny po pozycji + nazwie + lvl
-        const key = `${name}|${lvl}|${x}|${y}`;
-
-        // type: jeśli istnieje i wskazuje nie-moba, odrzuć
-        if (n.type === 0 || n.type === 1 || n.type === 4) continue;
-
-        uniq.set(key, {
-            id: item.id != null ? parseInt(item.id, 10) : (n.id != null ? parseInt(n.id, 10) : null),
-            x,
-            y,
-            lvl,
-            wt: parseInt(n.wt, 10) || 0,
-            type: n.type,
-            name
-        });
-    }
-
-    return Array.from(uniq.values());
-}
-
-function expFindBestMob(hero, minL, maxL, wantNormal, wantElite) {
-    const mobs = expCollectMobCandidates()
-        .filter(m => m.lvl >= minL && m.lvl <= maxL)
-        .filter(m => {
-            if (m.wt === 0 && !wantNormal) return false;
-            if (m.wt === 1 && !wantElite) return false;
-            if (m.wt >= 2) return false; // bez herosów/kolosów
-            return true;
-        })
-        .map(m => ({
-            ...m,
-            chebyshev: Math.max(Math.abs(hero.x - m.x), Math.abs(hero.y - m.y)),
-            manhattan: Math.abs(hero.x - m.x) + Math.abs(hero.y - m.y)
-        }))
-        .sort((a, b) => {
-            if (a.chebyshev !== b.chebyshev) return a.chebyshev - b.chebyshev;
-            if (a.manhattan !== b.manhattan) return a.manhattan - b.manhattan;
-            if (a.lvl !== b.lvl) return a.lvl - b.lvl;
-            return (a.id || 0) - (b.id || 0);
-        });
-
-    return mobs.length ? mobs[0] : null;
-}
+   
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading) return;
@@ -4238,7 +4157,7 @@ function runExpLogic() {
 
     const isExpMap = maps.includes(currMap);
 
-    // walka ma zawsze priorytet
+    // WALKA MA PIERWSZEŃSTWO
     if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
         expLastActionTime = now + 500;
         expCurrentTargetId = null;
@@ -4248,7 +4167,7 @@ function runExpLogic() {
 
     if (now < expLastActionTime) return;
 
-    // auto-level
+    // AUTO-LEVEL
     let minL = parseInt(botSettings.exp.minLvl, 10) || 1;
     let maxL = parseInt(botSettings.exp.maxLvl, 10) || 500;
 
@@ -4283,7 +4202,7 @@ function runExpLogic() {
         }
     }
 
-    // berserk
+    // BERSERK
     if (botSettings.berserk && botSettings.berserk.userEnabled) {
         const chk = document.getElementById('berserkEnabled');
         if (isExpMap && !botSettings.berserk.enabled) {
@@ -4305,11 +4224,14 @@ function runExpLogic() {
         return Math.floor(Math.random() * (maxLag - minLag + 1)) + minLag;
     };
 
-    const npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
     const hx = hero.x;
     const hy = hero.y;
 
-    // anty-lag tylko gdy nie ścigamy aktywnie celu
+    // ŹRÓDŁO NPC — DZIAŁAJĄCA WERSJA ZE STAREGO SKRYPTU
+    const npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
+    if (!npcs) return;
+
+    // ANTY-LAG
     if (hx !== expLastX || hy !== expLastY) {
         expLastX = hx;
         expLastY = hy;
@@ -4323,63 +4245,100 @@ function runExpLogic() {
         return;
     }
 
-    // 1. jeżeli mamy target i nadal istnieje, kończymy go
-    if (expCurrentTargetId && npcs && npcs[expCurrentTargetId]) {
-        const npcObj = npcs[expCurrentTargetId];
-        const n = npcObj.d || npcObj;
-
-        if (n && !n.dead && !n.del) {
-            const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
-
-            if (dist > 1) {
-                if (now > expAntiLagTime) {
-                    expCurrentTargetId = null;
-                    expLastActionTime = now + 300;
-                }
-                return;
-            }
-
-            if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(parseInt(expCurrentTargetId, 10));
-            else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${expCurrentTargetId}`);
-
-            expLastActionTime = now + 900;
-            expNoMobScans = 0;
+    // 1. JEŚLI MAMY CEL, TO GO KOŃCZYMY
+    if (expCurrentTargetId && npcs[expCurrentTargetId]) {
+        if (now > expAntiLagTime) {
+            expCurrentTargetId = null;
+            expLastActionTime = now + 400;
             return;
         }
 
-        expCurrentTargetId = null;
+        const n = npcs[expCurrentTargetId].d || npcs[expCurrentTargetId];
+        if (!n.dead && !n.del) {
+            const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+
+            if (dist > 1) {
+                return;
+            } else {
+                Engine.hero.autoGoTo({ x: n.x, y: n.y });
+
+                if (!botSettings.exp.useAggro) {
+                    if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(parseInt(expCurrentTargetId, 10));
+                    else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${expCurrentTargetId}`);
+                }
+
+                expLastActionTime = now + 800;
+                expNoMobScans = 0;
+                return;
+            }
+        } else {
+            expCurrentTargetId = null;
+        }
     } else {
         expCurrentTargetId = null;
     }
 
-    // 2. hybrydowy skaner mobów
-    let target = null;
+    // 2. ZNAJDŹ NAJBLIŻSZEGO POTWORA — STARA, SPRAWDZONA LOGIKA
+    let closestDist = 999;
+    let closestTx = -1;
+    let closestTy = -1;
+    let closestName = "";
+    let closestId = null;
+
     if (isExpMap) {
-        target = expFindBestMob(hero, minL, maxL, wantNormal, wantElite);
+        for (let id in npcs) {
+            const npcObj = npcs[id];
+            const n = npcObj.d || npcObj;
+            if (!n) continue;
+
+            if ((n.type === 2 || n.type === 3) && !n.dead && !n.del && !npcObj.del) {
+                const lvl = parseInt(n.lvl, 10) || 0;
+                if (lvl < minL || lvl > maxL) continue;
+
+                const wt = parseInt(n.wt, 10) || 0;
+                if (wt === 0 && !wantNormal) continue;
+                if (wt === 1 && !wantElite) continue;
+                if (wt >= 2) continue;
+
+                const dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestTx = n.x;
+                    closestTy = n.y;
+                    closestId = id;
+                    closestName = n.nick ? n.nick.replace(/<[^>]*>?/gm, '') : (n.name || "Potwór");
+                }
+            }
+        }
     }
 
-    if (target) {
-        expCurrentTargetId = target.id;
-        expLastTargetMap = currMap;
-        expLastTargetPos = { x: target.x, y: target.y };
-        expNoMobScans = 0;
+    // 3. MOB MA PIERWSZEŃSTWO
+    if (closestId && closestDist <= 999) {
+        expCurrentTargetId = closestId;
         expAntiLagTime = now + getAntiLagDelay();
+        expLastTargetMap = currMap;
+        expLastTargetPos = { x: closestTx, y: closestTy };
+        expNoMobScans = 0;
 
-        if (target.chebyshev <= 1) {
-            if (target.id != null && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
-            else if (target.id != null && typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
+        if (closestDist > 1) {
+            window.logExp(`Podchodzę do: ${closestName} (${closestDist}m)`, "#00e5ff");
+            Engine.hero.autoGoTo({ x: closestTx, y: closestTy });
+            expLastActionTime = now + 400;
+        } else {
+            window.logExp(`Osiągnięto cel: ${closestName}`, "#00e676");
+            Engine.hero.autoGoTo({ x: closestTx, y: closestTy });
 
-            expLastActionTime = now + 900;
-            return;
+            if (!botSettings.exp.useAggro) {
+                if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(parseInt(closestId, 10));
+                else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${closestId}`);
+            }
+
+            expLastActionTime = now + 800;
         }
-
-        Engine.hero.autoGoTo({ x: target.x, y: target.y });
-        window.logExp(`Podchodzę do: ${target.name} (${target.lvl})`, "#00e5ff");
-        expLastActionTime = now + 450;
         return;
     }
 
-    // 3. brak mobów — licz kilka pustych skanów zanim ruszysz do przejścia
+    // 4. BRAK MOBÓW — ALE NIE UCIEKAJ OD RAZU
     expNoMobScans++;
 
     if (expLastTargetMap === currMap && expNoMobScans < 8) {
@@ -4392,17 +4351,11 @@ function runExpLogic() {
         return;
     }
 
-    // potrzebujemy kilku pustych skanów zanim uznamy mapę za czystą
-    if (expNoMobScans < 5) {
-        expLastActionTime = now + 120;
-        return;
-    }
-
     if (now < expMapTransitionCooldown) return;
 
     expCurrentTargetId = null;
 
-    // 4. smart roam — wybierz najdawniej czyszczoną mapę
+    // 5. SMART-ROAM — Z WERSJI NOWEJ
     if (maps.includes(currMap)) {
         window.mapClearTimes[currMap] = now;
     }
