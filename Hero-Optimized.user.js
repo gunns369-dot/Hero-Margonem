@@ -4143,6 +4143,88 @@ function getNearestStepToMob(hero, target) {
 
     return spots[0];
 }
+    function expCollectMobCandidates() {
+    const raw = [];
+
+    // Źródło 1: check()/d
+    try {
+        const npcsA = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
+        if (npcsA) {
+            for (const id in npcsA) {
+                raw.push({ id, src: npcsA[id] });
+            }
+        }
+    } catch (e) {}
+
+    // Źródło 2: drawable list
+    try {
+        const arr = (typeof Engine.npcs.getDrawableList === 'function') ? Engine.npcs.getDrawableList() : [];
+        if (arr && arr.length) {
+            for (const el of arr) {
+                raw.push({ id: (el && (el.id || (el.d && el.d.id))) || null, src: el });
+            }
+        }
+    } catch (e) {}
+
+    const uniq = new Map();
+
+    for (const item of raw) {
+        const n = item && item.src ? (item.src.d || item.src) : null;
+        if (!n) continue;
+
+        const x = Number(n.x);
+        const y = Number(n.y);
+        const lvl = parseInt(n.lvl, 10);
+        const name = (n.nick || n.name || "").replace(/<[^>]*>?/gm, '').trim();
+
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        if (!name) continue;
+        if (!Number.isFinite(lvl) || lvl <= 0) continue;
+        if (n.dead || n.del || (item.src && item.src.del)) continue;
+
+        // Klucz unikalny po pozycji + nazwie + lvl
+        const key = `${name}|${lvl}|${x}|${y}`;
+
+        // type: jeśli istnieje i wskazuje nie-moba, odrzuć
+        if (n.type === 0 || n.type === 1 || n.type === 4) continue;
+
+        uniq.set(key, {
+            id: item.id != null ? parseInt(item.id, 10) : (n.id != null ? parseInt(n.id, 10) : null),
+            x,
+            y,
+            lvl,
+            wt: parseInt(n.wt, 10) || 0,
+            type: n.type,
+            name
+        });
+    }
+
+    return Array.from(uniq.values());
+}
+
+function expFindBestMob(hero, minL, maxL, wantNormal, wantElite) {
+    const mobs = expCollectMobCandidates()
+        .filter(m => m.lvl >= minL && m.lvl <= maxL)
+        .filter(m => {
+            if (m.wt === 0 && !wantNormal) return false;
+            if (m.wt === 1 && !wantElite) return false;
+            if (m.wt >= 2) return false; // bez herosów/kolosów
+            return true;
+        })
+        .map(m => ({
+            ...m,
+            chebyshev: Math.max(Math.abs(hero.x - m.x), Math.abs(hero.y - m.y)),
+            manhattan: Math.abs(hero.x - m.x) + Math.abs(hero.y - m.y)
+        }))
+        .sort((a, b) => {
+            if (a.chebyshev !== b.chebyshev) return a.chebyshev - b.chebyshev;
+            if (a.manhattan !== b.manhattan) return a.manhattan - b.manhattan;
+            if (a.lvl !== b.lvl) return a.lvl - b.lvl;
+            return (a.id || 0) - (b.id || 0);
+        });
+
+    return mobs.length ? mobs[0] : null;
+}
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading) return;
@@ -4224,8 +4306,6 @@ function runExpLogic() {
     };
 
     const npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
-    if (!npcs) return;
-
     const hx = hero.x;
     const hy = hero.y;
 
@@ -4243,8 +4323,8 @@ function runExpLogic() {
         return;
     }
 
-    // 1. jeśli mamy obecny cel, kończymy go
-    if (expCurrentTargetId && npcs[expCurrentTargetId]) {
+    // 1. jeżeli mamy target i nadal istnieje, kończymy go
+    if (expCurrentTargetId && npcs && npcs[expCurrentTargetId]) {
         const npcObj = npcs[expCurrentTargetId];
         const n = npcObj.d || npcObj;
 
@@ -4272,53 +4352,13 @@ function runExpLogic() {
         expCurrentTargetId = null;
     }
 
-    // 2. szukamy najlepszego potwora tylko na mapie expa
-    let candidates = [];
-
+    // 2. hybrydowy skaner mobów
+    let target = null;
     if (isExpMap) {
-        for (let id in npcs) {
-            const npcObj = npcs[id];
-            const n = npcObj.d || npcObj;
-            if (!n) continue;
-
-            if (!(n.type === 2 || n.type === 3)) continue;
-            if (n.dead || n.del || npcObj.del) continue;
-
-            const lvl = parseInt(n.lvl, 10) || 0;
-            if (lvl < minL || lvl > maxL) continue;
-
-            const wt = parseInt(n.wt, 10) || 0;
-            if (wt === 0 && !wantNormal) continue;
-            if (wt === 1 && !wantElite) continue;
-            if (wt >= 2) continue;
-
-            const chebyshev = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
-            const manhattan = Math.abs(n.x - hx) + Math.abs(n.y - hy);
-
-            candidates.push({
-                id: parseInt(id, 10),
-                x: n.x,
-                y: n.y,
-                lvl,
-                wt,
-                name: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').trim(),
-                chebyshev,
-                manhattan
-            });
-        }
+        target = expFindBestMob(hero, minL, maxL, wantNormal, wantElite);
     }
 
-    // sortowanie: najpierw realnie najbliższy, potem niższy lvl, potem stabilność
-    candidates.sort((a, b) => {
-        if (a.chebyshev !== b.chebyshev) return a.chebyshev - b.chebyshev;
-        if (a.manhattan !== b.manhattan) return a.manhattan - b.manhattan;
-        if (a.lvl !== b.lvl) return a.lvl - b.lvl;
-        return a.id - b.id;
-    });
-
-    if (candidates.length > 0) {
-        const target = candidates[0];
-
+    if (target) {
         expCurrentTargetId = target.id;
         expLastTargetMap = currMap;
         expLastTargetPos = { x: target.x, y: target.y };
@@ -4326,24 +4366,29 @@ function runExpLogic() {
         expAntiLagTime = now + getAntiLagDelay();
 
         if (target.chebyshev <= 1) {
-            if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
-            else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
+            if (target.id != null && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
+            else if (target.id != null && typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
 
             expLastActionTime = now + 900;
             return;
         }
 
         Engine.hero.autoGoTo({ x: target.x, y: target.y });
+        window.logExp(`Podchodzę do: ${target.name} (${target.lvl})`, "#00e5ff");
         expLastActionTime = now + 450;
         return;
     }
 
-    // 3. brak mobów: NIE zmieniaj mapy od razu
+    // 3. brak mobów — licz kilka pustych skanów zanim ruszysz do przejścia
     expNoMobScans++;
 
-    // jeśli przed chwilą był target na tej mapie, daj mu czas
-    if (expLastTargetMap === currMap && expNoMobScans < 6) {
+    if (expLastTargetMap === currMap && expNoMobScans < 8) {
         expLastActionTime = now + 150;
+        return;
+    }
+
+    if (expNoMobScans < 6) {
+        expLastActionTime = now + 120;
         return;
     }
 
