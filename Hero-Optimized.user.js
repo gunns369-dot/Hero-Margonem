@@ -5179,7 +5179,8 @@ window.clearExpMaps = () => {
             c.innerHTML = html;
         }
     };
-let btnOpenTp = document.getElementById('btnOpenTeleports');
+
+    let btnOpenTp = document.getElementById('btnOpenTeleports');
     if (btnOpenTp) {
         btnOpenTp.addEventListener('click', () => {
             let p = document.getElementById('heroTeleportsGUI');
@@ -5189,69 +5190,5 @@ let btnOpenTp = document.getElementById('btnOpenTeleports');
             }
         });
     }
-   
-            // Brak potworów na mapie - logika Smart-Roam (przechodzenie przez drzwi)
-            if (displayTarget) displayTarget.innerText = `Szukam przejścia...`;
-            
-            if (now < expMapTransitionCooldown) return;
-            
-            let maps = botSettings.exp.mapOrder;
-            let currMap = lastMapName;
-
-            if (maps && maps.length > 0) {
-                if (maps.includes(currMap)) window.mapClearTimes[currMap] = Date.now();
-
-                if (maps.length > 1) {
-                    let oldestMap = maps[0];
-                    let oldestTime = window.mapClearTimes[oldestMap] || 0;
-
-                    for (let i = 1; i < maps.length; i++) {
-                        let t = window.mapClearTimes[maps[i]] || 0;
-                        if (t < oldestTime) { oldestMap = maps[i]; oldestTime = t; }
-                    }
-
-                    if (oldestMap === currMap) {
-                        if (now - expMapTransitionCooldown > 3000) {
-                            window.logExp("Wszystkie mapy czyste. Czekam...", "#777");
-                            expMapTransitionCooldown = now + 3000;
-                        }
-                        return;
-                    }
-
-                    let path = getShortestPath(currMap, oldestMap);
-                    if (path && path.length > 1) {
-                        let nextStepMap = path[1];
-                        let door = globalGateways[currMap] && globalGateways[currentMap][nextStepMap];
-
-                        if (door) {
-                            window.logExp(`[Brak mobów] ➝ Zmieniam na: ${nextStepMap}`, "#ba68c8");
-                            let targetX = door.x; let targetY = door.y;
-                            if(door.allCoords && door.allCoords.length > 0) { 
-                                let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; 
-                                targetX = rnd[0]; targetY = rnd[1]; 
-                            }
-                            
-                            Engine.hero.autoGoTo({x: targetX, y: targetY});
-                            expMapTransitionCooldown = now + 2000;
-                            expLastActionTime = now + 500;
-                        } else {
-                            window.logExp(`Błąd! Nie połączyłeś przejść z ${currMap} do ${nextStepMap}!`, "#f44336");
-                            expMapTransitionCooldown = now + 5000;
-                        }
-                    } else {
-                        window.mapClearTimes[oldestMap] = Date.now();
-                        expMapTransitionCooldown = now + 2000;
-                    }
-                } else {
-                    if (now - expMapTransitionCooldown > 5000) {
-                        window.logExp("Wyczyszczono jedyną mapę. Czekam na respawn...", "#777");
-                        expMapTransitionCooldown = now + 5000;
-                    }
-                }
-            } else {
-                window.logExp("Lista map EXP jest pusta! Dodaj mapę by bot miał gdzie przejść.", "#ffb300");
-                stopPatrol(true);
-            }
-        }
 
 })(); // Koniec kodu
