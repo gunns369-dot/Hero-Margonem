@@ -4880,8 +4880,6 @@ window.renderMapOrderList = () => {
         }).join('');
     };
 
-    };
-
 // === TUTAJ WKLEJ NOWĄ FUNKCJĘ ===
 
     // Globalna funkcja do zapisu teleportów
