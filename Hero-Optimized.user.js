@@ -3295,52 +3295,36 @@ selHero.addEventListener('change', (e) => {
 
 
 
-            // --- NAPRAWA BŁĘDU "[Brak Kordów]" ---
-
+// --- NAPRAWA BŁĘDU "[Brak Kordów]" ORAZ "BIEGU PO NITCE" ---
             let finalMap = boss.path[boss.path.length-1];
-
             let savedInfo = `<span style="color:#777; font-size:9px;">[Brak Kordów]</span>`;
-
-            let rushArgs = `'${finalMap}'`;
-
             let targetX = null;
-
             let targetY = null;
-
-
-
+            
             // 1. Priorytet: Nowa Baza (właściwość "resp" z pliku bossy.json)
-
             if (boss.resp && boss.resp[finalMap] && boss.resp[finalMap].length > 0) {
-
                 targetX = boss.resp[finalMap][0][0];
-
                 targetY = boss.resp[finalMap][0][1];
-
                 savedInfo = `<span style="color:#4caf50; font-size:9px;">[Baza: ${finalMap} - X:${targetX}, Y:${targetY}]</span>`;
-
-                rushArgs = `'${finalMap}', ${targetX}, ${targetY}`;
-
             }
-
             // 2. Fallback: Jeśli zapisałeś coś sam w grze (w localStorage)
-
             else if (bossSavedCoords[boss.name]) {
-
                 targetX = bossSavedCoords[boss.name].x;
-
                 targetY = bossSavedCoords[boss.name].y;
-
-                finalMap = bossSavedCoords[boss.name].map; // Upewniamy się, że biegniemy tam, gdzie zapisał użytkownik
-
+                finalMap = bossSavedCoords[boss.name].map;
                 savedInfo = `<span style="color:#ffb300; font-size:9px;">[Zapisano: ${finalMap} - X:${targetX}, Y:${targetY}]</span>`;
-
-                rushArgs = `'${finalMap}', ${targetX}, ${targetY}`;
-
             }
-// Dodajemy pełną "nitkę" do argumentów biegu
-            rushArgs += `, ${JSON.stringify(boss.path)}`;
 
+            // GWARANCJA POPRAWNYCH ARGUMENTÓW DLA BIEGU
+            let safeMapName = finalMap.replace(/'/g, "\\'");
+            let rushArgs = `'${safeMapName}', ${targetX}, ${targetY}`;
+            
+            // Konwertujemy podwójne cudzysłowy z tablicy na bezpieczne HTML entity (&quot;), żeby nie zepsuć przycisku
+            let pathStr = JSON.stringify(boss.path).replace(/"/g, '&quot;');
+            rushArgs += `, ${pathStr}`;
+
+            const header = document.createElement('div');
+            // ... reszta kodu bez zmian ...
 
             const header = document.createElement('div');
 
