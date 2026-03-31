@@ -3621,8 +3621,7 @@ function optimizeRoute() {
         let currentSysMap = lastMapName;
         let exitGw = null;
 
-        // Szukamy bramy wyjściowej, aby ostatni punkt respu na liście był tuż obok niej
-        // (TYLKO OBLICZENIA, BEZ RUCHU POSTACI!)
+        // Poszukiwanie bramy prowadzącej do następnej mapy (TYLKO DO OBLICZEŃ, BEZ RUCHU!)
         if (hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0 && currentRouteIndex !== -1) {
             let mapList = heroMapOrder[hero];
             let nextMap = mapList[(currentRouteIndex + 1) % mapList.length];
@@ -3636,7 +3635,7 @@ function optimizeRoute() {
             }
         }
 
-        // Jeśli mamy wyjście i więcej niż 1 punkt do sprawdzenia, ustalamy punkt najbliżej bramy jako OSTATNI
+        // Jeśli mamy wyjście i więcej niż 1 punkt, ustalamy ostatni punkt przed drzwiami
         if (exitGw && unvisited.length > 1) {
             let closestToExitIdx = 0;
             let minDistToExit = Infinity;
@@ -3650,7 +3649,7 @@ function optimizeRoute() {
             finalPoint = unvisited.splice(closestToExitIdx, 1)[0];
         }
 
-        // Standardowe zachłanne sortowanie z obecnego miejsca (najbliższy -> kolejny najbliższy)
+        // Standardowe zachłanne sortowanie z obecnego miejsca dla reszty punktów
         while (unvisited.length > 0) {
             let nearestIdx = 0; let minDist = Infinity;
             for (let i = 0; i < unvisited.length; i++) {
@@ -3662,7 +3661,7 @@ function optimizeRoute() {
             cx = nextPt[0]; cy = nextPt[1];
         }
 
-        // Na koniec doklejamy punkt wyjściowy (ten przy bramie)
+        // Na koniec dodajemy "finalPoint" wyliczony obok drzwi
         if (finalPoint) newRoute.push(finalPoint);
 
         currentCordsList = newRoute;
