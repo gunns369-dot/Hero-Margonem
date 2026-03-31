@@ -4812,11 +4812,13 @@ window.clearExpMaps = () => {
 
         let currentMap = lastMapName;
         c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
+            let safeMapName = mapName.replace(/'/g, "\\'");
+
             if (editingGatewayFor === mapName) {
                 let defaultX = "", defaultY = "";
                 let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
                 if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
-                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="saveInlineGateway('${mapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="cancelInlineGateway()">✖</button></div></div></div>`;
+                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button></div></div></div>`;
             } else {
                 let isPathPossible = false;
                 for(let fromMap in globalGateways) { if(globalGateways[fromMap][mapName]) isPathPossible = true; }
@@ -4826,12 +4828,12 @@ window.clearExpMaps = () => {
                 let checkClass = checkedMapsThisSession.has(mapName) ? "checked" : "";
                 let nameColor = (currentRouteIndex === index) ? "#00acc1" : "#d4af37";
 
-                return `<div class="list-item ${activeClass} ${checkClass}"><div class="map-name-wrap"><span class="btn-del-map" onclick="removeMapFromOrder(${index})">✖</span><span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="setManualRouteIndex(${index}, '${mapName}')">${index + 1}. ${gatewayIndicator} ${mapName}</span></div><div class="buttons-wrapper"><input type="number" class="order-input" value="${index + 1}" onchange="changeMapOrder(${index}, this.value)" title="Zmień pozycję na liście (1-10)"><button class="icon-btn" onclick="openInlineEditor('${mapName}')" title="Edytuj kordy przejścia">🚪</button></div></div>`;
+                return `<div class="list-item ${activeClass} ${checkClass}"><div class="map-name-wrap"><span class="btn-del-map" onclick="window.removeMapFromOrder(${index})">✖</span><span class="map-name" style="color:${nameColor}; font-weight:bold;" onclick="window.setManualRouteIndex(${index}, '${safeMapName}')">${index + 1}. ${gatewayIndicator} ${mapName}</span></div><div class="buttons-wrapper"><input type="number" class="order-input" value="${index + 1}" onchange="window.changeMapOrder(${index}, this.value)" title="Zmień pozycję na liście (1-10)"><button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Edytuj kordy przejścia">🚪</button></div></div>`;
             }
         }).join('');
     };
 
- window.renderExpMaps = () => {
+    window.renderExpMaps = () => {
         let c = document.getElementById('expMapList'); if (!c) return;
         let currentMap = lastMapName;
         
@@ -4843,10 +4845,15 @@ window.clearExpMaps = () => {
                 if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
                 return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button></div></div></div>`;
             } else {
-                // Czyściutka lista, bez zbędnych ikonek [🚪✔] i [➕🚪]
+                // Czyściutka lista, bez ikonek [🚪✔] i [➕🚪]
                 return `<div class="list-item"><div class="map-name-wrap"><span class="btn-del-map" onclick="window.removeExpMap(${index})">✖</span><span class="map-name" style="color:#81c784; font-weight:bold;">${index + 1}. ${mapName}</span></div><div class="buttons-wrapper"><button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów (opcjonalne)">🚪</button></div></div>`;
             }
         }).join('');
+    };
+
+    window.toggleTeleportLock = function(city, isChecked) {
+        botSettings.unlockedTeleports[city] = isChecked;
+        saveSettings(); // To wymusi solidny zapis w głównym jądrze bota!
     };
 
     window.renderTeleportOptions = function() {
@@ -4863,7 +4870,5 @@ window.clearExpMaps = () => {
             `;
         }
     };
-
-} // <-- TEN NAWIAS ZAMYKA GŁÓWNĄ FUNKCJĘ setupLogic() I ZBAWI CAŁY KOD!
 
 })(); // Koniec kodu
