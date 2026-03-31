@@ -1749,11 +1749,12 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
 
         if (currentSysMap === targetMapName) {
             if (x !== null && y !== null) {
-                window.heroAlert(`Jesteś już na mapie: ${targetMapName}!\nPodchodzę pod koordynaty respu: [${x}, ${y}].`);
+                console.log("%c[HERO] Już stoisz na tej mapie! Podchodzę pod resp...", "color: #4caf50;");
                 safeGoTo(x, y, false);
-                return;
+            } else {
+                console.log("%c[HERO] Już stoisz na tej mapie!", "color: #4caf50;");
             }
-            return window.heroAlert(`Jesteś już na docelowej mapie: ${targetMapName}!`);
+            return;
         }
 
         stopPatrol(true);
@@ -1761,7 +1762,7 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
         rushTarget = targetMapName;
         rushTargetX = x;
         rushTargetY = y;
-        window.rushFullPath = fullPath || []; // Zapisujemy nitkę do pamięci
+        window.rushFullPath = (typeof fullPath === 'string') ? JSON.parse(fullPath) : (fullPath || []);
 
         let btn = document.getElementById('btnStartStop');
         if (btn) {
@@ -1770,7 +1771,7 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
             btn.style.borderColor = "#00acc1";
         }
 
-        console.log(`%c[HERO] 🏃 Rozpoczynam bieg na mapę: [${targetMapName}]`, "color: #00acc1; font-weight: bold;");
+        console.log(`%c[HERO] 🏃 Biegne na: [${targetMapName}]`, "color: #00acc1; font-weight: bold;");
         window.executeRushStep(); 
     };
 
@@ -1781,10 +1782,8 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
         if (currentSysMap === rushTarget) {
             stopPatrol(false);
             if (rushTargetX !== null && rushTargetY !== null) {
-                console.log("%c[HERO] Dotarto na mapę bosa! Podchodzę na zapisane koordynaty...", "color: #4caf50;");
+                console.log("%c[HERO] Osiągnięto cel! Podchodzę pod punkt...", "color: #4caf50;");
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
-            } else {
-                console.log("%c[HERO] Dotarto na wybraną mapę!", "color: #4caf50;");
             }
             return;
         }
@@ -1792,51 +1791,39 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
         let nextMap = null;
         let path = getShortestPath(currentSysMap, rushTarget);
 
-        // 1. Priorytet: Znamy bezpośrednią, najkrótszą drogę z bazy
         if (path && path.length > 1) {
-            nextMap = path[1];
-        } 
-        // 2. Jeśli nie znamy drogi, używamy nowej logiki "Po nitce" z bazy gry
-        else if (window.rushFullPath && window.rushFullPath.length > 0) {
+            nextMap = path[1]; // Radar zna bezpośrednią drogę
+        } else if (window.rushFullPath && window.rushFullPath.length > 0) {
+            // Nie znamy drogi - łapiemy się "nitki" z bazy
             let idx = window.rushFullPath.indexOf(currentSysMap);
-            
             if (idx !== -1 && idx < window.rushFullPath.length - 1) {
-                // Jesteśmy NA NITCE! Idziemy po prostu do kolejnej mapy z tablicy
                 nextMap = window.rushFullPath[idx + 1];
-                console.log(`%c[HERO] Idę po nitce... Następna mapa: ${nextMap}`, "color: #ff9800;");
             } else {
-                // Nie jesteśmy na nitce. Szukamy drogi do miasta docelowego (początku nitki)
                 let startMap = window.rushFullPath[0];
                 let pathToStart = getShortestPath(currentSysMap, startMap);
-                if (pathToStart && pathToStart.length > 1) {
-                    nextMap = pathToStart[1];
-                    console.log(`%c[HERO] Biegne na początek nitki (${startMap})... Kierunek: ${nextMap}`, "color: #ff9800;");
-                } else if (currentSysMap === startMap) {
-                     nextMap = window.rushFullPath[1]; // Jesteśmy na starcie, ładujemy mapę nr 2
-                }
+                if (pathToStart && pathToStart.length > 1) nextMap = pathToStart[1];
+                else if (currentSysMap === startMap && window.rushFullPath.length > 1) nextMap = window.rushFullPath[1];
             }
         }
 
         if (!nextMap) {
             stopPatrol(false);
-            window.heroAlert(`🚨 Zgubiłem się!\n\nStoisz na: [${currentSysMap}]\nCel: [${rushTarget}]\n\nBrak powiązania między obecną mapą, a początkiem trasy bosa.`);
+            console.log(`%c[HERO] Brak przejścia z ${currentSysMap} do ${rushTarget}. Użyj skanera by odblokować drogę!`, "color: #e53935;");
             return;
         }
 
-        window.rushNextMap = nextMap; // Zapamiętujemy dla zabezpieczenia anty-lag
-
+        window.rushNextMap = nextMap;
         let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
         let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
 
         if (isTeleportRoute) {
-            console.log(`%c[HERO] Bieg przez teleporter do: [${nextMap}]...`, "color: #9c27b0;");
             clearTimeout(rushInterval);
             rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
         } else if (door) {
             let targetX = door.x; let targetY = door.y;
-            if(door.allCoords && door.allCoords.length > 0) {
+            if (door.allCoords && door.allCoords.length > 0) {
                 let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
                 targetX = rnd[0]; targetY = rnd[1];
             }
@@ -1845,12 +1832,12 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
             rushInterval = setTimeout(window.checkRushArrival, 500);
         } else {
             stopPatrol(false);
-            window.heroAlert(`🚨 Ślepy Zaułek!\n\nJestem na mapie [${currentSysMap}].\nAlgorytm nakazał mi iść do [${nextMap}], ale skaner nie zdążył wyłapać tu takiego przejścia lub drzwi wymagają klucza!`);
+            console.log(`%c[HERO] Błąd! Bot chce wejść do [${nextMap}], ale skaner nie zapisał tam bramy. Podejdź do niej ręcznie!`, "color: #e53935;");
         }
     };
 
     window.checkRushArrival = function() {
-        if (!isRushing || !Engine || !Engine.hero) return;
+        if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
         let currentSysMap = lastMapName;
         if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
 
@@ -1860,23 +1847,17 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
         let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-        let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
-
-        if (isTeleportRoute) return;
-
+        if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
+        
         if (!door) return;
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-        let targetX = door.x; let targetY = door.y;
-        let dist = Math.abs(cx - targetX) + Math.abs(cy - targetY);
+        let dist = Math.abs(cx - door.x) + Math.abs(cy - door.y);
 
         if (dist > 1) {
             if (cx === lastX && cy === lastY) {
                 stuckCount++;
-                if(stuckCount > 6) {
-                    safeGoTo(targetX, targetY, false);
-                    stuckCount = 0;
-                }
+                if (stuckCount > 6) { safeGoTo(door.x, door.y, false); stuckCount = 0; }
             } else { stuckCount = 0; }
         }
         lastX = cx; lastY = cy;
@@ -3307,24 +3288,17 @@ selHero.addEventListener('change', (e) => {
                 targetY = boss.resp[finalMap][0][1];
                 savedInfo = `<span style="color:#4caf50; font-size:9px;">[Baza: ${finalMap} - X:${targetX}, Y:${targetY}]</span>`;
             }
-            // 2. Fallback: Jeśli zapisałeś coś sam w grze (w localStorage)
+       // 2. Fallback: Jeśli zapisałeś coś sam w grze (w localStorage)
             else if (bossSavedCoords[boss.name]) {
                 targetX = bossSavedCoords[boss.name].x;
                 targetY = bossSavedCoords[boss.name].y;
-                finalMap = bossSavedCoords[boss.name].map;
+                finalMap = bossSavedCoords[boss.name].map; 
                 savedInfo = `<span style="color:#ffb300; font-size:9px;">[Zapisano: ${finalMap} - X:${targetX}, Y:${targetY}]</span>`;
             }
 
-            // GWARANCJA POPRAWNYCH ARGUMENTÓW DLA BIEGU
             let safeMapName = finalMap.replace(/'/g, "\\'");
-            let rushArgs = `'${safeMapName}', ${targetX}, ${targetY}`;
-            
-            // Konwertujemy podwójne cudzysłowy z tablicy na bezpieczne HTML entity (&quot;), żeby nie zepsuć przycisku
             let pathStr = JSON.stringify(boss.path).replace(/"/g, '&quot;');
-            rushArgs += `, ${pathStr}`;
-
-            const header = document.createElement('div');
-            // ... reszta kodu bez zmian ...
+            let rushArgs = `'${safeMapName}', ${targetX}, ${targetY}, ${pathStr}`;
 
             const header = document.createElement('div');
 
@@ -4143,21 +4117,40 @@ let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Eng
             return Math.floor(Math.random() * (max - min + 1)) + min;
         };
 
-        // --- POWRÓT NA EXPOWISKO (GDY BOT JEST NA ZŁEJ MAPIE) ---
+// --- POWRÓT NA EXPOWISKO (GDY BOT JEST NA ZŁEJ MAPIE) ---
         let maps = botSettings.exp.mapOrder;
         let currMap = Engine.map.d.name;
 
         if (maps.length > 0 && !maps.includes(currMap)) {
             if (now < expMapTransitionCooldown) return;
             
-            let targetExpMap = maps[0]; // Zawsze biegniemy do pierwszej mapy z listy
-            
-            if (now - expLastActionTime > 3000) { // Ograniczenie spamu w logach
-                window.logExp(`[Auto-Powrót] Biegne do: ${targetExpMap}...`, "#ff9800");
-                expLastActionTime = now;
+            // Szukamy najbliższej mapy z expowiska, a nie tylko pierwszej!
+            let targetExpMap = null;
+            let path = null;
+            let shortestLen = Infinity;
+
+            for (let m of maps) {
+                let p = getShortestPath(currMap, m);
+                if (p && p.length > 0 && p.length < shortestLen) {
+                    shortestLen = p.length;
+                    path = p;
+                    targetExpMap = m;
+                }
             }
             
-            let path = getShortestPath(currMap, targetExpMap);
+            if (!path) {
+                if (now - expLastActionTime > 3000) {
+                    window.logExp(`Brak powiązań z obecnej mapy do expowiska!`, "#e53935");
+                    expLastActionTime = now;
+                    document.getElementById('btnStartExp').click(); // Zatrzymanie bota
+                }
+                return;
+            }
+            
+            if (now - expLastActionTime > 3000) {
+                window.logExp(`[Auto-Powrót] Wracam do: ${targetExpMap}...`, "#ff9800");
+                expLastActionTime = now;
+            }
             if (path && path.length > 1) {
                 let nextStepMap = path[1];
                 let tp = ZAKONNICY[currMap];
