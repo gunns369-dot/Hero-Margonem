@@ -2742,26 +2742,26 @@ const teleportsGui = document.createElement('div');
                     this.style.color = "#f44336";
                     if(typeof window.logExp === 'function') window.logExp("Uruchomiono tryb automatyczny!", "#4caf50");
                     
-                    // Automatyczne WŁĄCZENIE Berserka po starcie bota
-                    if (botSettings.berserk) {
-                        botSettings.berserk.userEnabled = true;
-                        botSettings.berserk.enabled = true;
-                        if (chk) chk.checked = true;
-                        if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-                    }
+               // Po starcie NIE włączamy berserka na sztywno.
+// Berserk ma być sterowany wyłącznie przez runExpLogic()
+// zależnie od tego, czy jesteśmy na mapie expowiska.
+if (botSettings.berserk) {
+    botSettings.berserk.userEnabled = true;
+    if (chk) chk.checked = true;
+}
                 } else {
                     this.innerHTML = "▶ START";
                     this.style.borderColor = "#4caf50";
                     this.style.color = "#4caf50";
                     if(typeof window.logExp === 'function') window.logExp("Zatrzymano tryb automatyczny.", "#f44336");
                     
-                    // Automatyczne WYŁĄCZENIE Berserka po zatrzymaniu bota
-                    if (botSettings.berserk) {
-                        botSettings.berserk.userEnabled = false;
-                        botSettings.berserk.enabled = false;
-                        if (chk) chk.checked = false;
-                        if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-                    }
+                  // Po zatrzymaniu wyłączamy berserka całkowicie
+if (botSettings.berserk) {
+    botSettings.berserk.userEnabled = false;
+    botSettings.berserk.enabled = false;
+    if (chk) chk.checked = false;
+    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+}
                 }
             });
         }
@@ -4191,58 +4191,65 @@ function getAntiLagDelay() {
     const maps = botSettings?.exp?.mapOrder || [];
     return Array.isArray(maps) && maps.includes(mapName);
 }
-    function setExpBerserkState(shouldEnable) {
-    if (!botSettings?.serverBerserk?.enabled) return;
+  function setExpBerserkState(shouldEnable) {
+    if (!botSettings?.berserk) return;
+    if (!botSettings.berserk.userEnabled) return;
 
-    const current = !!window.isServerBerserkActive;
+    const shouldBeEnabled = !!shouldEnable;
+    const currentEnabled = !!botSettings.berserk.enabled;
 
-    if (shouldEnable && !current) {
-        try {
-            if (typeof window.enableServerBerserk === 'function') {
-                window.enableServerBerserk();
-            } else if (typeof window.toggleServerBerserk === 'function') {
-                window.toggleServerBerserk(true);
-            }
-            window.isServerBerserkActive = true;
-            window.logExp(`⚔ Aktywowano serwerowego Kieszonkowego Berserka!`, "#ff9800");
-        } catch (e) {}
-        return;
-    }
+    if (currentEnabled === shouldBeEnabled) return;
 
-    if (!shouldEnable && current) {
-        try {
-            if (typeof window.disableServerBerserk === 'function') {
-                window.disableServerBerserk();
-            } else if (typeof window.toggleServerBerserk === 'function') {
-                window.toggleServerBerserk(false);
-            }
-            window.isServerBerserkActive = false;
-            window.logExp(`🛡 Wyłączono Kieszonkowego Berserka.`, "#90caf9");
-        } catch (e) {}
+    botSettings.berserk.enabled = shouldBeEnabled;
+
+    const chk = document.getElementById('berserkEnabled');
+    if (chk) chk.checked = shouldBeEnabled;
+
+    saveSettings();
+
+    if (typeof window.updateServerBerserk === 'function') {
+        window.updateServerBerserk();
     }
 }
-    
+    function getClosestExpMapPath(currMap) {
+    const maps = botSettings?.exp?.mapOrder || [];
+    if (!maps.length) return null;
+    if (maps.includes(currMap)) return { path: [currMap], targetMap: currMap };
+
+    let bestPath = null;
+    let bestTarget = null;
+    let bestLen = Infinity;
+
+    for (const targetMap of maps) {
+        const p = getShortestPath(currMap, targetMap);
+        if (p && p.length > 0 && p.length < bestLen) {
+            bestLen = p.length;
+            bestPath = p;
+            bestTarget = targetMap;
+        }
+    }
+
+    if (!bestPath) return null;
+    return { path: bestPath, targetMap: bestTarget };
+}
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading) return;
 
     const now = Date.now();
     const hero = Engine.hero.d;
-    let currMap = Engine.map.d.name;
-    let hx = hero.x;
-    let hy = hero.y;
-
-    const isExpMap = isMapInSelectedExpowisko(currMap);
-    setExpBerserkState(isExpMap);
+    const currMap = Engine.map.d.name;
+    const hx = hero.x;
+    const hy = hero.y;
 
     if (now < expLastActionTime) return;
 
-    // Walka = nic nie rób
     try {
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
             expCurrentTargetId = null;
             expEmptyScans = 0;
+            setExpBerserkState(false);
             return;
         }
     } catch (e) {}
@@ -4253,8 +4260,11 @@ function runExpLogic() {
     const maxL = parseInt(document.getElementById('expMaxL')?.value || botSettings.exp.maxLvl, 10);
     const displayTarget = document.getElementById('expTargetDisplay');
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
+    const isExpMap = isMapInSelectedExpowisko(currMap);
 
-    // Wejście na nową mapę
+    // Berserk tylko na mapie expowiska
+    setExpBerserkState(isExpMap);
+
     if (expLastMapName !== currMap) {
         expLastMapName = currMap;
         expMapEnteredAt = now;
@@ -4263,12 +4273,11 @@ function runExpLogic() {
         expAttackLockUntil = 0;
         expGatewayLockUntil = now + 1200;
 
-        let maps = botSettings.exp.mapOrder || [];
-        let idx = maps.indexOf(currMap);
+        const maps = botSettings.exp.mapOrder || [];
+        const idx = maps.indexOf(currMap);
         if (idx !== -1) expCurrentMapOrderIndex = idx;
     }
 
-    // Anty-lag / anty-stuck
     const isOnGateway = (x, y) => {
         let gws = (Engine.map && Engine.map.gateways)
             ? Engine.map.gateways
@@ -4287,8 +4296,6 @@ function runExpLogic() {
         expAntiLagTime = now + getAntiLagDelay();
     } else if (now > expAntiLagTime) {
         if (isOnGateway(hx, hy)) {
-            window.logExp(`Stoję na przejściu! Odbiegam kawałek...`, "#ff9800");
-
             let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
             let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
 
@@ -4301,15 +4308,88 @@ function runExpLogic() {
         }
 
         if (expCurrentTargetId) {
-            window.logExp(`Zawieszenie w drodze do potwora. Resetuję cel!`, "#f44336");
             expCurrentTargetId = null;
         }
 
         expAntiLagTime = now + getAntiLagDelay();
     }
 
-    // SKAN MOBÓW tylko na mapach należących do wybranego expowiska
-    const arr = isExpMap ? getExpNpcList() : [];
+    // Poza expowiskiem: nie bij nic, tylko wracaj do najbliższej mapy expowiska
+    if (!isExpMap) {
+        if (displayTarget) displayTarget.innerText = `Powrót do expowiska...`;
+
+        const result = getClosestExpMapPath(currMap);
+
+        if (!result || !result.path || result.path.length <= 1) {
+            expLastActionTime = now + 1200;
+            return;
+        }
+
+        const nextStepMap = result.path[1];
+        const door = globalGateways[currMap] && globalGateways[currMap][nextStepMap];
+
+        if (!door) {
+            expLastActionTime = now + 1200;
+            return;
+        }
+
+        let dx = door.x;
+        let dy = door.y;
+
+        if (door.allCoords && door.allCoords.length > 0) {
+            let best = null;
+            let bestDist = Infinity;
+
+            for (let coord of door.allCoords) {
+                let cd = Math.max(Math.abs(coord[0] - hx), Math.abs(coord[1] - hy));
+                if (cd < bestDist) {
+                    bestDist = cd;
+                    best = coord;
+                }
+            }
+
+            if (best) {
+                dx = best[0];
+                dy = best[1];
+            }
+        }
+
+        const distToDoor = Math.max(Math.abs(dx - hx), Math.abs(dy - hy));
+
+        if (distToDoor > 0) {
+            if (displayTarget) displayTarget.innerText = `Powrót: ${nextStepMap}`;
+
+            // jeśli już biegnie, nie klikaj ponownie
+            if (isHeroMoving) {
+                expLastActionTime = now + 150;
+                return;
+            }
+
+            if (now >= expGatewayLockUntil) {
+                Engine.hero.autoGoTo({ x: dx, y: dy });
+                expGatewayLockUntil = now + 1200;
+                expMapTransitionCooldown = now + 1400;
+                expLastActionTime = now + 400;
+            } else {
+                expLastActionTime = now + 150;
+            }
+            return;
+        }
+
+        // stoimy na przejściu - nie spamuj
+        if (!isHeroMoving && now >= expGatewayLockUntil) {
+            Engine.hero.autoGoTo({ x: dx, y: dy });
+            expGatewayLockUntil = now + 2200;
+            expMapTransitionCooldown = now + 2600;
+            expLastActionTime = now + 900;
+        } else {
+            expLastActionTime = now + 150;
+        }
+        return;
+    }
+
+    // Tylko na mapach expowiska skanujemy moby
+    const arr = getExpNpcList();
     let availableMobs = [];
 
     arr.forEach(npcObj => {
@@ -4346,49 +4426,42 @@ function runExpLogic() {
         return a.manhattan - b.manhattan;
     });
 
-    // --- NAPRAWIONA LOGIKA CHODZENIA DO MOBÓW ---
     if (availableMobs.length > 0) {
         expEmptyScans = 0;
+
         let target = null;
 
-        // Spróbuj utrzymać stary cel, żeby bot nie "skakał" między mobami
         if (expCurrentTargetId) {
             target = availableMobs.find(m => String(m.id) === String(expCurrentTargetId)) || null;
         }
 
-        // Jeśli nie mamy celu (bo to nowy skan, lub stary mob zginął) - bierzemy najbliższego
         if (!target) {
             target = availableMobs[0];
             expCurrentTargetId = target.id;
-            window.logExp(`🏃 Biegnę do najbliższego: ${target.nick} (${target.lvl} lvl) [Kratek: ${target.dist}]`, "#00e5ff");
+            window.logExp(`Namierzono: ${target.nick} (${target.lvl} lvl) [Kratek: ${target.dist}]`, "#00e5ff");
         }
 
         const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
 
         if (targetDist > 1) {
+            const step = getNearestStepToMob(hero, target);
+
             if (displayTarget) {
-                displayTarget.innerText = `Biegnę do: ${target.nick} (${targetDist}m)`;
+                displayTarget.innerText = `Czystka: ${target.nick} (${targetDist}m)`;
             }
 
-            // Używamy dokładnych kordów potwora - silnik Margonem sam ominie przeszkody i zatrzyma się 1 kratkę przed nim!
-            if (!isHeroMoving || now > expGatewayLockUntil) {
-                Engine.hero.autoGoTo({ x: target.x, y: target.y });
+            if (!isHeroMoving) {
+                Engine.hero.autoGoTo({ x: step.x, y: step.y });
                 expLastActionTime = now + 300;
                 expAntiLagTime = now + getAntiLagDelay();
             } else {
                 expLastActionTime = now + 120;
             }
-
             return;
         }
 
-        // Atak
         if (now >= expAttackLockUntil) {
-            if (displayTarget) {
-                displayTarget.innerText = `Atak: ${target.nick}`;
-            }
-
-            window.logExp(`⚔️ Atakuję: ${target.nick}`, "#ff5252");
+            if (displayTarget) displayTarget.innerText = `Atak: ${target.nick}`;
 
             if (!botSettings.exp.useAggro) {
                 if (typeof Engine.npcs?.interact === 'function') {
@@ -4407,7 +4480,7 @@ function runExpLogic() {
         return;
     }
 
-    // Brak mobów — nie uznawaj od razu mapy za pustą
+    // Brak mobów - dopiero po kilku skanach uznaj mapę za pustą
     if (now - expMapEnteredAt < 1200) {
         expLastActionTime = now + 120;
         return;
@@ -4424,10 +4497,9 @@ function runExpLogic() {
         return;
     }
 
-    // SMART ROAM po KOLEJNOŚCI EXPOWISKA
     if (now < expMapTransitionCooldown) return;
 
-    let maps = botSettings.exp.mapOrder || [];
+    const maps = botSettings.exp.mapOrder || [];
     if (!maps.length) return;
 
     let currIndex = maps.indexOf(currMap);
@@ -4443,17 +4515,13 @@ function runExpLogic() {
     let nextMap = maps[nextIndex];
 
     if (!nextMap || nextMap === currMap) {
-        if (now - expMapTransitionCooldown > 3000) {
-            window.logExp("Wszystkie mapy czyste. Czekam na resp...", "#777");
-            expMapTransitionCooldown = now + 3000;
-        }
+        expLastActionTime = now + 1000;
         return;
     }
 
     let path = getShortestPath(currMap, nextMap);
     if (!path || path.length <= 1) {
-        window.logExp(`Brak drogi z [${currMap}] do [${nextMap}]`, "#e53935");
-        expMapTransitionCooldown = now + 2000;
+        expLastActionTime = now + 1000;
         return;
     }
 
@@ -4461,8 +4529,7 @@ function runExpLogic() {
     let door = globalGateways[currMap] && globalGateways[currMap][nextStepMap];
 
     if (!door) {
-        window.logExp(`Brak zapisanego przejścia do: ${nextStepMap}`, "#e53935");
-        expMapTransitionCooldown = now + 2000;
+        expLastActionTime = now + 1000;
         return;
     }
 
@@ -4487,12 +4554,10 @@ function runExpLogic() {
         }
     }
 
-    let distToDoor = Math.max(Math.abs(dx - hx), Math.abs(dy - hy));
+    const distToDoor = Math.max(Math.abs(dx - hx), Math.abs(dy - hy));
 
     if (distToDoor > 0) {
-        if (displayTarget) {
-            displayTarget.innerText = `Przejście do: ${nextStepMap}`;
-        }
+        if (displayTarget) displayTarget.innerText = `Przejście do: ${nextStepMap}`;
 
         if (isHeroMoving) {
             expLastActionTime = now + 150;
@@ -4500,21 +4565,19 @@ function runExpLogic() {
         }
 
         if (now >= expGatewayLockUntil) {
-            window.logExp(`[Czysta mapa] Idę do przejścia: ${nextStepMap}`, "#ba68c8");
             Engine.hero.autoGoTo({ x: dx, y: dy });
-
             expGatewayLockUntil = now + 1200;
             expMapTransitionCooldown = now + 1400;
             expLastActionTime = now + 400;
             expAttackLockUntil = 0;
+        } else {
+            expLastActionTime = now + 150;
         }
         return;
     }
 
     if (!isHeroMoving && now >= expGatewayLockUntil) {
-        window.logExp(`[Zmiana mapy] ➝ ${nextStepMap}`, "#ba68c8");
         Engine.hero.autoGoTo({ x: dx, y: dy });
-
         expGatewayLockUntil = now + 2200;
         expMapTransitionCooldown = now + 2600;
         expLastActionTime = now + 900;
