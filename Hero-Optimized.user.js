@@ -4104,7 +4104,17 @@ function runExpLogic() {
 
         if (now < expLastActionTime) return;
 
-        let npcs = (typeof Engine.npcs.check === 'function') ? Engine.npcs.check() : Engine.npcs.d;
+        // --- BEZPIECZNE POBIERANIE LISTY NPC (DLA NI) ---
+        let npcs = {};
+        if (typeof Engine.npcs.getList === 'function') {
+            let list = Engine.npcs.getList();
+            list.forEach(npc => { if (npc && npc.d) npcs[npc.d.id] = npc; });
+        } else if (Engine.npcs.d) {
+            npcs = Engine.npcs.d;
+        } else if (typeof Engine.npcs.check === 'function') {
+            npcs = Engine.npcs.check();
+        }
+
         let hx = Engine.hero.d.x, hy = Engine.hero.d.y;
         
         let maps = botSettings.exp.mapOrder;
@@ -4173,7 +4183,7 @@ function runExpLogic() {
         let currentTargetDist = 999;
         if (expCurrentTargetId && npcs[expCurrentTargetId]) {
             let n = npcs[expCurrentTargetId].d || npcs[expCurrentTargetId];
-            if (!n.dead) {
+            if (!n.dead && !n.del && !npcs[expCurrentTargetId].del) {
                 currentTargetDist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
             } else {
                 expCurrentTargetId = null; 
@@ -4190,17 +4200,24 @@ function runExpLogic() {
 
         if (isExpMap) {
             for (let id in npcs) {
-                let n = npcs[id].d || npcs[id];
-                // Odpadają NPC (typ 4) i martwe obiekty
-                if (n.type === 4 || n.dead) continue; 
+                let npc = npcs[id];
+                let n = npc.d || npc;
+                if (!n) continue;
                 
-                let lvl = parseInt(n.lvl) || 0;
+                // TYP: 2 i 3 to potwory/NPC. 4 to gracze, 1 to przedmioty. 
+                if (n.type !== 2 && n.type !== 3) continue;
+                if (n.dead || n.del || npc.del) continue; 
+                
+                let lvl = parseInt(n.lvl);
+                if (isNaN(lvl) || lvl <= 0) continue; // Odpada, jeśli to zwykły NPC bez poziomu (np. Zakkonik)
                 if (lvl < minL || lvl > maxL) continue; // Filtr levela
 
-                let wt = parseInt(n.wt) || 0;
+                let wt = parseInt(n.wt);
+                if (isNaN(wt)) wt = 0; // Jeśli gra nie przypisuje 'wt', zakładamy że to zwyklak (wt=0)
+
                 if (wt === 0 && !botSettings.exp.normal) continue;
                 if (wt === 1 && !botSettings.exp.elite) continue;
-                if (wt > 1) continue; // Ignoruje bossy, herosów itp. na zwykłym expie
+                if (wt > 1) continue; // Ignorujemy E2 i herosów na auto-expie, bijemy maks elity
 
                 let dist = Math.max(Math.abs(n.x - hx), Math.abs(n.y - hy));
                 if (dist < closestDist) {
@@ -4215,19 +4232,19 @@ function runExpLogic() {
 
         // --- DECYZJA LOGICZNA: WALKA CZY PODRÓŻ ---
         if (closestId && closestDist <= 999) {
-            // Decyzja o zaatakowaniu/podejściu
+            // Decyzja o podejściu do nowego celu
             if (!expCurrentTargetId || closestDist < currentTargetDist) {
                 if (expCurrentTargetId !== closestId) {
                     expCurrentTargetId = closestId;
                     let m_lvl = npcs[closestId].d ? npcs[closestId].d.lvl : npcs[closestId].lvl;
                     window.logExp(`Atakuję: ${closestName} (${m_lvl} lvl)`, "#00e5ff");
                     Engine.hero.autoGoTo({x: closestTx, y: closestTy});
-                    expLastActionTime = now + 600; 
+                    expLastActionTime = now + 800; 
                     return;
                 }
             }
 
-            // Atak bezpośredni, gdy jesteśmy obok (zabezpieczenie)
+            // Atak bezpośredni, gdy jesteśmy obok (zabezpieczenie, bo Berserk z gry zazwyczaj załatwia sprawę)
             if (expCurrentTargetId && currentTargetDist <= 1) {
                 if (typeof window._g === 'function') {
                     window._g(`fight&a=attack&id=${expCurrentTargetId}`);
@@ -4238,7 +4255,7 @@ function runExpLogic() {
                 return;
             }
 
-            return; // Dajmy botowi dojść do celu
+            return; // Bot idzie do celu, zostawmy go w spokoju
         } else {
             // BRAK POTWORÓW LUB JESTEŚMY POZA EXPOWISKIEM -> IDZIEMY DALEJ
             if (now < expMapTransitionCooldown) return;
@@ -4247,7 +4264,7 @@ function runExpLogic() {
             let targetExpMap = null;
 
             if (!isExpMap) {
-                // Szybki skrót - znajdź najbliższą mapę należącą do expowiska
+                // Skrót: Zbliżamy się z powrotem na pierwszą mapę expowiska
                 let shortestLen = Infinity;
                 for (let m of maps) {
                     let p = getShortestPath(currMap, m);
@@ -4257,7 +4274,7 @@ function runExpLogic() {
                     }
                 }
             } else {
-                // Wybito wszystko na tej mapie. Odhacz i idź do najdawniej odwiedzonej
+                // Wybito wszystko na obecnej mapie - Odhacz i idź na "najstarszą" wg. czasu wejścia
                 window.mapClearTimes[currMap] = Date.now();
                 window.logExp(`Wybito mapę: ${currMap}. Idę dalej...`, "#a99a75");
                 
@@ -4273,7 +4290,7 @@ function runExpLogic() {
                 targetExpMap = oldestMap;
             }
 
-            // Blokada błędów / braku map
+            // Blokada błędów / braku map (np. zła trasa lub jedna mapa w pętli)
             if (!targetExpMap || targetExpMap === currMap) {
                 if (now - expMapTransitionCooldown > 3000) {
                     window.logExp("Wszystkie mapy czyste. Oczekuję na resp...", "#777");
@@ -4282,7 +4299,7 @@ function runExpLogic() {
                 return;
             }
 
-            // Realizujemy ruch w stronę wyliczonej mapy
+            // Realizujemy ruch do wyliczonej mapy
             let path = getShortestPath(currMap, targetExpMap);
             if (path && path.length > 1) {
                 let nextStepMap = path[1];
@@ -4307,15 +4324,15 @@ function runExpLogic() {
                         Engine.hero.autoGoTo({x: targetX, y: targetY});
                     }
                     expAntiLagTime = now + getAntiLagDelay();
-                    expMapTransitionCooldown = now + 1500;
+                    expMapTransitionCooldown = now + 2000;
                     expLastActionTime = now + 1000;
                 } else {
-                    window.logExp(`Brak bramy z ${currMap} do ${nextStepMap}! Nagraj ją ręcznie.`, "#e53935");
-                    document.getElementById('btnStartExp').click(); // Wyłącz bota, by go nie zapętlić
+                    window.logExp(`Brak bramy z ${currMap} do ${nextStepMap}! Nagraj ją ręcznie (🎥)`, "#e53935");
+                    document.getElementById('btnStartExp').click(); // Zatrzymanie bota aby uniknąć pętli
                 }
             } else {
-                window.logExp(`Brak połączonej drogi do: ${targetExpMap}! Nagraj trasę 🎥.`, "#e53935");
-                document.getElementById('btnStartExp').click(); // Wyłącz bota, by go nie zapętlić
+                window.logExp(`Brak powiązanej drogi do: ${targetExpMap}! Zresetuj lub dodaj ręcznie 🎥.`, "#e53935");
+                document.getElementById('btnStartExp').click(); 
             }
         }
     }
