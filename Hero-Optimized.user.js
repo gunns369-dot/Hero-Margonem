@@ -4153,135 +4153,90 @@ function runExpLogic() {
         const currMap = Engine.map.d.name;
         const hx = hero.x, hy = hero.y;
         
-        // Walka ma absolutny priorytet
+        // 1. BLOKADA: Jeśli trwa walka, nic nie rób
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
-            expLastActionTime = now + 600;
-            expNoMobScans = 0;
+            expLastActionTime = now + 500;
+            expCurrentTargetId = null;
+            expNoMobScans = 0; // Resetuj licznik pustej mapy
             return;
         }
 
         if (now < expLastActionTime) return;
 
-        // Pobieranie wartości suwaków i opcji - Bezpieczne
-        let minL = parseInt(document.getElementById('expMinL')?.value || botSettings.exp.minLvl, 10);
-        let maxL = parseInt(document.getElementById('expMaxL')?.value || botSettings.exp.maxLvl, 10);
-        
+        // 2. POBIERZ USTAWIENIA Z GUI (Typy potworów i levele)
         const wantNormal = document.getElementById('expN')?.checked ?? botSettings.exp.normal;
         const wantElite = document.getElementById('expE')?.checked ?? botSettings.exp.elite;
+        let minL = parseInt(document.getElementById('expMinL')?.value || botSettings.exp.minLvl, 10);
+        let maxL = parseInt(document.getElementById('expMaxL')?.value || botSettings.exp.maxLvl, 10);
 
-        // Awans (Auto-Lvl update)
-        if (hero.lvl && hero.lvl > window.lastHeroExpLevel) {
-            if (window.lastHeroExpLevel > 0) {
-                let diff = hero.lvl - window.lastHeroExpLevel;
-                botSettings.exp.minLvl += diff;
-                botSettings.exp.maxLvl += diff;
-                saveSettings();
-                if(document.getElementById('expMinL')) document.getElementById('expMinL').value = botSettings.exp.minLvl;
-                if(document.getElementById('expMaxL')) document.getElementById('expMaxL').value = botSettings.exp.maxLvl;
-                window.logExp(`[Awans!] Aktualizacja levelu na: ${botSettings.exp.minLvl} - ${botSettings.exp.maxLvl}`, "#ffb300");
-                minL = botSettings.exp.minLvl;
-                maxL = botSettings.exp.maxLvl;
-            }
-            window.lastHeroExpLevel = hero.lvl;
-        }
-
-        // --- POBIERANIE MOBÓW OPARTE O TWÓJ DZIAŁAJĄCY KOD ---
-        const arr = Engine.npcs?.getDrawableList?.() || (Engine.npcs?.check?.() ? Object.values(Engine.npcs.check()) : []);
+        // 3. SKANOWANIE MAPY (Logika Twojego działającego kodu)
+        const arr = Engine.npcs?.getDrawableList?.() || [];
         let availableMobs = [];
 
         arr.forEach(npcObj => {
             let n = npcObj.d || npcObj;
-            if (!n) return;
-            
-            // Odrzuć trupy, ukryte błędy i moby zajęte przez kogoś innego
-            if (n.dead || n.del || npcObj.del || n.st === 1 || n.st === 2) return;
-            // Odrzuć innych graczy
-            if (n.type === 4) return;
-
-            let name = n.nick || n.name;
-            if (!name) return; // Ignoruj to, co nie ma nazwy
+            if (!n || n.type === 4 || n.dead || n.st === 1 || n.st === 2) return;
 
             let lvl = parseInt(n.lvl, 10);
-            if (isNaN(lvl) || lvl <= 0) return; // Wywala bramy (mają "?") i Handlarzy
-
-            if (lvl < minL || lvl > maxL) return; // Filtruj lvl względem GUI
+            if (isNaN(lvl) || lvl <= 0) return; // Odrzuca bramy i NPC bez lvla
+            if (lvl < minL || lvl > maxL) return; // Filtr poziomu
 
             let wt = parseInt(n.wt, 10);
-            if (isNaN(wt)) wt = 0; // Jak gra urwie wt, to zakładamy że zwykły potwór
-
+            if (isNaN(wt)) wt = 0;
             if (wt === 0 && !wantNormal) return;
             if (wt === 1 && !wantElite) return;
-            if (wt >= 2) return; // Ignoruj Herosów na expie!
-
-            let npcId = npcObj.id || n.id;
-            if (!npcId) return; // Potrzebne ID do ataku serwerowego
+            if (wt >= 2) return; // Zawsze omijaj E2/Herosów na expie
 
             let dist = Math.max(Math.abs(hx - n.x), Math.abs(hy - n.y));
-            let realDist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
-
             availableMobs.push({
-                id: npcId,
-                x: n.x,
-                y: n.y,
+                id: npcObj.id || n.id,
+                x: n.x, y: n.y,
                 dist: dist,
-                realDist: realDist,
-                nick: name.replace(/<[^>]*>?/gm, '')
+                nick: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '')
             });
         });
 
         let displayTarget = document.getElementById('expTargetDisplay');
 
-        // --- ATAK / RUCH DO MOBA ---
+        // --- SCHEMAT: BIJ DO ZERA ---
         if (availableMobs.length > 0) {
-            window.mapClearTimes[currMap] = 0; 
-            expNoMobScans = 0;
+            expNoMobScans = 0; // Znaleziono moby, więc mapa NIE jest czysta
             
-            // Posortuj po odległości
-            availableMobs.sort((a, b) => a.dist !== b.dist ? a.dist - b.dist : a.realDist - b.realDist);
+            // Sortowanie: Najbliższy potwór
+            availableMobs.sort((a, b) => a.dist - b.dist);
             let target = availableMobs[0];
-            
-            if (target.dist > 1) {
-                // Biegnij do moba
-                if (displayTarget) displayTarget.innerText = `Biegnę: ${target.nick}`;
-                Engine.hero.autoGoTo({x: target.x, y: target.y});
-                expLastActionTime = now + 400;
-                
-                // System AntyLag (zablokowany ruch - trzęś postacią)
-                if(hx === expLastX && hy === expLastY) {
-                    if (now > expAntiLagTime) {
-                        Engine.hero.autoGoTo({x: hx + (Math.random()>0.5?1:-1), y: hy + (Math.random()>0.5?1:-1)});
-                        expAntiLagTime = now + 1500;
-                    }
-                } else {
-                    expLastX = hx; expLastY = hy;
-                    expAntiLagTime = now + 1500;
-                }
-            } else {
-                // Jesteś obok - zaatakuj
-                if (displayTarget) displayTarget.innerText = `Atakuję!`;
-                Engine.hero.autoGoTo({x: target.x, y: target.y}); 
 
+            if (target.dist > 1) {
+                if (displayTarget) displayTarget.innerText = `Czystka: ${target.nick} (${target.dist}m)`;
+                Engine.hero.autoGoTo({x: target.x, y: target.y});
+                expLastActionTime = now + 350;
+            } else {
+                if (displayTarget) displayTarget.innerText = `Atakuję: ${target.nick}`;
+                Engine.hero.autoGoTo({x: target.x, y: target.y});
+                
+                // Atak (Berserk lub Klik)
                 if (!botSettings.exp.useAggro) {
                     if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(parseInt(target.id, 10));
                     else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
                 }
-                expLastActionTime = now + 800; 
+                expLastActionTime = now + 800;
             }
-            return;
+            return; // PRZERWIJ - Dopóki są moby, nie sprawdzaj przejść!
         }
 
-        // --- SMART ROAM (ZMIANA MAPY GDY BRAK MOBÓW) ---
+        // --- SCHEMAT: JEŚLI MAPA JEST PUSTA ---
         expNoMobScans++;
 
-        if (expNoMobScans < 5) {
+        // Musimy być pewni (np. 10 skanów pod rząd pustych), że nic się nie zrespiło/nie doładowało
+        if (expNoMobScans < 10) {
+            if (displayTarget) displayTarget.innerText = `Mapa czysta? Sprawdzam... (${expNoMobScans}/10)`;
             expLastActionTime = now + 200;
             return;
         }
 
+        // Jeśli tu jesteśmy, mapa jest na 100% wybita. Przechodzimy dalej.
         let mapsOrder = botSettings.exp.mapOrder || [];
-        if (mapsOrder.includes(currMap)) {
-            window.mapClearTimes[currMap] = now;
-        }
+        if (mapsOrder.includes(currMap)) window.mapClearTimes[currMap] = now;
 
         if (now < expMapTransitionCooldown) return;
 
@@ -4290,20 +4245,13 @@ function runExpLogic() {
             let oldestTime = window.mapClearTimes[oldestMap] || 0;
 
             for (let i = 1; i < mapsOrder.length; i++) {
-                let t = window.mapClearTimes[mapsOrder[i]] || 0;
-                if (t < oldestTime) {
+                if ((window.mapClearTimes[mapsOrder[i]] || 0) < oldestTime) {
                     oldestMap = mapsOrder[i];
-                    oldestTime = t;
+                    oldestTime = window.mapClearTimes[oldestMap];
                 }
             }
 
-            if (oldestMap === currMap) {
-                if (now - expMapTransitionCooldown > 3000) {
-                    window.logExp("Wszystkie mapy z trasy czyste. Czekam...", "#777");
-                    expMapTransitionCooldown = now + 3000;
-                }
-                return;
-            }
+            if (oldestMap === currMap) return; // Stój i czekaj na resp, jeśli to jedyna mapa lub najstarsza
 
             let path = getShortestPath(currMap, oldestMap);
             if (path && path.length > 1) {
@@ -4312,40 +4260,20 @@ function runExpLogic() {
                 
                 if (door) {
                     let dx = door.x, dy = door.y;
-                    if (door.allCoords && door.allCoords.length > 0) {
+                    if (door.allCoords?.length > 0) {
                         let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
                         dx = rnd[0]; dy = rnd[1];
                     }
                     
-                    let distToDoor = Math.abs(hx - dx) + Math.abs(hy - dy);
-                    
-                    if (distToDoor > 1) {
+                    if (Math.abs(hx - dx) + Math.abs(hy - dy) > 1) {
                         Engine.hero.autoGoTo({x: dx, y: dy});
-                        if(hx === expLastX && hy === expLastY) {
-                            if (now > expAntiLagTime) {
-                                Engine.hero.autoGoTo({x: hx + (Math.random()>0.5?1:-1), y: hy + (Math.random()>0.5?1:-1)});
-                                expAntiLagTime = now + 1500;
-                            }
-                        } else {
-                            expLastX = hx; expLastY = hy;
-                            expAntiLagTime = now + 1500;
-                        }
                         expLastActionTime = now + 400;
                     } else {
                         Engine.hero.autoGoTo({x: dx, y: dy});
-                        window.logExp(`[Wyczyszczono] ➝ Zmieniam mapę na: ${nextMap}`, "#ba68c8");
-                        expMapTransitionCooldown = now + 3000;
-                        expLastActionTime = now + 1000;
+                        window.logExp(`[Czystka zakończona] ➝ ${nextMap}`, "#ba68c8");
+                        expMapTransitionCooldown = now + 4000; // Blokada powrotu na 4s
                     }
-                } else {
-                    window.logExp(`BŁĄD RADARU: Brak przejścia z ${currMap} do ${nextMap}!`, "#f44336");
-                    expMapTransitionCooldown = now + 5000;
                 }
-            }
-        } else {
-            if (now - expMapTransitionCooldown > 5000) {
-                window.logExp("Brak mobów. Czekam na respawn...", "#777");
-                expMapTransitionCooldown = now + 5000;
             }
         }
     }
