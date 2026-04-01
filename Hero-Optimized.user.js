@@ -300,18 +300,26 @@
             this.ekwipunek = items;
         },
 
-        getRecommendedEq: function() {
+    getRecommendedEq: function() {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return [];
             let myLvl = Engine.hero.d.lvl;
             let myProfLetter = Engine.hero.d.prof; 
             
-            // Mapowanie literek z gry na pełne nazwy z bazy MargoWorld
-            const profMap = { "w": "Wojownik", "m": "Mag", "t": "Tropiciel", "p": "Paladyn", "b": "Tancerz Ostrzy", "h": "Łowca" };
-            let fullProf = profMap[myProfLetter] || "";
+            const profMap = { "w": "wojownik", "m": "mag", "t": "tropiciel", "p": "paladyn", "b": "tancerz ostrzy", "h": "łowca" };
+            let fullProf = profMap[myProfLetter];
 
             return this.ekwipunek.filter(item => {
                 let isLevelOk = (item.level >= myLvl - 5) && (item.level <= myLvl + 5);
-                let isProfOk = item.prof.length === 0 || item.prof.includes(fullProf); // Jeśli puste to dla każdego (neutralne)
+                
+                // Kuloodporne filtrowanie po klasie (z uwzględnieniem pustych tablic w bazie Margo)
+                let profArray = item.prof.map(p => p.toLowerCase());
+                let isProfOk = false;
+                if (profArray.length === 0) {
+                    isProfOk = true; // Neutralne
+                } else {
+                    isProfOk = profArray.some(p => p.includes(fullProf));
+                }
+
                 return isLevelOk && isProfOk;
             }).sort((a, b) => a.level - b.level);
         }
@@ -2484,19 +2492,21 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
 
-               <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
+              <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
                     <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                     <button id="btnShowRecommendedEq" class="btn-sepia" style="padding:6px; background:#4caf50; font-weight:bold;">🎒 POKAŻ POLECANE EQ (-5 / +5 LVL)</button>
                     <button id="btnToggleShops" class="btn-sepia" style="padding:6px; background:#e65100; font-weight:bold;">🛒 WYSZUKIWARKA SKLEPÓW</button>
+                    <button id="btnStopWalk" class="btn-sepia" style="display:none; padding:6px; background:#d32f2f; color:white; font-weight:bold; border-color:#b71c1c;">🛑 ZATRZYMAJ RUCH DO NPC</button>
                     
-                    <div id="shopsSearchWrapper" style="display:none; flex-direction:column; flex:1; min-height:150px; border:1px solid #3a3020; background:#141414; padding:4px;">
+                    <div id="recommendedEqList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;">
+                        <span style="color:#777; font-size:10px; text-align:center; display:block;">Kliknij przycisk powyżej...</span>
+                    </div>
+
+                    <div id="shopsSearchWrapper" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;">
                         <input type="text" id="shopSearchInput" placeholder="Szukaj NPC, mapy lub przedmiotu..." style="width:100%; padding:5px; background:#000; color:#d4af37; border:1px solid #333; margin-bottom:5px; box-sizing:border-box;">
                         <div id="shopsListOutput" style="flex:1; overflow-y:auto;">
                             <span style="color:#777; font-size:10px; text-align:center; display:block;">Wpisz minimum 2 znaki, aby wyszukać...</span>
                         </div>
-                    </div>
-                    <div id="recommendedEqList" style="flex:1; border:1px solid #3a3020; background:#141414; overflow-y:auto; padding:4px;">
-                        <span style="color:#777; font-size:10px; text-align:center; display:block;">Kliknij przycisk powyżej, by wczytać przedmioty z bazy...</span>
                     </div>
                 </div>
         `;
@@ -5820,63 +5830,100 @@ window.clearExpMaps = () => {
             }
         });
     }
-// --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW (Naprawione EQ i TP, dodane IDŹ) ---
+// --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW ---
     document.addEventListener('click', (e) => {
-        // 1. NAPRAWIONY PRZYCISK: ZARZĄDZAJ TELEPORTAMI
+        
+        let tpGui = document.getElementById('heroTeleportsGUI');
+        let eqList = document.getElementById('recommendedEqList');
+        let shopsWrap = document.getElementById('shopsSearchWrapper');
+        let btnStop = document.getElementById('btnStopWalk');
+
+        // 1. ZARZĄDZAJ TELEPORTAMI (Naprawione chowanie)
         if (e.target && e.target.closest && e.target.closest('#btnOpenTeleports')) {
-            let p = document.getElementById('heroTeleportsGUI');
-            if (p) p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
-            if (p && p.style.display === 'flex' && typeof renderTeleportList === 'function') renderTeleportList();
+            if (eqList) eqList.style.display = 'none';
+            if (shopsWrap) shopsWrap.style.display = 'none';
+            if (tpGui) {
+                tpGui.style.display = tpGui.style.display === 'flex' ? 'none' : 'flex';
+                if (tpGui.style.display === 'flex' && typeof renderTeleportList === 'function') renderTeleportList();
+            }
         }
 
-        // 2. NAPRAWIONY PRZYCISK: POKAŻ POLECANE EQ
+        // 2. POKAŻ POLECANE EQ
         if (e.target && e.target.closest && e.target.closest('#btnShowRecommendedEq')) {
-            let wrapper = document.getElementById('shopsSearchWrapper');
-            let container = document.getElementById('recommendedEqList');
-            if (wrapper) wrapper.style.display = 'none'; // Chowamy sklepy
-            if (container) container.style.display = 'block';
+            if (tpGui) tpGui.style.display = 'none';
+            if (shopsWrap) shopsWrap.style.display = 'none';
+            if (eqList) eqList.style.display = 'flex';
             
-            if (!container) return;
+            if (!eqList) return;
             if (!window.DatabaseModule || !window.DatabaseModule.ekwipunek || window.DatabaseModule.ekwipunek.length === 0) {
-                container.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center; display:block; padding:5px;">Baza danych ładuje się w tle. Poczekaj!</span>`;
+                eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się w tle. Poczekaj!</span>`;
                 return;
             }
 
             let items = window.DatabaseModule.getRecommendedEq();
             if (items.length === 0) {
-                container.innerHTML = `<span style="color:#777; font-size:10px; text-align:center; display:block; padding:5px;">Brak EQ dla Twojego poziomu (-5/+5 lvl).</span>`;
+                eqList.innerHTML = `<span style="color:#777; font-size:10px; text-align:center;">Brak EQ dla Twojego poziomu (-5/+5 lvl).</span>`;
                 return;
             }
 
-            let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znaleziono ${items.length} pasujących przedmiotów (-5/+5 lvl):</div>`;
-            items.forEach(item => {
+            let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znaleziono ${items.length} przedmiotów (kliknij nazwę by kupić):</div>`;
+            items.forEach((item, index) => {
                 let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                 let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
                 html += `
-                    <div class="list-item" style="display:flex; flex-direction:column; align-items:flex-start; padding: 4px; border-left: 3px solid #d4af37; margin-bottom:2px; background:#1a1a1a;">
+                    <div class="list-item" style="display:flex; flex-direction:column; align-items:flex-start; padding:4px; border-left:3px solid #d4af37; margin-bottom:3px; background:#1a1a1a;">
                         <div style="display:flex; justify-content:space-between; width:100%;">
-                            <a href="${item.url}" target="_blank" style="color:#d4af37; font-weight:bold; font-size:11px; text-decoration:none;">${item.name}</a>
+                            <span class="toggle-seller-btn" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:pointer; text-decoration:underline;">${item.name}</span>
                             <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
                             <span style="color:#a99a75; font-size:9px;">Typ: ${item.type}</span>
                             <span style="color:${profColor}; font-size:9px;">${profText}</span>
                         </div>
+                        <div id="seller_info_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
                     </div>`;
             });
-            container.innerHTML = html;
+            eqList.innerHTML = html;
         }
 
-        // 3. WYSZUKIWARKA SKLEPÓW (Otwieranie)
+        // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest && e.target.closest('#btnToggleShops')) {
-            let wrapper = document.getElementById('shopsSearchWrapper');
-            let eqList = document.getElementById('recommendedEqList');
-            if (wrapper) wrapper.style.display = wrapper.style.display === 'none' ? 'flex' : 'none';
-            if (eqList && wrapper.style.display === 'flex') eqList.style.display = 'none'; 
-            else if (eqList) eqList.style.display = 'block';
+            if (tpGui) tpGui.style.display = 'none';
+            if (eqList) eqList.style.display = 'none';
+            if (shopsWrap) shopsWrap.style.display = shopsWrap.style.display === 'none' ? 'flex' : 'none';
         }
 
-        // 4. ROZWIJANIE ASORTYMENTU
+        // 4. ROZWIJANIE KUPCA W ZAKŁADCE EQ
+        if (e.target && e.target.classList.contains('toggle-seller-btn')) {
+            let itemName = e.target.getAttribute('data-name');
+            let index = e.target.getAttribute('data-index');
+            let sellerDiv = document.getElementById(`seller_info_${index}`);
+
+            if (sellerDiv) {
+                if (sellerDiv.style.display === 'block') { sellerDiv.style.display = 'none'; return; }
+
+                let sellers = window.DatabaseModule.kupcy.filter(k => k.items && k.items.some(i => i.name && i.name.includes(itemName)));
+                
+                if (sellers.length > 0) {
+                    let sHtml = '';
+                    sellers.forEach(s => {
+                        sHtml += `
+                            <div style="background:#0a0a0a; padding:4px; margin-bottom:2px; border-left:2px solid #4caf50;">
+                                <b style="color:#e65100; font-size:10px;">${s.npc_name}</b><br>
+                                <span style="color:#888; font-size:9px;">🌍 ${s.map_name} [${s.x}, ${s.y}]</span>
+                                <button class="btn-go-npc" data-map="${s.map_name}" data-x="${s.x}" data-y="${s.y}" style="background:#4caf50; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold; float:right;">🏃 IDŹ</button>
+                                <div style="clear:both;"></div>
+                            </div>`;
+                    });
+                    sellerDiv.innerHTML = sHtml;
+                } else {
+                    sellerDiv.innerHTML = `<span style="color:#777; font-size:9px;">Ten przedmiot dropi z potworów (brak w sklepach).</span>`;
+                }
+                sellerDiv.style.display = 'block';
+            }
+        }
+
+        // 5. ROZWIJANIE ASORTYMENTU (Wyszukiwarka)
         if (e.target && e.target.classList.contains('toggle-items-btn')) {
             let index = e.target.getAttribute('data-index');
             let itemsDiv = document.getElementById(`shop_items_${index}`);
@@ -5887,17 +5934,17 @@ window.clearExpMaps = () => {
             }
         }
 
-        // 5. OBSŁUGA PRZYCISKU "IDŹ" (Cross-Map Auto-Walk)
+        // 6. OBSŁUGA PRZYCISKU "IDŹ" ORAZ "STOP"
         if (e.target && e.target.classList.contains('btn-go-npc')) {
             let mapName = e.target.getAttribute('data-map');
             let targetX = parseInt(e.target.getAttribute('data-x'));
             let targetY = parseInt(e.target.getAttribute('data-y'));
             
             if (window.logHero) window.logHero(`🏃 Obieram kurs na: [${mapName}] (${targetX}, ${targetY})`, "#00e5ff");
+            if (btnStop) btnStop.style.display = 'block';
             
             if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
             
-            // Mini silnik ruchu
             window.npcWalkInterval = setInterval(() => {
                 if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
                 let currentSysMap = Engine.map.d.name;
@@ -5908,6 +5955,7 @@ window.clearExpMaps = () => {
                     if (dist <= 2) {
                         if (window.logHero) window.logHero(`✅ Dotarłem do kupca!`, "#8bc34a");
                         clearInterval(window.npcWalkInterval);
+                        if (btnStop) btnStop.style.display = 'none';
                     }
                 } else {
                     if (typeof getShortestPath === 'function') {
@@ -5917,22 +5965,26 @@ window.clearExpMaps = () => {
                             let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
                             if (door) {
                                 let doorX = door.x; let doorY = door.y;
-                                if (door.allCoords && door.allCoords.length > 0) {
-                                    doorX = door.allCoords[0][0]; doorY = door.allCoords[0][1];
-                                }
+                                if (door.allCoords && door.allCoords.length > 0) { doorX = door.allCoords[0][0]; doorY = door.allCoords[0][1]; }
                                 if (typeof safeGoTo === 'function') safeGoTo(doorX, doorY, false);
                                 else Engine.hero.autoGoTo({x: doorX, y: doorY});
-                            } else {
-                                if (window.logHero) window.logHero(`❌ Brak zapisanej bramy do [${nextMap}]!`, "#e53935");
-                                clearInterval(window.npcWalkInterval);
                             }
-                        } else {
-                            if (window.logHero) window.logHero(`❌ Nie potrafię wyznaczyć trasy do [${mapName}]!`, "#e53935");
-                            clearInterval(window.npcWalkInterval);
                         }
                     }
                 }
-            }, 800); // Sprawdza i klika co 0.8 sekundy
+            }, 800);
+        }
+
+        // 7. ZATRZYMYWANIE BOTA (Ręczne)
+        if (e.target && e.target.closest && e.target.closest('#btnStopWalk')) {
+            if (window.npcWalkInterval) {
+                clearInterval(window.npcWalkInterval);
+                if (window.logHero) window.logHero(`🛑 Zatrzymano w drodze do kupca.`, "#d32f2f");
+                if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                    Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
+                }
+            }
+            if (btnStop) btnStop.style.display = 'none';
         }
     });
 
@@ -5943,10 +5995,7 @@ window.clearExpMaps = () => {
             let container = document.getElementById('shopsListOutput');
             
             if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) return;
-            if (term.length < 2) {
-                container.innerHTML = `<span style="color:#777; font-size:10px;">Wpisz minimum 2 znaki...</span>`;
-                return;
-            }
+            if (term.length < 2) { container.innerHTML = `<span style="color:#777; font-size:10px;">Wpisz minimum 2 znaki...</span>`; return; }
 
             let filtered = window.DatabaseModule.kupcy.filter(k => 
                 (k.npc_name && k.npc_name.toLowerCase().includes(term)) ||
@@ -5955,10 +6004,7 @@ window.clearExpMaps = () => {
                 (k.items && k.items.some(i => i.name && i.name.toLowerCase().includes(term)))
             ).slice(0, 30); 
 
-            if (filtered.length === 0) {
-                container.innerHTML = `<span style="color:#777; font-size:10px;">Brak wyników dla: "${term}".</span>`;
-                return;
-            }
+            if (filtered.length === 0) { container.innerHTML = `<span style="color:#777; font-size:10px;">Brak wyników dla: "${term}".</span>`; return; }
 
             let html = '';
             filtered.forEach((k, index) => {
@@ -5969,14 +6015,10 @@ window.clearExpMaps = () => {
                     itemsHtml = k.items.map(i => {
                         let cleanName = i.name.split('Typ:')[0].trim();
                         let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
-                        
-                        // WYCIĄGANIE TYPU, LEVELU I PROFESJI
                         let typeMatch = i.name.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/);
                         let itemType = typeMatch ? typeMatch[1] : (i.slot_type || "Inne");
-
                         let lvlMatch = i.name.match(/Wymagany poziom:\s*(\d+)/);
                         let lvl = lvlMatch ? lvlMatch[1] : (i.required_level || "Brak");
-                        
                         let profMatch = i.name.match(/Wymagana profesja:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ,\s]+?)(?=\sWymagany|\sWartość|$)/);
                         let prof = profMatch ? profMatch[1].trim() : (i.allowed_professions && i.allowed_professions.length > 0 ? i.allowed_professions.join(', ') : "Każda");
 
@@ -5996,7 +6038,6 @@ window.clearExpMaps = () => {
                     <div style="background:#1a1a1a; padding:5px; margin-bottom:4px; border-left:3px solid #e65100;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <b style="color:#e65100; font-size:11px;">${k.npc_name}</b>
-                            <a href="${k.shop_url}" target="_blank" style="color:#4caf50; font-size:9px; text-decoration:none; border:1px solid #4caf50; padding:2px 4px; border-radius:3px;">MargoWorld</a>
                         </div>
                         <div style="color:#888; font-size:9px; margin-top:2px; display:flex; justify-content:space-between; align-items:center;">
                             <span>🌍 ${k.map_name} [${k.x}, ${k.y}]</span>
@@ -6010,8 +6051,7 @@ window.clearExpMaps = () => {
                         <div id="shop_items_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px; max-height:100px; overflow-y:auto; background:#0a0a0a; padding-left:4px;">
                             ${itemsHtml}
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
             container.innerHTML = html;
         }
