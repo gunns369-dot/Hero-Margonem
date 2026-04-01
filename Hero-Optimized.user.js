@@ -5820,9 +5820,54 @@ window.clearExpMaps = () => {
             }
         });
     }
-// --- OBSŁUGA WYSZUKIWARKI SKLEPÓW ---
+// --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW (Naprawione EQ i TP, dodane IDŹ) ---
     document.addEventListener('click', (e) => {
-        // Przycisk otwierający/zamykający panel sklepów
+        // 1. NAPRAWIONY PRZYCISK: ZARZĄDZAJ TELEPORTAMI
+        if (e.target && e.target.closest && e.target.closest('#btnOpenTeleports')) {
+            let p = document.getElementById('heroTeleportsGUI');
+            if (p) p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            if (p && p.style.display === 'flex' && typeof renderTeleportList === 'function') renderTeleportList();
+        }
+
+        // 2. NAPRAWIONY PRZYCISK: POKAŻ POLECANE EQ
+        if (e.target && e.target.closest && e.target.closest('#btnShowRecommendedEq')) {
+            let wrapper = document.getElementById('shopsSearchWrapper');
+            let container = document.getElementById('recommendedEqList');
+            if (wrapper) wrapper.style.display = 'none'; // Chowamy sklepy
+            if (container) container.style.display = 'block';
+            
+            if (!container) return;
+            if (!window.DatabaseModule || !window.DatabaseModule.ekwipunek || window.DatabaseModule.ekwipunek.length === 0) {
+                container.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center; display:block; padding:5px;">Baza danych ładuje się w tle. Poczekaj!</span>`;
+                return;
+            }
+
+            let items = window.DatabaseModule.getRecommendedEq();
+            if (items.length === 0) {
+                container.innerHTML = `<span style="color:#777; font-size:10px; text-align:center; display:block; padding:5px;">Brak EQ dla Twojego poziomu (-5/+5 lvl).</span>`;
+                return;
+            }
+
+            let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znaleziono ${items.length} pasujących przedmiotów (-5/+5 lvl):</div>`;
+            items.forEach(item => {
+                let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
+                let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
+                html += `
+                    <div class="list-item" style="display:flex; flex-direction:column; align-items:flex-start; padding: 4px; border-left: 3px solid #d4af37; margin-bottom:2px; background:#1a1a1a;">
+                        <div style="display:flex; justify-content:space-between; width:100%;">
+                            <a href="${item.url}" target="_blank" style="color:#d4af37; font-weight:bold; font-size:11px; text-decoration:none;">${item.name}</a>
+                            <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
+                            <span style="color:#a99a75; font-size:9px;">Typ: ${item.type}</span>
+                            <span style="color:${profColor}; font-size:9px;">${profText}</span>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // 3. WYSZUKIWARKA SKLEPÓW (Otwieranie)
         if (e.target && e.target.closest && e.target.closest('#btnToggleShops')) {
             let wrapper = document.getElementById('shopsSearchWrapper');
             let eqList = document.getElementById('recommendedEqList');
@@ -5831,7 +5876,7 @@ window.clearExpMaps = () => {
             else if (eqList) eqList.style.display = 'block';
         }
 
-        // Przycisk rozwijający asortyment danego kupca
+        // 4. ROZWIJANIE ASORTYMENTU
         if (e.target && e.target.classList.contains('toggle-items-btn')) {
             let index = e.target.getAttribute('data-index');
             let itemsDiv = document.getElementById(`shop_items_${index}`);
@@ -5842,33 +5887,62 @@ window.clearExpMaps = () => {
             }
         }
 
-        // Obsługa przycisku "IDŹ"
+        // 5. OBSŁUGA PRZYCISKU "IDŹ" (Cross-Map Auto-Walk)
         if (e.target && e.target.classList.contains('btn-go-npc')) {
             let mapName = e.target.getAttribute('data-map');
-            let x = parseInt(e.target.getAttribute('data-x'));
-            let y = parseInt(e.target.getAttribute('data-y'));
+            let targetX = parseInt(e.target.getAttribute('data-x'));
+            let targetY = parseInt(e.target.getAttribute('data-y'));
             
-            if (typeof Engine !== 'undefined' && Engine.map && Engine.map.d) {
-                if (Engine.map.d.name === mapName) {
-                    window.logHero(`🏃 Biegnę do NPC na kordy [${x}, ${y}]`, "#4caf50");
-                    Engine.hero.autoGoTo({x: x, y: y});
+            if (window.logHero) window.logHero(`🏃 Obieram kurs na: [${mapName}] (${targetX}, ${targetY})`, "#00e5ff");
+            
+            if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
+            
+            // Mini silnik ruchu
+            window.npcWalkInterval = setInterval(() => {
+                if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+                let currentSysMap = Engine.map.d.name;
+
+                if (currentSysMap === mapName) {
+                    Engine.hero.autoGoTo({x: targetX, y: targetY});
+                    let dist = Math.abs(Engine.hero.d.x - targetX) + Math.abs(Engine.hero.d.y - targetY);
+                    if (dist <= 2) {
+                        if (window.logHero) window.logHero(`✅ Dotarłem do kupca!`, "#8bc34a");
+                        clearInterval(window.npcWalkInterval);
+                    }
                 } else {
-                    window.logHero(`❌ Kupiec jest na innej mapie: [${mapName}]. Musisz tam najpierw przejść!`, "#e53935");
+                    if (typeof getShortestPath === 'function') {
+                        let path = getShortestPath(currentSysMap, mapName);
+                        if (path && path.length > 1) {
+                            let nextMap = path[1];
+                            let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+                            if (door) {
+                                let doorX = door.x; let doorY = door.y;
+                                if (door.allCoords && door.allCoords.length > 0) {
+                                    doorX = door.allCoords[0][0]; doorY = door.allCoords[0][1];
+                                }
+                                if (typeof safeGoTo === 'function') safeGoTo(doorX, doorY, false);
+                                else Engine.hero.autoGoTo({x: doorX, y: doorY});
+                            } else {
+                                if (window.logHero) window.logHero(`❌ Brak zapisanej bramy do [${nextMap}]!`, "#e53935");
+                                clearInterval(window.npcWalkInterval);
+                            }
+                        } else {
+                            if (window.logHero) window.logHero(`❌ Nie potrafię wyznaczyć trasy do [${mapName}]!`, "#e53935");
+                            clearInterval(window.npcWalkInterval);
+                        }
+                    }
                 }
-            }
+            }, 800); // Sprawdza i klika co 0.8 sekundy
         }
     });
 
-    // Silnik wyszukiwania na żywo (Live Search)
+    // --- SILNIK WYSZUKIWANIA SKLEPÓW NA ŻYWO ---
     document.addEventListener('input', (e) => {
         if (e.target && e.target.id === 'shopSearchInput') {
             let term = e.target.value.toLowerCase();
             let container = document.getElementById('shopsListOutput');
             
-            if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) {
-                container.innerHTML = `<span style="color:#e53935; font-size:10px;">Baza jeszcze się ładuje...</span>`;
-                return;
-            }
+            if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) return;
             if (term.length < 2) {
                 container.innerHTML = `<span style="color:#777; font-size:10px;">Wpisz minimum 2 znaki...</span>`;
                 return;
@@ -5896,7 +5970,10 @@ window.clearExpMaps = () => {
                         let cleanName = i.name.split('Typ:')[0].trim();
                         let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
                         
-                        // Ekstrakcja Levelu i Profesji z długiego tekstu JSON
+                        // WYCIĄGANIE TYPU, LEVELU I PROFESJI
+                        let typeMatch = i.name.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/);
+                        let itemType = typeMatch ? typeMatch[1] : (i.slot_type || "Inne");
+
                         let lvlMatch = i.name.match(/Wymagany poziom:\s*(\d+)/);
                         let lvl = lvlMatch ? lvlMatch[1] : (i.required_level || "Brak");
                         
@@ -5906,7 +5983,9 @@ window.clearExpMaps = () => {
                         return `
                             <div style="color:#d4af37; font-size:9px; margin-bottom:4px; border-bottom:1px solid #222; padding-bottom:2px;">
                                 <div>- ${cleanName} <span style="color:#4caf50;">(${price})</span></div>
-                                <div style="color:#777; font-size:8px; margin-left:8px;">Lvl: <span style="color:#fff;">${lvl}</span> | Prof: <span style="color:#fff;">${prof}</span></div>
+                                <div style="color:#777; font-size:8px; margin-left:8px;">
+                                    Typ: <span style="color:#fff;">${itemType}</span> | Lvl: <span style="color:#fff;">${lvl}</span> | Prof: <span style="color:#fff;">${prof}</span>
+                                </div>
                             </div>`;
                     }).join('');
                 } else {
