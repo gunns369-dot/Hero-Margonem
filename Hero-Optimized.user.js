@@ -2271,6 +2271,10 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 
                     <div class="nav-row"><label>Szukany Heros:</label><select id="selHero" style="flex-grow: 1;"><option value="">-- Wybierz --</option></select></div>
                     <div class="nav-row" style="display: flex; flex-direction: column; flex-grow: 1;">
+                    <div class="nav-row" style="display:flex; flex-direction:column; margin-top:6px;">
+    <label style="color:#00acc1;">Konsola Patrolu Herosa:</label>
+    <div id="heroPatrolConsole" style="height:90px; overflow-y:auto; background:#111; border:1px solid #333; padding:6px; font-size:10px; color:#bbb; border-radius:2px;"></div>
+</div>
                         <label style="color:#00acc1;">Kolejność Przechodzenia Map:</label>
                         <div id="heroMapListContainer"><div style="padding:5px;text-align:center;color:#777;">Wybierz herosa</div></div>
                         <div id="inlineTransitEditor" style="display:none; padding:8px; border:1px solid #00acc1; background:rgba(0, 172, 193, 0.1); margin-top:5px; border-radius:2px;">
@@ -2915,9 +2919,13 @@ selHero.addEventListener('change', (e) => {
 
                     currentCordsList = [...heroData[hero][currMap]];
 
-                    checkedPoints.clear();
+                   checkedPoints.clear();
 
-                    setTimeout(() => { optimizeRoute(); renderCordsList(); }, 150);
+if (checkedPointsByMap[currMap] && Array.isArray(checkedPointsByMap[currMap])) {
+    checkedPointsByMap[currMap].forEach(i => checkedPoints.add(i));
+}
+
+setTimeout(() => { optimizeRoute(); renderCordsList(); }, 150);
 
                 } else {
 
@@ -3681,8 +3689,37 @@ function optimizeRoute() {
 
     }
 
+window.logHero = function(msg, color = "#00acc1") {
+    const c = document.getElementById('heroPatrolConsole');
+    if (!c) return;
 
+    const time = new Date().toLocaleTimeString();
+    const row = document.createElement('div');
+    row.style.color = color;
+    row.style.marginBottom = "2px";
+    row.textContent = `[${time}] ${msg}`;
 
+    c.prepend(row);
+
+    while (c.children.length > 120) {
+        c.removeChild(c.lastChild);
+    }
+};
+let heroGatewayLockUntil = 0;
+let heroPatrolAntiLagTime = 0;
+let heroLastX = -1;
+let heroLastY = -1;
+let heroLastActionTime = 0;
+
+let checkedPointsByMap = {};
+let heroReturnRetryMap = null;
+let heroReturnRetryIndex = -1;
+
+    function saveCheckedPointsByMap() {
+    try {
+        sessionStorage.setItem('hero_checked_points_by_map', JSON.stringify(checkedPointsByMap));
+    } catch (e) {}
+}
  function stopPatrol(hardStop = false) {
 
 
@@ -3779,260 +3816,260 @@ function optimizeRoute() {
 
 
 
-    function startPatrol() {
-
-
-
-        let hero = document.getElementById('selHero').value; let mapList = heroMapOrder[hero];
-
-
-
-        if (hero && mapList) {
-
-
-
-            let currentSysMap = lastMapName;
-
-
-
-            if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) { currentRouteIndex = mapList.indexOf(currentSysMap); sessionStorage.setItem('hero_route_index', currentRouteIndex); updateUI(); }
-
-
-
-        }
-
-
-
-        isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
-
-
-
-        let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; executePatrolStep();
-
-
-
-    }
-
-
-
-
-
-
-
-    function executePatrolStep() {
-
-
-
-        if (!isPatrolling) return;
-
-
-
-
-
-
-
-        checkVisionRange();
-
-
-
-
-
-
-
-        while (patrolIndex < currentCordsList.length && checkedPoints.has(patrolIndex)) {
-
-
-
-            patrolIndex++;
-
-
-
-        }
-
-
-
-
-
-
-
-        let hero = document.getElementById('selHero').value;
-
-
-
+   function startPatrol() {
+    let hero = document.getElementById('selHero').value;
+    let mapList = heroMapOrder[hero];
+
+    if (hero && mapList) {
         let currentSysMap = lastMapName;
 
-
-
-
-
-
-
-        if (patrolIndex >= currentCordsList.length || currentCordsList.length === 0) {
-
-
-
-            clearTimeout(smoothPatrolInterval);
-
-
-
-
-
-
-
-            if (!checkedMapsThisSession.has(currentSysMap)) { checkedMapsThisSession.add(currentSysMap); saveCheckedMaps(); }
-
-
-
-
-
-
-
-            if(hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0) {
-
-
-
-                let mapList = heroMapOrder[hero];
-
-
-
-
-
-
-
-                let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
-
-
-
-                let finalDestinationMap = mapList[nextRouteIndex];
-
-
-
-
-
-
-
-              let path = getShortestPath(currentSysMap, finalDestinationMap);
-
-
-
-                if (path && path.length > 1) {
-
-                    let immediateNextMap = path[1];
-
-                    let tp = ZAKONNICY[currentSysMap];
-
-                    let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
-
-                    let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-
-                    let isTeleport = tp && (botSettings.unlockedTeleports[immediateNextMap] || isFakeDoor);
-
-
-
-                    if (isTeleport) {
-
-                        console.log(`%c[HERO] Koniec respów na mapie. Teleport w patrolu do [${immediateNextMap}]...`, "color: #9c27b0;");
-
-                        clearTimeout(smoothPatrolInterval);
-
-                        smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(immediateNextMap), 200);
-
-                        return;
-
-                    } else if (door) {
-
-                        let targetX = door.x; let targetY = door.y;
-
-                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
-
-
-
-                        safeGoTo(targetX, targetY, false);
-
-                        return;
-
-                    }
-
-                }
-
-
-
-
-
-
-
-                stopPatrol(true);
-
-
-
-                let fallbackMissing = path ? path[1] : finalDestinationMap;
-
-
-
-                heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy (wyjścia/powroty z podziemi). Kliknij 🎥 Nagrywam i przejdź tam!`);
-
-
-
-                return;
-
-
-
-            }
-
-
-
-
-
-
-
-            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true); heroAlert("✅ Trasa zrobiona!"); return;
-
-
-
+        if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) {
+            currentRouteIndex = mapList.indexOf(currentSysMap);
+            sessionStorage.setItem('hero_route_index', currentRouteIndex);
+            updateUI();
         }
 
+        if (heroData[hero] && heroData[hero][currentSysMap]) {
+            currentCordsList = [...heroData[hero][currentSysMap]];
+        } else {
+            currentCordsList = [];
+        }
+
+        let currentSysMap = lastMapName;
+if (currentSysMap) {
+    checkedPointsByMap[currentSysMap] = Array.from(checkedPoints);
+    saveCheckedPointsByMap();
+}
+checkedPoints.clear();
+
+        if (checkedPointsByMap[currentSysMap] && Array.isArray(checkedPointsByMap[currentSysMap])) {
+            checkedPointsByMap[currentSysMap].forEach(i => checkedPoints.add(i));
+        }
+
+        patrolIndex = 0;
+        while (patrolIndex < currentCordsList.length && checkedPoints.has(patrolIndex)) {
+            patrolIndex++;
+        }
+    }
+
+    isPatrolling = true;
+    heroFoundAlerted = false;
+    heroLastActionTime = 0;
+    heroGatewayLockUntil = 0;
+    heroPatrolAntiLagTime = Date.now() + 1500;
+
+    let btn = document.getElementById('btnStartStop');
+    if (btn) {
+        btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>';
+        btn.style.color = "#f44336";
+        btn.style.borderColor = "#f44336";
+    }
+
+    window.logHero("Uruchomiono patrol herosa.", "#4caf50");
+    executePatrolStep();
+}
 
 
 
 
+ function executePatrolStep() {
+    if (!isPatrolling) return;
+    if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading) return;
 
+    const now = Date.now();
+    if (now < heroLastActionTime) return;
+
+    const hero = Engine.hero.d;
+    const hx = hero.x;
+    const hy = hero.y;
+    const currentSysMap = lastMapName;
+    const selectedHero = document.getElementById('selHero').value;
+    const isHeroMoving = !!(hero.path && hero.path.length > 0);
+
+    checkVisionRange();
+
+    // aktualizacja anty-stuck
+    if (hx !== heroLastX || hy !== heroLastY) {
+        heroLastX = hx;
+        heroLastY = hy;
+        heroPatrolAntiLagTime = now + getAntiLagDelay();
+    }
+
+    // przywróć zapamiętane punkty dla mapy
+    if (!checkedPointsByMap[currentSysMap]) {
+        checkedPointsByMap[currentSysMap] = [];
+    }
+
+    // jeśli wróciliśmy na mapę i nie mamy currentCordsList, odbuduj
+    if (selectedHero && heroData[selectedHero] && heroData[selectedHero][currentSysMap]) {
+        if (!currentCordsList || currentCordsList.length === 0) {
+            currentCordsList = [...heroData[selectedHero][currentSysMap]];
+        }
+    }
+
+    while (patrolIndex < currentCordsList.length && checkedPoints.has(patrolIndex)) {
+        patrolIndex++;
+    }
+
+    const isOnGateway = (x, y) => {
+        let gws = (Engine.map && Engine.map.gateways)
+            ? Engine.map.gateways
+            : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
+
+        for (let id in gws) {
+            let gw = gws[id].d || gws[id];
+            if (gw && gw.x === x && gw.y === y) return true;
+        }
+        return false;
+    };
+
+    // ANTY-STUCK na przejściu
+    if (now > heroPatrolAntiLagTime && isOnGateway(hx, hy)) {
+        window.logHero(`Stoję na przejściu, odbijam i próbuję ponownie.`, "#ff9800");
+
+        let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
+        let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
+
+        Engine.hero.autoGoTo({ x: stepX, y: stepY });
+        heroGatewayLockUntil = now + 1400;
+        heroPatrolAntiLagTime = now + 1800;
+        heroLastActionTime = now + 500;
+        return;
+    }
+
+    // jeśli nadal mamy punkty do sprawdzenia na tej mapie
+    if (patrolIndex < currentCordsList.length && currentCordsList.length > 0) {
+        let target = currentCordsList[patrolIndex];
+        if (!target) {
+            patrolIndex++;
+            heroLastActionTime = now + 100;
+            return;
+        }
+
+        let tx = target[0];
+        let ty = target[1];
+        let dist = Math.max(Math.abs(tx - hx), Math.abs(ty - hy));
 
         renderCordsList(patrolIndex);
 
+        if (dist <= 1) {
+            checkedPoints.add(patrolIndex);
+            checkedPointsByMap[currentSysMap] = Array.from(checkedPoints);
+            saveCheckedPointsByMap();
 
+            window.logHero(`Sprawdzono punkt ${patrolIndex + 1}/${currentCordsList.length} na mapie ${currentSysMap}`, "#00acc1");
 
-        let target = currentCordsList[patrolIndex];
+            patrolIndex++;
+            heroLastActionTime = now + 120;
+            setTimeout(executePatrolStep, 120);
+            return;
+        }
 
+        if (!isHeroMoving) {
+            window.logHero(`Idę do punktu ${patrolIndex + 1}/${currentCordsList.length} [${tx}, ${ty}]`, "#00acc1");
+            Engine.hero.autoGoTo({ x: tx, y: ty });
+            heroLastActionTime = now + 350;
+            heroPatrolAntiLagTime = now + getAntiLagDelay();
+        } else {
+            heroLastActionTime = now + 120;
+        }
 
-
-        safeGoTo(target[0], target[1], true);
-
-
-
-        stuckCount = 0; clearTimeout(smoothPatrolInterval);
-
-
-
-
-
-
-
-        let pingDelay = Math.floor(Math.random() * (botSettings.stepMax - botSettings.stepMin + 1)) + botSettings.stepMin;
-
-
-
-        smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
-
-
-
+        return;
     }
 
+    // dopiero tutaj mapa jest naprawdę w pełni sprawdzona
+    if (!checkedMapsThisSession.has(currentSysMap)) {
+        checkedMapsThisSession.add(currentSysMap);
+        saveCheckedMaps();
+    }
 
+    checkedPointsByMap[currentSysMap] = Array.from(checkedPoints);
+    saveCheckedPointsByMap();
 
+    clearTimeout(smoothPatrolInterval);
 
+    if (selectedHero && heroMapOrder[selectedHero] && heroMapOrder[selectedHero].length > 0) {
+        let mapList = heroMapOrder[selectedHero];
+        let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
+        let finalDestinationMap = mapList[nextRouteIndex];
 
+        let path = getShortestPath(currentSysMap, finalDestinationMap);
 
+        if (path && path.length > 1) {
+            let immediateNextMap = path[1];
+            let tp = ZAKONNICY[currentSysMap];
+            let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
+            let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+            let isTeleport = tp && (botSettings.unlockedTeleports[immediateNextMap] || isFakeDoor);
 
+            currentRouteIndex = nextRouteIndex;
+            sessionStorage.setItem('hero_route_index', currentRouteIndex);
+
+            if (isTeleport) {
+                window.logHero(`Teleport do: ${immediateNextMap}`, "#ba68c8");
+                heroLastActionTime = now + 1200;
+                if (typeof window.handleTeleportNPC === 'function') {
+                    window.handleTeleportNPC(immediateNextMap);
+                }
+                return;
+            }
+
+            if (door) {
+                let dx = door.x;
+                let dy = door.y;
+
+                if (door.allCoords && door.allCoords.length > 0) {
+                    let best = null;
+                    let bestDist = Infinity;
+
+                    for (let coord of door.allCoords) {
+                        let cd = Math.max(Math.abs(coord[0] - hx), Math.abs(coord[1] - hy));
+                        if (cd < bestDist) {
+                            bestDist = cd;
+                            best = coord;
+                        }
+                    }
+
+                    if (best) {
+                        dx = best[0];
+                        dy = best[1];
+                    }
+                }
+
+                let distToDoor = Math.max(Math.abs(dx - hx), Math.abs(dy - hy));
+
+                if (distToDoor > 0) {
+                    if (isHeroMoving) {
+                        heroLastActionTime = now + 150;
+                        return;
+                    }
+
+                    if (now >= heroGatewayLockUntil) {
+                        window.logHero(`Przejście do: ${immediateNextMap}`, "#ba68c8");
+                        Engine.hero.autoGoTo({ x: dx, y: dy });
+                        heroGatewayLockUntil = now + 1200;
+                        heroPatrolAntiLagTime = now + getAntiLagDelay();
+                        heroLastActionTime = now + 400;
+                    }
+                    return;
+                }
+
+                if (!isHeroMoving && now >= heroGatewayLockUntil) {
+                    window.logHero(`Zmiana mapy -> ${immediateNextMap}`, "#ba68c8");
+                    Engine.hero.autoGoTo({ x: dx, y: dy });
+                    heroGatewayLockUntil = now + 2200;
+                    heroLastActionTime = now + 900;
+                } else {
+                    heroLastActionTime = now + 150;
+                }
+                return;
+            }
+        }
+    }
+
+    window.logHero(`Brak dalszej drogi patrolu.`, "#f44336");
+    heroLastActionTime = now + 1000;
+}
     function checkSmoothArrival() {
 
 
