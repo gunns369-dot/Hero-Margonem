@@ -38,9 +38,10 @@
                         if (processedCoords.has(coordKey)) return; 
                         processedCoords.add(coordKey);
 
-                        // Wyciąganie nazwy (Twoja metoda z tooltipa)
+                       // Wyciąganie nazwy - ZAAWANSOWANE CZYSZCZENIE (Odcina poziomy i nowe linie)
                         let rawName = (g.tip && g.tip[0]) ? g.tip[0] : (g.d.name || g.d.targetName || "");
-                        let cleanName = rawName.toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
+                        let cleanName = rawName.toString().replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]*>?/gm, '').split('\n')[0];
+                        cleanName = cleanName.replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].split("Przejście dostępne")[0].trim();
                         
                         if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
                             cleanName = `Wejście [${px}, ${py}]`;
@@ -88,8 +89,9 @@
                 if (processedCoords.has(coordKey)) return; 
                 processedCoords.add(coordKey);
 
-                let rawName = data.name || data.targetName || data.title || data.tooltip || "";
-                let cleanName = rawName.toString().replace(/<[^>]*>?/gm, '').replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].trim();
+              let rawName = data.name || data.targetName || data.title || data.tooltip || "";
+                let cleanName = rawName.toString().replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]*>?/gm, '').split('\n')[0];
+                cleanName = cleanName.replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].split("Przejście dostępne")[0].trim();
                 
                 if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
                     cleanName = `Wejście [${px}, ${py}]`;
@@ -4390,12 +4392,12 @@ function runExpLogic() {
         let bestTarget = availableMobs[0]; 
         let target = null;
 
-        if (expCurrentTargetId) {
+       if (expCurrentTargetId) {
             let currentTarget = availableMobs.find(m => String(m.id) === String(expCurrentTargetId));
             if (currentTarget) {
-                // BLOKADA CZASOWA: Zmienia cel tylko, jeśli minęło 4.5 sekundy od ostatniej zmiany.
-                // Eliminuje to tzw. ping-pong, gdy dwa potwory są w podobnej odległości.
-                if (bestTarget.id !== currentTarget.id && bestTarget.dist < currentTarget.dist && now > expLastTargetSwitchAt + 4500) {
+                // BLOKADA CZASOWA: Wydłużona do 8.5 sekundy.
+                // Bot "przykleja" się do celu, ignorując inne "trochę bliższe" potwory przez dłuższy czas.
+                if (bestTarget.id !== currentTarget.id && bestTarget.dist < currentTarget.dist && now > expLastTargetSwitchAt + 8500) {
                     target = bestTarget;
                     expLastTargetSwitchAt = now; // Zapisujemy czas zmiany celu
                     window.logExp(`🔄 Zmieniam cel na bliższy: ${target.nick}`, "#00e5ff");
