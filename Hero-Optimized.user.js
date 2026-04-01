@@ -4458,7 +4458,7 @@ arr.forEach(npcObj => {
             let bestTarget = reachableMobs[0]; 
             let target = null;
 
-           if (expCurrentTargetId) {
+            if (expCurrentTargetId) {
                 let currentTarget = reachableMobs.find(m => String(m.id) === String(expCurrentTargetId));
                 if (currentTarget) {
                     if (bestTarget.id !== currentTarget.id && bestTarget.realDist < currentTarget.realDist && now > expLastTargetSwitchAt + 8500) {
@@ -4480,65 +4480,66 @@ arr.forEach(npcObj => {
             }
 
             expCurrentTargetId = target.id;
-        const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
+            const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
 
-        // BIEGNIEMY DO POTWORA
-        if (targetDist > 1) {
-            expAttackLockUntil = 0; 
+            // BIEGNIEMY DO POTWORA
+            if (targetDist > 1) {
+                expAttackLockUntil = 0; 
 
-            let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
+                let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
-            if (isNewDestination) {
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick} (${targetDist}m)`;
-                Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                window.expLastMoveTx = target.x;
-                window.expLastMoveTy = target.y;
-                // Randomizacja od 2 do 3.5 sekundy
-                window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 2000; 
-                expAntiLagTime = now + getAntiLagDelay(); 
-            } else if (!isHeroMoving && now > window.expMoveLockUntil) {
-                // Postać zacięła się na drodze, ponów kliknięcie
-                Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
-                expAntiLagTime = now + getAntiLagDelay(); 
-            }
-            
-            expLastActionTime = now + 100;
-            return;
-        }
-
-        // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
-        if (targetDist <= 1) {
-            if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
-            
-            window.expLastMoveTx = -1;
-            window.expLastMoveTy = -1;
-            window.expMoveLockUntil = 0;
-
-            if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
-
-            let isBerserkActive = botSettings.berserk && botSettings.berserk.enabled;
-
-            if (expAttackLockUntil === 0) {
-                expAttackLockUntil = now + (isBerserkActive ? 2500 : 0);
-            } else if (now > expAttackLockUntil) {
-                window.logExp(`Zacięcie przy walce z: ${target.nick}. Odbiegam kawałek...`, "#ff9800");
+                if (isNewDestination) {
+                    if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick} (${targetDist}m)`;
+                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                    window.expLastMoveTx = target.x;
+                    window.expLastMoveTy = target.y;
+                    // Randomizacja od 2 do 3.5 sekundy
+                    window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 2000; 
+                    expAntiLagTime = now + getAntiLagDelay(); 
+                } else if (!isHeroMoving && now > window.expMoveLockUntil) {
+                    // Postać zacięła się na drodze, ponów kliknięcie
+                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                    window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
+                    expAntiLagTime = now + getAntiLagDelay(); 
+                }
                 
-                let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
-                let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-                Engine.hero.autoGoTo({ x: stepX, y: stepY });
-                
-                expAttackLockUntil = now + 2500; 
-                expLastActionTime = now + 800; 
+                expLastActionTime = now + 100;
                 return;
             }
-            
-            expLastActionTime = now + 100;
+
+            // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
+            if (targetDist <= 1) {
+                if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
+                
+                window.expLastMoveTx = -1;
+                window.expLastMoveTy = -1;
+                window.expMoveLockUntil = 0;
+
+                if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
+
+                let isBerserkActive = botSettings.berserk && botSettings.berserk.enabled;
+
+                if (expAttackLockUntil === 0) {
+                    expAttackLockUntil = now + (isBerserkActive ? 2500 : 0);
+                } else if (now > expAttackLockUntil) {
+                    window.logExp(`Zacięcie przy walce z: ${target.nick}. Odbiegam kawałek...`, "#ff9800");
+                    
+                    let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+                    let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+                    Engine.hero.autoGoTo({ x: stepX, y: stepY });
+                    
+                    expAttackLockUntil = now + 2500; 
+                    expLastActionTime = now + 800; 
+                    return;
+                }
+                
+                expLastActionTime = now + 100;
+            }
+            return;
         }
-        return;
     }
 
-// --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
+    // --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
     if (now - expMapEnteredAt < 1200) {
         expLastActionTime = now + 120;
         return;
