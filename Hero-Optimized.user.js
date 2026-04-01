@@ -5918,7 +5918,7 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                 html += `
                     <div class="list-item" style="display:flex; flex-direction:column; align-items:flex-start; padding:4px; border-left:3px solid #d4af37; margin-bottom:3px; background:#1a1a1a;">
                         <div style="display:flex; justify-content:space-between; width:100%;">
-                            <span class="toggle-seller-btn" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                            <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
                             <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
@@ -6072,7 +6072,7 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                 let itemCount = k.items ? k.items.length : 0;
                 let itemsHtml = '';
                 
-                if (itemCount > 0) {
+               if (itemCount > 0) {
                     itemsHtml = k.items.map(i => {
                         let cleanName = i.name.split('Typ:')[0].trim();
                         let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
@@ -6083,9 +6083,12 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                         let profMatch = i.name.match(/Wymagana profesja:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ,\s]+?)(?=\sWymagany|\sWartość|$)/);
                         let prof = profMatch ? profMatch[1].trim() : (i.allowed_professions && i.allowed_professions.length > 0 ? i.allowed_professions.join(', ') : "Każda");
 
+                        // Pełne statystyki dla tooltipa w wyszukiwarce
+                        let fullStats = i.tooltip_text || i.raw_detected_text || i.name;
+
                         return `
                             <div style="color:#d4af37; font-size:9px; margin-bottom:4px; border-bottom:1px solid #222; padding-bottom:2px;">
-                                <div>- ${cleanName} <span style="color:#4caf50;">(${price})</span></div>
+                                <div>- <span class="margo-tooltip-trigger" data-stats="${fullStats.replace(/"/g, '&quot;')}" data-name="${cleanName.replace(/"/g, '&quot;')}" style="cursor:help; text-decoration:underline;">${cleanName}</span> <span style="color:#4caf50;">(${price})</span></div>
                                 <div style="color:#777; font-size:8px; margin-left:8px;">
                                     Typ: <span style="color:#fff;">${itemType}</span> | Lvl: <span style="color:#fff;">${lvl}</span> | Prof: <span style="color:#fff;">${prof}</span>
                                 </div>
@@ -6117,9 +6120,8 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
             container.innerHTML = html;
         }
     });
-    // --- SILNIK GRAFICZNY CUSTOMOWYCH TOOLTIPÓW (Styl Margonem) ---
+ // --- SILNIK GRAFICZNY CUSTOMOWYCH TOOLTIPÓW (Styl Margonem) ---
     
-    // Tworzenie ukrytego okienka w HTML (tylko raz)
     if (!document.getElementById('customMargoTooltip')) {
         let tt = document.createElement('div');
         tt.id = 'customMargoTooltip';
@@ -6129,33 +6131,40 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
 
     // Wyświetlanie tooltipa
     document.addEventListener('mouseover', (e) => {
-        if (e.target && e.target.classList.contains('toggle-seller-btn')) {
+        if (e.target && e.target.classList.contains('margo-tooltip-trigger')) {
             let tt = document.getElementById('customMargoTooltip');
             let name = e.target.getAttribute('data-name');
             let rawStats = e.target.getAttribute('data-stats');
             
             if (tt && rawStats) {
-                // 1. Wycinamy nazwę z początku tekstu, żeby jej nie dublować
+                // 1. Usunięcie nazwy z początku
                 let desc = rawStats.replace(name, '').trim();
                 
-                // 2. Łamanie linii przed kluczowymi słowami (Pogrubienie)
-                desc = desc.replace(/Typ:/g, '<br><b style="color:#888;">Typ:</b>');
-                desc = desc.replace(/Wymagany poziom:/g, '<br><b style="color:#888;">Wymagany poziom:</b>');
-                desc = desc.replace(/Wymagana profesja:/g, '<br><b style="color:#888;">Wymagana profesja:</b>');
-                desc = desc.replace(/Wartość:/g, '<br><b style="color:#888;">Wartość:</b><span style="color:#ffca28;">');
+                // 2. Rzadkość przedmiotu (przejście do nowej linii)
+                desc = desc.replace(/(Pospolity|Unikat|Heroik|Legendarny)/g, '<br><span style="color:#b0bec5; font-weight:bold;">$1</span><br>');
+                desc = desc.replace(/Unikat/g, '<span style="color:#fbc02d; font-weight:bold;">Unikat</span>');
+                desc = desc.replace(/Heroik/g, '<span style="color:#29b6f6; font-weight:bold;">Heroik</span>');
+                desc = desc.replace(/Legendarny/g, '<span style="color:#ef5350; font-weight:bold;">Legendarny</span>');
                 
-                // 3. Kolorowanie rzadkości przedmiotów
-                desc = desc.replace(/Pospolity/g, '<span style="color:#aaa;">Pospolity</span><br>');
-                desc = desc.replace(/Unikat/g, '<span style="color:#fbc02d;">Unikat</span><br>');
-                desc = desc.replace(/Heroik/g, '<span style="color:#29b6f6;">Heroik</span><br>');
-                desc = desc.replace(/Legendarny/g, '<span style="color:#ef5350;">Legendarny</span><br>');
+                // 3. INTELIGENTNE ŁAMANIE LINII PRZED KAŻDĄ STATYSTYKĄ
+                const statKeywords = ["Typ:", "Obrażenia", "Cios krytyczny", "Siła", "Zręczność", "Intelekt", "Energia", "Mana", "Pancerz", "Unik", "Życie", "Wiąże", "Spowalnia", "Przebicie", "Pojemność", "Ilość:", "Teleportuje", "Leczy", "Przywraca", "Niszczy", "Szansa na", "Wymagany poziom:", "Wymagana profesja:", "Wartość:", "Zadaje", "Obniża"];
                 
-                // 4. Zielone statystyki (Wszystko z plusem)
-                desc = desc.replace(/(\+[0-9]+%?)/g, '<span style="color:#66bb6a;">$1</span>');
+                statKeywords.forEach(key => {
+                    let regex = new RegExp(`\\s*(${key})`, 'g');
+                    desc = desc.replace(regex, '<br>$1');
+                });
+
+                // 4. Kolorowanie (Szare nagłówki, zielone wartości na plusie, złote ceny)
+                desc = desc.replace(/(Wymagany poziom:|Wymagana profesja:|Typ:|Wartość:)/g, '<span style="color:#888;">$1</span>');
+                desc = desc.replace(/(\+[0-9]+%?)/g, '<span style="color:#66bb6a; font-weight:bold;">$1</span>');
+                desc = desc.replace(/(Wartość:\s*<\/span>)([0-9\.\s]+k?)/g, '$1<span style="color:#ffca28;">$2</span>');
                 
-                // 5. Budowanie gotowego HTML
+                // 5. Czystka: usuwanie wielokrotnych pustych linii
+                desc = desc.replace(/(<br>\s*){2,}/g, '<br>');
+
+                // Budowa finalnego HTML
                 let html = `<div style="color:#ffca28; font-weight:bold; font-size:12px; border-bottom:1px solid #443c2c; padding-bottom:4px; margin-bottom:4px; text-align:center; text-shadow:1px 1px 0 #000;">${name}</div>`;
-                html += `<div style="color:#ddd; font-size:10px; line-height:1.5;">${desc}</span></div>`;
+                html += `<div style="color:#ddd; font-size:10px; line-height:1.6;">${desc}</div>`;
                 
                 tt.innerHTML = html;
                 tt.style.display = 'block';
@@ -6163,19 +6172,16 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
         }
     });
 
-    // Podążanie tooltipa za kursorem
     document.addEventListener('mousemove', (e) => {
         let tt = document.getElementById('customMargoTooltip');
         if (tt && tt.style.display === 'block') {
-            // Dodajemy mały offset (15px), żeby myszka nie zasłaniała tekstu
             tt.style.left = (e.pageX + 15) + 'px';
             tt.style.top = (e.pageY + 15) + 'px';
         }
     });
 
-    // Chowanie tooltipa po zjechaniu myszką
     document.addEventListener('mouseout', (e) => {
-        if (e.target && e.target.classList.contains('toggle-seller-btn')) {
+        if (e.target && e.target.classList.contains('margo-tooltip-trigger')) {
             let tt = document.getElementById('customMargoTooltip');
             if (tt) tt.style.display = 'none';
         }
