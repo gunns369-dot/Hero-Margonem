@@ -5832,8 +5832,8 @@ window.clearExpMaps = () => {
             if (typeof saveSettings === 'function') saveSettings();
             if (window.logHero) window.logHero(`[System] Zaktualizowano teleport: ${mapName}`, "#00acc1");
         }
-
-        // Zmiana filtra w Ekwipunku
+        
+        // NOWOŚĆ: Zmiana w filtrze ekwipunku
         if (e.target && e.target.id === 'eqTypeFilter') {
             if (typeof window.renderEqItems === 'function') window.renderEqItems(e.target.value);
         }
@@ -5852,7 +5852,7 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-        // 2. POKAŻ POLECANE EQ (Z filtrowaniem)
+      // 2. POKAŻ POLECANE EQ (Z filtrowaniem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
@@ -5888,7 +5888,6 @@ window.clearExpMaps = () => {
                 let count = 0;
                 
                 items.forEach((item, index) => {
-                    // Ekstrakcja rzeczywistego typu, omijając błąd "null" w bazie Margo
                     let typeMatch = item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/);
                     let displayType = typeMatch ? typeMatch[1] : (item.type && item.type !== 'null' ? item.type : "Inne");
                     
@@ -5921,14 +5920,14 @@ window.clearExpMaps = () => {
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
-        // 4. MIKSTURY I LECZENIE (Lista Uzdrowicieli)
+        // 4. MIKSTURY I LECZENIE (Lista Uzdrowicieli ze wskaźnikiem leczenia)
         if (e.target && e.target.closest('#btnShowPotions')) {
             hideAllTabs(); if (potList) potList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) { 
                 potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; 
             }
 
-            // SZUKAMY NPC: Wszystkich ze słowem "uzdrowiciel" lub "uzdrowicielka"
+            // Szukamy NPC ze słowem "uzdrow"
             let healers = window.DatabaseModule.kupcy.filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
             
             let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Uzdrowiciele (${healers.length} postaci):</div>`;
@@ -5943,9 +5942,16 @@ window.clearExpMaps = () => {
                         let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
                         let fullStats = i.tooltip_text || i.raw_detected_text || i.name;
                         
+                        // Ekstrakcja ilości leczenia
+                        let healMatch = fullStats.match(/Leczy\s+([0-9\s]+)\s+punkt/i);
+                        let healAmount = healMatch ? healMatch[1].trim() : "??";
+                        
                         return `
                             <div style="display:flex; justify-content:space-between; align-items:center; color:#d4af37; font-size:9px; margin-bottom:4px; border-bottom:1px solid #222; padding-bottom:2px;">
-                                <div style="width:60%; padding-right:5px;">- <span class="margo-tooltip-trigger" data-stats="${fullStats.replace(/"/g, '&quot;')}" data-name="${cleanName.replace(/"/g, '&quot;')}" style="cursor:help; text-decoration:underline; color:#f48fb1; font-weight:bold;">${cleanName}</span> <span style="color:#4caf50;">(${price})</span></div>
+                                <div style="width:60%; padding-right:5px;">
+                                    <div style="margin-bottom:2px;">- <span class="margo-tooltip-trigger" data-stats="${fullStats.replace(/"/g, '&quot;')}" data-name="${cleanName.replace(/"/g, '&quot;')}" style="cursor:help; text-decoration:underline; color:#f48fb1; font-weight:bold;">${cleanName}</span> <span style="color:#4caf50;">(${price})</span></div>
+                                    <div style="color:#8bc34a; font-size:8px; margin-left:6px;">❤️ Leczy: ${healAmount} HP</div>
+                                </div>
                                 <div style="display:flex; align-items:center;">
                                     <input type="number" id="buy_amt_heal_${index}_${sIdx}" value="50" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center; margin-right:4px;">
                                     <button class="btn-go-npc" 
@@ -5976,7 +5982,7 @@ window.clearExpMaps = () => {
                             <button class="btn-go-npc" data-map="${k.map_name}" data-x="${k.x}" data-y="${k.y}" style="background:#4caf50; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">🏃 IDŹ DO NPC</button>
                         </div>
                         
-                        <div class="toggle-items-btn" data-index="heal_${index}" style="color:#00acc1; font-size:9px; margin-top:4px; cursor:pointer; font-weight:bold;">
+                        <div class="toggle-items-btn" data-index="heal_${index}" style="color:#00acc1; font-size:9px; margin-top:4px; cursor:pointer; font-weight:bold; background:#222; padding:2px 4px; text-align:center; border-radius:2px;">
                             Pokaż asortyment (${itemCount} szt.) ▼
                         </div>
                         
@@ -6307,27 +6313,59 @@ window.clearExpMaps = () => {
             if (tt) tt.style.display = 'none';
         }
     });
-    // --- DAEMON: AUTOMATYCZNE KUPNO PRZEDMIOTU W SKLEPIE ---
+// --- DAEMON: AUTOMATYCZNE KUPNO PRZEDMIOTU W SKLEPIE I DIALOGI ---
     if (!window.autoBuyDaemonInstalled) {
         window.autoBuyDaemonInstalled = true;
         setInterval(() => {
-            if (window.autoBuyTask && typeof Engine !== 'undefined' && Engine.shop && Engine.shop.items) {
-                // Sprawdzamy czy interfejs sklepu jest widoczny
-                let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper');
-                if (shopWrapper && shopWrapper.style.display !== 'none') {
-                    let shopItems = Object.values(Engine.shop.items);
-                    let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
+            if (window.autoBuyTask && typeof Engine !== 'undefined') {
+                
+                // 1. OMIJANIE DIALOGÓW (Zaczepienie uzdrowiciela otwiera dialog zamiast sklepu)
+                let dialogOptions = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
+                if (dialogOptions.length > 0) {
+                    let shopOpt = dialogOptions.find(el => {
+                        let txt = (el.innerText || el.textContent).toLowerCase();
+                        return txt.includes('sklep') || txt.includes('handl') || txt.includes('wywar') || txt.includes('lecznicz') || txt.includes('towar') || txt.includes('sprzedaj') || txt.includes('pokaż');
+                    });
                     
-                    if (itemToBuy) {
-                        if (window.logHero) window.logHero(`💸 Realizuję transakcję: ${window.autoBuyTask.amount}x ${window.autoBuyTask.item}...`, "#8bc34a");
-                        window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
-                        window.autoBuyTask = null; // Czyszczenie zlecenia
+                    if (shopOpt) {
+                        if (typeof shopOpt.click === 'function') shopOpt.click();
+                        else if (typeof MouseEvent !== 'undefined') {
+                            shopOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                            shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                        }
+                    }
+                    return; // Kliknęliśmy odpowiedź, czekamy aż gra załaduje sklep
+                }
+
+                // 2. KUPNO W SKLEPIE (Gdy okno sklepu fizycznie się pokaże)
+                if (Engine.shop && Engine.shop.items) {
+                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper');
+                    if (shopWrapper && shopWrapper.style.display !== 'none') {
+                        let shopItems = Object.values(Engine.shop.items);
+                        let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
                         
-                        // Zamykamy sklep po ułamku sekundy
-                        setTimeout(() => { if(typeof Engine.shop.close === 'function') Engine.shop.close(); }, 600);
-                    } else {
-                        if (window.logHero) window.logHero(`❌ Ten sprzedawca nie ma w tej chwili [${window.autoBuyTask.item}]!`, "#e53935");
-                        window.autoBuyTask = null;
+                        if (itemToBuy) {
+                            if (window.logHero) window.logHero(`💸 Kupuję: ${window.autoBuyTask.amount}x ${window.autoBuyTask.item}...`, "#8bc34a");
+                            
+                            // Bezpośrednie wysłanie polecenia kupna do serwera
+                            if (typeof window._t !== 'undefined' && window._t.send) {
+                                window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
+                            } else if (typeof window._g === 'function') {
+                                window._g(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
+                            }
+                            
+                            window.autoBuyTask = null; // Czyszczenie zlecenia
+                            
+                            // Zamykanie sklepu
+                            setTimeout(() => { 
+                                if(typeof Engine.shop.close === 'function') Engine.shop.close(); 
+                                let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close');
+                                if(closeBtn) closeBtn.click();
+                            }, 800);
+                        } else {
+                            if (window.logHero) window.logHero(`❌ Sprzedawca nie posiada obecnie [${window.autoBuyTask.item}]!`, "#e53935");
+                            window.autoBuyTask = null;
+                        }
                     }
                 }
             }
