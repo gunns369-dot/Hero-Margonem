@@ -4384,23 +4384,28 @@ arr.forEach(npcObj => {
             return;
         }
 
-        let bestTarget = availableMobs[0]; 
+        // 1. Podział na zasięg lokalny (do 15 kratek) i globalny
+        let localMobs = availableMobs.filter(m => m.dist <= 15);
+        let targetList = localMobs.length > 0 ? localMobs : availableMobs;
+
+        // 2. Sortowanie po "Manhattanie" (symulacja najkrótszej ścieżki pieszej)
+        targetList.sort((a, b) => a.manhattan - b.manhattan);
+
+        let bestTarget = targetList[0]; 
         let target = null;
 
        if (expCurrentTargetId) {
             let currentTarget = availableMobs.find(m => String(m.id) === String(expCurrentTargetId));
             if (currentTarget) {
-                // BLOKADA CZASOWA: Wydłużona do 8.5 sekundy.
-                // Bot "przykleja" się do celu, ignorując inne "trochę bliższe" potwory przez dłuższy czas.
-                if (bestTarget.id !== currentTarget.id && bestTarget.dist < currentTarget.dist && now > expLastTargetSwitchAt + 8500) {
+                // Zmiana celu, tylko jeśli nowy jest wyraźnie bliżej i minął czas blokady
+                if (bestTarget.id !== currentTarget.id && bestTarget.manhattan < currentTarget.manhattan && now > expLastTargetSwitchAt + 8500) {
                     target = bestTarget;
-                    expLastTargetSwitchAt = now; // Zapisujemy czas zmiany celu
+                    expLastTargetSwitchAt = now; 
                     window.logExp(`🔄 Zmieniam cel na bliższy: ${target.nick}`, "#00e5ff");
                 } else {
-                    target = currentTarget; // Trzymaj się obecnego celu
+                    target = currentTarget;
                 }
             } else {
-                // Obecny cel zniknął (np. ktoś go zabił) - bierzemy od razu nowy
                 target = bestTarget; 
                 expLastTargetSwitchAt = now;
                 window.logExp(`🏃 Nowy cel: ${target.nick}`, "#00e5ff");
@@ -4470,7 +4475,7 @@ arr.forEach(npcObj => {
         return;
     }
 
-   // --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
+// --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
     if (now - expMapEnteredAt < 1200) {
         expLastActionTime = now + 120;
         return;
@@ -4490,15 +4495,26 @@ arr.forEach(npcObj => {
     let mapsPool = botSettings.exp.mapOrder || [];
     if (!mapsPool.length) return;
 
-    // Szukamy najlepszej następnej mapy (najbliższej, ale NIE tej, z której przed chwilą przyszliśmy)
+    // --- PAMIĘĆ PUSTYCH MAP ---
+    // Oznaczamy obecną mapę jako całkowicie wyczyszczoną
+    window.mapClearTimes[currMap] = now;
+
+    // Filtrujemy mapy, odrzucając te, które już zostały wyczyszczone
+    let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m] && m !== currMap);
+
+    // Jeśli sprawdziliśmy wszystkie expowiska z listy, resetujemy cykl!
+    if (uncheckedMaps.length === 0) {
+        window.logExp("Sprawdzono wszystkie mapy. Resetuję cykl!", "#8bc34a");
+        window.mapClearTimes = {};
+        uncheckedMaps = mapsPool.filter(m => m !== currMap);
+    }
+
     let nextMap = null;
     let bestPathLen = Infinity;
 
-    for (let m of mapsPool) {
-        if (m === currMap) continue;
-        // Unikamy zapętlenia: ignorujemy poprzednią mapę, chyba że nie mamy innego wyjścia
-        if (mapsPool.length > 2 && m === window.expLastVisitedMap) continue;
-
+    // Szukamy najbliższej NIEODWIEDZONEJ mapy
+    // Funkcja getShortestPath automatycznie poradzi sobie z przejściem przez "puste" mapy po drodze
+    for (let m of uncheckedMaps) {
         let p = getShortestPath(currMap, m);
         if (p && p.length < bestPathLen) {
             bestPathLen = p.length;
@@ -4506,16 +4522,9 @@ arr.forEach(npcObj => {
         }
     }
 
-    // Fallback: jeśli odrzucenie poprzedniej mapy zablokowało drogę (ślepy zaułek), bierzemy cokolwiek dostępnego
-    if (!nextMap) {
-        for (let m of mapsPool) {
-            if (m === currMap) continue;
-            let p = getShortestPath(currMap, m);
-            if (p && p.length < bestPathLen) {
-                bestPathLen = p.length;
-                nextMap = m;
-            }
-        }
+    // Fallback bezpieczeństwa, gdyby algorytm grafu się zgubił
+    if (!nextMap && uncheckedMaps.length > 0) {
+        nextMap = uncheckedMaps[0];
     }
 
     if (!nextMap) {
