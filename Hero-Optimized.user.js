@@ -1666,16 +1666,19 @@ function autoDetectEngineData() {
             updateUI();
         }
 
-        if (isRushing) {
+      if (isRushing) {
             clearTimeout(rushInterval);
+            let loadDelay = Math.floor(Math.random() * (botSettings.mapLoadMax - botSettings.mapLoadMin + 1)) + botSettings.mapLoadMin;
             setTimeout(() => {
                 if (isRushing) executeRushStep();
-            }, 800);
+            }, loadDelay);
         } else if (isPatrolling) {
             clearTimeout(smoothPatrolInterval);
+            let loadDelay = Math.floor(Math.random() * (botSettings.mapLoadMax - botSettings.mapLoadMin + 1)) + botSettings.mapLoadMin;
+            if (typeof window.logHero === 'function') window.logHero(`Wczytywanie mapy... Czekam ${(loadDelay/1000).toFixed(1)}s.`, "#777");
             setTimeout(() => {
                 if (isPatrolling) executePatrolStep();
-            }, 300);
+            }, loadDelay);
         }
     }
 }
