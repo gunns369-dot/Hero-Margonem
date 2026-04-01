@@ -663,18 +663,41 @@ let opacityValue = 0.95;
 
 
 
-let lsProfiles = JSON.parse(localStorage.getItem('exp_profiles_v64') || 'null');
+// --- NOWA LOGIKA BAZY I POLECANYCH EXPOWISK ---
+    window.renderRecommendedExp = function() {
+        let c = document.getElementById('expRecList');
+        if(!c) return;
+        
+        let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
+        // Rozszerzony zakres dla lepszej widoczności bazy
+        let minTarget = playerLvl - 10;
+        let maxTarget = playerLvl + 25;
 
-    // BEZWZGLĘDNA ŁATKA CZYSZCZĄCA: Miażdży stare dane zapisane w ciasteczkach
-    let cacheString = JSON.stringify(lsProfiles || {});
-    if (!lsProfiles || lsProfiles.length < 80 || cacheString.includes("Wioska Ghuli") || lsProfiles[0].mobCount === undefined) {
-        // Głęboka kopia nowej bazy z kodu, aby uchronić obiekty przed błędami referencji
-        lsProfiles = JSON.parse(JSON.stringify(window.defaultExpProfiles));
-        localStorage.setItem('exp_profiles_v64', JSON.stringify(lsProfiles));
-        console.log("%c[System] Wykryto zepsutą pamięć! Stara baza map została pomyślnie zresetowana.", "color: #ff5252; font-weight: bold;");
-    }
-    
-    let loadedProfiles = lsProfiles;
+        let html = '';
+        botSettings.expProfiles.forEach((p, index) => {
+            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+            if(lvlMatch && lvlMatch[1]) {
+                let baseLvl = parseInt(lvlMatch[1]);
+                if(baseLvl >= minTarget && baseLvl <= maxTarget) {
+                    html += `
+                        <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom:2px;">
+                            <input type="checkbox" class="chk-rec-profile" data-index="${index}" style="margin-top:2px;">
+                            <div style="display:flex; flex-direction:column;">
+                                <b style="color:#00acc1;">${p.name}</b>
+                                <span style="color:#888; font-size:9px;">Mapy: ${p.maps.join(', ')}</span>
+                            </div>
+                        </label>
+                    `;
+                }
+            }
+        });
+
+        if(html === '') {
+            c.innerHTML = '<div style="text-align:center; color:#777; padding:10px; font-size:10px;">Brak gotowych expowisk w bazie dla Twojego przedziału poziomowego.</div>';
+        } else {
+            c.innerHTML = html;
+        }
+    };
 
 
   const ZAKONNICY = {
