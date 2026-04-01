@@ -2241,7 +2241,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
                     <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
                     <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
-                    <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;"><span class="btn-icon">✖</span></button>
+                   <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;" onclick="window.toggleMainVisibility()"><span class="btn-icon">✖</span></button>
                 </div>
             </div>
 
@@ -2355,7 +2355,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <span style="color:#00acc1; font-weight:bold; font-size:11px;">Skonfiguruj Teleporty</span><br>
                         <span style="color:#a99a75; font-size:9px;">Kliknij poniżej, aby wybrać miasta.</span>
                     </div>
-                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+                   <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="document.getElementById('heroTeleportsGUI').style.display='flex'; if(typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                 </div>
             </div>
         `;
@@ -2401,10 +2401,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 
 
                 <div class="nav-row"><label>Zasięg widoczności (Domyślnie 7):</label><input type="number" id="inpVisionRange" value="${botSettings.visionRange}" min="1" max="15"></div>
-
-                <div class="nav-row"><label>Przeźroczystość okna (0.2 - 1.0):</label><input type="range" id="sliderOpacity" min="0.2" max="1" step="0.05" value="0.95" style="width:100%;"></div>
-
-                <div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
+<div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
 
 
 
@@ -2541,9 +2538,9 @@ const teleportsGui = document.createElement('div');
 
     // ==========================================
 
-    function toggleMainVisibility() { let gui = document.getElementById('heroNavGUI'); let gear = document.getElementById('gearIcon'); if (gui.style.display === 'none') { gui.style.display = 'flex'; gear.style.display = 'none'; } else { gui.style.display = 'none'; gear.style.display = 'flex'; } }
+   window.toggleMainVisibility = function() { let gui = document.getElementById('heroNavGUI'); let gear = document.getElementById('gearIcon'); if (gui.style.display === 'none') { gui.style.display = 'flex'; gear.style.display = 'none'; } else { gui.style.display = 'none'; gear.style.display = 'flex'; } };
 
-    function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { toggleMainVisibility(); } }
+    function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { window.toggleMainVisibility(); } }
 
 
 
@@ -2611,7 +2608,7 @@ const teleportsGui = document.createElement('div');
 
     function setupMultiDrag() { document.querySelectorAll('.hero-window').forEach(win => { let header = win.querySelector('.gui-header'); if(!header) return; let isDragging = false, startX, startY, initialX, initialY; header.onmousedown = function(e) { if(e.target.closest('button')) return; isDragging = true; startX = e.clientX; startY = e.clientY; initialX = win.offsetLeft; initialY = win.offsetTop; document.querySelectorAll('.hero-window').forEach(w => w.style.zIndex = "10000"); win.style.zIndex = "10001"; document.onmousemove = function(e) { if(isDragging) { win.style.left = (initialX + e.clientX - startX) + 'px'; win.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; }); }
 
-    function setupGearDrag() { const gearIcon = document.getElementById('gearIcon'); let isDragging = false, startX, startY, initialX, initialY, isClick = true; gearIcon.onmousedown = function(e) { isDragging = true; isClick = true; startX = e.clientX; startY = e.clientY; initialX = gearIcon.offsetLeft; initialY = gearIcon.offsetTop; document.onmousemove = function(e) { if(isDragging) { if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) isClick = false; gearIcon.style.left = (initialX + e.clientX - startX) + 'px'; gearIcon.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; gearIcon.onclick = function() { if(isClick) toggleMainVisibility(); }; }
+    function setupGearDrag() { const gearIcon = document.getElementById('gearIcon'); let isDragging = false, startX, startY, initialX, initialY, isClick = true; gearIcon.onmousedown = function(e) { isDragging = true; isClick = true; startX = e.clientX; startY = e.clientY; initialX = gearIcon.offsetLeft; initialY = gearIcon.offsetTop; document.onmousemove = function(e) { if(isDragging) { if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) isClick = false; gearIcon.style.left = (initialX + e.clientX - startX) + 'px'; gearIcon.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; gearIcon.onclick = function() { if(isClick) window.toggleMainVisibility(); }; }
 
 function bindChange(id, handler) {
     const el = document.getElementById(id);
@@ -2955,7 +2952,7 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('btnOpenMaps').addEventListener('click', () => { let p = document.getElementById('heroGatewaysGUI'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; if(p.style.display === 'flex') renderGatewaysDatabase(); });
 
-        document.getElementById('btnMinimizeMain').addEventListener('click', toggleMainVisibility);
+        document.getElementById('sliderOpacity').addEventListener('input', (e) => { opacityValue = e.target.value; document.querySelectorAll('.hero-window').forEach(w => w.style.background = `rgba(17, 17, 17, ${opacityValue})`); });
 
         document.getElementById('btnScanGateways').addEventListener('click', scanCurrentMapForGateways);
 
@@ -5156,15 +5153,5 @@ window.clearExpMaps = () => {
         }
     };
 
-    let btnOpenTp = document.getElementById('btnOpenTeleports');
-    if (btnOpenTp) {
-        btnOpenTp.addEventListener('click', () => {
-            let p = document.getElementById('heroTeleportsGUI');
-            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
-            if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') {
-                window.renderTeleportOptions();
-            }
-        });
-    }
 
 })(); // Koniec kodu
