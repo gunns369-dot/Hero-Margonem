@@ -4461,11 +4461,12 @@ function runExpLogic() {
         }
 
         expCurrentTargetId = target.id;
-        const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
+            const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
 
-        if (targetDist > 1) {
-            expAttackLockUntil = 0; 
-            let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
+            // BIEGNIEMY DO POTWORA
+            if (targetDist > 1) {
+                expAttackLockUntil = 0; 
+                let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
             if (isNewDestination) {
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick} (${target.realDist} kroków)`;
