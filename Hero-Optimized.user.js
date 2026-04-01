@@ -2492,12 +2492,14 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
 
-              <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
+             <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
                     <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                     <button id="btnShowRecommendedEq" class="btn-sepia" style="padding:6px; background:#4caf50; font-weight:bold;">🎒 POKAŻ POLECANE EQ (-5 / +5 LVL)</button>
                     <button id="btnToggleShops" class="btn-sepia" style="padding:6px; background:#e65100; font-weight:bold;">🛒 WYSZUKIWARKA SKLEPÓW</button>
                     <button id="btnStopWalk" class="btn-sepia" style="display:none; padding:6px; background:#d32f2f; color:white; font-weight:bold; border-color:#b71c1c;">🛑 ZATRZYMAJ RUCH DO NPC</button>
                     
+                    <div id="heroTeleportsGUI" style="display:none; flex-direction:column; flex:1; overflow-y:auto; background:#141414; border:1px solid #3a3020; padding:4px;"></div>
+
                     <div id="recommendedEqList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;">
                         <span style="color:#777; font-size:10px; text-align:center; display:block;">Kliknij przycisk powyżej...</span>
                     </div>
@@ -5963,11 +5965,27 @@ window.clearExpMaps = () => {
                         if (path && path.length > 1) {
                             let nextMap = path[1];
                             let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+                            
+                            // DYNAMICZNY SKANER BRAM - gdy brakuje jej w bazie, bot szuka jej na ekranie!
+                            if (!door && typeof HeroScannerModule !== 'undefined') {
+                                let localGates = HeroScannerModule.scanCurrentMap(currentSysMap, null);
+                                let found = localGates.find(g => g.targetMap === nextMap);
+                                if (found) {
+                                    door = { x: found.x, y: found.y };
+                                    if(!globalGateways[currentSysMap]) globalGateways[currentSysMap] = {};
+                                    globalGateways[currentSysMap][nextMap] = door; // Zapisuje na przyszłość
+                                }
+                            }
+
                             if (door) {
                                 let doorX = door.x; let doorY = door.y;
                                 if (door.allCoords && door.allCoords.length > 0) { doorX = door.allCoords[0][0]; doorY = door.allCoords[0][1]; }
                                 if (typeof safeGoTo === 'function') safeGoTo(doorX, doorY, false);
                                 else Engine.hero.autoGoTo({x: doorX, y: doorY});
+                            } else {
+                                if (window.logHero) window.logHero(`❌ Błąd Radaru: Nie widzę bramy do [${nextMap}]!`, "#e53935");
+                                clearInterval(window.npcWalkInterval);
+                                if (btnStop) btnStop.style.display = 'none';
                             }
                         }
                     }
