@@ -665,28 +665,15 @@ let opacityValue = 0.95;
 
 let lsProfiles = JSON.parse(localStorage.getItem('exp_profiles_v64') || 'null');
 
-    // ŁATKA: Wymuś twardy reset pamięci, jeśli zacięła się tam fałszywa "Wioska Ghuli" 
-    // LUB jeśli w pamięci siedzi stara baza bez informacji o ilości potworów (mobCount).
-    let needsUpdate = false;
-
-    if (!lsProfiles || lsProfiles.length < 80) {
-        needsUpdate = true;
-    } else {
-        let hasBuggedMap = lsProfiles.some(p => p.maps.includes("Wioska Ghuli") || p.maps.includes("undefined"));
-        let hasNoMobCount = (lsProfiles[0].mobCount === undefined); // Sprawdza, czy to stara baza
-
-        if (hasBuggedMap || hasNoMobCount) {
-            needsUpdate = true;
-        }
-    }
-
-    // Jeśli wykryto stare dane - brutalnie nadpisz zawartość ciasteczek przeglądarki nową bazą!
-    if (needsUpdate) {
+    // BEZWZGLĘDNA ŁATKA CZYSZCZĄCA: Miażdży stare dane zapisane w ciasteczkach
+    let cacheString = JSON.stringify(lsProfiles || {});
+    if (!lsProfiles || lsProfiles.length < 80 || cacheString.includes("Wioska Ghuli") || lsProfiles[0].mobCount === undefined) {
+        // Głęboka kopia nowej bazy z kodu, aby uchronić obiekty przed błędami referencji
         lsProfiles = JSON.parse(JSON.stringify(window.defaultExpProfiles));
         localStorage.setItem('exp_profiles_v64', JSON.stringify(lsProfiles));
-        console.log("%c[System] Baza expowisk została zaktualizowana do najnowszej wersji!", "color: #4caf50; font-weight: bold;");
+        console.log("%c[System] Wykryto zepsutą pamięć! Stara baza map została pomyślnie zresetowana.", "color: #ff5252; font-weight: bold;");
     }
-
+    
     let loadedProfiles = lsProfiles;
 
 
