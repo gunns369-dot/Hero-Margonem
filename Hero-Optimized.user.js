@@ -5833,12 +5833,13 @@ window.clearExpMaps = () => {
             if (window.logHero) window.logHero(`[System] Zaktualizowano teleport: ${mapName}`, "#00acc1");
         }
 
-        // NOWOŚĆ: Nasłuchiwanie na zmianę w filtrze ekwipunku
+        // Zmiana filtra w Ekwipunku
         if (e.target && e.target.id === 'eqTypeFilter') {
             if (typeof window.renderEqItems === 'function') window.renderEqItems(e.target.value);
         }
     });
-// --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW ---
+
+    // --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW ---
     document.addEventListener('click', (e) => {
         let tpGui = document.getElementById('heroTeleportsGUI');
         let eqList = document.getElementById('recommendedEqList');
@@ -5851,27 +5852,26 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-       // 2. POKAŻ POLECANE EQ (Z filtrowaniem typu)
+        // 2. POKAŻ POLECANE EQ (Z filtrowaniem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
             
-            // Rysujemy interfejs dropdowna (rozsuwanej listy) jeśli jeszcze go nie ma
             if (!document.getElementById('eqTypeFilter')) {
                 eqList.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:#1a1a1a; padding:4px; border:1px solid #333;">
-                        <span style="color:#a99a75; font-size:10px; font-weight:bold;">Filtruj:</span>
+                        <span style="color:#a99a75; font-size:10px; font-weight:bold;">Filtruj typ:</span>
                         <select id="eqTypeFilter" style="background:#000; color:#d4af37; border:1px solid #333; font-size:10px; padding:2px; font-weight:bold; cursor:pointer;">
                             <option value="Wszystkie">Wszystkie (-5 / +5 lvl)</option>
-                            <option value="bro">Broń (Jedno / Dwuręczna)</option>
-                            <option value="dystansowe">Broń Dystansowa</option>
-                            <option value="zbroj">Zbroja</option>
-                            <option value="hełm">Hełm</option>
+                            <option value="bro">Broń (Biała/Złoto)</option>
+                            <option value="dystansowe">Dystansowe / Łuki</option>
+                            <option value="zbroj">Zbroje</option>
+                            <option value="hełm">Hełmy</option>
                             <option value="but">Buty</option>
                             <option value="rękaw">Rękawice</option>
-                            <option value="pierś">Pierścień</option>
-                            <option value="naszyj">Naszyjnik</option>
-                            <option value="tarcz">Tarcza</option>
+                            <option value="pierś">Pierścienie</option>
+                            <option value="naszyj">Naszyjniki</option>
+                            <option value="tarcz">Tarcze</option>
                             <option value="pomocnicze">Pomocnicze</option>
                         </select>
                     </div>
@@ -5879,104 +5879,114 @@ window.clearExpMaps = () => {
                 `;
             }
             
-            // Funkcja odpowiadająca za rysowanie (podpięta pod zmianę typu)
             window.renderEqItems = function(filterVal = "Wszystkie") {
                 let content = document.getElementById('eqListContent');
                 if (!content) return;
                 let items = window.DatabaseModule.getRecommendedEq();
                 
-                if (filterVal !== "Wszystkie") {
-                    items = items.filter(i => i.type && i.type.toLowerCase().includes(filterVal));
-                }
-                
                 let html = '';
-                if(items.length === 0) {
-                    html = `<span style="color:#777; font-size:10px; text-align:center; padding:10px; display:block;">Brak sprzętu w tej kategorii (-5 / +5 lvl).</span>`;
-                } else {
-                    items.forEach((item, index) => {
-                        let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
-                        let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
-                        html += `
-                            <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; background:#1a1a1a;">
-                                <div style="display:flex; justify-content:space-between; width:100%;">
-                                    <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
-                                    <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
-                                </div>
-                                <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
-                                    <span style="color:#a99a75; font-size:9px;">Typ: <b style="color:#fff">${item.type}</b></span>
-                                    <span style="color:${profColor}; font-size:9px;">${profText}</span>
-                                </div>
-                                <div id="seller_info_eq_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
-                            </div>`;
-                    });
-                }
+                let count = 0;
+                
+                items.forEach((item, index) => {
+                    // Ekstrakcja rzeczywistego typu, omijając błąd "null" w bazie Margo
+                    let typeMatch = item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/);
+                    let displayType = typeMatch ? typeMatch[1] : (item.type && item.type !== 'null' ? item.type : "Inne");
+                    
+                    if (filterVal !== "Wszystkie" && !displayType.toLowerCase().includes(filterVal.toLowerCase())) return;
+                    
+                    count++;
+                    let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
+                    let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
+                    html += `
+                        <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; background:#1a1a1a;">
+                            <div style="display:flex; justify-content:space-between; width:100%;">
+                                <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                                <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
+                                <span style="color:#a99a75; font-size:9px;">Typ: <b style="color:#fff">${displayType}</b></span>
+                                <span style="color:${profColor}; font-size:9px;">${profText}</span>
+                            </div>
+                            <div id="seller_info_eq_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
+                        </div>`;
+                });
+                
+                if(count === 0) html = `<span style="color:#777; font-size:10px; text-align:center; padding:10px; display:block;">Brak sprzętu w tej kategorii.</span>`;
                 content.innerHTML = html;
             };
-            // Rysuj natychmiast na podstawie tego, co jest aktualnie wybrane
+            
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
 
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
-        // 4. MIKSTURY I LECZENIE (Zintegrowane z Uzdrowicielami)
+        // 4. MIKSTURY I LECZENIE (Lista Uzdrowicieli)
         if (e.target && e.target.closest('#btnShowPotions')) {
             hideAllTabs(); if (potList) potList.style.display = 'flex';
-            if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { 
+            if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) { 
                 potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; 
             }
+
+            // SZUKAMY NPC: Wszystkich ze słowem "uzdrowiciel" lub "uzdrowicielka"
+            let healers = window.DatabaseModule.kupcy.filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
             
-            let potionsMap = new Map();
-
-            // KROK 1: Przedmioty z ogólnej bazy, które leczą (filtr dla innych NPC)
-            window.DatabaseModule.ekwipunek.forEach(i => {
-                if (i.stats.toLowerCase().includes('leczy') || i.stats.toLowerCase().includes('przywraca')) {
-                    potionsMap.set(i.name, i);
+            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Uzdrowiciele (${healers.length} postaci):</div>`;
+            
+            healers.forEach((k, index) => {
+                let itemCount = k.items ? k.items.length : 0;
+                let itemsHtml = '';
+                
+                if (itemCount > 0) {
+                    itemsHtml = k.items.map((i, sIdx) => {
+                        let cleanName = i.name.split('Typ:')[0].trim();
+                        let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
+                        let fullStats = i.tooltip_text || i.raw_detected_text || i.name;
+                        
+                        return `
+                            <div style="display:flex; justify-content:space-between; align-items:center; color:#d4af37; font-size:9px; margin-bottom:4px; border-bottom:1px solid #222; padding-bottom:2px;">
+                                <div style="width:60%; padding-right:5px;">- <span class="margo-tooltip-trigger" data-stats="${fullStats.replace(/"/g, '&quot;')}" data-name="${cleanName.replace(/"/g, '&quot;')}" style="cursor:help; text-decoration:underline; color:#f48fb1; font-weight:bold;">${cleanName}</span> <span style="color:#4caf50;">(${price})</span></div>
+                                <div style="display:flex; align-items:center;">
+                                    <input type="number" id="buy_amt_heal_${index}_${sIdx}" value="50" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center; margin-right:4px;">
+                                    <button class="btn-go-npc" 
+                                        data-mode="potion"
+                                        data-buy-input="buy_amt_heal_${index}_${sIdx}" 
+                                        data-item="${cleanName}" 
+                                        data-npc="${k.npc_name}" 
+                                        data-map="${k.map_name}" 
+                                        data-x="${k.x}" 
+                                        data-y="${k.y}" 
+                                        style="background:#d81b60; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">
+                                        🏃 KUP
+                                    </button>
+                                </div>
+                            </div>`;
+                    }).join('');
+                } else {
+                    itemsHtml = `<div style="color:#777; font-size:9px;">Brak danych o asortymencie.</div>`;
                 }
-            });
 
-            // KROK 2: Przedmioty wyciągnięte BEZPOŚREDNIO od NPC zaczynających się na "Uzdrow"
-            window.DatabaseModule.kupcy.forEach(k => {
-                if (k.npc_name && k.npc_name.toLowerCase().startsWith('uzdrow')) {
-                    if (k.items) {
-                        k.items.forEach(i => {
-                            let cleanName = i.name.split('Typ:')[0].trim();
-                            if (!potionsMap.has(cleanName)) {
-                                let typeMatch = i.name.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/);
-                                let itemType = typeMatch ? typeMatch[1] : (i.slot_type || "Konsumpcyjne");
-                                let lvlMatch = i.name.match(/Wymagany poziom:\s*(\d+)/);
-                                let lvl = lvlMatch ? parseInt(lvlMatch[1]) : (i.required_level || 1);
-                                
-                                potionsMap.set(cleanName, {
-                                    name: cleanName,
-                                    level: lvl,
-                                    prof: [], 
-                                    type: itemType,
-                                    stats: i.tooltip_text || i.raw_detected_text || i.name
-                                });
-                            }
-                        });
-                    }
-                }
-            });
-
-            let potions = Array.from(potionsMap.values());
-            potions.sort((a,b) => a.level - b.level);
-
-            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Mikstury i Uzdrawiacze (${potions.length} szt.):</div>`;
-            potions.forEach((item, index) => {
                 html += `
-                    <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d81b60; margin-bottom:3px; background:#1a1a1a;">
-                        <div style="display:flex; justify-content:space-between; width:100%;">
-                            <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="pot_${index}" style="color:#f48fb1; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
-                            <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
+                    <div style="background:#1a1a1a; padding:5px; margin-bottom:4px; border-left:3px solid #d81b60;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <b style="color:#f48fb1; font-size:11px;">${k.npc_name}</b>
                         </div>
-                        <div id="seller_info_pot_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
+                        <div style="color:#888; font-size:9px; margin-top:2px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>🌍 ${k.map_name} [${k.x}, ${k.y}]</span>
+                            <button class="btn-go-npc" data-map="${k.map_name}" data-x="${k.x}" data-y="${k.y}" style="background:#4caf50; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">🏃 IDŹ DO NPC</button>
+                        </div>
+                        
+                        <div class="toggle-items-btn" data-index="heal_${index}" style="color:#00acc1; font-size:9px; margin-top:4px; cursor:pointer; font-weight:bold;">
+                            Pokaż asortyment (${itemCount} szt.) ▼
+                        </div>
+                        
+                        <div id="shop_items_heal_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px; background:#0a0a0a; padding-left:4px;">
+                            ${itemsHtml}
+                        </div>
                     </div>`;
             });
             potList.innerHTML = html;
         }
-
    // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
         if (e.target && e.target.classList.contains('toggle-seller-btn')) {
             let itemName = e.target.getAttribute('data-name');
