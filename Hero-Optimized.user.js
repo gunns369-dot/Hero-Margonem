@@ -241,28 +241,36 @@
             }
         },
 
-        parseShops: function(rawShops) {
+    parseShops: function(rawShops) {
             let merchants = [];
             for (let category in rawShops) {
                 let shopsInCategory = rawShops[category];
                 for (let shopUrl in shopsInCategory) {
                     let shopData = shopsInCategory[shopUrl];
+                    
+                    // Szukamy listy przedmiotów w sklepie
+                    let itemsList = [];
+                    for (let key in shopData) {
+                        if (Array.isArray(shopData[key]) && shopData[key].length > 0 && shopData[key][0].name) {
+                            itemsList = shopData[key];
+                            break;
+                        }
+                    }
+
                     if (shopData.shop_npcs) {
                         shopData.shop_npcs.forEach(npc => {
+                            let maps = [];
                             if (npc.maps) {
-                                npc.maps.forEach(mapObj => {
-                                    if (mapObj.coords) {
-                                        mapObj.coords.forEach(coord => {
-                                            merchants.push({
-                                                npc_name: npc.npc_name,
-                                                map_name: mapObj.map_name,
-                                                x: coord.x, y: coord.y,
-                                                category: shopData.category
-                                            });
-                                        });
-                                    }
-                                });
+                                npc.maps.forEach(mapObj => maps.push(mapObj.map_name));
                             }
+                            merchants.push({
+                                npc_name: npc.npc_name,
+                                maps: maps.join(', '),
+                                category: shopData.category,
+                                shop_name: shopData.shop_name || npc.npc_name,
+                                shop_url: shopData.shop_url || shopUrl,
+                                items: itemsList // Zapisujemy asortyment do pamięci!
+                            });
                         });
                     }
                 }
@@ -2476,7 +2484,14 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
                     <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                     <button id="btnShowRecommendedEq" class="btn-sepia" style="padding:6px; background:#4caf50; font-weight:bold;">🎒 POKAŻ POLECANE EQ (-5 / +5 LVL)</button>
+                    <button id="btnToggleShops" class="btn-sepia" style="padding:6px; background:#e65100; font-weight:bold;">🛒 WYSZUKIWARKA SKLEPÓW</button>
                     
+                    <div id="shopsSearchWrapper" style="display:none; flex-direction:column; flex:1; min-height:150px; border:1px solid #3a3020; background:#141414; padding:4px;">
+                        <input type="text" id="shopSearchInput" placeholder="Szukaj NPC, mapy lub przedmiotu..." style="width:100%; padding:5px; background:#000; color:#d4af37; border:1px solid #333; margin-bottom:5px; box-sizing:border-box;">
+                        <div id="shopsListOutput" style="flex:1; overflow-y:auto;">
+                            <span style="color:#777; font-size:10px; text-align:center; display:block;">Wpisz minimum 2 znaki, aby wyszukać...</span>
+                        </div>
+                    </div>
                     <div id="recommendedEqList" style="flex:1; border:1px solid #3a3020; background:#141414; overflow-y:auto; padding:4px;">
                         <span style="color:#777; font-size:10px; text-align:center; display:block;">Kliknij przycisk powyżej, by wczytać przedmioty z bazy...</span>
                     </div>
@@ -5802,5 +5817,91 @@ window.clearExpMaps = () => {
             }
         });
     }
+// --- OBSŁUGA WYSZUKIWARKI SKLEPÓW ---
+    document.addEventListener('click', (e) => {
+        // Przycisk otwierający/zamykający panel sklepów
+        if (e.target && e.target.closest && e.target.closest('#btnToggleShops')) {
+            let wrapper = document.getElementById('shopsSearchWrapper');
+            let eqList = document.getElementById('recommendedEqList');
+            if (wrapper) wrapper.style.display = wrapper.style.display === 'none' ? 'flex' : 'none';
+            if (eqList && wrapper.style.display === 'flex') eqList.style.display = 'none'; // Chowamy liste EQ, zeby zrobic miejsce
+            else if (eqList) eqList.style.display = 'block';
+        }
 
+        // Przycisk rozwijający asortyment danego kupca
+        if (e.target && e.target.classList.contains('toggle-items-btn')) {
+            let index = e.target.getAttribute('data-index');
+            let itemsDiv = document.getElementById(`shop_items_${index}`);
+            if (itemsDiv) {
+                let isHidden = itemsDiv.style.display === 'none';
+                itemsDiv.style.display = isHidden ? 'block' : 'none';
+                e.target.innerHTML = isHidden ? 'Ukryj asortyment ▲' : `Pokaż asortyment ▼`;
+            }
+        }
+    });
+
+    // Silnik wyszukiwania na żywo (Live Search)
+    document.addEventListener('input', (e) => {
+        if (e.target && e.target.id === 'shopSearchInput') {
+            let term = e.target.value.toLowerCase();
+            let container = document.getElementById('shopsListOutput');
+            
+            if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) {
+                container.innerHTML = `<span style="color:#e53935; font-size:10px;">Baza jeszcze się ładuje...</span>`;
+                return;
+            }
+            if (term.length < 2) {
+                container.innerHTML = `<span style="color:#777; font-size:10px;">Wpisz minimum 2 znaki...</span>`;
+                return;
+            }
+
+            // Filtrowanie po imieniu, mapie, kategorii lub nazwie przedmiotu!
+            let filtered = window.DatabaseModule.kupcy.filter(k => 
+                (k.npc_name && k.npc_name.toLowerCase().includes(term)) ||
+                (k.maps && k.maps.toLowerCase().includes(term)) ||
+                (k.category && k.category.toLowerCase().includes(term)) ||
+                (k.items && k.items.some(i => i.name && i.name.toLowerCase().includes(term)))
+            ).slice(0, 30); // Ograniczenie do 30 wyników, żeby nie zaciąć gry
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<span style="color:#777; font-size:10px;">Brak wyników dla: "${term}".</span>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach((k, index) => {
+                let itemCount = k.items ? k.items.length : 0;
+                let itemsHtml = '';
+                
+                if (itemCount > 0) {
+                    itemsHtml = k.items.map(i => {
+                        let cleanName = i.name.split('Typ:')[0].trim();
+                        let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
+                        return `<div style="color:#d4af37; font-size:9px; margin-bottom:2px;">- ${cleanName} <span style="color:#4caf50;">(${price})</span></div>`;
+                    }).join('');
+                } else {
+                    itemsHtml = `<div style="color:#777; font-size:9px;">Brak danych o asortymencie.</div>`;
+                }
+
+                html += `
+                    <div style="background:#1a1a1a; padding:5px; margin-bottom:4px; border-left:3px solid #e65100;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <b style="color:#e65100; font-size:11px;">${k.npc_name}</b>
+                            <a href="${k.shop_url}" target="_blank" style="color:#4caf50; font-size:9px; text-decoration:none; border:1px solid #4caf50; padding:2px 4px; border-radius:3px;">MargoWorld</a>
+                        </div>
+                        <div style="color:#888; font-size:9px; margin-top:2px;">🌍 ${k.maps}</div>
+                        
+                        <div class="toggle-items-btn" data-index="${index}" style="color:#00acc1; font-size:9px; margin-top:4px; cursor:pointer; font-weight:bold;">
+                            Pokaż asortyment (${itemCount} szt.) ▼
+                        </div>
+                        
+                        <div id="shop_items_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px; max-height:100px; overflow-y:auto; background:#0a0a0a; padding-left:4px;">
+                            ${itemsHtml}
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+    });
 })(); // Koniec kodu
