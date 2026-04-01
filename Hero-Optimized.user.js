@@ -4326,26 +4326,32 @@ function runExpLogic() {
         expAntiLagTime = now + getAntiLagDelay();
     }
 
-    // SKAN MOBÓW tylko na mapach expowiska
+   // SKAN MOBÓW tylko na mapach expowiska
     const arr = isExpMap ? getExpNpcList() : [];
     let availableMobs = [];
 
-    
+    arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n) return;
+        
+        // Zabezpieczenie przed atakowaniem martwych lub walczących z kimś innym
         if (n.dead || n.del || n.st === 1 || n.st === 2) return;
         if (!(n.type === 2 || n.type === 3)) return;
 
         let lvl = parseInt(n.lvl, 10);
         if (isNaN(lvl) || lvl <= 0) return;
         if (lvl < minL || lvl > maxL) return;
-arr.forEach(npcObj => {
+
         let wt = parseInt(n.wt, 10);
         if (isNaN(wt)) wt = 0;
 
+        // Filtrowanie na podstawie opcji wyznaczonych w UI (Zwykłe i Elity I)
         if (wt === 0 && !wantNormal) return;
         if (wt === 1 && !wantElite) return;
-        if (wt >= 2) return;
+        
+        // Dynamiczne sprawdzanie wyższych rang (Elity II, Herosi/Tytani) na podstawie ustawień "Kieszonkowego Berserka"
+        if (wt === 2 && botSettings.berserk && !botSettings.berserk.e2) return; 
+        if (wt >= 3 && botSettings.berserk && !botSettings.berserk.hero) return;
 
         availableMobs.push({
             id: npcObj.id || n.id,
