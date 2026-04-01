@@ -2351,11 +2351,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                 </div>
 
                 <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
-                    <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
-                        <span style="color:#00acc1; font-weight:bold; font-size:11px;">Skonfiguruj Teleporty</span><br>
-                        <span style="color:#a99a75; font-size:9px;">Kliknij poniżej, aby wybrać miasta.</span>
-                    </div>
-                   <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="document.getElementById('heroTeleportsGUI').style.display='flex'; if(typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="let p = document.getElementById('heroTeleportsGUI'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                 </div>
             </div>
         `;
