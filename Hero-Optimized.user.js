@@ -6334,8 +6334,8 @@ window.clearExpMaps = () => {
                     });
                     
                     if (shopOpt) {
-                        // Humanizacja: losowe opóźnienie 400-900ms przed kliknięciem dialogu
-                        let humanDelay = Math.floor(Math.random() * 501) + 400;
+                        // Humanizacja: losowe opóźnienie 400-800ms przed kliknięciem dialogu
+                        let humanDelay = Math.floor(Math.random() * 401) + 400;
                         setTimeout(() => {
                             if (typeof shopOpt.click === 'function') shopOpt.click();
                             else if (typeof MouseEvent !== 'undefined') {
@@ -6343,40 +6343,67 @@ window.clearExpMaps = () => {
                                 shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                             }
                         }, humanDelay);
-                        return; // Czekamy aż gra załaduje sklep
+                        return; 
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Gdy okno sklepu fizycznie się pokaże)
+                // 2. FIZYCZNE KUPNO W SKLEPIE (Gdy okno sklepu się pokaże)
                 if (Engine.shop && Engine.shop.items) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window');
+                    
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         let shopItems = Object.values(Engine.shop.items);
                         let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
                         
                         if (itemToBuy) {
-                            // Humanizacja: czekamy 500-1200ms po otwarciu sklepu zanim kupimy
-                            let buyDelay = Math.floor(Math.random() * 701) + 500;
+                            if (window.logHero) window.logHero(`💸 Wybieram: ${window.autoBuyTask.item}...`, "#8bc34a");
                             
-                            if (window.logHero) window.logHero(`💸 Kupuję: ${window.autoBuyTask.amount}x ${window.autoBuyTask.item}...`, "#8bc34a");
-                            
+                            // ETAP A: Zaznaczenie przedmiotu na liście
+                            let itemElement = shopWrapper.querySelector(`[data-id="${itemToBuy.id}"]`) || shopWrapper.querySelector(`.item-slot[data-id="${itemToBuy.id}"]`);
+                            if (itemElement) {
+                                itemElement.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                                itemElement.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                                if (typeof itemElement.click === 'function') itemElement.click();
+                            }
+
+                            // Zapisujemy cel do tymczasowej zmiennej i usuwamy zadanie główne, żeby nie zapętlać
+                            let finalAmount = window.autoBuyTask.amount;
+                            let finalItemId = itemToBuy.id;
+                            window.autoBuyTask = null; 
+
+                            // ETAP B: Wpisanie ilości i kliknięcie "KUP" (Po krótkim opóźnieniu na animację okna)
+                            let buyDelay = Math.floor(Math.random() * 401) + 500; // 500-900ms
                             setTimeout(() => {
-                                // Wysłanie komendy kupna
-                                if (typeof window._g === 'function') {
-                                    window._g(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
-                                } else if (typeof window._t !== 'undefined' && window._t.send) {
-                                    window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
+                                // Szukamy pola na wpisanie sztuk
+                                let amountInput = shopWrapper.querySelector('input[type="text"], input[type="number"], .amount-input, .buy-amount');
+                                if (amountInput) {
+                                    amountInput.value = finalAmount;
+                                    amountInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+
+                                // Szukamy przycisku kupna
+                                let buttons = Array.from(shopWrapper.querySelectorAll('.button, .btn, .green, .buy-btn'));
+                                let buyBtn = buttons.find(b => {
+                                    let t = (b.innerText || b.textContent || "").toLowerCase();
+                                    return t.includes('kup') || t.includes('akceptuj') || t.includes('tak');
+                                });
+
+                                if (buyBtn) {
+                                    if (typeof buyBtn.click === 'function') buyBtn.click();
+                                } else {
+                                    // Jeśli UI całkowicie się zmieniło, awaryjnie uderzamy w serwer
+                                    if (typeof window._g === 'function') window._g(`shop&buy=${finalItemId}&amount=${finalAmount}`);
                                 }
                                 
-                                window.autoBuyTask = null; // Zlecenie wykonane
-                                
-                                // Humanizacja: Losowy czas do zamknięcia sklepu (600-1400ms po kupnie)
-                                let closeDelay = Math.floor(Math.random() * 801) + 600;
+                                // ETAP C: Zamknięcie sklepu i powrót
+                                let closeDelay = Math.floor(Math.random() * 501) + 600; // 600-1100ms
                                 setTimeout(() => { 
-                                    if(typeof Engine.shop.close === 'function') Engine.shop.close(); 
+                                    if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
                                     let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close');
-                                    if(closeBtn) closeBtn.click();
+                                    if (closeBtn) closeBtn.click();
                                 }, closeDelay);
+                                
                             }, buyDelay);
 
                         } else {
@@ -6386,6 +6413,6 @@ window.clearExpMaps = () => {
                     }
                 }
             }
-        }, 800); // Główny cykl demona
+        }, 800);
     }
 })(); // Koniec kodu
