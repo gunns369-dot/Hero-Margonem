@@ -674,23 +674,27 @@ let opacityValue = 0.95;
         let maxTarget = playerLvl + 25;
 
         let html = '';
-        botSettings.expProfiles.forEach((p, index) => {
-            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
-            if(lvlMatch && lvlMatch[1]) {
-                let baseLvl = parseInt(lvlMatch[1]);
-                if(baseLvl >= minTarget && baseLvl <= maxTarget) {
-                    html += `
-                        <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom:2px;">
-                            <input type="checkbox" class="chk-rec-profile" data-index="${index}" style="margin-top:2px;">
-                            <div style="display:flex; flex-direction:column;">
-                                <b style="color:#00acc1;">${p.name}</b>
-                                <span style="color:#888; font-size:9px;">Mapy: ${p.maps.join(', ')}</span>
-                            </div>
-                        </label>
-                    `;
+        
+        // Zabezpieczenie przed ReferenceError - pobieramy profile bezpośrednio z bezpiecznego obiektu botSettings
+        if (botSettings && botSettings.expProfiles) {
+            botSettings.expProfiles.forEach((p, index) => {
+                let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+                if(lvlMatch && lvlMatch[1]) {
+                    let baseLvl = parseInt(lvlMatch[1]);
+                    if(baseLvl >= minTarget && baseLvl <= maxTarget) {
+                        html += `
+                            <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom:2px;">
+                                <input type="checkbox" class="chk-rec-profile" data-index="${index}" style="margin-top:2px;">
+                                <div style="display:flex; flex-direction:column;">
+                                    <b style="color:#00acc1;">${p.name}</b>
+                                    <span style="color:#888; font-size:9px;">Mapy: ${p.maps.join(', ')}</span>
+                                </div>
+                            </label>
+                        `;
+                    }
                 }
-            }
-        });
+            });
+        }
 
         if(html === '') {
             c.innerHTML = '<div style="text-align:center; color:#777; padding:10px; font-size:10px;">Brak gotowych expowisk w bazie dla Twojego przedziału poziomowego.</div>';
@@ -698,8 +702,6 @@ let opacityValue = 0.95;
             c.innerHTML = html;
         }
     };
-let loadedProfiles = lsProfiles;
-
   const ZAKONNICY = {
 
         "Thuzal": {x: 72, y: 20},
