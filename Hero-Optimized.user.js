@@ -4328,23 +4328,25 @@ function runExpLogic() {
     const arr = isExpMap ? getExpNpcList() : [];
     let availableMobs = [];
 
-    arr.forEach(npcObj => {
-        let n = npcObj?.d || npcObj;
+arr.forEach(npcObj => {
+        let n = npcObj; 
         if (!n) return;
-        if (n.dead || n.del || n.st === 1 || n.st === 2) return;
-        if (!(n.type === 2 || n.type === 3)) return;
+        
+        // ZABEZPIECZENIE: n.st === 1 oznacza, że potwór idzie! Nie możemy go ignorować. 
+        // n.st === 2 oznacza, że z kimś walczy (tego ignorujemy).
+        if (n.dead || n.del || n.st === 2) return; 
+        if (n.type !== 2 && n.type !== 3) return; // Tylko potwory (2 = agresywne, 3 = neutralne)
 
         let lvl = parseInt(n.lvl, 10);
         if (isNaN(lvl) || lvl <= 0) return;
         if (lvl < minL || lvl > maxL) return;
 
-     let wt = parseInt(n.wt, 10);
+        let wt = parseInt(n.wt, 10);
         if (isNaN(wt)) wt = 0;
 
-        if (wt === 0 && !wantNormal) return;
-        if (wt === 1 && !wantElite) return;
-        if (wt > 1) return; // Herosi i Kolosy omijamy
-
+        if (wt === 0 && !wantNormal) return; // Zwykłe
+        if (wt === 1 && !wantElite) return;  // Elity I
+        if (wt > 1) return; // Omijamy Elity II, Herosów i Tytanów (od tego jest inna zakładka)
         availableMobs.push({
             id: npcObj.id || n.id,
             x: n.x,
