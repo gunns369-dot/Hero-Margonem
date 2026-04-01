@@ -6098,7 +6098,7 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                     itemsHtml = `<div style="color:#777; font-size:9px;">Brak danych o asortymencie.</div>`;
                 }
 
-                html += `
+        html += `
                     <div style="background:#1a1a1a; padding:5px; margin-bottom:4px; border-left:3px solid #e65100;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <b style="color:#e65100; font-size:11px;">${k.npc_name}</b>
@@ -6112,7 +6112,7 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                             Pokaż asortyment (${itemCount} szt.) ▼
                         </div>
                         
-                        <div id="shop_items_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px; max-height:100px; overflow-y:auto; background:#0a0a0a; padding-left:4px;">
+                        <div id="shop_items_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px; background:#0a0a0a; padding-left:4px;">
                             ${itemsHtml}
                         </div>
                     </div>`;
@@ -6145,14 +6145,23 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                 desc = desc.replace(/Unikat/g, '<span style="color:#fbc02d; font-weight:bold;">Unikat</span>');
                 desc = desc.replace(/Heroik/g, '<span style="color:#29b6f6; font-weight:bold;">Heroik</span>');
                 desc = desc.replace(/Legendarny/g, '<span style="color:#ef5350; font-weight:bold;">Legendarny</span>');
-                
-                // 3. INTELIGENTNE ŁAMANIE LINII PRZED KAŻDĄ STATYSTYKĄ
-                const statKeywords = ["Typ:", "Obrażenia", "Cios krytyczny", "Siła", "Zręczność", "Intelekt", "Energia", "Mana", "Pancerz", "Unik", "Życie", "Wiąże", "Spowalnia", "Przebicie", "Pojemność", "Ilość:", "Teleportuje", "Leczy", "Przywraca", "Niszczy", "Szansa na", "Wymagany poziom:", "Wymagana profesja:", "Wartość:", "Zadaje", "Obniża"];
+               // 3. INTELIGENTNE ŁAMANIE LINII PRZED KAŻDĄ STATYSTYKĄ
+                const statKeywords = [
+                    "Typ:", "Obrażenia", "Cios krytyczny", "Siła", "Zręczność", "Intelekt", "Energia", "Mana", 
+                    "Pancerz", "Blok", "Unik", "Życie", "Odporność na", "Wiąże", "Spowalnia", "Przebicie", 
+                    "Pojemność", "Ilość:", "Teleportuje", "Leczy", "Przywraca", "Niszczy", "Szansa na", 
+                    "Podczas ataku", "Dodatkowe obrażenia", "Absorbuje", "Wymagany poziom:", "Wymagana profesja:", 
+                    "Wartość:", "Zadaje", "Obniża"
+                ];
                 
                 statKeywords.forEach(key => {
+                    // Dodaje nową linię zawsze przed napotkaniem wielkiej litery ze słowa kluczowego
                     let regex = new RegExp(`\\s*(${key})`, 'g');
                     desc = desc.replace(regex, '<br>$1');
                 });
+
+                // Czystka: usuwanie znaków nowej linii z samego początku tekstu
+                desc = desc.replace(/^(<br>\s*)+/, '');
 
                 // 4. Kolorowanie (Szare nagłówki, zielone wartości na plusie, złote ceny)
                 desc = desc.replace(/(Wymagany poziom:|Wymagana profesja:|Typ:|Wartość:)/g, '<span style="color:#888;">$1</span>');
