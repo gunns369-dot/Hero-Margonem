@@ -4477,34 +4477,47 @@ function runExpLogic() {
             window.expLastDistImprovementTime = now;
         }
 
-        if (targetDist > 1) {
+       if (targetDist > 1) {
             expAttackLockUntil = 0; 
             
-            // SYSTEM BEZWZGLĘDNEGO ANTI-STUCK (Monitorowanie postępów)
-            if (target.realDist < window.expBestDistToTarget) {
-                // Posuwamy się do przodu! Zapisujemy nowy rekord dystansu i resetujemy zegar.
-                window.expBestDistToTarget = target.realDist;
-                window.expLastDistImprovementTime = now;
-            } else if (now - window.expLastDistImprovementTime > 4000) {
-                // Minęły 4 sekundy bez postępu (zacięcie, klif, niewidzialna bariera)
-                window.logExp(`🚨 Zablokowany w drodze do [${target.nick}]! Ignoruję go.`, "#ff5252");
-                window.expUnreachableMobs.add(target.id);
-                expCurrentTargetId = null;
-                window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                return;
-            }
-
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
             if (isNewDestination) {
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
-                window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 2000; 
+                window.expLastMoveTx = target.x; 
+                window.expLastMoveTy = target.y;
+                
+                // Rejestrujemy czas startu i dystans
+                window.expTargetPursuitStart = now;
+                window.expPursuitLastDist = targetDist;
+                
+                // Dajemy silnikowi gry 500ms na faktyczne rozpoczęcie kroku, żeby uniknąć fałszywych alarmów
+                window.expMoveLockUntil = now + 500; 
                 expAntiLagTime = now + getAntiLagDelay(); 
-            } else if (!isHeroMoving && now > window.expMoveLockUntil) {
-                Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
+            } else {
+                // --- ROZWIĄZANIE TWOJEGO POMYSŁU: ZATRZYMANIE Z DALA OD MOBA ---
+                // Jeśli postać fizycznie STOI (!isHeroMoving) i minął czas na start ruchu,
+                // ale potwór NADAL jest dalej niż 1 kratka - jesteśmy na skarpie/ścianie!
+                if (!isHeroMoving && now > window.expMoveLockUntil) {
+                    window.logExp(`🚨 Droga do [${target.nick}] urwana! (Utknął ${targetDist} kratek stąd). Czarna lista.`, "#ff5252");
+                    window.expUnreachableMobs.add(target.id);
+                    expCurrentTargetId = null;
+                    window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                    return;
+                }
+
+                // Zapasowy Anti-Ping-Pong (Brak zmniejszenia dystansu przez 3.5 sekundy)
+                if (targetDist < window.expPursuitLastDist) {
+                    window.expPursuitLastDist = targetDist;
+                    window.expTargetPursuitStart = now; // Resetujemy stoper bo postać idzie do przodu
+                } else if (now - window.expTargetPursuitStart > 3500) {
+                    window.logExp(`🚨 Zapętlenie w drodze do [${target.nick}]! Czarna lista.`, "#ff5252");
+                    window.expUnreachableMobs.add(target.id);
+                    expCurrentTargetId = null;
+                    window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                    return;
+                }
             }
             expLastActionTime = now + 100;
             return;
