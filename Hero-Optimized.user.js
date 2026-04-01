@@ -661,7 +661,17 @@ let opacityValue = 0.95;
       {"name": "Driady (280lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Drzewo Życia p.1", "Drzewo Życia p.2", "Drzewo Życia p.3", "Gvar Hamryd", "Jaskinia Suchych Pędów s.1", "Jaskinia Suchych Pędów s.2", "Jaskinia Suchych Pędów s.3", "Jaskinia Suchych Pędów s.4", "Matecznik Szelestu", "Rozlewisko Kai"]}
     ];
 
+// === BEZWZGLĘDNA ŁATKA CZYSZCZĄCA v64.4 ===
+    let lsProfiles = JSON.parse(localStorage.getItem('exp_profiles_v64_4') || 'null');
 
+    // Jeśli baza jest pusta lub różni się długością od tej z kodu - wymusza twardy reset
+    if (!lsProfiles || lsProfiles.length !== window.defaultExpProfiles.length) {
+        lsProfiles = JSON.parse(JSON.stringify(window.defaultExpProfiles));
+        localStorage.setItem('exp_profiles_v64_4', JSON.stringify(lsProfiles));
+        console.log("%c[System] Baza expowisk zaktualizowana pomyślnie z kodu!", "color: #00e5ff; font-weight: bold;");
+    }
+    let loadedProfiles = lsProfiles;
+    window.loadedProfiles = lsProfiles; // Globalne zabezpieczenie przed błędem ReferenceError
 
 // --- NOWA LOGIKA BAZY I POLECANYCH EXPOWISK ---
     window.renderRecommendedExp = function() {
@@ -669,15 +679,17 @@ let opacityValue = 0.95;
         if(!c) return;
         
         let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
-        // Rozszerzony zakres dla lepszej widoczności bazy
+        // ROZSZERZONY ZAKRES: Od -10 do +25 leveli!
         let minTarget = playerLvl - 10;
         let maxTarget = playerLvl + 25;
 
         let html = '';
         
-        // Zabezpieczenie przed ReferenceError - pobieramy profile bezpośrednio z bezpiecznego obiektu botSettings
-        if (botSettings && botSettings.expProfiles) {
-            botSettings.expProfiles.forEach((p, index) => {
+        // Wyeliminowanie ReferenceError, sięgamy wprost do botSettings lub zabezpieczenia
+        let profilesToRender = (botSettings && botSettings.expProfiles) ? botSettings.expProfiles : window.defaultExpProfiles;
+
+        if (profilesToRender) {
+            profilesToRender.forEach((p, index) => {
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
                 if(lvlMatch && lvlMatch[1]) {
                     let baseLvl = parseInt(lvlMatch[1]);
@@ -4618,7 +4630,7 @@ function runExpLogic() {
 
         botSettings.expProfiles.push({ name: name, desc: desc, maps: [...botSettings.exp.mapOrder] });
 
-        localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
+        localStorage.setItem('exp_profiles_v64_4', JSON.stringify(botSettings.expProfiles));
 
 
 
@@ -4777,7 +4789,7 @@ function runExpLogic() {
 
                 botSettings.expProfiles.splice(index, 1);
 
-                localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
+                localStorage.setItem('exp_profiles_v64_4', JSON.stringify(botSettings.expProfiles));
 
                 if(typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
 
@@ -4803,7 +4815,7 @@ function runExpLogic() {
 
                 botSettings.expProfiles = [...window.defaultExpProfiles];
 
-                localStorage.setItem('exp_profiles_v64', JSON.stringify(botSettings.expProfiles));
+                localStorage.setItem('exp_profiles_v64_4', JSON.stringify(botSettings.expProfiles));
 
             }
 
