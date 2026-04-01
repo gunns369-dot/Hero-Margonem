@@ -4584,36 +4584,27 @@ function runExpLogic() {
 
 
 
-    if (hx !== expLastX || hy !== expLastY) {
-
+ if (hx !== expLastX || hy !== expLastY) {
         expLastX = hx;
-
         expLastY = hy;
-
         expAntiLagTime = now + getAntiLagDelay();
-
+        window.expGatewayStandTime = 0;
     } else if (now > expAntiLagTime) {
-
         if (isOnGateway(hx, hy)) {
-
-            window.logExp(`[Anti-Lag] Stoję na bramie. Odbiegam...`, "#ff9800");
-
-            let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
-
-            let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
-
-            Engine.hero.autoGoTo({ x: stepX, y: stepY });
-
-            expAntiLagTime = now + 1500; expMapTransitionCooldown = now + 1500; expLastActionTime = now + 500;
-
-            expCurrentTargetId = null; window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-
-            return;
-
+            if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
+            // Dajemy grze twarde 4.5 sekundy na wczytanie mapy po wejściu na kratkę z bramą
+            if (now - window.expGatewayStandTime > 4500) {
+                window.logExp(`[Anti-Lag] Brama zablokowana. Odbiegam...`, "#ff9800");
+                let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
+                let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
+                Engine.hero.autoGoTo({ x: stepX, y: stepY });
+                expAntiLagTime = now + 1500; expMapTransitionCooldown = now + 1500; expLastActionTime = now + 500;
+                expCurrentTargetId = null; window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                window.expGatewayStandTime = 0;
+            }
+            return; // Ważne: na bramie nie robimy nic, tylko czekamy
         }
-
         expAntiLagTime = now + getAntiLagDelay();
-
     }
 
 
