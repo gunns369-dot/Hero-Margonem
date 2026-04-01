@@ -698,7 +698,7 @@ let opacityValue = 0.95;
             c.innerHTML = html;
         }
     };
-
+let loadedProfiles = lsProfiles;
 
   const ZAKONNICY = {
 
