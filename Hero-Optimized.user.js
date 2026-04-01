@@ -3411,8 +3411,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
                 }
             });
         }
-    } // <--- TA KLAMRA ZOSTAŁA PRZEZ CIEBIE USUNIĘTA, TERAZ WRACA NA SWOJE MIEJSCE!
-
+    } // <--- TO JEST ZAMKNIĘCIE FUNKCJI setupLogic, KTÓRE SIĘ ZEPSUŁO!
 
     // ==========================================
 
@@ -5894,7 +5893,7 @@ window.clearExpMaps = () => {
             potList.innerHTML = html;
         }
 
-    // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
+   // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
         if (e.target && e.target.classList.contains('toggle-seller-btn')) {
             let itemName = e.target.getAttribute('data-name');
             let index = e.target.getAttribute('data-index');
