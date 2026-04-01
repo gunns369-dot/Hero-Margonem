@@ -1441,32 +1441,19 @@ let attackInterval = null;
 
 
 
-    function updateSuitableBosses(containerId, searchId, dataArray, labelColor) {
-
+   function updateSuitableBosses(containerId, searchId, dataArray, labelColor) {
         let container = document.getElementById(containerId);
-
-        if (!container || !Engine || !Engine.hero) return;
-
-
+        if (!container || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return; // ZABEZPIECZENIE PRZED CRASHEM
 
         let playerLvl = Engine.hero.d.lvl;
-
         if (!playerLvl) return;
 
-
-
         // Boss wyświetla się od (boss.level - 13) do jego maksa. Kolosy mają limit = 999.
-
         let suitable = dataArray.filter(e => playerLvl >= (e.level - 13) && playerLvl <= e.limit);
-
         let html = suitable.map(e => `<span style="color:${labelColor}; font-weight:bold; cursor:pointer;" onclick="document.getElementById('${searchId}').value='${e.name}'; document.getElementById('${searchId}').dispatchEvent(new Event('input'));">${e.name} (${e.level})</span>`).join(', ');
 
-
-
         container.innerHTML = `<div style="font-size:10px; color:#a99a75; font-weight:bold;">Moby na Twój poziom (od ${playerLvl - 13 > 0 ? playerLvl - 13 : 1} w górę):</div>
-
                                <div style="font-size:11px; margin-top:3px; max-height:60px; overflow-y:auto; line-height:1.4;">${html || 'Brak mobów w Twoim przedziale'}</div>`;
-
     }
 
 
@@ -4161,47 +4148,38 @@ function getAntiLagDelay() {
     if (safeMax <= safeMin) return safeMin;
     return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
 }   
-    function getExpNpcList() {
-        // 1. GŁÓWNY PRIORYTET: Pełna lista z pamięci gry (widzi potwory daleko we mgle wojny)
+  function getExpNpcList() {
+        let mobs = new Map();
+
+        // 1. Z pamięci głębokiej (widzi daleko we mgle)
         try {
-            const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : null;
-            if (checked && typeof checked === 'object') {
-                return Object.keys(checked).map(id => {
-                    const raw = checked[id];
-                    const n = raw?.d || raw || {};
-                    if (n.id == null) n.id = id;
-                    return n;
-                });
+            const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : {};
+            for (let id in checked) {
+                let n = checked[id]?.d || checked[id];
+                if (n && n.x !== undefined && n.y !== undefined) mobs.set(id, { id: id, ...n });
             }
         } catch (e) {}
 
-        // 2. METODA ZAPASOWA: Bezpośredni odczyt obiektu z danymi
+        // 2. Z bezpośredniego słownika (aktualizowany na bieżąco)
         try {
-            const direct = Engine?.npcs?.d;
-            if (direct && typeof direct === 'object') {
-                return Object.keys(direct).map(id => {
-                    const raw = direct[id];
-                    const n = raw?.d || raw || {};
-                    if (n.id == null) n.id = id;
-                    return n;
-                });
+            const direct = Engine?.npcs?.d || {};
+            for (let id in direct) {
+                let n = direct[id]?.d || direct[id];
+                if (n && n.x !== undefined && n.y !== undefined) mobs.set(id, { id: id, ...n });
             }
         } catch (e) {}
 
-        // 3. OSTATECZNOŚĆ: Lista tylko z widocznego ekranu (poprzednio to psuło expienie)
+        // 3. Z obiektów na ekranie (dla pewności)
         try {
-            const drawable = Engine?.npcs?.getDrawableList?.();
-            if (Array.isArray(drawable) && drawable.length > 0) {
-                return drawable;
-            }
+            const drawable = Engine?.npcs?.getDrawableList?.() || [];
+            drawable.forEach(obj => {
+                let n = obj?.d || obj;
+                if (n && n.id && n.x !== undefined && n.y !== undefined) mobs.set(n.id, { id: n.id, ...n });
+            });
         } catch (e) {}
 
-        return [];
+        return Array.from(mobs.values());
     }
-    function isMapInSelectedExpowisko(mapName) {
-    const maps = botSettings?.exp?.mapOrder || [];
-    return Array.isArray(maps) && maps.includes(mapName);
-}
 function setExpBerserkState(shouldEnable) {
     if (!botSettings?.berserk) return;
     if (!botSettings.berserk.userEnabled) return;
@@ -4441,7 +4419,7 @@ function runExpLogic() {
             return;
         }
 
-        // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
+     // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
         if (targetDist <= 1) {
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
             
@@ -4451,10 +4429,15 @@ function runExpLogic() {
 
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
+            // WYMUSZENIE KLIKNIĘCIA "ZAATAKUJ" - NA WYPADEK GDYBY BERSERK ZIGNOROWAŁ ELITĘ
+            if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
+            let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
+            if (confirmBtn && confirmBtn.innerText.toLowerCase().includes("zaatakuj")) confirmBtn.click();
+
             let isBerserkActive = botSettings.berserk && botSettings.berserk.enabled;
 
             if (expAttackLockUntil === 0) {
-                expAttackLockUntil = now + (isBerserkActive ? 2500 : 0);
+                expAttackLockUntil = now + (isBerserkActive ? 2500 : 1000);
             } else if (now > expAttackLockUntil) {
                 window.logExp(`Zacięcie przy walce z: ${target.nick}. Odbiegam kawałek...`, "#ff9800");
                 
