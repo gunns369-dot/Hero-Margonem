@@ -665,16 +665,28 @@ let opacityValue = 0.95;
 
 let lsProfiles = JSON.parse(localStorage.getItem('exp_profiles_v64') || 'null');
 
-    // ŁATKA: Wymuś twardy reset pamięci, jeśli zacięła się tam fałszywa "Wioska Ghuli"
-    if (lsProfiles) {
-        let hasBuggedMap = lsProfiles.some(p => p.maps.includes("Wioska Ghuli"));
-        if (hasBuggedMap) lsProfiles = null; 
-    }
+    // ŁATKA: Wymuś twardy reset pamięci, jeśli zacięła się tam fałszywa "Wioska Ghuli" 
+    // LUB jeśli w pamięci siedzi stara baza bez informacji o ilości potworów (mobCount).
+    let needsUpdate = false;
 
     if (!lsProfiles || lsProfiles.length < 80) {
-        lsProfiles = [...window.defaultExpProfiles];
-        localStorage.setItem('exp_profiles_v64', JSON.stringify(lsProfiles));
+        needsUpdate = true;
+    } else {
+        let hasBuggedMap = lsProfiles.some(p => p.maps.includes("Wioska Ghuli") || p.maps.includes("undefined"));
+        let hasNoMobCount = (lsProfiles[0].mobCount === undefined); // Sprawdza, czy to stara baza
+
+        if (hasBuggedMap || hasNoMobCount) {
+            needsUpdate = true;
+        }
     }
+
+    // Jeśli wykryto stare dane - brutalnie nadpisz zawartość ciasteczek przeglądarki nową bazą!
+    if (needsUpdate) {
+        lsProfiles = JSON.parse(JSON.stringify(window.defaultExpProfiles));
+        localStorage.setItem('exp_profiles_v64', JSON.stringify(lsProfiles));
+        console.log("%c[System] Baza expowisk została zaktualizowana do najnowszej wersji!", "color: #4caf50; font-weight: bold;");
+    }
+
     let loadedProfiles = lsProfiles;
 
 
