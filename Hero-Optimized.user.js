@@ -247,7 +247,6 @@
                 for (let shopUrl in shopsInCategory) {
                     let shopData = shopsInCategory[shopUrl];
                     
-                    // Szukamy listy przedmiotów w sklepie
                     let itemsList = [];
                     for (let key in shopData) {
                         if (Array.isArray(shopData[key]) && shopData[key].length > 0 && shopData[key][0].name) {
@@ -258,25 +257,30 @@
 
                     if (shopData.shop_npcs) {
                         shopData.shop_npcs.forEach(npc => {
-                            let maps = [];
                             if (npc.maps) {
-                                npc.maps.forEach(mapObj => maps.push(mapObj.map_name));
+                                npc.maps.forEach(mapObj => {
+                                    let mapName = mapObj.map_name;
+                                    if (mapObj.coords && mapObj.coords.length > 0) {
+                                        mapObj.coords.forEach(coord => {
+                                            merchants.push({
+                                                npc_name: npc.npc_name,
+                                                map_name: mapName,
+                                                x: coord.x, y: coord.y,
+                                                category: shopData.category,
+                                                shop_name: shopData.shop_name || npc.npc_name,
+                                                shop_url: shopData.shop_url || shopUrl,
+                                                items: itemsList
+                                            });
+                                        });
+                                    }
+                                });
                             }
-                            merchants.push({
-                                npc_name: npc.npc_name,
-                                maps: maps.join(', '),
-                                category: shopData.category,
-                                shop_name: shopData.shop_name || npc.npc_name,
-                                shop_url: shopData.shop_url || shopUrl,
-                                items: itemsList // Zapisujemy asortyment do pamięci!
-                            });
                         });
                     }
                 }
             }
             this.kupcy = merchants;
         },
-
         parseEq: function(rawEq) {
             let items = [];
             for (let itemUrl in rawEq) {
@@ -5823,7 +5827,7 @@ window.clearExpMaps = () => {
             let wrapper = document.getElementById('shopsSearchWrapper');
             let eqList = document.getElementById('recommendedEqList');
             if (wrapper) wrapper.style.display = wrapper.style.display === 'none' ? 'flex' : 'none';
-            if (eqList && wrapper.style.display === 'flex') eqList.style.display = 'none'; // Chowamy liste EQ, zeby zrobic miejsce
+            if (eqList && wrapper.style.display === 'flex') eqList.style.display = 'none'; 
             else if (eqList) eqList.style.display = 'block';
         }
 
@@ -5835,6 +5839,22 @@ window.clearExpMaps = () => {
                 let isHidden = itemsDiv.style.display === 'none';
                 itemsDiv.style.display = isHidden ? 'block' : 'none';
                 e.target.innerHTML = isHidden ? 'Ukryj asortyment ▲' : `Pokaż asortyment ▼`;
+            }
+        }
+
+        // Obsługa przycisku "IDŹ"
+        if (e.target && e.target.classList.contains('btn-go-npc')) {
+            let mapName = e.target.getAttribute('data-map');
+            let x = parseInt(e.target.getAttribute('data-x'));
+            let y = parseInt(e.target.getAttribute('data-y'));
+            
+            if (typeof Engine !== 'undefined' && Engine.map && Engine.map.d) {
+                if (Engine.map.d.name === mapName) {
+                    window.logHero(`🏃 Biegnę do NPC na kordy [${x}, ${y}]`, "#4caf50");
+                    Engine.hero.autoGoTo({x: x, y: y});
+                } else {
+                    window.logHero(`❌ Kupiec jest na innej mapie: [${mapName}]. Musisz tam najpierw przejść!`, "#e53935");
+                }
             }
         }
     });
@@ -5854,13 +5874,12 @@ window.clearExpMaps = () => {
                 return;
             }
 
-            // Filtrowanie po imieniu, mapie, kategorii lub nazwie przedmiotu!
             let filtered = window.DatabaseModule.kupcy.filter(k => 
                 (k.npc_name && k.npc_name.toLowerCase().includes(term)) ||
-                (k.maps && k.maps.toLowerCase().includes(term)) ||
+                (k.map_name && k.map_name.toLowerCase().includes(term)) ||
                 (k.category && k.category.toLowerCase().includes(term)) ||
                 (k.items && k.items.some(i => i.name && i.name.toLowerCase().includes(term)))
-            ).slice(0, 30); // Ograniczenie do 30 wyników, żeby nie zaciąć gry
+            ).slice(0, 30); 
 
             if (filtered.length === 0) {
                 container.innerHTML = `<span style="color:#777; font-size:10px;">Brak wyników dla: "${term}".</span>`;
@@ -5876,7 +5895,19 @@ window.clearExpMaps = () => {
                     itemsHtml = k.items.map(i => {
                         let cleanName = i.name.split('Typ:')[0].trim();
                         let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
-                        return `<div style="color:#d4af37; font-size:9px; margin-bottom:2px;">- ${cleanName} <span style="color:#4caf50;">(${price})</span></div>`;
+                        
+                        // Ekstrakcja Levelu i Profesji z długiego tekstu JSON
+                        let lvlMatch = i.name.match(/Wymagany poziom:\s*(\d+)/);
+                        let lvl = lvlMatch ? lvlMatch[1] : (i.required_level || "Brak");
+                        
+                        let profMatch = i.name.match(/Wymagana profesja:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ,\s]+?)(?=\sWymagany|\sWartość|$)/);
+                        let prof = profMatch ? profMatch[1].trim() : (i.allowed_professions && i.allowed_professions.length > 0 ? i.allowed_professions.join(', ') : "Każda");
+
+                        return `
+                            <div style="color:#d4af37; font-size:9px; margin-bottom:4px; border-bottom:1px solid #222; padding-bottom:2px;">
+                                <div>- ${cleanName} <span style="color:#4caf50;">(${price})</span></div>
+                                <div style="color:#777; font-size:8px; margin-left:8px;">Lvl: <span style="color:#fff;">${lvl}</span> | Prof: <span style="color:#fff;">${prof}</span></div>
+                            </div>`;
                     }).join('');
                 } else {
                     itemsHtml = `<div style="color:#777; font-size:9px;">Brak danych o asortymencie.</div>`;
@@ -5888,7 +5919,10 @@ window.clearExpMaps = () => {
                             <b style="color:#e65100; font-size:11px;">${k.npc_name}</b>
                             <a href="${k.shop_url}" target="_blank" style="color:#4caf50; font-size:9px; text-decoration:none; border:1px solid #4caf50; padding:2px 4px; border-radius:3px;">MargoWorld</a>
                         </div>
-                        <div style="color:#888; font-size:9px; margin-top:2px;">🌍 ${k.maps}</div>
+                        <div style="color:#888; font-size:9px; margin-top:2px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>🌍 ${k.map_name} [${k.x}, ${k.y}]</span>
+                            <button class="btn-go-npc" data-map="${k.map_name}" data-x="${k.x}" data-y="${k.y}" style="background:#4caf50; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">🏃 IDŹ</button>
+                        </div>
                         
                         <div class="toggle-items-btn" data-index="${index}" style="color:#00acc1; font-size:9px; margin-top:4px; cursor:pointer; font-weight:bold;">
                             Pokaż asortyment (${itemCount} szt.) ▼
