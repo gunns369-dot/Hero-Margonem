@@ -2541,10 +2541,9 @@ const teleportsGui = document.createElement('div');
 
     // ==========================================
 
-    function toggleMainVisibility() { let gui = document.getElementById('heroNavGUI'); let gear = document.getElementById('gearIcon'); if (gui.style.display === 'none') { gui.style.display = 'flex'; gear.style.display = 'none'; } else { gui.style.display = 'none'; gear.style.display = 'flex'; } }
+   window.toggleMainVisibility = function() { let gui = document.getElementById('heroNavGUI'); let gear = document.getElementById('gearIcon'); if (gui.style.display === 'none') { gui.style.display = 'flex'; gear.style.display = 'none'; } else { gui.style.display = 'none'; gear.style.display = 'flex'; } };
 
-    function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { toggleMainVisibility(); } }
-
+    function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { window.toggleMainVisibility(); } }
 
 
     function setupModals() {
