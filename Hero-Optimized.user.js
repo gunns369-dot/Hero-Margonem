@@ -4237,6 +4237,39 @@ window.expLastMoveTy = -1;
 window.expMoveLockUntil = 0;
 window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
+// ==========================================
+// 🗺️ NATYWNY PATHFINDER & GRAF MAP
+// ==========================================
+const SmartPathfinder = {
+    findReachableGateways: function(heroX, heroY, currentMap) {
+        let reachable = [];
+        let gateways = globalGateways[currentMap] || {};
+        for (let targetMap in gateways) {
+            let gw = gateways[targetMap];
+            reachable.push({
+                targetMap: targetMap,
+                x: gw.x,
+                y: gw.y,
+                dist: Math.abs(heroX - gw.x) + Math.abs(heroY - gw.y)
+            });
+        }
+        return reachable.sort((a, b) => a.dist - b.dist);
+    },
+
+    pickBestMob: function(hero, availableMobs) {
+        if (availableMobs.length === 0) return null;
+        let scoredMobs = availableMobs.map(mob => {
+            let isElite = (mob.wt === 11 || mob.type === 11 || mob.type === 2) ? 1 : 0;
+            return { ...mob, isElite };
+        });
+        scoredMobs.sort((a, b) => {
+            if (b.isElite !== a.isElite) return b.isElite - a.isElite; 
+            return a.manhattan - b.manhattan; 
+        });
+        return scoredMobs[0];
+    }
+};
+
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
@@ -4283,7 +4316,7 @@ function runExpLogic() {
         window.expLastMoveTx = -1;
         window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
-        window.expUnreachableMobs.clear(); // Reset czarnej listy na nowej mapie
+        window.expUnreachableMobs.clear(); // Reset czarnej listy na nowej mapie!
     }
 
     const isOnGateway = (x, y) => {
@@ -4314,9 +4347,7 @@ function runExpLogic() {
             window.expLastMoveTy = -1;
             return;
         }
-
         if (expCurrentTargetId) {
-            window.logExp(`Zawieszenie na trasie. Szukam innego celu!`, "#f44336");
             expCurrentTargetId = null;
             window.expLastMoveTx = -1;
             window.expLastMoveTy = -1;
@@ -4333,9 +4364,7 @@ function runExpLogic() {
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
-        
-        // OMIJAMY MOBY Z CZARNEJ LISTY
-        if (window.expUnreachableMobs.has(n.id)) return;
+        if (window.expUnreachableMobs.has(n.id)) return; // IGNORUJEMY NIEDOSTĘPNE MOBY!
 
         let lvl = parseInt(n.lvl, 10);
         if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
@@ -4355,39 +4384,26 @@ function runExpLogic() {
         if (ranga === "hero" && !bHero) return;
 
         rawMobs.push({ 
-            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
+            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, 
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
             manhattan: Math.abs(hx - n.x) + Math.abs(hy - n.y)
         });
     });
 
-    // Sortowanie potworów: 1. Elity, 2. Odległość
-    rawMobs.sort((a, b) => {
-        let aElite = (a.ranga !== "normal") ? 1 : 0;
-        let bElite = (b.ranga !== "normal") ? 1 : 0;
-        if (aElite !== bElite) return bElite - aElite;
-        return a.manhattan - b.manhattan;
-    });
+    let target = SmartPathfinder.pickBestMob(hero, rawMobs);
 
-    if (rawMobs.length > 0) {
+    if (target) {
         if (expEmptyScans > 0) {
             window.logExp(`✨ Zauważono nowy resp! Czekam...`, "#8bc34a");
             expEmptyScans = 0; expLastActionTime = now + 2000; return;
         }
 
-        let target = rawMobs[0];
-
         if (expCurrentTargetId !== target.id) {
-            window.logExp(`🏃 Namierzono: ${target.nick}`, "#00e5ff");
+            window.logExp(`🏃 Cel: ${target.nick}`, "#00e5ff");
             expCurrentTargetId = target.id;
-            
-            // Reset stopera Anti-Stuck dla nowego moba
-            window.expTargetPursuitStart = now;
-            window.expPursuitLastX = hx;
-            window.expPursuitLastY = hy;
         }
 
-        const targetDist = target.manhattan;
+        const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
 
         if (targetDist > 1) {
             expAttackLockUntil = 0; 
@@ -4395,31 +4411,31 @@ function runExpLogic() {
 
             if (isNewDestination) {
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
+                
+                // WYKORZYSTANIE NATYWNEGO PATHFINDERA MARGONEM (Rysuje ścieżkę!)
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                
+                // SPRAWDZENIE CZY SILNIK GRY WYZNACZYŁ TRASĘ OMIJAJĄCĄ KLIFY (Z Opóźnieniem 80ms na obliczenia)
+                setTimeout(() => {
+                    if (window.isExping && Engine.hero && Engine.hero.d) {
+                        let p = Engine.hero.d.path;
+                        let currentD = Math.max(Math.abs(target.x - Engine.hero.d.x), Math.abs(target.y - Engine.hero.d.y));
+                        // Jeśli cel jest daleko, a pathfinder gry zwrócił pustą tablicę = cel jest za ścianą!
+                        if ((!p || p.length === 0) && currentD > 1) {
+                            window.logExp(`🚨 ${target.nick} jest niedostępny! Czarna lista.`, "#ff5252");
+                            window.expUnreachableMobs.add(target.id);
+                            expCurrentTargetId = null;
+                            window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                        }
+                    }
+                }, 80);
+
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 2000; 
                 expAntiLagTime = now + getAntiLagDelay(); 
-            } else {
-                // --- ZAAWANSOWANY ANTI-STUCK ---
-                if (now - window.expTargetPursuitStart > 2000) {
-                    if (hx === window.expPursuitLastX && hy === window.expPursuitLastY) {
-                        window.logExp(`🚨 Potwór [${target.nick}] zablokowany! Dodaję do czarnej listy.`, "#ff5252");
-                        window.expUnreachableMobs.add(target.id);
-                        expCurrentTargetId = null;
-                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                        return;
-                    }
-                    // Zaktualizuj pozycję jeśli się porusza
-                    window.expTargetPursuitStart = now;
-                    window.expPursuitLastX = hx;
-                    window.expPursuitLastY = hy;
-                }
-
-                if (!isHeroMoving && now > window.expMoveLockUntil) {
-                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                    window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
-                    expAntiLagTime = now + getAntiLagDelay(); 
-                }
+            } else if (!isHeroMoving && now > window.expMoveLockUntil) {
+                Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
             }
             expLastActionTime = now + 100;
             return;
@@ -4444,7 +4460,7 @@ function runExpLogic() {
         return;
     }
 
-    // --- BRAK MOBÓW: ZAAWANSOWANE SZUKANIE NASTĘPNEJ MAPY (GRAF + DYSTANS) ---
+    // --- ZAAWANSOWANY SMART ROAM (Z NAPRAWIONĄ PĘTLĄ TUNELI) ---
     if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
 
     expEmptyScans++;
@@ -4459,35 +4475,40 @@ function runExpLogic() {
     let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m] && m !== currMap);
 
     if (uncheckedMaps.length === 0) {
-        window.logExp("Sprawdzono wszystkie mapy. Resetuję cykl!", "#8bc34a");
-        window.mapClearTimes = {};
-        uncheckedMaps = mapsPool.filter(m => m !== currMap);
+        // ROZWIĄZANIE PROBLEMU PĘTLI MIĘDZY TUNELAMI
+        window.logExp("⏳ Wyczyszczono expowiska! Czekam 45s na resp...", "#ffb300");
+        expMapTransitionCooldown = now + 45000; // POSTAĆ STOI 45 SEKUND ZAMIAST BIEGAĆ W PĘTLI
+        window.mapClearTimes = {}; // Reset pamięci, po 45s sprawdzi ponownie
+        return;
     }
 
-    let gateways = globalGateways[currMap] || {};
+    let reachableGateways = SmartPathfinder.findReachableGateways(hx, hy, currMap);
     let nextStepMap = null;
     let targetGateway = null;
-    let bestDistToDoor = Infinity;
 
-    // Szukamy najlepszego wyjścia - sprawdzamy które z lokalnych wyjść prowadzi najszybciej do pełnej mapy
-    for (let targetMap in gateways) {
-        let gw = gateways[targetMap];
+    if (reachableGateways.length > 0) {
+        let directGw = reachableGateways.find(gw => uncheckedMaps.includes(gw.targetMap));
         
-        for (let unvisitedMap of uncheckedMaps) {
-            let path = getShortestPath(targetMap, unvisitedMap);
-            if (path) { // Ścieżka z bramy do celu istnieje
-                let dist = Math.abs(gw.x - hx) + Math.abs(gw.y - hy); // Dystans postaci do bramy
-                if (dist < bestDistToDoor) {
-                    bestDistToDoor = dist;
-                    nextStepMap = targetMap;
-                    targetGateway = gw;
+        if (directGw) {
+            nextStepMap = directGw.targetMap;
+            targetGateway = directGw;
+        } else {
+            let bestGraphPathLen = Infinity;
+            for (let gw of reachableGateways) {
+                for (let unvisitedMap of uncheckedMaps) {
+                    let path = getShortestPath(gw.targetMap, unvisitedMap);
+                    if (path && path.length < bestGraphPathLen) {
+                        bestGraphPathLen = path.length;
+                        nextStepMap = gw.targetMap;
+                        targetGateway = gw;
+                    }
                 }
             }
         }
     }
 
     if (!nextStepMap) {
-        window.logExp(`Brak znanej drogi do expowiska! Zapisz przejścia (🎥).`, "#e53935");
+        window.logExp(`Brak fizycznie osiągalnych przejść na tej mapie!`, "#e53935");
         expMapTransitionCooldown = now + 4000;
         return;
     }
