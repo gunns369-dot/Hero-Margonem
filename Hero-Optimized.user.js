@@ -4235,27 +4235,26 @@ function setExpBerserkState(shouldEnable) {
 window.expLastMoveTx = -1;
 window.expLastMoveTy = -1;
 window.expMoveLockUntil = 0;
+window.expUnreachableMobs = window.expUnreachableMobs || new Set();
+window.expBestDistToTarget = 9999;
+window.expLastDistImprovementTime = 0;
 
 // ==========================================
-// 🗺️ SMART PATHFINDER (MATRIX FLOOD-FILL) - 0 LAGÓW, UŻYWA DETEKTORA GRY
+// 🗺️ SMART PATHFINDER (Z LOJALNOŚCIĄ I ANTI-PINGPONG)
 // ==========================================
 window.floodFillCache = { x: -1, y: -1, time: 0, grid: null, w: 0, h: 0 };
 
 const SmartPathfinder = {
-    // "Wylewa farbę" po wolnych kratkach z użyciem wewnętrznego detektora Margonem
     getReachableArea: function(startX, startY) {
         if (window.floodFillCache.grid && window.floodFillCache.x === startX && window.floodFillCache.y === startY && (Date.now() - window.floodFillCache.time < 500)) {
-            return window.floodFillCache; // Zwraca z pamięci dla wydajności (max 2 przeliczenia na sekunde)
+            return window.floodFillCache; 
         }
 
-        const maxW = Engine.map.d.x;
-        const maxH = Engine.map.d.y;
+        const maxW = Engine.map.d.x; const maxH = Engine.map.d.y;
         let grid = new Int32Array(maxW * maxH).fill(-1);
-        let queueX = new Int32Array(maxW * maxH);
-        let queueY = new Int32Array(maxW * maxH);
+        let queueX = new Int32Array(maxW * maxH); let queueY = new Int32Array(maxW * maxH);
         
         let head = 0; let tail = 0;
-
         queueX[tail] = startX; queueY[tail] = startY; tail++;
         grid[startY * maxW + startX] = 0;
 
@@ -4263,7 +4262,6 @@ const SmartPathfinder = {
         const dx = [0, 0, -1, 1, -1, 1, -1, 1];
         const dy = [-1, 1, 0, 0, -1, -1, 1, 1];
 
-        // Zasięg szukania drogi (300 kroków - omija najdłuższe klify w Margonem)
         while (head < tail) {
             let cx = queueX[head]; let cy = queueY[head];
             let cd = grid[cy * maxW + cx];
@@ -4273,11 +4271,10 @@ const SmartPathfinder = {
 
             for (let i = 0; i < 8; i++) {
                 let nx = cx + dx[i]; let ny = cy + dy[i];
-
                 if (nx >= 0 && ny >= 0 && nx < maxW && ny < maxH) {
                     let idx = ny * maxW + nx;
-                    if (grid[idx] === -1) { // Jeśli nieodwiedzone
-                        if (!colCheck(nx, ny)) { // I NIE MA KOLIZJI (wbudowany detektor)
+                    if (grid[idx] === -1) { 
+                        if (!colCheck(nx, ny)) { 
                             grid[idx] = cd + 1;
                             queueX[tail] = nx; queueY[tail] = ny; tail++;
                         }
@@ -4292,14 +4289,11 @@ const SmartPathfinder = {
 
     getRealDistToMob: function(mx, my, cache) {
         let maxW = cache.w; let maxH = cache.h; let grid = cache.grid;
-
-        // Jeśli potwór jest na naszej kratce (lub my na jego)
         if (mx >= 0 && my >= 0 && mx < maxW && my < maxH) {
             let d = grid[my * maxW + mx];
             if (d !== -1) return d;
         }
 
-        // Sprawdzamy, czy "farba" dotarła obok potwora
         let bestD = Infinity;
         const dx = [0, 0, -1, 1, -1, 1, -1, 1];
         const dy = [-1, 1, 0, 0, -1, -1, 1, 1];
@@ -4311,7 +4305,7 @@ const SmartPathfinder = {
                 if (d !== -1 && d < bestD) { bestD = d; }
             }
         }
-        return bestD === Infinity ? Infinity : bestD + 1; // Infinity = Zablokowany za skarpą!
+        return bestD === Infinity ? Infinity : bestD + 1; 
     },
 
     findReachableGateways: function(heroX, heroY, currentMap) {
@@ -4322,14 +4316,12 @@ const SmartPathfinder = {
         for (let targetMap in gateways) {
             let gw = gateways[targetMap];
             let dist = this.getRealDistToMob(gw.x, gw.y, reachableArea);
-            if (dist !== Infinity) {
-                reachable.push({ targetMap: targetMap, x: gw.x, y: gw.y, dist: dist });
-            }
+            if (dist !== Infinity) reachable.push({ targetMap: targetMap, x: gw.x, y: gw.y, dist: dist });
         }
         return reachable.sort((a, b) => a.dist - b.dist);
     },
 
-    pickBestMob: function(hero, availableMobs) {
+    pickBestMob: function(hero, availableMobs, currentTargetId) {
         if (availableMobs.length === 0) return null;
         
         let reachableArea = this.getReachableArea(hero.x, hero.y);
@@ -4337,17 +4329,24 @@ const SmartPathfinder = {
 
         availableMobs.forEach(mob => {
             let realDist = this.getRealDistToMob(mob.x, mob.y, reachableArea);
-            if (realDist === Infinity) return; // INSTANT ODRZUT MOBÓW ZA SKARPĄ (0 LAGÓW)
+            if (realDist === Infinity) return; 
 
             let isElite = (mob.wt === 11 || mob.type === 11 || mob.type === 2) ? 1 : 0;
-            scoredMobs.push({ ...mob, realDist: realDist, isElite: isElite });
+            
+            // SYSTEM LOJALNOŚCI: Zapobiega "Ping-Pongowi" między dwoma mobami
+            let scoreDist = realDist;
+            if (mob.id === currentTargetId) {
+                scoreDist -= 50; // Znacznie obniżamy dystans dla obecnego celu by go nie zmieniał!
+            }
+
+            scoredMobs.push({ ...mob, realDist: realDist, scoreDist: scoreDist, isElite: isElite });
         });
 
         if (scoredMobs.length === 0) return null;
 
         scoredMobs.sort((a, b) => {
             if (b.isElite !== a.isElite) return b.isElite - a.isElite; 
-            return a.realDist - b.realDist; // Sortuj wg realnego dystansu do pieszego chodu
+            return a.scoreDist - b.scoreDist; 
         });
 
         return scoredMobs[0];
@@ -4376,8 +4375,7 @@ function runExpLogic() {
             expLastTargetSwitchAt = 0; 
             expEmptyScans = 0;
             expAttackLockUntil = 0; 
-            window.expLastMoveTx = -1; 
-            window.expLastMoveTy = -1;
+            window.expLastMoveTx = -1; window.expLastMoveTy = -1;
             return;
         }
     } catch (e) {}
@@ -4397,9 +4395,9 @@ function runExpLogic() {
         expEmptyScans = 0;
         expCurrentTargetId = null;
         expAttackLockUntil = 0;
-        window.expLastMoveTx = -1;
-        window.expLastMoveTy = -1;
+        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
+        window.expUnreachableMobs.clear(); // Reset czarnej listy
     }
 
     const isOnGateway = (x, y) => {
@@ -4417,7 +4415,7 @@ function runExpLogic() {
         expAntiLagTime = now + getAntiLagDelay();
     } else if (now > expAntiLagTime) {
         if (isOnGateway(hx, hy)) {
-            window.logExp(`[Anti-Lag] Odbiegam z bramy...`, "#ff9800");
+            window.logExp(`[Anti-Lag] Stoję na bramie. Odbiegam...`, "#ff9800");
             let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
             let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
 
@@ -4427,7 +4425,6 @@ function runExpLogic() {
             return;
         }
         if (expCurrentTargetId) {
-            window.logExp(`[Anti-Lag] Postać zamuliła. Szukam innego celu!`, "#f44336");
             expCurrentTargetId = null;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1;
         }
@@ -4442,6 +4439,7 @@ function runExpLogic() {
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+        if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
         if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
@@ -4461,7 +4459,7 @@ function runExpLogic() {
         rawMobs.push({ id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim() });
     });
 
-    let target = SmartPathfinder.pickBestMob(hero, rawMobs);
+    let target = SmartPathfinder.pickBestMob(hero, rawMobs, expCurrentTargetId);
 
     if (target) {
         if (expEmptyScans > 0) {
@@ -4471,18 +4469,35 @@ function runExpLogic() {
 
         const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
 
+        // Inicjalizacja Nowego Celu
+        if (expCurrentTargetId !== target.id) {
+            window.logExp(`🏃 Namierzono: ${target.nick}`, "#00e5ff");
+            expCurrentTargetId = target.id;
+            window.expBestDistToTarget = target.realDist;
+            window.expLastDistImprovementTime = now;
+        }
+
         if (targetDist > 1) {
             expAttackLockUntil = 0; 
+            
+            // SYSTEM BEZWZGLĘDNEGO ANTI-STUCK (Monitorowanie postępów)
+            if (target.realDist < window.expBestDistToTarget) {
+                // Posuwamy się do przodu! Zapisujemy nowy rekord dystansu i resetujemy zegar.
+                window.expBestDistToTarget = target.realDist;
+                window.expLastDistImprovementTime = now;
+            } else if (now - window.expLastDistImprovementTime > 4000) {
+                // Minęły 4 sekundy bez postępu (zacięcie, klif, niewidzialna bariera)
+                window.logExp(`🚨 Zablokowany w drodze do [${target.nick}]! Ignoruję go.`, "#ff5252");
+                window.expUnreachableMobs.add(target.id);
+                expCurrentTargetId = null;
+                window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                return;
+            }
+
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
             if (isNewDestination) {
-                // Naprawa wyświetlania: Rzucamy tekst na konsole gdy wbijemy nowy cel
-                if (expCurrentTargetId !== target.id) {
-                    window.logExp(`🏃 Biegnę do: ${target.nick} (Kroków: ${target.realDist})`, "#00e5ff");
-                    expCurrentTargetId = target.id;
-                }
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
-                
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 2000; 
@@ -4490,7 +4505,6 @@ function runExpLogic() {
             } else if (!isHeroMoving && now > window.expMoveLockUntil) {
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
                 window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
-                expAntiLagTime = now + getAntiLagDelay(); 
             }
             expLastActionTime = now + 100;
             return;
@@ -4519,7 +4533,7 @@ function runExpLogic() {
     if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
 
     expEmptyScans++;
-    if (displayTarget) displayTarget.innerText = `Skanowanie... (${expEmptyScans}/6)`;
+    if (displayTarget) displayTarget.innerText = `Czysto. Skanowanie... (${expEmptyScans}/6)`;
     if (expEmptyScans < 6) { expLastActionTime = now + 180; return; }
     if (now < expMapTransitionCooldown) return;
 
@@ -4530,14 +4544,12 @@ function runExpLogic() {
     let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m] && m !== currMap);
 
     if (uncheckedMaps.length === 0) {
-        // ROZWIĄZANIE PĘTLI MIĘDZY JASKINIAMI/TUNELAMI
-        window.logExp("⏳ Wyczyszczono całą listę map! Czekam 45s na respy...", "#ffb300");
-        expMapTransitionCooldown = now + 45000; // Po wyszysczeniu wszystkiego czeka 45 sekund zanim ruszy znowu w kółko
-        window.mapClearTimes = {}; // Reset cyklu po 45 sekundach
+        window.logExp("⏳ Wszystkie mapy czyste. Czekam 45s...", "#ffb300");
+        expMapTransitionCooldown = now + 45000; 
+        window.mapClearTimes = {}; 
         return;
     }
 
-    // Bierzemy tylko te bramy, do których postać faktycznie fizycznie ma dojście!
     let reachableGateways = SmartPathfinder.findReachableGateways(hx, hy, currMap);
     let nextStepMap = null;
     let targetGateway = null;
