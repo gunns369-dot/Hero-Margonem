@@ -2260,6 +2260,9 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                 </div>
 
                 <div id="heroContainer" style="display:flex; flex-direction:column; flex-grow:1;">
+                    <div id="heroConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 150px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:5px;">
+                        <span style="color:#777;">[System]</span> Moduł Patrolu w gotowości...
+                    </div>
                     <div id="radarControlsWrapper" style="margin-bottom: 8px;">
                         <div class="nav-row" style="background: rgba(183, 28, 28, 0.2); padding:5px; border-radius:2px; border:1px solid #8e0000;">
                             <label style="color: #ff5252; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkRadar" ${botSettings.radarEnabled ? 'checked' : ''}> Wykrywacz (Radar)</label>
