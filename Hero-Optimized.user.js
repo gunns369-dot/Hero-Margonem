@@ -1547,7 +1547,33 @@ function autoDetectEngineData() {
 
     let currentName = Engine.map.d.name;
     if (!currentName || currentName === "undefined") return;
-
+// --- ŁATKA: SPRAWDZANIE AWANSU I SYNCHRONIZACJA POZIOMÓW ---
+    if (Engine.hero && Engine.hero.d && Engine.hero.d.lvl) {
+        let currentLvl = Engine.hero.d.lvl;
+        if (window.lastHeroExpLevel !== currentLvl) {
+            if (window.lastHeroExpLevel !== 0 && currentLvl > window.lastHeroExpLevel) {
+                if (typeof window.logExp === 'function') window.logExp(`🎉 Awans na ${currentLvl} poziom! Automatyczna aktualizacja przedziału.`, "#4caf50");
+            }
+            window.lastHeroExpLevel = currentLvl;
+            
+            // Kalkulacja widełek na podstawie offsetów berserka
+            let minOff = Math.abs(botSettings.berserk.minLvlOffset || 20);
+            let maxOff = parseInt(botSettings.berserk.maxLvlOffset || 100);
+            
+            botSettings.exp.minLvl = Math.max(1, currentLvl - minOff);
+            botSettings.exp.maxLvl = currentLvl + maxOff;
+            
+            let elMin = document.getElementById('expMinL');
+            let elMax = document.getElementById('expMaxL');
+            if (elMin) elMin.value = botSettings.exp.minLvl;
+            if (elMax) elMax.value = botSettings.exp.maxLvl;
+            
+            saveSettings();
+            if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+            if (botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
+        }
+    }
+    // --- KONIEC ŁATKI ---
     updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
     updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
 
