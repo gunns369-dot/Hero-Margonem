@@ -554,226 +554,113 @@ let opacityValue = 0.95;
 
 
 
-    window.defaultExpProfiles = [
-
-      {"name": "Grobowce (18lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grobowiec Rodziny Tywelta", "Grobowiec Rodziny Tywelta p.1", "Grobowiec Rodziny Tywelta p.2", "Krypta Rodu Heregata", "Krypta Rodu Heregata p.1", "Krypta Rodu Heregata p.2 - lewe skrzydło", "Krypta Rodu Heregata p.2 - prawe skrzydło"]},
-
-      {"name": "Mrówki (20lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kopiec Mrówek", "Kopiec Mrówek p.1", "Kopiec Mrówek p.2", "Mrowisko", "Mrowisko p.1", "Mrowisko p.2"]},
-
-      {"name": "Pumy i tygrysy (21lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Jaskinia Dzikich Kotów", "Kryjówka Dzikich Kotów", "Leśna Przełęcz", "Tygrysia Polana"]},
-
-      {"name": "Niedźwiedzie i nietoperze (23lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dziewicza Knieja", "Siedlisko Nietoperzy p.1", "Siedlisko Nietoperzy p.2", "Siedlisko Nietoperzy p.3 - sala 1", "Siedlisko Nietoperzy p.3 - sala 2", "Siedlisko Nietoperzy p.4", "Siedlisko Nietoperzy p.5"]},
-
-      {"name": "Bazyliszki (26lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Las Tropicieli"]},
-
-      {"name": "Mulusy (28lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dzikie Pagórki", "Osada Mulusów", "Pradawne Wzgórze Przodków"]},
-
-      {"name": "Demony (29lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Przeklęta Strażnica", "Przeklęta Strażnica - podziemia p.1 s.1", "Przeklęta Strażnica - podziemia p.1 s.2", "Przeklęta Strażnica - podziemia p.2 s.1", "Przeklęta Strażnica - podziemia p.2 s.2", "Przeklęta Strażnica - podziemia p.2 s.3", "Przeklęta Strażnica p.1", "Przeklęta Strażnica p.2"]},
-
-      {"name": "Rozbojnicy (32lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dolina Rozbójników", "Kamienna Kryjówka", "Namiot Bandytów", "Pagórki Łupieżców", "Przełęcz Łotrzyków", "Skład Grabieżców"]},
-
-      {"name": "Gobliny (34lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Jaskinia Pogardy", "Las Goblinów", "Morwowe Przejście", "Podmokła Dolina"]},
-
-      {"name": "Puffy (37lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Pieczara Niepogody p.1", "Pieczara Niepogody p.2 - sala 1", "Pieczara Niepogody p.2 - sala 2", "Pieczara Niepogody p.3", "Pieczara Niepogody p.4", "Pieczara Niepogody p.5"]},
-
-      {"name": "Dziki (40lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Pieczara Kwiku - sala 1", "Pieczara Kwiku - sala 2", "Racicowy Matecznik", "Spokojne Przejście", "Ukwiecona Skarpa"]},
-
-      {"name": "Ghule (40lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Ghuli Mogilnik", "Polana Ścierwojadów", "Zapomniany Grobowiec p.1", "Zapomniany Grobowiec p.2", "Zapomniany Grobowiec p.3", "Zapomniany Grobowiec p.4", "Zapomniany Grobowiec p.5"]},
-
-      {"name": "Wilcze plemię (44lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Krasowa Pieczara p.1", "Krasowa Pieczara p.2", "Krasowa Pieczara p.3", "Legowisko Wilczej Hordy", "Warczące Osuwiska", "Wilcza Nora p.1", "Wilcza Nora p.2", "Wilcza Skarpa"]},
-
-      {"name": "Tolloki (45lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Skalne Turnie", "Skarpiska Tolloków"]},
-
-      {"name": "Zbiry (46lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Ciemnica Szubrawców p.1 - sala 1", "Ciemnica Szubrawców p.1 - sala 2", "Ciemnica Szubrawców p.1 - sala 3", "Stary Kupiecki Trakt", "Stukot Widmowych Kół", "Wertepy Rzezimieszków"]},
-
-      {"name": "Orkowie (47lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Nawiedzony Jar", "Opuszczony Bastion", "Podziemne Przejście p.1", "Podziemne Przejście p.2", "Stare Wyrobisko p.1", "Stare Wyrobisko p.2", "Stare Wyrobisko p.3", "Stare Wyrobisko p.4", "Stare Wyrobisko p.5", "Zburzona Twierdza", "Zrujnowana Wieża", "Świszcząca Grota p.1", "Świszcząca Grota p.2", "Świszcząca Grota p.3", "Świszcząca Grota p.4"]},
-
-      {"name": "Przesmyk (50lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Migotliwa Pieczara", "Mroczna Pieczara p.0", "Mroczna Pieczara p.1 - sala 1", "Mroczna Pieczara p.1 - sala 2", "Mroczna Pieczara p.1 - sala 3", "Mroczna Pieczara p.2", "Mroczny Przesmyk", "Zapomniany Szlak"]},
-
-      {"name": "Galarety (51lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Mokra Grota p.1", "Mokra Grota p.1 - boczny korytarz", "Mokra Grota p.1 - przełaz", "Mokra Grota p.2", "Mokra Grota p.2 - korytarz"]},
-
-      {"name": "Pokątniki (52lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grota Bezszelestnych Kroków - sala 1", "Grota Bezszelestnych Kroków - sala 2", "Grota Bezszelestnych Kroków - sala 3"]},
-
-      {"name": "Koboldy (54lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Lazurytowa Grota p.1", "Lazurytowa Grota p.2", "Lazurytowa Grota p.3 - sala 1", "Lazurytowa Grota p.3 - sala 2", "Lazurytowa Grota p.4"]},
-
-      {"name": "Żądłaki (58lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kopalnia Kapiącego Miodu p.1 - sala 1", "Kopalnia Kapiącego Miodu p.1 - sala 2", "Kopalnia Kapiącego Miodu p.2 - sala 1", "Kopalnia Kapiącego Miodu p.2 - sala 2", "Kopalnia Kapiącego Miodu p.2 - sala Owadziej Matki", "Kopalnia Kapiącego Miodu p.3", "Porzucone Pasieki"]},
-
-      {"name": "Bazyliszki (61lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Pieczara Szaleńców - sala 1", "Pieczara Szaleńców - sala 2", "Pieczara Szaleńców - sala 3", "Pieczara Szaleńców - sala 4"]},
-
-      {"name": "Gnolle (64lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Czeluść Ognistej Pożogi", "Grota Pragnolli p.1", "Grota Pragnolli p.1 - sala 2", "Grota Pragnolli p.2", "Grota Pragnolli p.3", "Jaskinia Gnollich Szamanów - komnata Kozuga", "Jaskinia Gnollich Szamanów p.1", "Jaskinia Gnollich Szamanów p.2", "Jaskinia Gnollich Szamanów p.3", "Namiot Vari Krugera", "Radosna Polana", "Wioska Gnolli"]},
-
-      {"name": "Mrówcza kolonia (66lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Mrówcza Kolonia p.1 - lewy tunel", "Mrówcza Kolonia p.1 - prawy tunel", "Mrówcza Kolonia p.2 - lewe korytarze", "Mrówcza Kolonia p.2 - prawe korytarze", "Mrówcza Kolonia p.3 - lewa komora jaj", "Mrówcza Kolonia p.3 - prawa komora jaj", "Mrówcza Kolonia p.4 - królewskie gniazdo"]},
-
-      {"name": "Rosomaki (66lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": []},
-
-      {"name": "Olbrzymy (67lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kamienna Jaskinia - sala 1", "Kamienna Jaskinia - sala 2", "Ukryty Kanion"]},
-
-      {"name": "Andarum i okolice (70lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Andarum Ilami", "Cmentarzysko Szerpów", "Skały Mroźnych Śpiewów", "Śnieżna Granica"]},
-
-      {"name": "Jaskiniowe tolloki (71lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Głębokie Skałki p.1", "Głębokie Skałki p.2", "Głębokie Skałki p.3", "Głębokie Skałki p.4", "Zdradzieckie Przejście p.1"]},
-
-      {"name": "Demilisze (72lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Krypty Dusz Śniegu p.1", "Krypty Dusz Śniegu p.2", "Krypty Dusz Śniegu p.3", "Krypty Dusz Śniegu p.3 - komnata Lisza"]},
-
-      {"name": "Mnisi (74lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Świątynia Andarum", "Świątynia Andarum - lokum mnichów", "Świątynia Andarum - podziemia", "Świątynia Andarum - zejście lewe", "Świątynia Andarum - zejście prawe"]},
-
-      {"name": "Biblioteka Andarum (75lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Świątynia Andarum - biblioteka"]},
-
-      {"name": "Wodniki (75lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Moczary Rybiego Oka", "Uroczysko Wodnika", "Źródło Narumi"]},
-
-      {"name": "Magazynierzy (77lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Świątynia Andarum - magazyn p.1", "Świątynia Andarum - magazyn p.2", "Świątynia Andarum - zbrojownia"]},
-
-      {"name": "Erem (80lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Erem Czarnego Słońca p.1 - północ", "Erem Czarnego Słońca p.2", "Erem Czarnego Słońca p.3", "Erem Czarnego Słońca p.3 - południe", "Erem Czarnego Słońca p.4 - sala 1", "Erem Czarnego Słońca p.4 - sala 2", "Erem Czarnego Słońca p.5"]},
-
-      {"name": "Minotaury (81lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Labirynt Wyklętych p.1", "Labirynt Wyklętych p.2 - sala 1", "Labirynt Wyklętych p.2 - sala 2", "Pieczara Czaszek"]},
-
-      {"name": "Dławiciele (83lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Wylęgarnia Choukkerów p.1", "Wylęgarnia Choukkerów p.2", "Wylęgarnia Choukkerów p.3"]},
-
-      {"name": "Miśki (83lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Firnowa Grota p.1", "Firnowa Grota p.2", "Firnowa Grota p.2 s.1", "Lodowa Wyrwa p.1 s.1", "Lodowa Wyrwa p.1 s.2", "Lodowa Wyrwa p.2", "Sala Lodowych Iglic"]},
-
-      {"name": "Wermonty (85lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Zdradzieckie Przejście p.2"]},
-
-      {"name": "Krasnoludy (86lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kopalnia Margorii", "Labirynt Margorii", "Margoria", "Margoria - Sala Królewska"]},
-
-      {"name": "Darhouny (87lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Szyb Zdrajców", "Ślepe Wyrobisko"]},
-
-      {"name": "Grexy (89 lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grota Samotnych Dusz p.1", "Grota Samotnych Dusz p.2", "Grota Samotnych Dusz p.3", "Grota Samotnych Dusz p.3 - sala wyjściowa", "Grota Samotnych Dusz p.4", "Grota Samotnych Dusz p.5", "Grota Samotnych Dusz p.6"]},
-
-      {"name": "Leszy (91lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Księżycowe Wzniesienie", "Liściaste Rozstaje", "Sosnowe Odludzie", "Zapomniany Święty Gaj p.1", "Zapomniany Święty Gaj p.1 - sala 1", "Zapomniany Święty Gaj p.2", "Zapomniany Święty Gaj p.3"]},
-
-      {"name": "Wieczornice i Południce (92lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kamienna Strażnica - Sala Chwały", "Kamienna Strażnica - Sanktuarium", "Kamienna Strażnica - tunel", "Kamienna Strażnica - wsch. baszta skalna sala p.0", "Kamienna Strażnica - wsch. baszta skalna sala p.1", "Kamienna Strażnica - wsch. baszta zasypany tunel", "Kamienna Strażnica - zach. baszta p.1", "Kamienna Strażnica - zach. baszta p.2", "Mglista Polana Vesy", "Płacząca Grota - sala Lamentu", "Płacząca Grota p.1 - sala 1", "Płacząca Grota p.1 - sala 2", "Płacząca Grota p.2", "Płacząca Grota p.3", "Trupia Przełęcz", "Wzgórze Płaczek"]},
-
-      {"name": "Grexy (93lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grota Samotnych Dusz p.1", "Grota Samotnych Dusz p.2", "Grota Samotnych Dusz p.3", "Grota Samotnych Dusz p.4", "Grota Samotnych Dusz p.5", "Grota Samotnych Dusz p.6"]},
-
-      {"name": "Błotniste gady (94lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Gadzia Kotlina", "Złowrogie Bagna"]},
-
-      {"name": "Gnomy (94lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Gadzia Kotlina", "Mglista Polana Vesy", "Wzgórze Płaczek", "Zagrzybiałe Ścieżki p.1 - sala 1", "Zagrzybiałe Ścieżki p.1 - sala 2", "Zagrzybiałe Ścieżki p.1 - sala 3", "Zagrzybiałe Ścieżki p.2", "Zagrzybiałe Ścieżki p.3", "Złowrogie Bagna"]},
-
-      {"name": "Ogniki (96lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Gadzia Kotlina", "Złowrogie Bagna"]},
-
-      {"name": "Centaury (98lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Błędny Szlak", "Dolina Centaurów", "Iglaste Ścieżki", "Ostępy Szalbierskich Lasów", "Selva Oscura", "Zawiły Bór"]},
-
-      {"name": "Małe gady i płazy (99lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Ostępy Szalbierskich Lasów", "Selva Oscura"]},
-
-      {"name": "Bandyci (100lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Cienisty Bór", "Las Dziwów", "Ostępy Szalbierskich Lasów"]},
-
-      {"name": "Mykonidy (102lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Lodowa Sala", "Przejście Lodowatego Wiatru", "Przejście Magicznego Mrozu", "Przejście Zamarzniętych Kości", "Sala Lodowatego Wiatru", "Sala Magicznego Mrozu", "Sala Zamarzniętych Kości", "Śnieżna Grota p.2", "Śnieżna Grota p.3"]},
-
-      {"name": "Molochy (103lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Podziemia Zniszczonej Wieży p.2", "Podziemia Zniszczonej Wieży p.3", "Podziemia Zniszczonej Wieży p.4", "Podziemia Zniszczonej Wieży p.5"]},
-
-      {"name": "Dwugłowe olbrzymy (105lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Przełaz olbrzymów", "Selva Oscura", "Smocza Jaskinia", "Smocze Góry"]},
-
-      {"name": "Gady i płazy (106lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Solny Szyb p.3", "Zabłocona Jama p.1 - sala 1", "Zabłocona Jama p.1 - sala 2", "Zabłocona Jama p.2 - sala 1", "Zabłocona Jama p.2 - sala 3"]},
-
-      {"name": "Błotniste istoty (107lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": []},
-
-      {"name": "Alghule (111lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Skalne Cmentarzysko p.1", "Skalne Cmentarzysko p.2", "Skalne Cmentarzysko p.3", "Skalne Cmentarzysko p.4"]},
-
-      {"name": "Szkielety-koty (111lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grobowiec Nieznających Spokoju", "Płaskowyż Arpan", "Sucha Dolina"]},
-
-      {"name": "Mumie (114lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Ciche Rumowiska", "Dolina Suchych Łez", "Oaza Siedmiu Wichrów", "Piramida Pustynnego Władcy p.1", "Piramida Pustynnego Władcy p.2", "Piramida Pustynnego Władcy p.3", "Złote Piaski"]},
-
-      {"name": "Kałamarnice (118lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Archipelag Bremus An", "Jama Morskiej Macki p.1 - sala 1", "Jama Morskiej Macki p.1 - sala 2", "Jama Morskiej Macki p.1 - sala 3"]},
-
-      {"name": "Ingotia (121lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Korytarze Wygnańców p.1 - Bezdenne Przepaści", "Korytarze Wygnańców p.1 - Hala Odszczepieńców", "Korytarze Wygnańców p.1 - Jaskinia Zagubionych", "Korytarze Wygnańców p.1 - Komora Opuszczonych", "Korytarze Wygnańców p.1 - Sala Ech", "Korytarze Wygnańców p.1 - Sala Szlachetnych", "Korytarze Wygnańców p.2 - Komnata Wygnańców", "Korytarze Wygnańców p.2 - Komora Budowniczego", "Korytarze Wygnańców p.2 - Sala Żądzy", "Korytarze Wygnańców p.3 - Komnata Przeklętego Daru", "Twierdza Rogogłowych - Sala Byka", "Wyspa Ingotia"]},
-
-      {"name": "Kraby (122lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Wyspa Rem"]},
-
-      {"name": "Caneum (124lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Piaskowa Pułapka - Grota Piaskowej Śmierci", "Piaskowa Pułapka p.1 - sala 1", "Piaskowa Pułapka p.1 - sala 2", "Piaskowa Pułapka p.1 - sala 3", "Piaskowa Pułapka p.1 - sala 4", "Wyspa Caneum"]},
-
-      {"name": "Magradit (127lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Wulkan Politraki p.1 - sala 1", "Wulkan Politraki p.1 - sala 2", "Wulkan Politraki p.1 - sala 3", "Wulkan Politraki p.2 - sala 1", "Wulkan Politraki p.2 - sala 2"]},
-
-      {"name": "Wraki (127lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grota Trzeszczących Kości p.1 - sala 1", "Grota Trzeszczących Kości p.1 - sala 2", "Wrak statku", "Wyspa Wraków"]},
-
-      {"name": "Pajaki (129lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Szlak Thorpa p.1", "Szlak Thorpa p.2", "Szlak Thorpa p.3", "Szlak Thorpa p.4", "Szlak Thorpa p.5", "Szlak Thorpa p.6"]},
-
-      {"name": "Piraci (130lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Korsarska Nora - sala 1", "Korsarska Nora - sala 2", "Korsarska Nora - sala 3", "Korsarska Nora - sala 4", "Korsarska Nora - sala 5", "Korsarska Nora - sala 6", "Korsarska Nora - statek", "Korsarska Nora - wschodni przełaz", "Korsarska Nora - zachodni przełaz", "Ukryta Grota Morskich Diabłów", "Ukryta Grota Morskich Diabłów - arsenał", "Ukryta Grota Morskich Diabłów - korytarz", "Ukryta Grota Morskich Diabłów - magazyn", "Ukryta Grota Morskich Diabłów - siedziba", "Ukryta Grota Morskich Diabłów - skarbiec"]},
-
-      {"name": "Piaskowi niewolnicy (133lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dolina Pustynnych Kręgów", "Piachy Zniewolonych", "Piaskowa Gęstwina", "Piaszczysta Grota p.1 - sala 1", "Piaszczysta Grota p.1 - sala 2", "Ruchome Piaski"]},
-
-      {"name": "Korredy (134lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kopalnia Żółtego Kruszcu p.1 - sala 1", "Kopalnia Żółtego Kruszcu p.1 - sala 2", "Kopalnia Żółtego Kruszcu p.2 - sala 1", "Kopalnia Żółtego Kruszcu p.2 - sala 2"]},
-
-      {"name": "Impy (136lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Chodniki Mrinding", "Chodniki Mrinding p.1 - sala 1", "Chodniki Mrinding p.1 - sala 2", "Chodniki Mrinding p.2 - sala 1", "Chodniki Mrinding p.2 - sala 2"]},
-
-      {"name": "Ognie (137lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Ognista Studnia p.1", "Ścieżki Erebeth p.2 - sala 1", "Ścieżki Erebeth p.2 - sala 2", "Ścieżki Erebeth p.3"]},
-
-      {"name": "Ogniste golemy (138lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kuźnia Worundriela - Komnata Żaru", "Kuźnia Worundriela p.1", "Kuźnia Worundriela p.2", "Kuźnia Worundriela p.3", "Ognista Studnia p.2", "Ognista Studnia p.3"]},
-
-      {"name": "Ważki (140lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Jezioro Ważek"]},
-
-      {"name": "Górale (143lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Babi Wzgórek", "Chata Teściowej", "Chata wójta Fistuły", "Chata wójta Fistuły p.1", "Góralska Pieczara p.1", "Góralska Pieczara p.2", "Góralska Pieczara p.3", "Góralskie Przejście", "Wyjąca Jaskinia", "Wyjący Wąwóz"]},
-
-      {"name": "Berserkerzy (147lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Cenotaf Berserkerów - przejście przodków", "Cenotaf Berserkerów p.1 - sala 1", "Cenotaf Berserkerów p.1 - sala 2", "Czarcie Oparzeliska", "Grobowiec Przodków", "Mała Twierdza - korytarz zachodni", "Mała Twierdza - magazyn", "Mała Twierdza - mały barak", "Mała Twierdza - mury wschodnie", "Mała Twierdza - mury zachodnie", "Mała Twierdza - podziemny magazyn", "Mała Twierdza - sala główna", "Mała Twierdza - sala wejściowa", "Mała Twierdza - wieża strażnicza", "Mała Twierdza - wieża wschodnia", "Mała Twierdza - wieża zachodnia", "Mała Twierdza p.1", "Opuszczona Twierdza", "Zaginiona Dolina", "Śnieżna Granica"]},
-
-      {"name": "Duchy (149lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Korytarze Milczących Intryg p.1", "Korytarze Milczących Intryg p.2 - sala 1", "Korytarze Milczących Intryg p.2 - sala 2", "Korytarze Milczących Intryg p.3", "Sala Ukrytych Paktów"]},
-
-      {"name": "Mechaniczne gobliny (151lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Lokum Złych Goblinów - warsztat", "Lokum Złych Goblinów - wieża", "Lokum Złych Goblinów - zejście p.1", "Lokum Złych Goblinów p.2 - sala 1", "Lokum Złych Goblinów p.2 - sala 2", "Lokum Złych Goblinów p.3 - sala 1", "Lokum Złych Goblinów p.3 - sala 2"]},
-
-      {"name": "Dusze (152lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Upiorna Droga"]},
-
-      {"name": "Wiedzmy (154lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dom Adariel", "Dom Amry", "Dom Atalii", "Dom czarnej magii", "Dom starej czarownicy", "Laboratorium Adariel", "Lochy Tristam", "Magazyn mioteł", "Ograbiona świątynia", "Opuszczone więzienie", "Sabatowe Góry", "Splugawiona kaplica", "Splądrowana kaplica", "Tristam", "Wiedźmie Kotłowisko"]},
-
-      {"name": "Czerwoni orkowie (156lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grota Orczej Hordy p.1 s.1", "Grota Orczej Hordy p.1 s.2", "Grota Orczej Hordy p.2 s.1", "Grota Orczej Hordy p.2 s.2", "Grota Orczej Hordy p.2 s.3", "Grota Orczych Szamanów p.1 s.1", "Grota Orczych Szamanów p.1 s.2", "Grota Orczych Szamanów p.2 s.1", "Grota Orczych Szamanów p.2 s.2", "Kurhany Zwyciężonych", "Orcza Wyżyna", "Osada Czerwonych Orków"]},
-
-      {"name": "Dziki zagajnik (161lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dziki Zagajnik", "Przepaść Aguti", "Przełęcz Krwistego Posłańca", "Skały Pamięci Nikantosa", "Ukryty Kanion"]},
-
-      {"name": "Kazamaty (163lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Nawiedzone Kazamaty p.1 s.1", "Nawiedzone Kazamaty p.1 s.2", "Nawiedzone Kazamaty p.2 s.1", "Nawiedzone Kazamaty p.2 s.2", "Nawiedzone Kazamaty p.3 s.1", "Nawiedzone Kazamaty p.3 s.2", "Nawiedzone Kazamaty p.4", "Nawiedzone Komnaty - przedsionek"]},
-
-      {"name": "Komnaty (170lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Komnaty Czarnej Gwardii - wschód", "Komnaty Czarnej Gwardii - zachód", "Nawiedzone Komnaty - przedsionek", "Nawiedzone Komnaty - wschód", "Nawiedzone Komnaty - zachód", "Sala Dowódcy Orków", "Sala Królewska", "Sala Rady Orków"]},
-
-      {"name": "Kryształowa grota (174lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kryształowa Grota - Sala Smutku", "Kryształowa Grota - przepaść", "Kryształowa Grota p.1", "Kryształowa Grota p.2 - sala 1", "Kryształowa Grota p.2 - sala 2", "Kryształowa Grota p.3 - sala 1", "Kryształowa Grota p.3 - sala 2", "Kryształowa Grota p.4", "Kryształowa Grota p.5", "Kryształowa Grota p.6"]},
-
-      {"name": "Driady (178lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Błota Sham Al", "Drzewo Dusz p.1", "Drzewo Dusz p.2", "Grota Arbor s.1", "Grota Arbor s.2", "Głusza Świstu", "Kwieciste Kresy", "Las Porywów Wiatru", "Ruiny Tass Zhil"]},
-
-      {"name": "Ogry (181lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Ogrza Kawerna p.1", "Ogrza Kawerna p.2", "Ogrza Kawerna p.3", "Ogrza Kawerna p.4"]},
-
-      {"name": "Patrycjusze (184lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Krypty Bezsennych p.1 s.1", "Krypty Bezsennych p.1 s.2", "Krypty Bezsennych p.2 s.1", "Krypty Bezsennych p.2 s.2", "Krypty Bezsennych p.3"]},
-
-      {"name": "Zmutowane rośliny (187lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Głuchy Las", "Kwieciste Przejście", "Skarpa Trzech Słów", "Ukwiecona Skarpa", "Zapomniana Ścieżyna", "Złudny Trakt"]},
-
-      {"name": "Draki (189lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kwieciste Kresy", "Przysiółek Valmirów", "Szczerba Samobójców", "Śnieżna Granica", "Śnieżycowy Las"]},
-
-      {"name": "Mroczny las (192lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Bezgwiezdna Gęstwina", "Bór Zagubionych", "Grota Skamieniałej Kory p.1 - sala 1", "Grota Skamieniałej Kory p.1 - sala 2", "Grota Skamieniałej Kory p.2", "Martwy Las", "Starodrzew Przedwiecznych p.1", "Starodrzew Przedwiecznych p.2", "Zbocze Starych Bogów", "Ziemia Szepczących Cierni", "Złudny Trakt"]},
-
-      {"name": "Myświóry (196lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Kanały Nithal p.1 - sala 1", "Kanały Nithal p.1 - sala 2", "Kanały Nithal p.1 - sala 3", "Szlamowe Kanały p.2 - sala 1", "Szlamowe Kanały p.2 - sala 2", "Szlamowe Kanały p.2 - sala 3"]},
-
-      {"name": "Hurysy (199lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Mroczne Komnaty", "Przedsionek Kultu", "Przerażające Sypialnie"]},
-
-      {"name": "Heretycy (203lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Korytarz Ostatnich Nadziei", "Lochy Kultu", "Przejście Oczyszczenia", "Sala Skaryfikacji Grzeszników", "Sala Spowiedzi Konających", "Sala Tysiąca Świec", "Sale Rozdzierania", "Tajemnicza Siedziba"]},
-
-      {"name": "Furbole (208lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dolina Gniewu", "Rozległa Równina", "Terytorium Furii", "Wzgórza Obłędu", "Zalana Grota", "Zapadlisko Zniewolonych", "Zapomniany Las"]},
-
-      {"name": "Pająki (212lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Arachnitopia p.1", "Arachnitopia p.2", "Arachnitopia p.3", "Arachnitopia p.4", "Arachnitopia p.5", "Arachnitopia p.6", "Dolina Pajęczych Korytarzy", "Otchłań Pajęczych Sieci", "Pajęczy Las", "Zapadlisko Zniewolonych"]},
-
-      {"name": "Drowy (216lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dawny Przełaz", "Erem Aldiphrina", "Porzucone Noiridum p.2", "Porzucone Noiridum p.3 - sala 1", "Porzucone Noiridum p.3 - sala 2", "Porzucone Noiridum p.3 - sala 3", "Zakazana Grota"]},
-
-      {"name": "Dridery (219lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dawny Przełaz", "Zamierzchłe Arterie p.2 - sala 1", "Zamierzchłe Arterie p.2 - sala 2", "Zamierzchłe Arterie p.3", "Zapomniane Sztolnie"]},
-
-      {"name": "Anuraki (223lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Bagna Umarłych", "Gnijące Topielisko", "Grząska Ziemia", "Mglisty Las", "Smocze Skalisko", "Urwisko Vapora"]},
-
-      {"name": "Maddoki (227lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dolina Potoku Śmierci", "Grota Porośniętych Stalagmitów p.1 - sala 1", "Grota Porośniętych Stalagmitów p.1 - sala 2", "Grota Porośniętych Stalagmitów p.2 - sala 1", "Grota Porośniętych Stalagmitów p.2 - sala 2", "Jaszczurze Korytarze p.1 - sala 1", "Jaszczurze Korytarze p.1 - sala 2", "Jaszczurze Korytarze p.1 - sala 3", "Jaszczurze Korytarze p.1 - sala 4", "Jaszczurze Korytarze p.2 - sala 1", "Jaszczurze Korytarze p.2 - sala 2", "Jaszczurze Korytarze p.2 - sala 3", "Jaszczurze Korytarze p.2 - sala 4", "Jaszczurze Korytarze p.2 - sala 5", "Mechata Jama p.1", "Mechata Jama p.2", "Mechata Jama p.3", "Nora Jaszczurzych Koszmarów p.1 - sala 1", "Nora Jaszczurzych Koszmarów p.1 - sala 2", "Skryty Azyl", "Strumienie Szemrzących Wód", "Zawodzące Kaskady", "Złota Dąbrowa"]},
-
-      {"name": "Zagrzybiony las (232lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Garb Połamanych Konarów", "Gardziel Podgnitych Mchów p.1", "Gardziel Podgnitych Mchów p.2", "Gardziel Podgnitych Mchów p.3", "Gęste Sploty", "Zalesiony Step", "Zarosłe Szczeliny p.1 - sala 1", "Zarosłe Szczeliny p.1 - sala 2", "Zarosłe Szczeliny p.1 - sala 3", "Zmurszały Łęg"]},
-
-      {"name": "Elgary (236lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Gaj Księżycowego Blasku", "Głusza Srebrnego Rogu", "Knieja Lunarnych Głazów", "Szepty Menhirów", "Zacienione Wnęki p.1 - sala 1", "Zacienione Wnęki p.1 - sala 2", "Zacienione Wnęki p.2 - sala 1", "Zacienione Wnęki p.2 - sala 2", "Zakątek Nocnych Szelestów"]},
-
-      {"name": "Drzewce (239lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Jaskinia Korzennego Czaru p.1 - sala 1", "Jaskinia Korzennego Czaru p.1 - sala 2", "Jaskinia Korzennego Czaru p.1 - sala 3", "Jaskinia Korzennego Czaru p.1 - sala 4", "Jaskinia Korzennego Czaru p.2 - sala 1", "Jaskinia Korzennego Czaru p.2 - sala 2", "Jaskinia Korzennego Czaru p.3", "Krzaczasta Grota p.1 - sala 1", "Krzaczasta Grota p.1 - sala 2", "Krzaczasta Grota p.1 - sala 3", "Krzaczasta Grota p.2 - sala 1", "Krzaczasta Grota p.2 - sala 2", "Krzaczasta Grota p.2 - sala 3", "Piaskowa Gęstwina", "Regiel Zabłąkanych", "Urwisko Zdrewniałych", "Wąwóz Zakorzenionych Dusz", "Źródło Zakorzenionego Ludu"]},
-
-      {"name": "Bolity (244lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Dolina Chmur", "Złota Góra p.1 - sala 1", "Złota Góra p.1 - sala 2", "Złota Góra p.1 - sala 3", "Złota Góra p.1 - sala 4", "Złota Góra p.2 - sala 1", "Złota Góra p.2 - sala 2", "Złota Góra p.2 - sala 3", "Złota Góra p.2 - sala 4", "Złota Góra p.3 - sala 1", "Złota Góra p.3 - sala 2"]},
-
-      {"name": "Niecka (248lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Chantli", "Chantli Cuaitla Citlalina", "Niecka Xiuh Atl", "Oztotl Tzacua p.1 - sala 1", "Oztotl Tzacua p.1 - sala 2", "Oztotl Tzacua p.2 - sala 1", "Oztotl Tzacua p.2 - sala 2", "Oztotl Tzacua p.3 - sala 1", "Oztotl Tzacua p.3 - sala 2", "Oztotl Tzacua p.4 - sala 1", "Oztotl Tzacua p.4 - sala 2", "Oztotl Tzacua p.5"]},
-
-      {"name": "Maho (253lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Altepetl Mahoptekan", "Topan p.1", "Topan p.10", "Topan p.11", "Topan p.12", "Topan p.13", "Topan p.2", "Topan p.3", "Topan p.4", "Topan p.5", "Topan p.6", "Topan p.7", "Topan p.8", "Topan p.9", "Wschodni Mictlan p.1", "Wschodni Mictlan p.2", "Wschodni Mictlan p.3", "Wschodni Mictlan p.4", "Wschodni Mictlan p.5", "Wschodni Mictlan p.6", "Wschodni Mictlan p.7", "Wschodni Mictlan p.8", "Zachodni Mictlan p.1", "Zachodni Mictlan p.2", "Zachodni Mictlan p.3", "Zachodni Mictlan p.4", "Zachodni Mictlan p.5", "Zachodni Mictlan p.6", "Zachodni Mictlan p.7", "Zachodni Mictlan p.8", "Zachodni Mictlan p.9"]},
-
-      {"name": "Wiedźmowe potwory (258lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Jęczywąwóz", "Plugawe Pustkowie", "Pogranicze Wisielców", "Siedlisko Przyjemnej Woni", "Siedlisko Przyjemnej Woni - źródło", "Skalisty Styk", "Zachodnie Zbocze", "Zacisze Zimnych Wiatrów"]},
-
-      {"name": "Potępione zamczysko (261lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Potępione Zamczysko", "Potępione Zamczysko - głębokie lochy", "Potępione Zamczysko - korytarz wejściowy", "Potępione Zamczysko - korytarz wschodni", "Potępione Zamczysko - korytarz zachodni", "Potępione Zamczysko - lochy wschodnie p.1", "Potępione Zamczysko - lochy wschodnie p.2", "Potępione Zamczysko - lochy zachodnie p.1", "Potępione Zamczysko - lochy zachodnie p.2", "Potępione Zamczysko - północna komnata", "Potępione Zamczysko - sala ofiarna", "Potępione Zamczysko - wschodnia komnata", "Potępione Zamczysko - zachodnia komnata", "Potępione Zamczysko - łącznik wschodni", "Potępione Zamczysko - łącznik zachodni", "Wieża Szlochów p.1", "Wieża Szlochów p.2", "Wieża Szlochów p.3"]},
-
-      {"name": "Katakumby (268lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grobowiec Seta", "Katakumby Gwałtownej Śmierci", "Katakumby Krwawych Wypraw", "Katakumby Odnalezionych Skrytobójców", "Katakumby Opętanych Dusz", "Katakumby Poległych Legionistów", "Komnaty Bezdusznych - sala 1", "Komnaty Bezdusznych - sala 2", "Korytarz Porzuconych Marzeń", "Korytarz Porzuconych Nadziei", "Pustynne Katakumby", "Pustynne Katakumby - sala 1", "Pustynne Katakumby - sala 2", "Wschodni Tunel Jaźni", "Zachodni Tunel Jaźni"]},
-
-      {"name": "Pustynia (275lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Grota Poświęcenia", "Jaskinia Odwagi", "Jaskinia Piaskowej Burzy s.1", "Jaskinia Piaskowej Burzy s.2", "Jaskinia Próby", "Jaskinia Smoczej Paszczy p.1", "Jaskinia Smoczej Paszczy p.2", "Jaskinia Szczęk", "Jaskinia Sępa s.1", "Jaskinia Sępa s.2", "Jurta Chaegda", "Jurta Czcicieli", "Jurta Nomadzka", "Namiot Błogosławionych", "Namiot Gwardii Smokoszczękich", "Namiot Naznaczonych", "Namiot Piechoty Piłowej", "Namiot Pustynnych Smoków", "Pustynia Shaiharrud - wschód", "Pustynia Shaiharrud - zachód", "Skały Umarłych", "Smocze Skalisko", "Sępiarnia", "Urwisko Vapora", "Świątynia Hebrehotha - przedsionek", "Świątynia Hebrehotha - sala czciciela", "Świątynia Hebrehotha - sala ofiary"]},
-
-      {"name": "Driady (280lvl)", "desc": "Zoptymalizowana baza wbudowana", "maps": ["Drzewo Życia p.1", "Drzewo Życia p.2", "Drzewo Życia p.3", "Gvar Hamryd", "Jaskinia Suchych Pędów s.1", "Jaskinia Suchych Pędów s.2", "Jaskinia Suchych Pędów s.3", "Jaskinia Suchych Pędów s.4", "Matecznik Szelestu", "Rozlewisko Kai"]}
-
+   window.defaultExpProfiles = [
+      {"name": "Grobowce (18lvl)", "desc": "Zoptymalizowana baza (Potworów: 197)", "mobCount": 197, "maps": ["Grobowiec Rodziny Tywelta", "Grobowiec Rodziny Tywelta p.1", "Grobowiec Rodziny Tywelta p.2", "Krypta Rodu Heregata", "Krypta Rodu Heregata p.1", "Krypta Rodu Heregata p.2 - lewe skrzydło", "Krypta Rodu Heregata p.2 - prawe skrzydło"]},
+      {"name": "Mrówki (20lvl)", "desc": "Zoptymalizowana baza (Potworów: 192)", "mobCount": 192, "maps": ["Kopiec Mrówek", "Kopiec Mrówek p.1", "Kopiec Mrówek p.2", "Mrowisko", "Mrowisko p.1", "Mrowisko p.2"]},
+      {"name": "Pumy i tygrysy (21lvl)", "desc": "Zoptymalizowana baza (Potworów: 255)", "mobCount": 255, "maps": ["Jaskinia Dzikich Kotów", "Kryjówka Dzikich Kotów", "Leśna Przełęcz", "Tygrysia Polana"]},
+      {"name": "Niedźwiedzie i nietoperze (23lvl)", "desc": "Zoptymalizowana baza (Potworów: 247)", "mobCount": 247, "maps": ["Dziewicza Knieja", "Siedlisko Nietoperzy p.1", "Siedlisko Nietoperzy p.2", "Siedlisko Nietoperzy p.3 - sala 1", "Siedlisko Nietoperzy p.3 - sala 2", "Siedlisko Nietoperzy p.4", "Siedlisko Nietoperzy p.5"]},
+      {"name": "Bazyliszki (26lvl)", "desc": "Zoptymalizowana baza (Potworów: 96)", "mobCount": 96, "maps": ["Las Tropicieli"]},
+      {"name": "Mulusy (28lvl)", "desc": "Zoptymalizowana baza (Potworów: 306)", "mobCount": 306, "maps": ["Dzikie Pagórki", "Osada Mulusów", "Pradawne Wzgórze Przodków"]},
+      {"name": "Demony (29lvl)", "desc": "Zoptymalizowana baza (Potworów: 242)", "mobCount": 242, "maps": ["Przeklęta Strażnica", "Przeklęta Strażnica - podziemia p.1 s.1", "Przeklęta Strażnica - podziemia p.1 s.2", "Przeklęta Strażnica - podziemia p.2 s.1", "Przeklęta Strażnica - podziemia p.2 s.2", "Przeklęta Strażnica - podziemia p.2 s.3", "Przeklęta Strażnica p.1", "Przeklęta Strażnica p.2"]},
+      {"name": "Rozbojnicy (32lvl)", "desc": "Zoptymalizowana baza (Potworów: 185)", "mobCount": 185, "maps": ["Dolina Rozbójników", "Kamienna Kryjówka", "Namiot Bandytów", "Pagórki Łupieżców", "Przełęcz Łotrzyków", "Skład Grabieżców"]},
+      {"name": "Gobliny (34lvl)", "desc": "Zoptymalizowana baza (Potworów: 120)", "mobCount": 120, "maps": ["Jaskinia Pogardy", "Las Goblinów", "Morwowe Przejście", "Podmokła Dolina"]},
+      {"name": "Puffy (37lvl)", "desc": "Zoptymalizowana baza (Potworów: 140)", "mobCount": 140, "maps": ["Pieczara Niepogody p.1", "Pieczara Niepogody p.2 - sala 1", "Pieczara Niepogody p.2 - sala 2", "Pieczara Niepogody p.3", "Pieczara Niepogody p.4", "Pieczara Niepogody p.5"]},
+      {"name": "Dziki (40lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Pieczara Kwiku - sala 1", "Pieczara Kwiku - sala 2", "Racicowy Matecznik", "Spokojne Przejście", "Ukwiecona Skarpa"]},
+      {"name": "Ghule (40lvl)", "desc": "Zoptymalizowana baza (Potworów: 165)", "mobCount": 165, "maps": ["Ghuli Mogilnik", "Polana Ścierwojadów", "Zapomniany Grobowiec p.1", "Zapomniany Grobowiec p.2", "Zapomniany Grobowiec p.3", "Zapomniany Grobowiec p.4", "Zapomniany Grobowiec p.5"]},
+      {"name": "Wilcze plemię (44lvl)", "desc": "Zoptymalizowana baza (Potworów: 175)", "mobCount": 175, "maps": ["Krasowa Pieczara p.1", "Krasowa Pieczara p.2", "Krasowa Pieczara p.3", "Legowisko Wilczej Hordy", "Warczące Osuwiska", "Wilcza Nora p.1", "Wilcza Nora p.2", "Wilcza Skarpa"]},
+      {"name": "Tolloki (45lvl)", "desc": "Zoptymalizowana baza (Potworów: 110)", "mobCount": 110, "maps": ["Skalne Turnie", "Skarpiska Tolloków"]},
+      {"name": "Zbiry (46lvl)", "desc": "Zoptymalizowana baza (Potworów: 145)", "mobCount": 145, "maps": ["Ciemnica Szubrawców p.1 - sala 1", "Ciemnica Szubrawców p.1 - sala 2", "Ciemnica Szubrawców p.1 - sala 3", "Stary Kupiecki Trakt", "Stukot Widmowych Kół", "Wertepy Rzezimieszków"]},
+      {"name": "Orkowie (47lvl)", "desc": "Zoptymalizowana baza (Potworów: 210)", "mobCount": 210, "maps": ["Nawiedzony Jar", "Opuszczony Bastion", "Podziemne Przejście p.1", "Podziemne Przejście p.2", "Stare Wyrobisko p.1", "Stare Wyrobisko p.2", "Stare Wyrobisko p.3", "Stare Wyrobisko p.4", "Stare Wyrobisko p.5", "Zburzona Twierdza", "Zrujnowana Wieża", "Świszcząca Grota p.1", "Świszcząca Grota p.2", "Świszcząca Grota p.3", "Świszcząca Grota p.4"]},
+      {"name": "Przesmyk (50lvl)", "desc": "Zoptymalizowana baza (Potworów: 130)", "mobCount": 130, "maps": ["Migotliwa Pieczara", "Mroczna Pieczara p.0", "Mroczna Pieczara p.1 - sala 1", "Mroczna Pieczara p.1 - sala 2", "Mroczna Pieczara p.1 - sala 3", "Mroczna Pieczara p.2", "Mroczny Przesmyk", "Zapomniany Szlak"]},
+      {"name": "Galarety (51lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Mokra Grota p.1", "Mokra Grota p.1 - boczny korytarz", "Mokra Grota p.1 - przełaz", "Mokra Grota p.2", "Mokra Grota p.2 - korytarz"]},
+      {"name": "Pokątniki (52lvl)", "desc": "Zoptymalizowana baza (Potworów: 80)", "mobCount": 80, "maps": ["Grota Bezszelestnych Kroków - sala 1", "Grota Bezszelestnych Kroków - sala 2", "Grota Bezszelestnych Kroków - sala 3"]},
+      {"name": "Koboldy (54lvl)", "desc": "Zoptymalizowana baza (Potworów: 115)", "mobCount": 115, "maps": ["Lazurytowa Grota p.1", "Lazurytowa Grota p.2", "Lazurytowa Grota p.3 - sala 1", "Lazurytowa Grota p.3 - sala 2", "Lazurytowa Grota p.4"]},
+      {"name": "Żądłaki (58lvl)", "desc": "Zoptymalizowana baza (Potworów: 142)", "mobCount": 142, "maps": ["Kopalnia Kapiącego Miodu p.1 - sala 1", "Kopalnia Kapiącego Miodu p.1 - sala 2", "Kopalnia Kapiącego Miodu p.2 - sala 1", "Kopalnia Kapiącego Miodu p.2 - sala 2", "Kopalnia Kapiącego Miodu p.2 - sala Owadziej Matki", "Kopalnia Kapiącego Miodu p.3", "Porzucone Pasieki"]},
+      {"name": "Bazyliszki (61lvl)", "desc": "Zoptymalizowana baza (Potworów: 85)", "mobCount": 85, "maps": ["Pieczara Szaleńców - sala 1", "Pieczara Szaleńców - sala 2", "Pieczara Szaleńców - sala 3", "Pieczara Szaleńców - sala 4"]},
+      {"name": "Gnolle (64lvl)", "desc": "Zoptymalizowana baza (Potworów: 195)", "mobCount": 195, "maps": ["Czeluść Ognistej Pożogi", "Grota Pragnolli p.1", "Grota Pragnolli p.1 - sala 2", "Grota Pragnolli p.2", "Grota Pragnolli p.3", "Jaskinia Gnollich Szamanów - komnata Kozuga", "Jaskinia Gnollich Szamanów p.1", "Jaskinia Gnollich Szamanów p.2", "Jaskinia Gnollich Szamanów p.3", "Namiot Vari Krugera", "Radosna Polana", "Wioska Gnolli"]},
+      {"name": "Mrówcza kolonia (66lvl)", "desc": "Zoptymalizowana baza (Potworów: 180)", "mobCount": 180, "maps": ["Mrówcza Kolonia p.1 - lewy tunel", "Mrówcza Kolonia p.1 - prawy tunel", "Mrówcza Kolonia p.2 - lewe korytarze", "Mrówcza Kolonia p.2 - prawe korytarze", "Mrówcza Kolonia p.3 - lewa komora jaj", "Mrówcza Kolonia p.3 - prawa komora jaj", "Mrówcza Kolonia p.4 - królewskie gniazdo"]},
+      {"name": "Olbrzymy (67lvl)", "desc": "Zoptymalizowana baza (Potworów: 65)", "mobCount": 65, "maps": ["Kamienna Jaskinia - sala 1", "Kamienna Jaskinia - sala 2", "Ukryty Kanion"]},
+      {"name": "Andarum i okolice (70lvl)", "desc": "Zoptymalizowana baza (Potworów: 175)", "mobCount": 175, "maps": ["Andarum Ilami", "Cmentarzysko Szerpów", "Skały Mroźnych Śpiewów", "Śnieżna Granica"]},
+      {"name": "Jaskiniowe tolloki (71lvl)", "desc": "Zoptymalizowana baza (Potworów: 110)", "mobCount": 110, "maps": ["Głębokie Skałki p.1", "Głębokie Skałki p.2", "Głębokie Skałki p.3", "Głębokie Skałki p.4", "Zdradzieckie Przejście p.1"]},
+      {"name": "Demilisze (72lvl)", "desc": "Zoptymalizowana baza (Potworów: 88)", "mobCount": 88, "maps": ["Krypty Dusz Śniegu p.1", "Krypty Dusz Śniegu p.2", "Krypty Dusz Śniegu p.3", "Krypty Dusz Śniegu p.3 - komnata Lisza"]},
+      {"name": "Mnisi (74lvl)", "desc": "Zoptymalizowana baza (Potworów: 125)", "mobCount": 125, "maps": ["Świątynia Andarum", "Świątynia Andarum - lokum mnichów", "Świątynia Andarum - podziemia", "Świątynia Andarum - zejście lewe", "Świątynia Andarum - zejście prawe"]},
+      {"name": "Biblioteka Andarum (75lvl)", "desc": "Zoptymalizowana baza (Potworów: 92)", "mobCount": 92, "maps": ["Świątynia Andarum - biblioteka"]},
+      {"name": "Wodniki (75lvl)", "desc": "Zoptymalizowana baza (Potworów: 115)", "mobCount": 115, "maps": ["Moczary Rybiego Oka", "Uroczysko Wodnika", "Źródło Narumi"]},
+      {"name": "Magazynierzy (77lvl)", "desc": "Zoptymalizowana baza (Potworów: 105)", "mobCount": 105, "maps": ["Świątynia Andarum - magazyn p.1", "Świątynia Andarum - magazyn p.2", "Świątynia Andarum - zbrojownia"]},
+      {"name": "Erem (80lvl)", "desc": "Zoptymalizowana baza (Potworów: 165)", "mobCount": 165, "maps": ["Erem Czarnego Słońca p.1 - północ", "Erem Czarnego Słońca p.2", "Erem Czarnego Słońca p.3", "Erem Czarnego Słońca p.3 - południe", "Erem Czarnego Słońca p.4 - sala 1", "Erem Czarnego Słońca p.4 - sala 2", "Erem Czarnego Słońca p.5"]},
+      {"name": "Minotaury (81lvl)", "desc": "Zoptymalizowana baza (Potworów: 105)", "mobCount": 105, "maps": ["Labirynt Wyklętych p.1", "Labirynt Wyklętych p.2 - sala 1", "Labirynt Wyklętych p.2 - sala 2", "Pieczara Czaszek"]},
+      {"name": "Dławiciele (83lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Wylęgarnia Choukkerów p.1", "Wylęgarnia Choukkerów p.2", "Wylęgarnia Choukkerów p.3"]},
+      {"name": "Miśki (83lvl)", "desc": "Zoptymalizowana baza (Potworów: 125)", "mobCount": 125, "maps": ["Firnowa Grota p.1", "Firnowa Grota p.2", "Firnowa Grota p.2 s.1", "Lodowa Wyrwa p.1 s.1", "Lodowa Wyrwa p.1 s.2", "Lodowa Wyrwa p.2", "Sala Lodowych Iglic"]},
+      {"name": "Wermonty (85lvl)", "desc": "Zoptymalizowana baza (Potworów: 65)", "mobCount": 65, "maps": ["Zdradzieckie Przejście p.2"]},
+      {"name": "Krasnoludy (86lvl)", "desc": "Zoptymalizowana baza (Potworów: 145)", "mobCount": 145, "maps": ["Kopalnia Margorii", "Labirynt Margorii", "Margoria", "Margoria - Sala Królewska"]},
+      {"name": "Darhouny (87lvl)", "desc": "Zoptymalizowana baza (Potworów: 75)", "mobCount": 75, "maps": ["Szyb Zdrajców", "Ślepe Wyrobisko"]},
+      {"name": "Grexy (89 lvl)", "desc": "Zoptymalizowana baza (Potworów: 120)", "mobCount": 120, "maps": ["Grota Samotnych Dusz p.1", "Grota Samotnych Dusz p.2", "Grota Samotnych Dusz p.3", "Grota Samotnych Dusz p.3 - sala wyjściowa", "Grota Samotnych Dusz p.4", "Grota Samotnych Dusz p.5", "Grota Samotnych Dusz p.6"]},
+      {"name": "Leszy (91lvl)", "desc": "Zoptymalizowana baza (Potworów: 115)", "mobCount": 115, "maps": ["Księżycowe Wzniesienie", "Liściaste Rozstaje", "Sosnowe Odludzie", "Zapomniany Święty Gaj p.1", "Zapomniany Święty Gaj p.1 - sala 1", "Zapomniany Święty Gaj p.2", "Zapomniany Święty Gaj p.3"]},
+      {"name": "Wieczornice i Południce (92lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Kamienna Strażnica - Sala Chwały", "Kamienna Strażnica - Sanktuarium", "Kamienna Strażnica - tunel", "Kamienna Strażnica - wsch. baszta skalna sala p.0", "Kamienna Strażnica - wsch. baszta skalna sala p.1", "Kamienna Strażnica - wsch. baszta zasypany tunel", "Kamienna Strażnica - zach. baszta p.1", "Kamienna Strażnica - zach. baszta p.2", "Mglista Polana Vesy", "Płacząca Grota - sala Lamentu", "Płacząca Grota p.1 - sala 1", "Płacząca Grota p.1 - sala 2", "Płacząca Grota p.2", "Płacząca Grota p.3", "Trupia Przełęcz", "Wzgórze Płaczek"]},
+      {"name": "Błotniste gady (94lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Gadzia Kotlina", "Złowrogie Bagna"]},
+      {"name": "Gnomy (94lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Gadzia Kotlina", "Mglista Polana Vesy", "Wzgórze Płaczek", "Zagrzybiałe Ścieżki p.1 - sala 1", "Zagrzybiałe Ścieżki p.1 - sala 2", "Zagrzybiałe Ścieżki p.1 - sala 3", "Zagrzybiałe Ścieżki p.2", "Zagrzybiałe Ścieżki p.3", "Złowrogie Bagna"]},
+      {"name": "Ogniki (96lvl)", "desc": "Zoptymalizowana baza (Potworów: 75)", "mobCount": 75, "maps": ["Gadzia Kotlina", "Złowrogie Bagna"]},
+      {"name": "Centaury (98lvl)", "desc": "Zoptymalizowana baza (Potworów: 135)", "mobCount": 135, "maps": ["Błędny Szlak", "Dolina Centaurów", "Iglaste Ścieżki", "Ostępy Szalbierskich Lasów", "Selva Oscura", "Zawiły Bór"]},
+      {"name": "Małe gady i płazy (99lvl)", "desc": "Zoptymalizowana baza (Potworów: 85)", "mobCount": 85, "maps": ["Ostępy Szalbierskich Lasów", "Selva Oscura"]},
+      {"name": "Bandyci (100lvl)", "desc": "Zoptymalizowana baza (Potworów: 115)", "mobCount": 115, "maps": ["Cienisty Bór", "Las Dziwów", "Ostępy Szalbierskich Lasów"]},
+      {"name": "Mykonidy (102lvl)", "desc": "Zoptymalizowana baza (Potworów: 125)", "mobCount": 125, "maps": ["Lodowa Sala", "Przejście Lodowatego Wiatru", "Przejście Magicznego Mrozu", "Przejście Zamarzniętych Kości", "Sala Lodowatego Wiatru", "Sala Magicznego Mrozu", "Sala Zamarzniętych Kości", "Śnieżna Grota p.2", "Śnieżna Grota p.3"]},
+      {"name": "Molochy (103lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Podziemia Zniszczonej Wieży p.2", "Podziemia Zniszczonej Wieży p.3", "Podziemia Zniszczonej Wieży p.4", "Podziemia Zniszczonej Wieży p.5"]},
+      {"name": "Dwugłowe olbrzymy (105lvl)", "desc": "Zoptymalizowana baza (Potworów: 75)", "mobCount": 75, "maps": ["Przełaz olbrzymów", "Selva Oscura", "Smocza Jaskinia", "Smocze Góry"]},
+      {"name": "Gady i płazy (106lvl)", "desc": "Zoptymalizowana baza (Potworów: 105)", "mobCount": 105, "maps": ["Solny Szyb p.3", "Zabłocona Jama p.1 - sala 1", "Zabłocona Jama p.1 - sala 2", "Zabłocona Jama p.2 - sala 1", "Zabłocona Jama p.2 - sala 3"]},
+      {"name": "Alghule (111lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Skalne Cmentarzysko p.1", "Skalne Cmentarzysko p.2", "Skalne Cmentarzysko p.3", "Skalne Cmentarzysko p.4"]},
+      {"name": "Szkielety-koty (111lvl)", "desc": "Zoptymalizowana baza (Potworów: 85)", "mobCount": 85, "maps": ["Grobowiec Nieznających Spokoju", "Płaskowyż Arpan", "Sucha Dolina"]},
+      {"name": "Mumie (114lvl)", "desc": "Zoptymalizowana baza (Potworów: 145)", "mobCount": 145, "maps": ["Ciche Rumowiska", "Dolina Suchych Łez", "Oaza Siedmiu Wichrów", "Piramida Pustynnego Władcy p.1", "Piramida Pustynnego Władcy p.2", "Piramida Pustynnego Władcy p.3", "Złote Piaski"]},
+      {"name": "Kałamarnice (118lvl)", "desc": "Zoptymalizowana baza (Potworów: 65)", "mobCount": 65, "maps": ["Archipelag Bremus An", "Jama Morskiej Macki p.1 - sala 1", "Jama Morskiej Macki p.1 - sala 2", "Jama Morskiej Macki p.1 - sala 3"]},
+      {"name": "Ingotia (121lvl)", "desc": "Zoptymalizowana baza (Potworów: 255)", "mobCount": 255, "maps": ["Korytarze Wygnańców p.1 - Bezdenne Przepaści", "Korytarze Wygnańców p.1 - Hala Odszczepieńców", "Korytarze Wygnańców p.1 - Jaskinia Zagubionych", "Korytarze Wygnańców p.1 - Komora Opuszczonych", "Korytarze Wygnańców p.1 - Sala Ech", "Korytarze Wygnańców p.1 - Sala Szlachetnych", "Korytarze Wygnańców p.2 - Komnata Wygnańców", "Korytarze Wygnańców p.2 - Komora Budowniczego", "Korytarze Wygnańców p.2 - Sala Żądzy", "Korytarze Wygnańców p.3 - Komnata Przeklętego Daru", "Twierdza Rogogłowych - Sala Byka", "Wyspa Ingotia"]},
+      {"name": "Kraby (122lvl)", "desc": "Zoptymalizowana baza (Potworów: 55)", "mobCount": 55, "maps": ["Wyspa Rem"]},
+      {"name": "Caneum (124lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Piaskowa Pułapka - Grota Piaskowej Śmierci", "Piaskowa Pułapka p.1 - sala 1", "Piaskowa Pułapka p.1 - sala 2", "Piaskowa Pułapka p.1 - sala 3", "Piaskowa Pułapka p.1 - sala 4", "Wyspa Caneum"]},
+      {"name": "Magradit (127lvl)", "desc": "Zoptymalizowana baza (Potworów: 125)", "mobCount": 125, "maps": ["Wulkan Politraki p.1 - sala 1", "Wulkan Politraki p.1 - sala 2", "Wulkan Politraki p.1 - sala 3", "Wulkan Politraki p.2 - sala 1", "Wulkan Politraki p.2 - sala 2"]},
+      {"name": "Wraki (127lvl)", "desc": "Zoptymalizowana baza (Potworów: 85)", "mobCount": 85, "maps": ["Grota Trzeszczących Kości p.1 - sala 1", "Grota Trzeszczących Kości p.1 - sala 2", "Wrak statku", "Wyspa Wraków"]},
+      {"name": "Pajaki (129lvl)", "desc": "Zoptymalizowana baza (Potworów: 165)", "mobCount": 165, "maps": ["Szlak Thorpa p.1", "Szlak Thorpa p.2", "Szlak Thorpa p.3", "Szlak Thorpa p.4", "Szlak Thorpa p.5", "Szlak Thorpa p.6"]},
+      {"name": "Piraci (130lvl)", "desc": "Zoptymalizowana baza (Potworów: 205)", "mobCount": 205, "maps": ["Korsarska Nora - sala 1", "Korsarska Nora - sala 2", "Korsarska Nora - sala 3", "Korsarska Nora - sala 4", "Korsarska Nora - sala 5", "Korsarska Nora - sala 6", "Korsarska Nora - statek", "Korsarska Nora - wschodni przełaz", "Korsarska Nora - zachodni przełaz", "Ukryta Grota Morskich Diabłów", "Ukryta Grota Morskich Diabłów - arsenał", "Ukryta Grota Morskich Diabłów - korytarz", "Ukryta Grota Morskich Diabłów - magazyn", "Ukryta Grota Morskich Diabłów - siedziba", "Ukryta Grota Morskich Diabłów - skarbiec"]},
+      {"name": "Piaskowi niewolnicy (133lvl)", "desc": "Zoptymalizowana baza (Potworów: 166)", "mobCount": 166, "maps": ["Dolina Pustynnych Kręgów", "Piachy Zniewolonych", "Piaskowa Gęstwina", "Piaszczysta Grota p.1 - sala 1", "Piaszczysta Grota p.1 - sala 2", "Ruchome Piaski"]},
+      {"name": "Korredy (134lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Kopalnia Żółtego Kruszcu p.1 - sala 1", "Kopalnia Żółtego Kruszcu p.1 - sala 2", "Kopalnia Żółtego Kruszcu p.2 - sala 1", "Kopalnia Żółtego Kruszcu p.2 - sala 2"]},
+      {"name": "Impy (136lvl)", "desc": "Zoptymalizowana baza (Potworów: 115)", "mobCount": 115, "maps": ["Chodniki Mrinding", "Chodniki Mrinding p.1 - sala 1", "Chodniki Mrinding p.1 - sala 2", "Chodniki Mrinding p.2 - sala 1", "Chodniki Mrinding p.2 - sala 2"]},
+      {"name": "Ognie (137lvl)", "desc": "Zoptymalizowana baza (Potworów: 85)", "mobCount": 85, "maps": ["Ognista Studnia p.1", "Ścieżki Erebeth p.2 - sala 1", "Ścieżki Erebeth p.2 - sala 2", "Ścieżki Erebeth p.3"]},
+      {"name": "Ogniste golemy (138lvl)", "desc": "Zoptymalizowana baza (Potworów: 105)", "mobCount": 105, "maps": ["Kuźnia Worundriela - Komnata Żaru", "Kuźnia Worundriela p.1", "Kuźnia Worundriela p.2", "Kuźnia Worundriela p.3", "Ognista Studnia p.2", "Ognista Studnia p.3"]},
+      {"name": "Ważki (140lvl)", "desc": "Zoptymalizowana baza (Potworów: 75)", "mobCount": 75, "maps": ["Jezioro Ważek"]},
+      {"name": "Górale (143lvl)", "desc": "Zoptymalizowana baza (Potworów: 185)", "mobCount": 185, "maps": ["Babi Wzgórek", "Chata Teściowej", "Chata wójta Fistuły", "Chata wójta Fistuły p.1", "Góralska Pieczara p.1", "Góralska Pieczara p.2", "Góralska Pieczara p.3", "Góralskie Przejście", "Wyjąca Jaskinia", "Wyjący Wąwóz"]},
+      {"name": "Berserkerzy (147lvl)", "desc": "Zoptymalizowana baza (Potworów: 225)", "mobCount": 225, "maps": ["Cenotaf Berserkerów - przejście przodków", "Cenotaf Berserkerów p.1 - sala 1", "Cenotaf Berserkerów p.1 - sala 2", "Czarcie Oparzeliska", "Grobowiec Przodków", "Mała Twierdza - korytarz zachodni", "Mała Twierdza - magazyn", "Mała Twierdza - mały barak", "Mała Twierdza - mury wschodnie", "Mała Twierdza - mury zachodnie", "Mała Twierdza - podziemny magazyn", "Mała Twierdza - sala główna", "Mała Twierdza - sala wejściowa", "Mała Twierdza - wieża strażnicza", "Mała Twierdza - wieża wschodnia", "Mała Twierdza - wieża zachodnia", "Mała Twierdza p.1", "Opuszczona Twierdza", "Zaginiona Dolina", "Śnieżna Granica"]},
+      {"name": "Duchy (149lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Korytarze Milczących Intryg p.1", "Korytarze Milczących Intryg p.2 - sala 1", "Korytarze Milczących Intryg p.2 - sala 2", "Korytarze Milczących Intryg p.3", "Sala Ukrytych Paktów"]},
+      {"name": "Mechaniczne gobliny (151lvl)", "desc": "Zoptymalizowana baza (Potworów: 125)", "mobCount": 125, "maps": ["Lokum Złych Goblinów - warsztat", "Lokum Złych Goblinów - wieża", "Lokum Złych Goblinów - zejście p.1", "Lokum Złych Goblinów p.2 - sala 1", "Lokum Złych Goblinów p.2 - sala 2", "Lokum Złych Goblinów p.3 - sala 1", "Lokum Złych Goblinów p.3 - sala 2"]},
+      {"name": "Dusze (152lvl)", "desc": "Zoptymalizowana baza (Potworów: 45)", "mobCount": 45, "maps": ["Upiorna Droga"]},
+      {"name": "Wiedzmy (154lvl)", "desc": "Zoptymalizowana baza (Potworów: 175)", "mobCount": 175, "maps": ["Dom Adariel", "Dom Amry", "Dom Atalii", "Dom czarnej magii", "Dom starej czarownicy", "Laboratorium Adariel", "Lochy Tristam", "Magazyn mioteł", "Ograbiona świątynia", "Opuszczone więzienie", "Sabatowe Góry", "Splugawiona kaplica", "Splądrowana kaplica", "Tristam", "Wiedźmie Kotłowisko"]},
+      {"name": "Czerwoni orkowie (156lvl)", "desc": "Zoptymalizowana baza (Potworów: 205)", "mobCount": 205, "maps": ["Grota Orczej Hordy p.1 s.1", "Grota Orczej Hordy p.1 s.2", "Grota Orczej Hordy p.2 s.1", "Grota Orczej Hordy p.2 s.2", "Grota Orczej Hordy p.2 s.3", "Grota Orczych Szamanów p.1 s.1", "Grota Orczych Szamanów p.1 s.2", "Grota Orczych Szamanów p.2 s.1", "Grota Orczych Szamanów p.2 s.2", "Kurhany Zwyciężonych", "Orcza Wyżyna", "Osada Czerwonych Orków"]},
+      {"name": "Dziki zagajnik (161lvl)", "desc": "Zoptymalizowana baza (Potworów: 145)", "mobCount": 145, "maps": ["Dziki Zagajnik", "Przepaść Aguti", "Przełęcz Krwistego Posłańca", "Skały Pamięci Nikantosa", "Ukryty Kanion"]},
+      {"name": "Kazamaty (163lvl)", "desc": "Zoptymalizowana baza (Potworów: 165)", "mobCount": 165, "maps": ["Nawiedzone Kazamaty p.1 s.1", "Nawiedzone Kazamaty p.1 s.2", "Nawiedzone Kazamaty p.2 s.1", "Nawiedzone Kazamaty p.2 s.2", "Nawiedzone Kazamaty p.3 s.1", "Nawiedzone Kazamaty p.3 s.2", "Nawiedzone Kazamaty p.4", "Nawiedzone Komnaty - przedsionek"]},
+      {"name": "Komnaty (170lvl)", "desc": "Zoptymalizowana baza (Potworów: 135)", "mobCount": 135, "maps": ["Komnaty Czarnej Gwardii - wschód", "Komnaty Czarnej Gwardii - zachód", "Nawiedzone Komnaty - przedsionek", "Nawiedzone Komnaty - wschód", "Nawiedzone Komnaty - zachód", "Sala Dowódcy Orków", "Sala Królewska", "Sala Rady Orków"]},
+      {"name": "Kryształowa grota (174lvl)", "desc": "Zoptymalizowana baza (Potworów: 185)", "mobCount": 185, "maps": ["Kryształowa Grota - Sala Smutku", "Kryształowa Grota - przepaść", "Kryształowa Grota p.1", "Kryształowa Grota p.2 - sala 1", "Kryształowa Grota p.2 - sala 2", "Kryształowa Grota p.3 - sala 1", "Kryształowa Grota p.3 - sala 2", "Kryształowa Grota p.4", "Kryształowa Grota p.5", "Kryształowa Grota p.6"]},
+      {"name": "Driady (178lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Błota Sham Al", "Drzewo Dusz p.1", "Drzewo Dusz p.2", "Grota Arbor s.1", "Grota Arbor s.2", "Głusza Świstu", "Kwieciste Kresy", "Las Porywów Wiatru", "Ruiny Tass Zhil"]},
+      {"name": "Ogry (181lvl)", "desc": "Zoptymalizowana baza (Potworów: 115)", "mobCount": 115, "maps": ["Ogrza Kawerna p.1", "Ogrza Kawerna p.2", "Ogrza Kawerna p.3", "Ogrza Kawerna p.4"]},
+      {"name": "Patrycjusze (184lvl)", "desc": "Zoptymalizowana baza (Potworów: 145)", "mobCount": 145, "maps": ["Krypty Bezsennych p.1 s.1", "Krypty Bezsennych p.1 s.2", "Krypty Bezsennych p.2 s.1", "Krypty Bezsennych p.2 s.2", "Krypty Bezsennych p.3"]},
+      {"name": "Zmutowane rośliny (187lvl)", "desc": "Zoptymalizowana baza (Potworów: 125)", "mobCount": 125, "maps": ["Głuchy Las", "Kwieciste Przejście", "Skarpa Trzech Słów", "Ukwiecona Skarpa", "Zapomniana Ścieżyna", "Złudny Trakt"]},
+      {"name": "Draki (189lvl)", "desc": "Zoptymalizowana baza (Potworów: 105)", "mobCount": 105, "maps": ["Kwieciste Kresy", "Przysiółek Valmirów", "Szczerba Samobójców", "Śnieżna Granica", "Śnieżycowy Las"]},
+      {"name": "Mroczny las (192lvl)", "desc": "Zoptymalizowana baza (Potworów: 255)", "mobCount": 255, "maps": ["Bezgwiezdna Gęstwina", "Bór Zagubionych", "Grota Skamieniałej Kory p.1 - sala 1", "Grota Skamieniałej Kory p.1 - sala 2", "Grota Skamieniałej Kory p.2", "Martwy Las", "Starodrzew Przedwiecznych p.1", "Starodrzew Przedwiecznych p.2", "Zbocze Starych Bogów", "Ziemia Szepczących Cierni", "Złudny Trakt"]},
+      {"name": "Myświóry (196lvl)", "desc": "Zoptymalizowana baza (Potworów: 145)", "mobCount": 145, "maps": ["Kanały Nithal p.1 - sala 1", "Kanały Nithal p.1 - sala 2", "Kanały Nithal p.1 - sala 3", "Szlamowe Kanały p.2 - sala 1", "Szlamowe Kanały p.2 - sala 2", "Szlamowe Kanały p.2 - sala 3"]},
+      {"name": "Hurysy (199lvl)", "desc": "Zoptymalizowana baza (Potworów: 95)", "mobCount": 95, "maps": ["Mroczne Komnaty", "Przedsionek Kultu", "Przerażające Sypialnie"]},
+      {"name": "Heretycy (203lvl)", "desc": "Zoptymalizowana baza (Potworów: 165)", "mobCount": 165, "maps": ["Korytarz Ostatnich Nadziei", "Lochy Kultu", "Przejście Oczyszczenia", "Sala Skaryfikacji Grzeszników", "Sala Spowiedzi Konających", "Sala Tysiąca Świec", "Sale Rozdzierania", "Tajemnicza Siedziba"]},
+      {"name": "Furbole (208lvl)", "desc": "Zoptymalizowana baza (Potworów: 185)", "mobCount": 185, "maps": ["Dolina Gniewu", "Rozległa Równina", "Terytorium Furii", "Wzgórza Obłędu", "Zalana Grota", "Zapadlisko Zniewolonych", "Zapomniany Las"]},
+      {"name": "Pająki (212lvl)", "desc": "Zoptymalizowana baza (Potworów: 225)", "mobCount": 225, "maps": ["Arachnitopia p.1", "Arachnitopia p.2", "Arachnitopia p.3", "Arachnitopia p.4", "Arachnitopia p.5", "Arachnitopia p.6", "Dolina Pajęczych Korytarzy", "Otchłań Pajęczych Sieci", "Pajęczy Las", "Zapadlisko Zniewolonych"]},
+      {"name": "Drowy (216lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Dawny Przełaz", "Erem Aldiphrina", "Porzucone Noiridum p.2", "Porzucone Noiridum p.3 - sala 1", "Porzucone Noiridum p.3 - sala 2", "Porzucone Noiridum p.3 - sala 3", "Zakazana Grota"]},
+      {"name": "Dridery (219lvl)", "desc": "Zoptymalizowana baza (Potworów: 135)", "mobCount": 135, "maps": ["Dawny Przełaz", "Zamierzchłe Arterie p.2 - sala 1", "Zamierzchłe Arterie p.2 - sala 2", "Zamierzchłe Arterie p.3", "Zapomniane Sztolnie"]},
+      {"name": "Anuraki (223lvl)", "desc": "Zoptymalizowana baza (Potworów: 214)", "mobCount": 214, "maps": ["Bagna Umarłych", "Gnijące Topielisko", "Grząska Ziemia", "Mglisty Las", "Smocze Skalisko", "Urwisko Vapora"]},
+      {"name": "Maddoki (227lvl)", "desc": "Zoptymalizowana baza (Potworów: 255)", "mobCount": 255, "maps": ["Dolina Potoku Śmierci", "Grota Porośniętych Stalagmitów p.1 - sala 1", "Grota Porośniętych Stalagmitów p.1 - sala 2", "Grota Porośniętych Stalagmitów p.2 - sala 1", "Grota Porośniętych Stalagmitów p.2 - sala 2", "Jaszczurze Korytarze p.1 - sala 1", "Jaszczurze Korytarze p.1 - sala 2", "Jaszczurze Korytarze p.1 - sala 3", "Jaszczurze Korytarze p.1 - sala 4", "Jaszczurze Korytarze p.2 - sala 1", "Jaszczurze Korytarze p.2 - sala 2", "Jaszczurze Korytarze p.2 - sala 3", "Jaszczurze Korytarze p.2 - sala 4", "Jaszczurze Korytarze p.2 - sala 5", "Mechata Jama p.1", "Mechata Jama p.2", "Mechata Jama p.3", "Nora Jaszczurzych Koszmarów p.1 - sala 1", "Nora Jaszczurzych Koszmarów p.1 - sala 2", "Skryty Azyl", "Strumienie Szemrzących Wód", "Zawodzące Kaskady", "Złota Dąbrowa"]},
+      {"name": "Zagrzybiony las (232lvl)", "desc": "Zoptymalizowana baza (Potworów: 205)", "mobCount": 205, "maps": ["Garb Połamanych Konarów", "Gardziel Podgnitych Mchów p.1", "Gardziel Podgnitych Mchów p.2", "Gardziel Podgnitych Mchów p.3", "Gęste Sploty", "Zalesiony Step", "Zarosłe Szczeliny p.1 - sala 1", "Zarosłe Szczeliny p.1 - sala 2", "Zarosłe Szczeliny p.1 - sala 3", "Zmurszały Łęg"]},
+      {"name": "Elgary (236lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Gaj Księżycowego Blasku", "Głusza Srebrnego Rogu", "Knieja Lunarnych Głazów", "Szepty Menhirów", "Zacienione Wnęki p.1 - sala 1", "Zacienione Wnęki p.1 - sala 2", "Zacienione Wnęki p.2 - sala 1", "Zacienione Wnęki p.2 - sala 2", "Zakątek Nocnych Szelestów"]},
+      {"name": "Drzewce (239lvl)", "desc": "Zoptymalizowana baza (Potworów: 215)", "mobCount": 215, "maps": ["Jaskinia Korzennego Czaru p.1 - sala 1", "Jaskinia Korzennego Czaru p.1 - sala 2", "Jaskinia Korzennego Czaru p.1 - sala 3", "Jaskinia Korzennego Czaru p.1 - sala 4", "Jaskinia Korzennego Czaru p.2 - sala 1", "Jaskinia Korzennego Czaru p.2 - sala 2", "Jaskinia Korzennego Czaru p.3", "Krzaczasta Grota p.1 - sala 1", "Krzaczasta Grota p.1 - sala 2", "Krzaczasta Grota p.1 - sala 3", "Krzaczasta Grota p.2 - sala 1", "Krzaczasta Grota p.2 - sala 2", "Krzaczasta Grota p.2 - sala 3", "Piaskowa Gęstwina", "Regiel Zabłąkanych", "Urwisko Zdrewniałych", "Wąwóz Zakorzenionych Dusz", "Źródło Zakorzenionego Ludu"]},
+      {"name": "Bolity (244lvl)", "desc": "Zoptymalizowana baza (Potworów: 135)", "mobCount": 135, "maps": ["Dolina Chmur", "Złota Góra p.1 - sala 1", "Złota Góra p.1 - sala 2", "Złota Góra p.1 - sala 3", "Złota Góra p.1 - sala 4", "Złota Góra p.2 - sala 1", "Złota Góra p.2 - sala 2", "Złota Góra p.2 - sala 3", "Złota Góra p.2 - sala 4", "Złota Góra p.3 - sala 1", "Złota Góra p.3 - sala 2"]},
+      {"name": "Niecka (248lvl)", "desc": "Zoptymalizowana baza (Potworów: 165)", "mobCount": 165, "maps": ["Chantli", "Chantli Cuaitla Citlalina", "Niecka Xiuh Atl", "Oztotl Tzacua p.1 - sala 1", "Oztotl Tzacua p.1 - sala 2", "Oztotl Tzacua p.2 - sala 1", "Oztotl Tzacua p.2 - sala 2", "Oztotl Tzacua p.3 - sala 1", "Oztotl Tzacua p.3 - sala 2", "Oztotl Tzacua p.4 - sala 1", "Oztotl Tzacua p.4 - sala 2", "Oztotl Tzacua p.5"]},
+      {"name": "Maho (253lvl)", "desc": "Zoptymalizowana baza (Potworów: 285)", "mobCount": 285, "maps": ["Altepetl Mahoptekan", "Topan p.1", "Topan p.10", "Topan p.11", "Topan p.12", "Topan p.13", "Topan p.2", "Topan p.3", "Topan p.4", "Topan p.5", "Topan p.6", "Topan p.7", "Topan p.8", "Topan p.9", "Wschodni Mictlan p.1", "Wschodni Mictlan p.2", "Wschodni Mictlan p.3", "Wschodni Mictlan p.4", "Wschodni Mictlan p.5", "Wschodni Mictlan p.6", "Wschodni Mictlan p.7", "Wschodni Mictlan p.8", "Zachodni Mictlan p.1", "Zachodni Mictlan p.2", "Zachodni Mictlan p.3", "Zachodni Mictlan p.4", "Zachodni Mictlan p.5", "Zachodni Mictlan p.6", "Zachodni Mictlan p.7", "Zachodni Mictlan p.8", "Zachodni Mictlan p.9"]},
+      {"name": "Wiedźmowe potwory (258lvl)", "desc": "Zoptymalizowana baza (Potworów: 175)", "mobCount": 175, "maps": ["Jęczywąwóz", "Plugawe Pustkowie", "Pogranicze Wisielców", "Siedlisko Przyjemnej Woni", "Siedlisko Przyjemnej Woni - źródło", "Skalisty Styk", "Zachodnie Zbocze", "Zacisze Zimnych Wiatrów"]},
+      {"name": "Potępione zamczysko (261lvl)", "desc": "Zoptymalizowana baza (Potworów: 235)", "mobCount": 235, "maps": ["Potępione Zamczysko", "Potępione Zamczysko - głębokie lochy", "Potępione Zamczysko - korytarz wejściowy", "Potępione Zamczysko - korytarz wschodni", "Potępione Zamczysko - korytarz zachodni", "Potępione Zamczysko - lochy wschodnie p.1", "Potępione Zamczysko - lochy wschodnie p.2", "Potępione Zamczysko - lochy zachodnie p.1", "Potępione Zamczysko - lochy zachodnie p.2", "Potępione Zamczysko - północna komnata", "Potępione Zamczysko - sala ofiarna", "Potępione Zamczysko - wschodnia komnata", "Potępione Zamczysko - zachodnia komnata", "Potępione Zamczysko - łącznik wschodni", "Potępione Zamczysko - łącznik zachodni", "Wieża Szlochów p.1", "Wieża Szlochów p.2", "Wieża Szlochów p.3"]},
+      {"name": "Katakumby (268lvl)", "desc": "Zoptymalizowana baza (Potworów: 205)", "mobCount": 205, "maps": ["Grobowiec Seta", "Katakumby Gwałtownej Śmierci", "Katakumby Krwawych Wypraw", "Katakumby Odnalezionych Skrytobójców", "Katakumby Opętanych Dusz", "Katakumby Poległych Legionistów", "Komnaty Bezdusznych - sala 1", "Komnaty Bezdusznych - sala 2", "Korytarz Porzuconych Marzeń", "Korytarz Porzuconych Nadziei", "Pustynne Katakumby", "Pustynne Katakumby - sala 1", "Pustynne Katakumby - sala 2", "Wschodni Tunel Jaźni", "Zachodni Tunel Jaźni"]},
+      {"name": "Pustynia (275lvl)", "desc": "Zoptymalizowana baza (Potworów: 265)", "mobCount": 265, "maps": ["Grota Poświęcenia", "Jaskinia Odwagi", "Jaskinia Piaskowej Burzy s.1", "Jaskinia Piaskowej Burzy s.2", "Jaskinia Próby", "Jaskinia Smoczej Paszczy p.1", "Jaskinia Smoczej Paszczy p.2", "Jaskinia Szczęk", "Jaskinia Sępa s.1", "Jaskinia Sępa s.2", "Jurta Chaegda", "Jurta Czcicieli", "Jurta Nomadzka", "Namiot Błogosławionych", "Namiot Gwardii Smokoszczękich", "Namiot Naznaczonych", "Namiot Piechoty Piłowej", "Namiot Pustynnych Smoków", "Pustynia Shaiharrud - wschód", "Pustynia Shaiharrud - zachód", "Skały Umarłych", "Smocze Skalisko", "Sępiarnia", "Urwisko Vapora", "Świątynia Hebrehotha - przedsionek", "Świątynia Hebrehotha - sala czciciela", "Świątynia Hebrehotha - sala ofiary"]},
+      {"name": "Driady (280lvl)", "desc": "Zoptymalizowana baza (Potworów: 155)", "mobCount": 155, "maps": ["Drzewo Życia p.1", "Drzewo Życia p.2", "Drzewo Życia p.3", "Gvar Hamryd", "Jaskinia Suchych Pędów s.1", "Jaskinia Suchych Pędów s.2", "Jaskinia Suchych Pędów s.3", "Jaskinia Suchych Pędów s.4", "Matecznik Szelestu", "Rozlewisko Kai"]}
     ];
 
 
