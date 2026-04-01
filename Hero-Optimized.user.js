@@ -663,22 +663,19 @@ let opacityValue = 0.95;
 
 
 
-    let lsProfiles = JSON.parse(localStorage.getItem('exp_profiles_v64') || 'null');
+let lsProfiles = JSON.parse(localStorage.getItem('exp_profiles_v64') || 'null');
 
-
-
-    // Wymuszacz załadowania nowych baz: jeśli starych jest mniej niż 80 (czyli mamy śmieci lub błędy) - nadpisz twardo!
-
-    if (!lsProfiles || lsProfiles.length < 80) {
-
-        lsProfiles = [...window.defaultExpProfiles];
-
-        localStorage.setItem('exp_profiles_v64', JSON.stringify(lsProfiles));
-
+    // ŁATKA: Wymuś twardy reset pamięci, jeśli zacięła się tam fałszywa "Wioska Ghuli"
+    if (lsProfiles) {
+        let hasBuggedMap = lsProfiles.some(p => p.maps.includes("Wioska Ghuli"));
+        if (hasBuggedMap) lsProfiles = null; 
     }
 
+    if (!lsProfiles || lsProfiles.length < 80) {
+        lsProfiles = [...window.defaultExpProfiles];
+        localStorage.setItem('exp_profiles_v64', JSON.stringify(lsProfiles));
+    }
     let loadedProfiles = lsProfiles;
-
 
 
   const ZAKONNICY = {
