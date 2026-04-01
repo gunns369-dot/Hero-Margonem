@@ -2350,9 +2350,14 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
 
-             <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
-                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="let p = document.getElementById('heroTeleportsGUI'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+                <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
+                    <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
+                        <span style="color:#00acc1; font-weight:bold; font-size:11px;">Skonfiguruj Teleporty</span><br>
+                        <span style="color:#a99a75; font-size:9px;">Kliknij poniżej, aby wybrać miasta.</span>
+                    </div>
+                   <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="document.getElementById('heroTeleportsGUI').style.display='flex'; if(typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                 </div>
+            </div>
         `;
 
         document.body.appendChild(mainGui);
@@ -2514,7 +2519,6 @@ const teleportsGui = document.createElement('div');
         teleportsGui.style.width = '320px'; 
         teleportsGui.style.maxHeight = '560px';
         teleportsGui.innerHTML = `
- teleportsGui.innerHTML = `
             <div class="gui-header">🚀 Teleporty <button class="btn-close" onclick="document.getElementById('heroTeleportsGUI').style.display='none'">✖</button></div>
             <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
                 <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
@@ -5160,5 +5164,15 @@ window.clearExpMaps = () => {
         }
     };
 
+    let btnOpenTp = document.getElementById('btnOpenTeleports');
+    if (btnOpenTp) {
+        btnOpenTp.addEventListener('click', () => {
+            let p = document.getElementById('heroTeleportsGUI');
+            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') {
+                window.renderTeleportOptions();
+            }
+        });
+    }
 
 })(); // Koniec kodu
