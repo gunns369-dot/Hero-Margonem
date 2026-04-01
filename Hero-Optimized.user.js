@@ -3360,7 +3360,7 @@ selHero.addEventListener('change', (e) => {
             });
         }
 
-        let btnAddRec = document.getElementById('btnAddSelectedRec');
+let btnAddRec = document.getElementById('btnAddSelectedRec');
         if (btnAddRec) {
             btnAddRec.addEventListener('click', () => {
                 let checkboxes = document.querySelectorAll('.chk-rec-profile:checked');
@@ -3388,45 +3388,7 @@ selHero.addEventListener('change', (e) => {
                         }
                     }
                 });
-let btnShowEq = document.getElementById('btnShowRecommendedEq');
-        if (btnShowEq) {
-            btnShowEq.addEventListener('click', () => {
-                let container = document.getElementById('recommendedEqList');
-                if (!container) return;
-                
-                if (window.DatabaseModule.ekwipunek.length === 0) {
-                    container.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center; display:block;">Baza danych jest pusta lub nadal się ładuje. Upewnij się, że podałeś poprawne linki!</span>`;
-                    return;
-                }
 
-                let items = window.DatabaseModule.getRecommendedEq();
-                
-                if (items.length === 0) {
-                    container.innerHTML = `<span style="color:#777; font-size:10px; text-align:center; display:block;">Nie znaleziono odpowiedniego sprzętu dla Twojego poziomu i profesji.</span>`;
-                    return;
-                }
-
-                let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znaleziono ${items.length} pasujących przedmiotów:</div>`;
-                
-                items.forEach(item => {
-                    let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
-                    html += `
-                        <div class="list-item" style="flex-direction:column; align-items:flex-start; padding: 4px; border-left: 3px solid #d4af37;">
-                            <div style="display:flex; justify-content:space-between; width:100%;">
-                                <a href="${item.url}" target="_blank" style="color:#d4af37; font-weight:bold; font-size:11px; text-decoration:none;">${item.name}</a>
-                                <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
-                                <span style="color:#a99a75; font-size:9px;">Typ: ${item.type}</span>
-                                <span style="color:${profColor}; font-size:9px;">${item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły'}</span>
-                            </div>
-                        </div>
-                    `;
-                });
-
-                container.innerHTML = html;
-            });
-        }
                 if(addedCount > 0) {
                     localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
                     
@@ -3449,8 +3411,7 @@ let btnShowEq = document.getElementById('btnShowRecommendedEq');
                 }
             });
         }
-    }
-
+    } // <--- TA KLAMRA ZOSTAŁA PRZEZ CIEBIE USUNIĘTA, TERAZ WRACA NA SWOJE MIEJSCE!
 
 
     // ==========================================
