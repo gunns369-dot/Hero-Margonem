@@ -226,7 +226,7 @@
             try {
                 // TUTAJ WKLEJ LINKI RAW DO SWOICH PLIKÓW NA GITHUBIE:
                 let urlShops = 'https://twoj-serwer.pl/margoworld_shops_full_database.json';
-                let urlTooltips = 'https://twoj-serwer.pl/margoworld_tooltip_cache_full.json';
+                let urlTooltips = 'https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/refs/heads/main/margoworld_tooltip_cache_full.json';
 
                 console.log("[Baza] Rozpoczęto pobieranie zewnętrznych baz danych...");
                 let [resShops, resEq] = await Promise.all([fetch(urlShops), fetch(urlTooltips)]);
