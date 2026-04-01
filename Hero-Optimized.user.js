@@ -1441,19 +1441,32 @@ let attackInterval = null;
 
 
 
-   function updateSuitableBosses(containerId, searchId, dataArray, labelColor) {
+    function updateSuitableBosses(containerId, searchId, dataArray, labelColor) {
+
         let container = document.getElementById(containerId);
-        if (!container || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return; // ZABEZPIECZENIE PRZED CRASHEM
+
+        if (!container || !Engine || !Engine.hero) return;
+
+
 
         let playerLvl = Engine.hero.d.lvl;
+
         if (!playerLvl) return;
 
+
+
         // Boss wyświetla się od (boss.level - 13) do jego maksa. Kolosy mają limit = 999.
+
         let suitable = dataArray.filter(e => playerLvl >= (e.level - 13) && playerLvl <= e.limit);
+
         let html = suitable.map(e => `<span style="color:${labelColor}; font-weight:bold; cursor:pointer;" onclick="document.getElementById('${searchId}').value='${e.name}'; document.getElementById('${searchId}').dispatchEvent(new Event('input'));">${e.name} (${e.level})</span>`).join(', ');
 
+
+
         container.innerHTML = `<div style="font-size:10px; color:#a99a75; font-weight:bold;">Moby na Twój poziom (od ${playerLvl - 13 > 0 ? playerLvl - 13 : 1} w górę):</div>
+
                                <div style="font-size:11px; margin-top:3px; max-height:60px; overflow-y:auto; line-height:1.4;">${html || 'Brak mobów w Twoim przedziale'}</div>`;
+
     }
 
 
@@ -2228,7 +2241,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
                     <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
                     <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
-                   <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;" onclick="window.toggleMainVisibility()"><span class="btn-icon">✖</span></button>
+                    <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;"><span class="btn-icon">✖</span></button>
                 </div>
             </div>
 
@@ -2342,7 +2355,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <span style="color:#00acc1; font-weight:bold; font-size:11px;">Skonfiguruj Teleporty</span><br>
                         <span style="color:#a99a75; font-size:9px;">Kliknij poniżej, aby wybrać miasta.</span>
                     </div>
-                   <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="document.getElementById('heroTeleportsGUI').style.display='flex'; if(typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                 </div>
             </div>
         `;
@@ -2388,7 +2401,10 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 
 
                 <div class="nav-row"><label>Zasięg widoczności (Domyślnie 7):</label><input type="number" id="inpVisionRange" value="${botSettings.visionRange}" min="1" max="15"></div>
-<div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
+
+                <div class="nav-row"><label>Przeźroczystość okna (0.2 - 1.0):</label><input type="range" id="sliderOpacity" min="0.2" max="1" step="0.05" value="0.95" style="width:100%;"></div>
+
+                <div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
 
 
 
@@ -2525,9 +2541,9 @@ const teleportsGui = document.createElement('div');
 
     // ==========================================
 
-   window.toggleMainVisibility = function() { let gui = document.getElementById('heroNavGUI'); let gear = document.getElementById('gearIcon'); if (gui.style.display === 'none') { gui.style.display = 'flex'; gear.style.display = 'none'; } else { gui.style.display = 'none'; gear.style.display = 'flex'; } };
+    function toggleMainVisibility() { let gui = document.getElementById('heroNavGUI'); let gear = document.getElementById('gearIcon'); if (gui.style.display === 'none') { gui.style.display = 'flex'; gear.style.display = 'none'; } else { gui.style.display = 'none'; gear.style.display = 'flex'; } }
 
-    function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { window.toggleMainVisibility(); } }
+    function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { toggleMainVisibility(); } }
 
 
 
@@ -2595,7 +2611,7 @@ const teleportsGui = document.createElement('div');
 
     function setupMultiDrag() { document.querySelectorAll('.hero-window').forEach(win => { let header = win.querySelector('.gui-header'); if(!header) return; let isDragging = false, startX, startY, initialX, initialY; header.onmousedown = function(e) { if(e.target.closest('button')) return; isDragging = true; startX = e.clientX; startY = e.clientY; initialX = win.offsetLeft; initialY = win.offsetTop; document.querySelectorAll('.hero-window').forEach(w => w.style.zIndex = "10000"); win.style.zIndex = "10001"; document.onmousemove = function(e) { if(isDragging) { win.style.left = (initialX + e.clientX - startX) + 'px'; win.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; }); }
 
-    function setupGearDrag() { const gearIcon = document.getElementById('gearIcon'); let isDragging = false, startX, startY, initialX, initialY, isClick = true; gearIcon.onmousedown = function(e) { isDragging = true; isClick = true; startX = e.clientX; startY = e.clientY; initialX = gearIcon.offsetLeft; initialY = gearIcon.offsetTop; document.onmousemove = function(e) { if(isDragging) { if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) isClick = false; gearIcon.style.left = (initialX + e.clientX - startX) + 'px'; gearIcon.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; gearIcon.onclick = function() { if(isClick) window.toggleMainVisibility(); }; }
+    function setupGearDrag() { const gearIcon = document.getElementById('gearIcon'); let isDragging = false, startX, startY, initialX, initialY, isClick = true; gearIcon.onmousedown = function(e) { isDragging = true; isClick = true; startX = e.clientX; startY = e.clientY; initialX = gearIcon.offsetLeft; initialY = gearIcon.offsetTop; document.onmousemove = function(e) { if(isDragging) { if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) isClick = false; gearIcon.style.left = (initialX + e.clientX - startX) + 'px'; gearIcon.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; gearIcon.onclick = function() { if(isClick) toggleMainVisibility(); }; }
 
 function bindChange(id, handler) {
     const el = document.getElementById(id);
@@ -2939,7 +2955,7 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('btnOpenMaps').addEventListener('click', () => { let p = document.getElementById('heroGatewaysGUI'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; if(p.style.display === 'flex') renderGatewaysDatabase(); });
 
-        document.getElementById('sliderOpacity').addEventListener('input', (e) => { opacityValue = e.target.value; document.querySelectorAll('.hero-window').forEach(w => w.style.background = `rgba(17, 17, 17, ${opacityValue})`); });
+        document.getElementById('btnMinimizeMain').addEventListener('click', toggleMainVisibility);
 
         document.getElementById('btnScanGateways').addEventListener('click', scanCurrentMapForGateways);
 
@@ -4148,38 +4164,44 @@ function getAntiLagDelay() {
     if (safeMax <= safeMin) return safeMin;
     return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
 }   
-  function getExpNpcList() {
-        let mobs = new Map();
+    function getExpNpcList() {
+    try {
+        const drawable = Engine?.npcs?.getDrawableList?.();
+        if (Array.isArray(drawable) && drawable.length > 0) {
+            return drawable;
+        }
+    } catch (e) {}
 
-        // 1. Z pamięci głębokiej (widzi daleko we mgle)
-        try {
-            const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : {};
-            for (let id in checked) {
-                let n = checked[id]?.d || checked[id];
-                if (n && n.x !== undefined && n.y !== undefined) mobs.set(id, { id: id, ...n });
-            }
-        } catch (e) {}
-
-        // 2. Z bezpośredniego słownika (aktualizowany na bieżąco)
-        try {
-            const direct = Engine?.npcs?.d || {};
-            for (let id in direct) {
-                let n = direct[id]?.d || direct[id];
-                if (n && n.x !== undefined && n.y !== undefined) mobs.set(id, { id: id, ...n });
-            }
-        } catch (e) {}
-
-        // 3. Z obiektów na ekranie (dla pewności)
-        try {
-            const drawable = Engine?.npcs?.getDrawableList?.() || [];
-            drawable.forEach(obj => {
-                let n = obj?.d || obj;
-                if (n && n.id && n.x !== undefined && n.y !== undefined) mobs.set(n.id, { id: n.id, ...n });
+    try {
+        const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : null;
+        if (checked && typeof checked === 'object') {
+            return Object.keys(checked).map(id => {
+                const raw = checked[id];
+                const n = raw?.d || raw || {};
+                if (n.id == null) n.id = id;
+                return n;
             });
-        } catch (e) {}
+        }
+    } catch (e) {}
 
-        return Array.from(mobs.values());
-    }
+    try {
+        const direct = Engine?.npcs?.d;
+        if (direct && typeof direct === 'object') {
+            return Object.keys(direct).map(id => {
+                const raw = direct[id];
+                const n = raw?.d || raw || {};
+                if (n.id == null) n.id = id;
+                return n;
+            });
+        }
+    } catch (e) {}
+
+    return [];
+}
+    function isMapInSelectedExpowisko(mapName) {
+    const maps = botSettings?.exp?.mapOrder || [];
+    return Array.isArray(maps) && maps.includes(mapName);
+}
 function setExpBerserkState(shouldEnable) {
     if (!botSettings?.berserk) return;
     if (!botSettings.berserk.userEnabled) return;
@@ -4419,7 +4441,7 @@ function runExpLogic() {
             return;
         }
 
-     // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
+        // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
         if (targetDist <= 1) {
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
             
@@ -4429,15 +4451,10 @@ function runExpLogic() {
 
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
-            // WYMUSZENIE KLIKNIĘCIA "ZAATAKUJ" - NA WYPADEK GDYBY BERSERK ZIGNOROWAŁ ELITĘ
-            if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
-            let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
-            if (confirmBtn && confirmBtn.innerText.toLowerCase().includes("zaatakuj")) confirmBtn.click();
-
             let isBerserkActive = botSettings.berserk && botSettings.berserk.enabled;
 
             if (expAttackLockUntil === 0) {
-                expAttackLockUntil = now + (isBerserkActive ? 2500 : 1000);
+                expAttackLockUntil = now + (isBerserkActive ? 2500 : 0);
             } else if (now > expAttackLockUntil) {
                 window.logExp(`Zacięcie przy walce z: ${target.nick}. Odbiegam kawałek...`, "#ff9800");
                 
@@ -5136,5 +5153,15 @@ window.clearExpMaps = () => {
         }
     };
 
+    let btnOpenTp = document.getElementById('btnOpenTeleports');
+    if (btnOpenTp) {
+        btnOpenTp.addEventListener('click', () => {
+            let p = document.getElementById('heroTeleportsGUI');
+            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') {
+                window.renderTeleportOptions();
+            }
+        });
+    }
 
 })(); // Koniec kodu
