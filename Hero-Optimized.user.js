@@ -6104,13 +6104,19 @@ window.clearExpMaps = () => {
                         clearInterval(window.npcWalkInterval);
                         if (btnStop) btnStop.style.display = 'none';
                         
-                        // ODPALANIE ROZMOWY Z NPC (Auto-Kupno)
+                      // ODPALANIE ROZMOWY Z NPC (Auto-Kupno)
                         if (window.autoBuyTask) {
                             if (window.logHero) window.logHero(`💬 Zaczepiam NPC ${window.autoBuyTask.npc}...`, "#ffeb3b");
-                            for (let i in Engine.npcs.check()) {
-                                let n = Engine.npcs.check()[i];
-                                if (n.nick === window.autoBuyTask.npc && Math.abs(n.x - Engine.hero.d.x) <= 2 && Math.abs(n.y - Engine.hero.d.y) <= 2) {
-                                    window._t.send(`talk&id=${n.id}`);
+                            let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+                            for (let i in npcs) {
+                                let n = npcs[i];
+                                let nData = n.d || n;
+                                if (nData.nick === window.autoBuyTask.npc && Math.abs(nData.x - Engine.hero.d.x) <= 2 && Math.abs(nData.y - Engine.hero.d.y) <= 2) {
+                                    if (typeof Engine.npcs.interact === 'function') {
+                                        Engine.npcs.interact(nData.id); // Metoda dla NI
+                                    } else if (typeof window._g === 'function') {
+                                        window._g(`talk&id=${nData.id}`); // Awaryjna
+                                    }
                                     break;
                                 }
                             }
@@ -6339,7 +6345,7 @@ window.clearExpMaps = () => {
 
                 // 2. KUPNO W SKLEPIE (Gdy okno sklepu fizycznie się pokaże)
                 if (Engine.shop && Engine.shop.items) {
-                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper');
+                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window');
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         let shopItems = Object.values(Engine.shop.items);
                         let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
@@ -6347,11 +6353,11 @@ window.clearExpMaps = () => {
                         if (itemToBuy) {
                             if (window.logHero) window.logHero(`💸 Kupuję: ${window.autoBuyTask.amount}x ${window.autoBuyTask.item}...`, "#8bc34a");
                             
-                            // Bezpośrednie wysłanie polecenia kupna do serwera
-                            if (typeof window._t !== 'undefined' && window._t.send) {
-                                window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
-                            } else if (typeof window._g === 'function') {
+                            // Bezpośrednie wysłanie polecenia kupna do serwera (wsparcie NI)
+                            if (typeof window._g === 'function') {
                                 window._g(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
+                            } else if (typeof window._t !== 'undefined' && window._t.send) {
+                                window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
                             }
                             
                             window.autoBuyTask = null; // Czyszczenie zlecenia
@@ -6359,7 +6365,7 @@ window.clearExpMaps = () => {
                             // Zamykanie sklepu
                             setTimeout(() => { 
                                 if(typeof Engine.shop.close === 'function') Engine.shop.close(); 
-                                let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close');
+                                let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close');
                                 if(closeBtn) closeBtn.click();
                             }, 800);
                         } else {
