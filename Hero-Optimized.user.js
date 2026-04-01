@@ -4741,12 +4741,11 @@ function runExpLogic() {
 
                 // Ustawienie nowego celu i wydanie komendy ruchu
 
+              // Ustawienie nowego celu i wydanie komendy ruchu (Nakłada 8s lock)
                 if (expCurrentTargetId !== target.id) {
-
                     window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
-
                     expCurrentTargetId = target.id;
-
+                    window.expTargetLockTime = now + 8000; // 8 SEKUND TWARDEJ BLOKADY!
                 }
 
                 
