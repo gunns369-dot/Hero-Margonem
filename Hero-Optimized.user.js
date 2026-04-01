@@ -2496,18 +2496,17 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
 
-             <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
+          <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
                     <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
-                   <button id="btnShowRecommendedEq" class="btn-sepia" style="padding:6px; background:#4caf50; font-weight:bold;">🎒 POLECANY EKWIPUNEK </button>
+                    <button id="btnShowRecommendedEq" class="btn-sepia" style="padding:6px; background:#4caf50; font-weight:bold;">🎒 POLECANY EKWIPUNEK</button>
+                    <button id="btnShowPotions" class="btn-sepia" style="padding:6px; background:#d81b60; color:white; font-weight:bold;">🧪 MIKSTURY I LECZENIE</button>
                     <button id="btnToggleShops" class="btn-sepia" style="padding:6px; background:#e65100; font-weight:bold;">🛒 WYSZUKIWARKA SKLEPÓW</button>
-                    <button id="btnStopWalk" class="btn-sepia" style="display:none; padding:6px; background:#d32f2f; color:white; font-weight:bold; border-color:#b71c1c;">🛑 ZATRZYMAJ RUCH DO NPC</button>
+                    <button id="btnStopWalk" class="btn-sepia" style="display:none; padding:6px; background:#d32f2f; color:white; font-weight:bold; border-color:#b71c1c;">🛑 ZATRZYMAJ RUCH</button>
                     
                     <div id="heroTeleportsGUI" style="display:none; flex-direction:column; flex:1; overflow-y:auto; background:#141414; border:1px solid #3a3020; padding:4px;"></div>
-
-                    <div id="recommendedEqList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;">
-                        <span style="color:#777; font-size:10px; text-align:center; display:block;">Kliknij przycisk powyżej...</span>
-                    </div>
-
+                    <div id="recommendedEqList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;"></div>
+                    <div id="potionsList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;"></div>
+                    
                     <div id="shopsSearchWrapper" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;">
                         <input type="text" id="shopSearchInput" placeholder="Szukaj NPC, mapy lub przedmiotu..." style="width:100%; padding:5px; background:#000; color:#d4af37; border:1px solid #333; margin-bottom:5px; box-sizing:border-box;">
                         <div id="shopsListOutput" style="flex:1; overflow-y:auto;">
@@ -5876,69 +5875,64 @@ window.clearExpMaps = () => {
     });
 // --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW ---
     document.addEventListener('click', (e) => {
-        
         let tpGui = document.getElementById('heroTeleportsGUI');
         let eqList = document.getElementById('recommendedEqList');
+        let potList = document.getElementById('potionsList');
         let shopsWrap = document.getElementById('shopsSearchWrapper');
         let btnStop = document.getElementById('btnStopWalk');
 
-        // 1. ZARZĄDZAJ TELEPORTAMI (Naprawione chowanie)
-        if (e.target && e.target.closest && e.target.closest('#btnOpenTeleports')) {
-            if (eqList) eqList.style.display = 'none';
-            if (shopsWrap) shopsWrap.style.display = 'none';
-            if (tpGui) {
-                tpGui.style.display = tpGui.style.display === 'flex' ? 'none' : 'flex';
-                if (tpGui.style.display === 'flex' && typeof renderTeleportList === 'function') renderTeleportList();
-            }
-        }
+        let hideAllTabs = () => { if(tpGui) tpGui.style.display='none'; if(eqList) eqList.style.display='none'; if(potList) potList.style.display='none'; if(shopsWrap) shopsWrap.style.display='none'; };
+
+        // 1. ZARZĄDZAJ TELEPORTAMI
+        if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
         // 2. POKAŻ POLECANE EQ
-        if (e.target && e.target.closest && e.target.closest('#btnShowRecommendedEq')) {
-            if (tpGui) tpGui.style.display = 'none';
-            if (shopsWrap) shopsWrap.style.display = 'none';
-            if (eqList) eqList.style.display = 'flex';
-            
-            if (!eqList) return;
-            if (!window.DatabaseModule || !window.DatabaseModule.ekwipunek || window.DatabaseModule.ekwipunek.length === 0) {
-                eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się w tle. Poczekaj!</span>`;
-                return;
-            }
-
+        if (e.target && e.target.closest('#btnShowRecommendedEq')) {
+            hideAllTabs(); if (eqList) eqList.style.display = 'flex';
+            if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
             let items = window.DatabaseModule.getRecommendedEq();
-            if (items.length === 0) {
-                eqList.innerHTML = `<span style="color:#777; font-size:10px; text-align:center;">Brak EQ dla Twojego poziomu (-5/+5 lvl).</span>`;
-                return;
-            }
-
-let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znaleziono ${items.length} przedmiotów (kliknij by znaleźć kupca):</div>`;
+            let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Ekwipunek (-5/+5 lvl):</div>`;
             items.forEach((item, index) => {
-                let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
-                let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
-                
                 html += `
-                    <div class="list-item" style="display:flex; flex-direction:column; align-items:flex-start; padding:4px; border-left:3px solid #d4af37; margin-bottom:3px; background:#1a1a1a;">
+                    <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; margin-bottom:3px; background:#1a1a1a;">
                         <div style="display:flex; justify-content:space-between; width:100%;">
-                            <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                            <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
                             <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
                         </div>
-                        <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
-                            <span style="color:#a99a75; font-size:9px;">Typ: ${item.type}</span>
-                            <span style="color:${profColor}; font-size:9px;">${profText}</span>
-                        </div>
-                        <div id="seller_info_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
+                        <div id="seller_info_eq_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
                     </div>`;
             });
             eqList.innerHTML = html;
         }
 
         // 3. WYSZUKIWARKA SKLEPÓW
-        if (e.target && e.target.closest && e.target.closest('#btnToggleShops')) {
-            if (tpGui) tpGui.style.display = 'none';
-            if (eqList) eqList.style.display = 'none';
-            if (shopsWrap) shopsWrap.style.display = shopsWrap.style.display === 'none' ? 'flex' : 'none';
+        if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
+
+        // 4. NOWOŚĆ: MIKSTURY I LECZENIE
+        if (e.target && e.target.closest('#btnShowPotions')) {
+            hideAllTabs(); if (potList) potList.style.display = 'flex';
+            if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
+            
+            // Filtrujemy tylko potki
+            let potions = window.DatabaseModule.ekwipunek.filter(i => i.stats.includes('Leczy') || i.stats.includes('Przywraca') || i.stats.includes('Pełne leczenie'));
+            // Sortujemy po sile leczenia lub levelu
+            potions.sort((a,b) => a.level - b.level);
+
+            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Znaleziono ${potions.length} mikstur leczniczych:</div>`;
+            potions.forEach((item, index) => {
+                html += `
+                    <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d81b60; margin-bottom:3px; background:#1a1a1a;">
+                        <div style="display:flex; justify-content:space-between; width:100%;">
+                            <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="pot_${index}" style="color:#f48fb1; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                            <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
+                        </div>
+                        <div id="seller_info_pot_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
+                    </div>`;
+            });
+            potList.innerHTML = html;
         }
 
-        // 4. ROZWIJANIE KUPCA W ZAKŁADCE EQ
+        // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
         if (e.target && e.target.classList.contains('toggle-seller-btn')) {
             let itemName = e.target.getAttribute('data-name');
             let index = e.target.getAttribute('data-index');
@@ -5946,29 +5940,32 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
 
             if (sellerDiv) {
                 if (sellerDiv.style.display === 'block') { sellerDiv.style.display = 'none'; return; }
-
                 let sellers = window.DatabaseModule.kupcy.filter(k => k.items && k.items.some(i => i.name && i.name.includes(itemName)));
                 
                 if (sellers.length > 0) {
                     let sHtml = '';
-                    sellers.forEach(s => {
+                    sellers.forEach((s, sIdx) => {
+                        let isPotion = index.startsWith('pot_');
                         sHtml += `
-                            <div style="background:#0a0a0a; padding:4px; margin-bottom:2px; border-left:2px solid #4caf50;">
+                            <div style="background:#0a0a0a; padding:4px; margin-bottom:4px; border-left:2px solid ${isPotion ? '#d81b60' : '#4caf50'};">
                                 <b style="color:#e65100; font-size:10px;">${s.npc_name}</b><br>
                                 <span style="color:#888; font-size:9px;">🌍 ${s.map_name} [${s.x}, ${s.y}]</span>
-                                <button class="btn-go-npc" data-map="${s.map_name}" data-x="${s.x}" data-y="${s.y}" style="background:#4caf50; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold; float:right;">🏃 IDŹ</button>
-                                <div style="clear:both;"></div>
+                                
+                                <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px;">
+                                    ${isPotion ? `<input type="number" id="buy_amt_${index}_${sIdx}" value="50" min="1" max="1000" style="width:40px; height:18px; font-size:10px; background:#000; color:#fff; border:1px solid #444; margin-right:4px; text-align:center;" title="Ilość sztuk do kupienia">` : ''}
+                                    <button class="btn-go-npc" data-buy-input="${isPotion ? `buy_amt_${index}_${sIdx}` : ''}" data-item="${itemName}" data-npc="${s.npc_name}" data-map="${s.map_name}" data-x="${s.x}" data-y="${s.y}" style="background:${isPotion ? '#d81b60' : '#4caf50'}; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">${isPotion ? '🏃 IDŹ I KUP' : '🏃 IDŹ'}</button>
+                                </div>
                             </div>`;
                     });
                     sellerDiv.innerHTML = sHtml;
                 } else {
-                    sellerDiv.innerHTML = `<span style="color:#777; font-size:9px;">Ten przedmiot dropi z potworów (brak w sklepach).</span>`;
+                    sellerDiv.innerHTML = `<span style="color:#777; font-size:9px;">Przedmiot nie występuje w sklepach (Drop z potworów).</span>`;
                 }
                 sellerDiv.style.display = 'block';
             }
         }
 
-        // 5. ROZWIJANIE ASORTYMENTU (Wyszukiwarka)
+        // 6. ROZWIJANIE ASORTYMENTU WYSZUKIWARKI
         if (e.target && e.target.classList.contains('toggle-items-btn')) {
             let index = e.target.getAttribute('data-index');
             let itemsDiv = document.getElementById(`shop_items_${index}`);
@@ -5979,29 +5976,64 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
             }
         }
 
-        // 6. OBSŁUGA PRZYCISKU "IDŹ" ORAZ "STOP"
+        // 7. SMART WALK (Z AUTO-KUPNEM)
         if (e.target && e.target.classList.contains('btn-go-npc')) {
             let mapName = e.target.getAttribute('data-map');
             let targetX = parseInt(e.target.getAttribute('data-x'));
             let targetY = parseInt(e.target.getAttribute('data-y'));
             
-            if (window.logHero) window.logHero(`🏃 Obieram kurs na: [${mapName}] (${targetX}, ${targetY})`, "#00e5ff");
+            // Konfiguracja Auto-Kupowania
+            let inputId = e.target.getAttribute('data-buy-input');
+            let buyAmount = inputId && document.getElementById(inputId) ? parseInt(document.getElementById(inputId).value) : 0;
+            if (buyAmount > 0) {
+                window.autoBuyTask = { npc: e.target.getAttribute('data-npc'), item: e.target.getAttribute('data-item'), amount: buyAmount };
+                if (window.logHero) window.logHero(`🛒 Otrzymano zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}. Wyruszam!`, "#d81b60");
+            } else {
+                window.autoBuyTask = null;
+                if (window.logHero) window.logHero(`🏃 Obieram kurs na: [${mapName}] (${targetX}, ${targetY})`, "#00e5ff");
+            }
+
             if (btnStop) btnStop.style.display = 'block';
-            
             if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
             
+            let lastMap = null;
+            let stuckTicks = 0;
+            
+            // INTELIGENTNY INTERWAŁ RUCHU (Bez spamu!)
             window.npcWalkInterval = setInterval(() => {
                 if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
                 let currentSysMap = Engine.map.d.name;
 
+                // Sprawdzamy, czy postać fizycznie się przemieszcza
+                let isMoving = (Engine.hero.d.x !== Engine.hero.d.tx) || (Engine.hero.d.y !== Engine.hero.d.ty);
+                
+                // Pauzujemy akcję na chwilę, by dać mapie czas na załadowanie
+                if (lastMap !== currentSysMap) { lastMap = currentSysMap; stuckTicks = 0; return; }
+
                 if (currentSysMap === mapName) {
-                    Engine.hero.autoGoTo({x: targetX, y: targetY});
                     let dist = Math.abs(Engine.hero.d.x - targetX) + Math.abs(Engine.hero.d.y - targetY);
                     if (dist <= 2) {
-                        if (window.logHero) window.logHero(`✅ Dotarłem do kupca!`, "#8bc34a");
+                        if (window.logHero) window.logHero(`✅ Dotarłem do celu!`, "#8bc34a");
                         clearInterval(window.npcWalkInterval);
                         if (btnStop) btnStop.style.display = 'none';
+                        
+                        // ODPALANIE ROZMOWY Z NPC (Auto-Kupno)
+                        if (window.autoBuyTask) {
+                            if (window.logHero) window.logHero(`💬 Zaczepiam NPC ${window.autoBuyTask.npc}...`, "#ffeb3b");
+                            for (let i in Engine.npcs.check()) {
+                                let n = Engine.npcs.check()[i];
+                                if (n.nick === window.autoBuyTask.npc && Math.abs(n.x - Engine.hero.d.x) <= 2 && Math.abs(n.y - Engine.hero.d.y) <= 2) {
+                                    window._t.send(`talk&id=${n.id}`);
+                                    break;
+                                }
+                            }
+                        }
+                        return;
                     }
+                    
+                    // Postać stoi lub zablokowała się przez 3 sekundy - wymuszamy nowy ruch
+                    if (!isMoving || stuckTicks > 6) { Engine.hero.autoGoTo({x: targetX, y: targetY}); stuckTicks = 0; } 
+                    else { stuckTicks++; }
                 } else {
                     if (typeof getShortestPath === 'function') {
                         let path = getShortestPath(currentSysMap, mapName);
@@ -6009,42 +6041,42 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                             let nextMap = path[1];
                             let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
                             
-                            // DYNAMICZNY SKANER BRAM - gdy brakuje jej w bazie, bot szuka jej na ekranie!
                             if (!door && typeof HeroScannerModule !== 'undefined') {
                                 let localGates = HeroScannerModule.scanCurrentMap(currentSysMap, null);
                                 let found = localGates.find(g => g.targetMap === nextMap);
                                 if (found) {
                                     door = { x: found.x, y: found.y };
                                     if(!globalGateways[currentSysMap]) globalGateways[currentSysMap] = {};
-                                    globalGateways[currentSysMap][nextMap] = door; // Zapisuje na przyszłość
+                                    globalGateways[currentSysMap][nextMap] = door; 
                                 }
                             }
 
                             if (door) {
                                 let doorX = door.x; let doorY = door.y;
                                 if (door.allCoords && door.allCoords.length > 0) { doorX = door.allCoords[0][0]; doorY = door.allCoords[0][1]; }
-                                if (typeof safeGoTo === 'function') safeGoTo(doorX, doorY, false);
-                                else Engine.hero.autoGoTo({x: doorX, y: doorY});
+                                
+                                let distToDoor = Math.abs(Engine.hero.d.x - doorX) + Math.abs(Engine.hero.d.y - doorY);
+                                if (!isMoving || stuckTicks > 6 || distToDoor <= 1) {
+                                    if (typeof safeGoTo === 'function') safeGoTo(doorX, doorY, false);
+                                    else Engine.hero.autoGoTo({x: doorX, y: doorY});
+                                    stuckTicks = 0;
+                                } else { stuckTicks++; }
                             } else {
-                                if (window.logHero) window.logHero(`❌ Błąd Radaru: Nie widzę bramy do [${nextMap}]!`, "#e53935");
                                 clearInterval(window.npcWalkInterval);
                                 if (btnStop) btnStop.style.display = 'none';
                             }
                         }
                     }
                 }
-            }, 800);
+            }, 500); // Mniejszy odstęp czasu, bo blokujemy spamowanie komendami!
         }
 
-        // 7. ZATRZYMYWANIE BOTA (Ręczne)
-        if (e.target && e.target.closest && e.target.closest('#btnStopWalk')) {
-            if (window.npcWalkInterval) {
-                clearInterval(window.npcWalkInterval);
-                if (window.logHero) window.logHero(`🛑 Zatrzymano w drodze do kupca.`, "#d32f2f");
-                if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                    Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
-                }
-            }
+        // 8. ZATRZYMYWANIE RUCHU
+        if (e.target && e.target.closest('#btnStopWalk')) {
+            if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
+            window.autoBuyTask = null;
+            if (window.logHero) window.logHero(`🛑 Zatrzymano akcję manualnie.`, "#d32f2f");
+            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
             if (btnStop) btnStop.style.display = 'none';
         }
     });
@@ -6195,4 +6227,30 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
             if (tt) tt.style.display = 'none';
         }
     });
+    // --- DAEMON: AUTOMATYCZNE KUPNO PRZEDMIOTU W SKLEPIE ---
+    if (!window.autoBuyDaemonInstalled) {
+        window.autoBuyDaemonInstalled = true;
+        setInterval(() => {
+            if (window.autoBuyTask && typeof Engine !== 'undefined' && Engine.shop && Engine.shop.items) {
+                // Sprawdzamy czy interfejs sklepu jest widoczny
+                let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper');
+                if (shopWrapper && shopWrapper.style.display !== 'none') {
+                    let shopItems = Object.values(Engine.shop.items);
+                    let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
+                    
+                    if (itemToBuy) {
+                        if (window.logHero) window.logHero(`💸 Realizuję transakcję: ${window.autoBuyTask.amount}x ${window.autoBuyTask.item}...`, "#8bc34a");
+                        window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
+                        window.autoBuyTask = null; // Czyszczenie zlecenia
+                        
+                        // Zamykamy sklep po ułamku sekundy
+                        setTimeout(() => { if(typeof Engine.shop.close === 'function') Engine.shop.close(); }, 600);
+                    } else {
+                        if (window.logHero) window.logHero(`❌ Ten sprzedawca nie ma w tej chwili [${window.autoBuyTask.item}]!`, "#e53935");
+                        window.autoBuyTask = null;
+                    }
+                }
+            }
+        }, 800);
+    }
 })(); // Koniec kodu
