@@ -4283,7 +4283,7 @@ function runExpLogic() {
     // Margonem często gubi 'path', sprawdzajmy czy hero faktycznie się rusza
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
 
-// Wejście na nową mapę
+ // Wejście na nową mapę
     if (expLastMapName !== currMap) {
         window.expLastVisitedMap = expLastMapName; // ZAPAMIĘTUJEMY SKĄD PRZYSZLIŚMY
         expLastMapName = currMap;
@@ -4293,7 +4293,6 @@ function runExpLogic() {
         expAttackLockUntil = 0;
         window.expLastMoveTx = -1;
         window.expLastMoveTy = -1;
-        window.expGatewayArrivalTime = 0; // RESET ZACINKI BRAMY
         expGatewayLockUntil = now + 1200;
     }
 
@@ -4607,38 +4606,25 @@ function runExpLogic() {
         return;
     }
 
-// --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
-    if (!isHeroMoving) {
+    // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
+    if (!isHeroMoving && now >= expGatewayLockUntil) {
+        // Jeśli cel osiągnięty, ale przejście nie zadziałało
         if (hx === dx && hy === dy) {
-            // Stoimy fizycznie na bramie
-            if (!window.expGatewayArrivalTime) {
-                window.expGatewayArrivalTime = now; // Rejestrujemy moment dotarcia
-            } else if (now - window.expGatewayArrivalTime > Math.floor(Math.random() * 2000) + 4000) {
-                // Minęło od 4 do 6 sekund bez zmiany mapy - robimy ludzki krok w bok
-                window.logExp(`[Smart-Roam] Brama zamuliła! Robię krok w bok...`, "#ff9800");
-                let stepX = hx + (Math.random() > 0.5 ? 1 : -1);
-                let stepY = hy + (Math.random() > 0.5 ? 1 : -1);
-                Engine.hero.autoGoTo({ x: Math.max(0, stepX), y: Math.max(0, stepY) });
-                
-                window.expLastMoveTx = -1; 
-                window.expGatewayArrivalTime = 0; // Reset
-                expGatewayLockUntil = now + 1500;
-                expMapTransitionCooldown = now + 1500;
-            }
-            expLastActionTime = now + 200;
-        } else if (now >= expGatewayLockUntil) {
-            // Czas na dojście do bramy minął, a my nadal nie jesteśmy na kordach bramy
+            window.logExp(`[Smart-Roam] Zacięcie w bramie! Robię krok w bok...`, "#ff9800");
+            // Krok w dół lub górę, aby zejść z bramy
+            let stepY = hy + (Math.random() > 0.5 ? 1 : -1);
+            Engine.hero.autoGoTo({ x: hx, y: stepY });
+            window.expLastMoveTx = -1; // Resetujemy cel, żeby w następnej klatce znów kliknął w bramę!
+            expGatewayLockUntil = now + 1200;
+        } else {
             Engine.hero.autoGoTo({ x: dx, y: dy });
             window.expLastMoveTx = -1;
             window.expLastMoveTy = -1;
-            expGatewayLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
-            expMapTransitionCooldown = now + 2600;
-            expLastActionTime = now + 900;
-        } else {
-            expLastActionTime = now + 150;
+            expGatewayLockUntil = now + 2200;
         }
+        expMapTransitionCooldown = now + 2600;
+        expLastActionTime = now + 900;
     } else {
-        window.expGatewayArrivalTime = 0; // Jeśli postać wciąż biegnie, resetujemy timer stania
         expLastActionTime = now + 150;
     }
 }
