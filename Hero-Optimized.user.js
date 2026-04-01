@@ -4286,8 +4286,9 @@ function runExpLogic() {
     // Margonem często gubi 'path', sprawdzajmy czy hero faktycznie się rusza
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
 
-    // Wejście na nową mapę
+ // Wejście na nową mapę
     if (expLastMapName !== currMap) {
+        window.expLastVisitedMap = expLastMapName; // ZAPAMIĘTUJEMY SKĄD PRZYSZLIŚMY
         expLastMapName = currMap;
         expMapEnteredAt = now;
         expEmptyScans = 0;
@@ -4296,10 +4297,6 @@ function runExpLogic() {
         window.expLastMoveTx = -1;
         window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
-
-        let maps = botSettings.exp.mapOrder || [];
-        let idx = maps.indexOf(currMap);
-        if (idx !== -1) expCurrentMapOrderIndex = idx;
     }
 
     // Anty-lag / anty-stuck na przejściach
@@ -4475,7 +4472,7 @@ function runExpLogic() {
         return;
     }
 
-    // --- SMART ROAM (PRZECHODZENIE MIĘDZY MAPAMI) ---
+   // --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
     if (now - expMapEnteredAt < 1200) {
         expLastActionTime = now + 120;
         return;
@@ -4492,55 +4489,54 @@ function runExpLogic() {
 
     if (now < expMapTransitionCooldown) return;
 
-let maps = botSettings.exp.mapOrder || [];
-    if (!maps.length) return;
+    let mapsPool = botSettings.exp.mapOrder || [];
+    if (!mapsPool.length) return;
 
-    // === FIX: PAMIĘĆ GLOBALNEGO CELU TRASY ===
-    // Wymusza trzymanie się wyznaczonego celu, dopóki do niego nie dotrzemy!
-    if (!window.expGlobalTargetMap || window.expGlobalTargetMap === currMap || !maps.includes(window.expGlobalTargetMap)) {
-        window.expGlobalTargetMap = null;
-        let currIndex = maps.indexOf(currMap);
-        
-        if (currIndex !== -1) {
-            window.mapClearTimes[currMap] = now;
-            let nextIndex = maps.length > 1 ? ((currIndex + 1) % maps.length) : currIndex;
-            window.expGlobalTargetMap = maps[nextIndex];
-            
-            if (window.expGlobalTargetMap === currMap) {
-                if (now - expMapTransitionCooldown > 3000) {
-                    window.logExp("Jedyna mapa na liście jest czysta. Czekam na resp...", "#777");
-                    expMapTransitionCooldown = now + 3000;
-                }
-                return;
-            }
-            window.logExp(`[Trasa] Następny cel wyznaczony: ${window.expGlobalTargetMap}`, "#ffb300");
-        } else {
-            // Jeśli zabłądziliśmy, szukamy najbliższej mapy z naszej trasy
-            let bestPath = null;
-            for (let m of maps) {
-                let p = getShortestPath(currMap, m);
-                if (p && (!bestPath || p.length < bestPath.length)) {
-                    bestPath = p;
-                    window.expGlobalTargetMap = m;
-                }
-            }
+    // Szukamy najlepszej następnej mapy (najbliższej, ale NIE tej, z której przed chwilą przyszliśmy)
+    let nextMap = null;
+    let bestPathLen = Infinity;
 
-            if (!window.expGlobalTargetMap) {
-                window.logExp(`Brak drogi na expowisko! Zapisz przejścia skanerem!`, "#e53935");
-                expMapTransitionCooldown = now + 4000;
-                return;
-            }
-            window.logExp(`[Trasa] Wracam na expowisko: ${window.expGlobalTargetMap}`, "#ffb300");
+    for (let m of mapsPool) {
+        if (m === currMap) continue;
+        // Unikamy zapętlenia: ignorujemy poprzednią mapę, chyba że nie mamy innego wyjścia
+        if (mapsPool.length > 2 && m === window.expLastVisitedMap) continue;
+
+        let p = getShortestPath(currMap, m);
+        if (p && p.length < bestPathLen) {
+            bestPathLen = p.length;
+            nextMap = m;
         }
     }
 
-    let nextMap = window.expGlobalTargetMap;
+    // Fallback: jeśli odrzucenie poprzedniej mapy zablokowało drogę (ślepy zaułek), bierzemy cokolwiek dostępnego
+    if (!nextMap) {
+        for (let m of mapsPool) {
+            if (m === currMap) continue;
+            let p = getShortestPath(currMap, m);
+            if (p && p.length < bestPathLen) {
+                bestPathLen = p.length;
+                nextMap = m;
+            }
+        }
+    }
+
+    if (!nextMap) {
+        if (mapsPool.length > 1) {
+            window.logExp(`Brak drogi na expowisko! Zapisz przejścia skanerem!`, "#e53935");
+            expMapTransitionCooldown = now + 4000;
+        } else {
+            if (now - expMapTransitionCooldown > 3000) {
+                window.logExp("Jedyna mapa na liście jest czysta. Czekam na resp...", "#777");
+                expMapTransitionCooldown = now + 3000;
+            }
+        }
+        return;
+    }
 
     let path = getShortestPath(currMap, nextMap);
     if (!path || path.length <= 1) {
         window.logExp(`Błąd trasy do: ${nextMap}`, "#e53935");
         expMapTransitionCooldown = now + 2000;
-        window.expGlobalTargetMap = null; // Reset uszkodzonego celu
         return;
     }
 
@@ -4595,18 +4591,16 @@ let maps = botSettings.exp.mapOrder || [];
         let isNewDoorDest = (window.expLastMoveTx !== dx || window.expLastMoveTy !== dy);
 
         if (isNewDoorDest) {
-            // Wysłanie ruchu DOPIERO gdy cel się zmienił (Wysyła i loguje TYLKO RAZ)
             window.logExp(`[Smart-Roam] Idę do przejścia: ${nextStepMap}`, "#ba68c8");
             Engine.hero.autoGoTo({ x: dx, y: dy });
             window.expLastMoveTx = dx;
             window.expLastMoveTy = dy;
-            window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 3000; // 3-4.5s
+            window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 3000;
             expGatewayLockUntil = now + 1500;
             expMapTransitionCooldown = now + 1500;
             expLastActionTime = now + 200;
             expAttackLockUntil = 0;
         } else if (!isHeroMoving && now > window.expMoveLockUntil) {
-            // Anty-stuck na drodze do portalu
             Engine.hero.autoGoTo({ x: dx, y: dy });
             window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
         }
@@ -4615,11 +4609,22 @@ let maps = botSettings.exp.mapOrder || [];
         return;
     }
 
+    // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
     if (!isHeroMoving && now >= expGatewayLockUntil) {
-        Engine.hero.autoGoTo({ x: dx, y: dy });
-        window.expLastMoveTx = -1;
-        window.expLastMoveTy = -1;
-        expGatewayLockUntil = now + 2200;
+        // Jeśli cel osiągnięty, ale przejście nie zadziałało
+        if (hx === dx && hy === dy) {
+            window.logExp(`[Smart-Roam] Zacięcie w bramie! Robię krok w bok...`, "#ff9800");
+            // Krok w dół lub górę, aby zejść z bramy
+            let stepY = hy + (Math.random() > 0.5 ? 1 : -1);
+            Engine.hero.autoGoTo({ x: hx, y: stepY });
+            window.expLastMoveTx = -1; // Resetujemy cel, żeby w następnej klatce znów kliknął w bramę!
+            expGatewayLockUntil = now + 1200;
+        } else {
+            Engine.hero.autoGoTo({ x: dx, y: dy });
+            window.expLastMoveTx = -1;
+            window.expLastMoveTy = -1;
+            expGatewayLockUntil = now + 2200;
+        }
         expMapTransitionCooldown = now + 2600;
         expLastActionTime = now + 900;
     } else {
@@ -5069,7 +5074,7 @@ window.clearExpMaps = () => {
         }).join('');
     };
 
-    window.renderExpMaps = () => {
+   window.renderExpMaps = () => {
         let c = document.getElementById('expMapList'); if (!c) return;
         let currentMap = lastMapName;
         
@@ -5081,8 +5086,8 @@ window.clearExpMaps = () => {
                 if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
                 return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button></div></div></div>`;
             } else {
-                // Czyściutka lista, bez ikonek [🚪✔] i [➕🚪]
-                return `<div class="list-item"><div class="map-name-wrap"><span class="btn-del-map" onclick="window.removeExpMap(${index})">✖</span><span class="map-name" style="color:#81c784; font-weight:bold;">${index + 1}. ${mapName}</span></div><div class="buttons-wrapper"><button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów (opcjonalne)">🚪</button></div></div>`;
+                // Czyściutka lista, BEZ NUMERACJI
+                return `<div class="list-item"><div class="map-name-wrap"><span class="btn-del-map" onclick="window.removeExpMap(${index})">✖</span><span class="map-name" style="color:#81c784; font-weight:bold;">${mapName}</span></div><div class="buttons-wrapper"><button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów (opcjonalne)">🚪</button></div></div>`;
             }
         }).join('');
     };
