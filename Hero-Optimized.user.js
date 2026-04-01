@@ -2355,7 +2355,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <span style="color:#00acc1; font-weight:bold; font-size:11px;">Skonfiguruj Teleporty</span><br>
                         <span style="color:#a99a75; font-size:9px;">Kliknij poniżej, aby wybrać miasta.</span>
                     </div>
-                    <button id="btnOpenTeleports" cla<button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="document.getElementById('heroTeleportsGUI').style.display='flex'; if(typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>ss="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+                   <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="document.getElementById('heroTeleportsGUI').style.display='flex'; if(typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                 </div>
             </div>
         `;
