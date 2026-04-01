@@ -4326,49 +4326,53 @@ function runExpLogic() {
         expAntiLagTime = now + getAntiLagDelay();
     }
 
-   // SKAN MOBÓW tylko na mapach expowiska
-    const arr = isExpMap ? getExpNpcList() : [];
-    let availableMobs = [];
+// --- POPRAWIONA SEKCJA SKANOWANIA POTWORÓW ---
+const arr = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
+let availableMobs = [];
 
-    arr.forEach(npcObj => {
-        let n = npcObj?.d || npcObj;
-        if (!n) return;
-        
-        // Zabezpieczenie przed atakowaniem martwych lub walczących z kimś innym
-        if (n.dead || n.del || n.st === 1 || n.st === 2) return;
-        if (!(n.type === 2 || n.type === 3)) return;
+const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
+const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-        let lvl = parseInt(n.lvl, 10);
-        if (isNaN(lvl) || lvl <= 0) return;
-        if (lvl < minL || lvl > maxL) return;
+arr.forEach(npcObj => {
+    let n = npcObj?.d || npcObj;
+    if (!n) return;
+    
+    // Ignorujemy martwe, dekoracje (type 4) i NPC (type 0/1)
+    if (n.dead || n.del || n.type === 4 || n.type < 2) return;
 
-        let wt = parseInt(n.wt, 10);
-        if (isNaN(wt)) wt = 0;
+    let lvl = parseInt(n.lvl, 10);
+    if (isNaN(lvl) || lvl <= 0) return;
+    if (lvl < minL || lvl > maxL) return;
 
-        // Filtrowanie na podstawie opcji wyznaczonych w UI (Zwykłe i Elity I)
-        if (wt === 0 && !wantNormal) return;
-        if (wt === 1 && !wantElite) return;
-        
-        // Dynamiczne sprawdzanie wyższych rang (Elity II, Herosi/Tytani) na podstawie ustawień "Kieszonkowego Berserka"
-        if (wt === 2 && botSettings.berserk && !botSettings.berserk.e2) return; 
-        if (wt >= 3 && botSettings.berserk && !botSettings.berserk.hero) return;
+    // --- NOWA LOGIKA KLASYFIKACJI (Na podstawie Twoich danych) ---
+    let wt = parseInt(n.wt, 10);
+    let ranga = "normal"; // Domyślnie zwykły (type 3)
 
-        availableMobs.push({
-            id: npcObj.id || n.id,
-            x: n.x,
-            y: n.y,
-            lvl: lvl,
-            wt: wt,
-            nick: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim(),
-            dist: Math.max(Math.abs(hx - n.x), Math.abs(hy - n.y)),
-            manhattan: Math.abs(hx - n.x) + Math.abs(hy - n.y)
-        });
+    if (n.type === 2) {
+        // Skoro type = 2, to na pewno jest to Elita lub wyżej
+        if (wt === 11 || wt === 1) ranga = "elite1"; 
+        else if (wt === 12 || wt === 2) ranga = "elite2";
+        else if (wt >= 13 || wt >= 3) ranga = "hero";
+    }
+
+    // --- FILTROWANIE ZGODNIE Z TWOIMI USTAWIENIAMI ---
+    if (ranga === "normal" && !wantNormal) return;
+    if (ranga === "elite1" && !wantElite) return;
+    if (ranga === "elite2" && !bE2) return;
+    if (ranga === "hero" && !bHero) return;
+
+    availableMobs.push({
+        id: n.id,
+        x: n.x,
+        y: n.y,
+        lvl: lvl,
+        ranga: ranga,
+        nick: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').trim(),
+        dist: Math.max(Math.abs(hx - n.x), Math.abs(hy - n.y)),
+        manhattan: Math.abs(hx - n.x) + Math.abs(hy - n.y)
     });
-
-    availableMobs.sort((a, b) => {
-        if (a.dist !== b.dist) return a.dist - b.dist;
-        return a.manhattan - b.manhattan;
-    });
+});
+// --- KONIEC POPRAWIONEJ SEKCJI ---
 
 // --- LOGIKA CHODZENIA DO MOBÓW ---
     if (availableMobs.length > 0) {
