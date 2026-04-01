@@ -4589,8 +4589,8 @@ function runExpLogic() {
     } else if (now > expAntiLagTime) {
         if (isOnGateway(hx, hy)) {
             if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
-            // Dajemy grze twarde 4.5 sekundy na wczytanie mapy po wejściu na kratkę z bramą
-            if (now - window.expGatewayStandTime > 4500) {
+            // Odbiega dopiero gdy stoi na samej bramie ponad 2.5 sekundy
+            if (now - window.expGatewayStandTime > 2500) {
                 window.logExp(`[Anti-Lag] Brama zablokowana. Odbiegam...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
@@ -4599,11 +4599,10 @@ function runExpLogic() {
                 expCurrentTargetId = null; window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                 window.expGatewayStandTime = 0;
             }
-            return; // Ważne: na bramie nie robimy nic, tylko czekamy
+            return; // Bot grzecznie czeka na teleport
         }
         expAntiLagTime = now + getAntiLagDelay();
     }
-
 
 
     // --- SKANOWANIE POTWORÓW ---
