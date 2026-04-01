@@ -4378,7 +4378,7 @@ function runExpLogic() {
         return a.dist - b.dist;
     });
 
-    // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
+  // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (rawMobs.length > 0) {
         let target = rawMobs[0];
         const targetDist = target.dist;
@@ -4393,7 +4393,7 @@ function runExpLogic() {
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
             if (isNewDestination) {
-                // Ustawienie i logowanie nowego celu tylko raz!
+                // Ustawienie nowego celu i wydanie komendy ruchu
                 if (expCurrentTargetId !== target.id) {
                     window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
@@ -4402,31 +4402,35 @@ function runExpLogic() {
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
                 
+                // Zapisujemy dokąd idziemy oraz gdzie DOKŁADNIE staliśmy w momencie kliknięcia
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
                 window.expTargetPursuitStart = now;
-                window.expMoveLockUntil = now + 600; 
+                window.expMoveLockUntil = now + 1000; // Dajemy silnikowi 1 sekundę na rozpoczęcie marszu
             } else {
                 if (now > window.expMoveLockUntil) {
-                    // Jeśli postać fizycznie zatrzymała się daleko od celu (niedostępny mob)
-                    if (!isHeroMoving) {
-                        window.logExp(`🚨 Utknięto przy: ${target.nick}. Omijam go.`, "#ff5252");
+                    // --- CZYSTO FIZYCZNA KONTROLA ZACIĘCIA ---
+                    // Jeśli postać zmieniła swoje X lub Y (czyli idzie krok do przodu), resetujemy stoper!
+                    if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
+                        window.expPursuitLastX = hx; 
+                        window.expPursuitLastY = hy;
+                        window.expTargetPursuitStart = now; 
+                    }
+                    
+                    let timeStandingStill = now - window.expTargetPursuitStart;
+
+                    // 🚨 ZŁOTY WARUNEK: Jeśli stoimy na DOKŁADNIE tej samej kratce przez 2.5 sekundy
+                    if (timeStandingStill > 2500) {
+                        window.logExp(`🚨 Utknięto na [${hx}, ${hy}]. Omijam: ${target.nick}.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
                         expCurrentTargetId = null;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         return;
                     }
 
-                    // Reset stopera, jeśli postać idzie
-                    if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
-                        window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-                        window.expTargetPursuitStart = now; 
-                    } else if (now - window.expTargetPursuitStart > 3000) {
-                        window.logExp(`🚨 Zapętlenie kroku. Omijam: ${target.nick}.`, "#ff5252");
-                        window.expUnreachableMobs.add(target.id);
-                        expCurrentTargetId = null;
-                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                        return;
+                    // Co 1.5 sekundy przypominamy grze o ruchu, żeby pchnąć ją przy ew. laggach serwera
+                    if (timeStandingStill > 1500 && (now % 1500 < 150)) {
+                        Engine.hero.autoGoTo({ x: target.x, y: target.y });
                     }
                 }
             }
@@ -4434,7 +4438,7 @@ function runExpLogic() {
             return;
         }
 
-        // WALKA (Odległość 1 kratka lub 0)
+        // --- WALKA (Jesteśmy pod potworem) ---
         if (targetDist <= 1) {
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
@@ -4453,7 +4457,6 @@ function runExpLogic() {
         }
         return;
     }
-
     // --- ZAAWANSOWANY SMART ROAM: PĘTLE BRAM I TUNELI ---
     if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
 
