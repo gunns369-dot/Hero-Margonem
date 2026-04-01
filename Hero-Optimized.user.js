@@ -5953,7 +5953,7 @@ window.clearExpMaps = () => {
             }
         }
 
-   // 7. SMART WALK (Z AUTO-KUPNEM)
+ // 7. SMART WALK (Z AUTO-KUPNEM)
         if (e.target && e.target.classList.contains('btn-go-npc')) {
             let mapName = e.target.getAttribute('data-map');
             let targetX = parseInt(e.target.getAttribute('data-x'));
@@ -5964,24 +5964,14 @@ window.clearExpMaps = () => {
             let buyAmount = 0;
 
             if (mode === 'potion') {
-                buyAmount = parseInt(document.getElementById(inputId).value) || 0;
+                let el = document.getElementById(inputId);
+                buyAmount = el ? parseInt(el.value) || 0 : 0;
             } else if (mode === 'eq') {
                 // Dla EQ sprawdzamy czy checkbox jest zaznaczony
-                let isChecked = document.getElementById(inputId).checked;
-                if (isChecked) buyAmount = 1;
+                let el = document.getElementById(inputId);
+                if (el && el.checked) buyAmount = 1;
             }
 
-            if (buyAmount > 0) {
-                window.autoBuyTask = { npc: e.target.getAttribute('data-npc'), item: e.target.getAttribute('data-item'), amount: buyAmount };
-                window.logHero(`🛒 Zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}.`, "#d81b60");
-            } else {
-                window.autoBuyTask = null;
-                window.logHero(`🏃 Obieram kurs na: [${mapName}]`, "#00e5ff");
-            }
-            
-            // Konfiguracja Auto-Kupowania
-            let inputId = e.target.getAttribute('data-buy-input');
-            let buyAmount = inputId && document.getElementById(inputId) ? parseInt(document.getElementById(inputId).value) : 0;
             if (buyAmount > 0) {
                 window.autoBuyTask = { npc: e.target.getAttribute('data-npc'), item: e.target.getAttribute('data-item'), amount: buyAmount };
                 if (window.logHero) window.logHero(`🛒 Otrzymano zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}. Wyruszam!`, "#d81b60");
@@ -6067,7 +6057,6 @@ window.clearExpMaps = () => {
                 }
             }, 500); // Mniejszy odstęp czasu, bo blokujemy spamowanie komendami!
         }
-
         // 8. ZATRZYMYWANIE RUCHU
         if (e.target && e.target.closest('#btnStopWalk')) {
             if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
