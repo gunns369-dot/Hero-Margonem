@@ -5915,13 +5915,10 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
                 let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                 let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
                 
-                // Formatyzacja statystyk dla ładnego wyświetlania w dymku
-                let cleanStats = item.stats.replace(/"/g, '&quot;').replace(/ Typ: /g, ' | Typ: ').replace(/ Wymagany /g, ' | Wymagany ').replace(/ Wartość: /g, ' | Wartość: ');
-
                 html += `
                     <div class="list-item" style="display:flex; flex-direction:column; align-items:flex-start; padding:4px; border-left:3px solid #d4af37; margin-bottom:3px; background:#1a1a1a;">
                         <div style="display:flex; justify-content:space-between; width:100%;">
-                            <span class="toggle-seller-btn" title="${cleanStats}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                            <span class="toggle-seller-btn" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
                             <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
