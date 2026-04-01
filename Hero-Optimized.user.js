@@ -2610,7 +2610,7 @@ const teleportsGui = document.createElement('div');
 
     function setupMultiDrag() { document.querySelectorAll('.hero-window').forEach(win => { let header = win.querySelector('.gui-header'); if(!header) return; let isDragging = false, startX, startY, initialX, initialY; header.onmousedown = function(e) { if(e.target.closest('button')) return; isDragging = true; startX = e.clientX; startY = e.clientY; initialX = win.offsetLeft; initialY = win.offsetTop; document.querySelectorAll('.hero-window').forEach(w => w.style.zIndex = "10000"); win.style.zIndex = "10001"; document.onmousemove = function(e) { if(isDragging) { win.style.left = (initialX + e.clientX - startX) + 'px'; win.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; }); }
 
-    function setupGearDrag() { const gearIcon = document.getElementById('gearIcon'); let isDragging = false, startX, startY, initialX, initialY, isClick = true; gearIcon.onmousedown = function(e) { isDragging = true; isClick = true; startX = e.clientX; startY = e.clientY; initialX = gearIcon.offsetLeft; initialY = gearIcon.offsetTop; document.onmousemove = function(e) { if(isDragging) { if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) isClick = false; gearIcon.style.left = (initialX + e.clientX - startX) + 'px'; gearIcon.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; gearIcon.onclick = function() { if(isClick) toggleMainVisibility(); }; }
+    function setupGearDrag() { const gearIcon = document.getElementById('gearIcon'); let isDragging = false, startX, startY, initialX, initialY, isClick = true; gearIcon.onmousedown = function(e) { isDragging = true; isClick = true; startX = e.clientX; startY = e.clientY; initialX = gearIcon.offsetLeft; initialY = gearIcon.offsetTop; document.onmousemove = function(e) { if(isDragging) { if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) isClick = false; gearIcon.style.left = (initialX + e.clientX - startX) + 'px'; gearIcon.style.top = (initialY + e.clientY - startY) + 'px'; } }; document.onmouseup = function() { isDragging = false; document.onmousemove = null; document.onmouseup = null; }; }; gearIcon.onclick = function() { if(isClick) window.toggleMainVisibility(); }; }
 
 function bindChange(id, handler) {
     const el = document.getElementById(id);
@@ -2954,7 +2954,6 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('btnOpenMaps').addEventListener('click', () => { let p = document.getElementById('heroGatewaysGUI'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; if(p.style.display === 'flex') renderGatewaysDatabase(); });
 
-        document.getElementById('btnMinimizeMain').addEventListener('click', toggleMainVisibility);
 
         document.getElementById('btnScanGateways').addEventListener('click', scanCurrentMapForGateways);
 
@@ -2970,8 +2969,7 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('chkAutoAttack').addEventListener('change', (e) => { botSettings.autoAttack = e.target.checked; saveSettings(); });
 
-        document.getElementById('sliderOpacity').addEventListener('input', (e) => { opacityValue = e.target.value; document.querySelectorAll('.hero-window').forEach(w => w.style.background = `rgba(17, 17, 17, ${opacityValue})`); });
-
+      
 
 
         document.getElementById('btnSaveSettings').addEventListener('click', () => {
