@@ -4165,39 +4165,42 @@ function getAntiLagDelay() {
     return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
 }   
     function getExpNpcList() {
-    try {
-        const drawable = Engine?.npcs?.getDrawableList?.();
-        if (Array.isArray(drawable) && drawable.length > 0) {
-            return drawable;
-        }
-    } catch (e) {}
+        // 1. GŁÓWNY PRIORYTET: Pełna lista z pamięci gry (widzi potwory daleko we mgle wojny)
+        try {
+            const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : null;
+            if (checked && typeof checked === 'object') {
+                return Object.keys(checked).map(id => {
+                    const raw = checked[id];
+                    const n = raw?.d || raw || {};
+                    if (n.id == null) n.id = id;
+                    return n;
+                });
+            }
+        } catch (e) {}
 
-    try {
-        const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : null;
-        if (checked && typeof checked === 'object') {
-            return Object.keys(checked).map(id => {
-                const raw = checked[id];
-                const n = raw?.d || raw || {};
-                if (n.id == null) n.id = id;
-                return n;
-            });
-        }
-    } catch (e) {}
+        // 2. METODA ZAPASOWA: Bezpośredni odczyt obiektu z danymi
+        try {
+            const direct = Engine?.npcs?.d;
+            if (direct && typeof direct === 'object') {
+                return Object.keys(direct).map(id => {
+                    const raw = direct[id];
+                    const n = raw?.d || raw || {};
+                    if (n.id == null) n.id = id;
+                    return n;
+                });
+            }
+        } catch (e) {}
 
-    try {
-        const direct = Engine?.npcs?.d;
-        if (direct && typeof direct === 'object') {
-            return Object.keys(direct).map(id => {
-                const raw = direct[id];
-                const n = raw?.d || raw || {};
-                if (n.id == null) n.id = id;
-                return n;
-            });
-        }
-    } catch (e) {}
+        // 3. OSTATECZNOŚĆ: Lista tylko z widocznego ekranu (poprzednio to psuło expienie)
+        try {
+            const drawable = Engine?.npcs?.getDrawableList?.();
+            if (Array.isArray(drawable) && drawable.length > 0) {
+                return drawable;
+            }
+        } catch (e) {}
 
-    return [];
-}
+        return [];
+    }
     function isMapInSelectedExpowisko(mapName) {
     const maps = botSettings?.exp?.mapOrder || [];
     return Array.isArray(maps) && maps.includes(mapName);
