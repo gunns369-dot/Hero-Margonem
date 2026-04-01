@@ -913,29 +913,25 @@ let opacityValue = 0.95;
 
 
     function loadData() {
-
         let s1 = localStorage.getItem('hero_settings_db_v64') || localStorage.getItem('hero_settings_db_v61');
-
         if (s1) {
-
             let parsed = JSON.parse(s1);
-
             if (parsed.waitMin === undefined) { parsed.waitMin = 200; parsed.waitMax = 500; }
-
             if (parsed.autoAttack === undefined) { parsed.autoAttack = false; }
-
+            
             // Usuwamy combatKey ze starych zapisów
-
             delete parsed.combatKey;
 
+            // --- ŁATKA: Blokada przed wczytaniem starej/zepsutej bazy z ogólnych ustawień ---
+            if (!parsed.expProfiles || parsed.expProfiles.length !== window.defaultExpProfiles.length) {
+                parsed.expProfiles = JSON.parse(JSON.stringify(window.defaultExpProfiles));
+            }
+            // -----------------------------------------------------------------------------
+
             botSettings = {...botSettings, ...parsed};
-
         }
-
         let s2 = localStorage.getItem('hero_global_gateways_v20'); if (s2) globalGateways = JSON.parse(s2);
-
         let s3 = localStorage.getItem('hero_map_order_v20'); if (s3) heroMapOrder = JSON.parse(s3);
-
     }
 
 
@@ -5098,20 +5094,27 @@ window.clearExpMaps = () => {
         if(!c) return;
         
         let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
-        let minTarget = playerLvl - 5;
-        let maxTarget = playerLvl + 15;
+        // Rozszerzony zakres dla lepszej widoczności bazy (-10 do +25 lvl)
+        let minTarget = playerLvl - 10;
+        let maxTarget = playerLvl + 25;
 
         let html = '';
-        botSettings.expProfiles.forEach((p, index) => {
+        
+        // Zabezpieczenie: korzystamy bezpośrednio z odświeżonych botSettings
+        let safeProfiles = (botSettings && botSettings.expProfiles) ? botSettings.expProfiles : window.defaultExpProfiles;
+
+        safeProfiles.forEach((p, index) => {
             let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
             if(lvlMatch && lvlMatch[1]) {
                 let baseLvl = parseInt(lvlMatch[1]);
                 if(baseLvl >= minTarget && baseLvl <= maxTarget) {
+                    // Dodano wyświetlanie p.desc (Opis zawierający ilość potworów)
                     html += `
-                        <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px;">
+                        <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px;">
                             <input type="checkbox" class="chk-rec-profile" data-index="${index}" style="margin-top:2px;">
                             <div style="display:flex; flex-direction:column;">
                                 <b style="color:#00acc1;">${p.name}</b>
+                                ${p.desc ? `<span style="color:#8bc34a; font-size:9px;">${p.desc}</span>` : ''}
                                 <span style="color:#888; font-size:9px;">Mapy: ${p.maps.join(', ')}</span>
                             </div>
                         </label>
