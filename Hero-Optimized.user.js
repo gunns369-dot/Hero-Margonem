@@ -4156,40 +4156,34 @@ function getAntiLagDelay() {
     if (safeMax <= safeMin) return safeMin;
     return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
 }   
-    function getExpNpcList() {
-    try {
-        const drawable = Engine?.npcs?.getDrawableList?.();
-        if (Array.isArray(drawable) && drawable.length > 0) {
-            return drawable;
-        }
-    } catch (e) {}
-
-    try {
-        const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : null;
-        if (checked && typeof checked === 'object') {
-            return Object.keys(checked).map(id => {
-                const raw = checked[id];
-                const n = raw?.d || raw || {};
-                if (n.id == null) n.id = id;
-                return n;
+function getExpNpcList() {
+        let mobs = new Map();
+        // 1. Z pamięci głębokiej (widzi daleko we mgle)
+        try {
+            const checked = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : {};
+            for (let id in checked) {
+                let n = checked[id]?.d || checked[id];
+                if (n && n.x !== undefined && n.y !== undefined) mobs.set(id, { id: id, ...n });
+            }
+        } catch (e) {}
+        // 2. Z bezpośredniego słownika
+        try {
+            const direct = Engine?.npcs?.d || {};
+            for (let id in direct) {
+                let n = direct[id]?.d || direct[id];
+                if (n && n.x !== undefined && n.y !== undefined) mobs.set(id, { id: id, ...n });
+            }
+        } catch (e) {}
+        // 3. Z obiektów na ekranie
+        try {
+            const drawable = Engine?.npcs?.getDrawableList?.() || [];
+            drawable.forEach(obj => {
+                let n = obj?.d || obj;
+                if (n && n.id && n.x !== undefined && n.y !== undefined) mobs.set(n.id, { id: n.id, ...n });
             });
-        }
-    } catch (e) {}
-
-    try {
-        const direct = Engine?.npcs?.d;
-        if (direct && typeof direct === 'object') {
-            return Object.keys(direct).map(id => {
-                const raw = direct[id];
-                const n = raw?.d || raw || {};
-                if (n.id == null) n.id = id;
-                return n;
-            });
-        }
-    } catch (e) {}
-
-    return [];
-}
+        } catch (e) {}
+        return Array.from(mobs.values());
+    }
     function isMapInSelectedExpowisko(mapName) {
     const maps = botSettings?.exp?.mapOrder || [];
     return Array.isArray(maps) && maps.includes(mapName);
@@ -4344,12 +4338,12 @@ function runExpLogic() {
         if (isNaN(lvl) || lvl <= 0) return;
         if (lvl < minL || lvl > maxL) return;
 
-        let wt = parseInt(n.wt, 10);
+     let wt = parseInt(n.wt, 10);
         if (isNaN(wt)) wt = 0;
 
         if (wt === 0 && !wantNormal) return;
         if (wt === 1 && !wantElite) return;
-        if (wt >= 2) return;
+        if (wt > 1) return; // Herosi i Kolosy omijamy
 
         availableMobs.push({
             id: npcObj.id || n.id,
@@ -4433,7 +4427,7 @@ function runExpLogic() {
             return;
         }
 
-        // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
+       // STOIMY PRZY POTWORZE (Odległość 1 kratka lub 0)
         if (targetDist <= 1) {
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
             
@@ -4443,13 +4437,17 @@ function runExpLogic() {
 
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
+            // WYMUSZONE KLIKNIĘCIE "ZAATAKUJ" NA ELITY
+            if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
+            let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
+            if (confirmBtn && confirmBtn.innerText.toLowerCase().includes("zaatakuj")) confirmBtn.click();
+
             let isBerserkActive = botSettings.berserk && botSettings.berserk.enabled;
 
             if (expAttackLockUntil === 0) {
-                expAttackLockUntil = now + (isBerserkActive ? 2500 : 0);
+                expAttackLockUntil = now + (isBerserkActive ? 2500 : 1000);
             } else if (now > expAttackLockUntil) {
                 window.logExp(`Zacięcie przy walce z: ${target.nick}. Odbiegam kawałek...`, "#ff9800");
-                
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
@@ -4458,11 +4456,9 @@ function runExpLogic() {
                 expLastActionTime = now + 800; 
                 return;
             }
-            
             expLastActionTime = now + 100;
         }
         return;
-    }
 
    // --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
     if (now - expMapEnteredAt < 1200) {
@@ -4601,28 +4597,37 @@ function runExpLogic() {
         return;
     }
 
-    // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
-    if (!isHeroMoving && now >= expGatewayLockUntil) {
-        // Jeśli cel osiągnięty, ale przejście nie zadziałało
-        if (hx === dx && hy === dy) {
-            window.logExp(`[Smart-Roam] Zacięcie w bramie! Robię krok w bok...`, "#ff9800");
-            // Krok w dół lub górę, aby zejść z bramy
-            let stepY = hy + (Math.random() > 0.5 ? 1 : -1);
-            Engine.hero.autoGoTo({ x: hx, y: stepY });
-            window.expLastMoveTx = -1; // Resetujemy cel, żeby w następnej klatce znów kliknął w bramę!
-            expGatewayLockUntil = now + 1200;
-        } else {
-            Engine.hero.autoGoTo({ x: dx, y: dy });
+  // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
+    if (hx === dx && hy === dy) {
+        // Fizycznie stoimy na bramie
+        if (!window.expGatewayArrivalTime) {
+            window.expGatewayArrivalTime = now; // Rejestrujemy moment dotarcia
+            Engine.hero.autoGoTo({ x: dx, y: dy }); // Podwójne kliknięcie dla pewności
+        } else if (now - window.expGatewayArrivalTime > Math.floor(Math.random() * 1500) + 3000) {
+            // Czekaliśmy od 3 do 4.5 sekundy - robimy krok w bok by wejść ponownie
+            window.logExp(`[Smart-Roam] Brama zamuliła! Robię krok w bok...`, "#ff9800");
+            let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+            let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+            Engine.hero.autoGoTo({ x: stepX, y: stepY });
+            
             window.expLastMoveTx = -1;
             window.expLastMoveTy = -1;
-            expGatewayLockUntil = now + 2200;
+            window.expGatewayArrivalTime = 0; // Reset, po kroku wejdzie znowu
+            expGatewayLockUntil = now + 1500;
         }
+        expLastActionTime = now + 200;
+        return;
+    } else if (!isHeroMoving && now >= expGatewayLockUntil) {
+        // Zacięcie przed dotarciem do bramy
+        Engine.hero.autoGoTo({ x: dx, y: dy });
+        window.expLastMoveTx = -1;
+        window.expLastMoveTy = -1;
+        expGatewayLockUntil = now + 2200;
         expMapTransitionCooldown = now + 2600;
         expLastActionTime = now + 900;
     } else {
         expLastActionTime = now + 150;
     }
-}
     setInterval(runExpLogic, 150);
 
     // --- BAZA DANYCH PROFILI EXPOWISK ---
