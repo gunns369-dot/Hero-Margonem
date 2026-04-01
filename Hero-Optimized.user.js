@@ -4502,24 +4502,22 @@ function runExpLogic() {
 
     try {
 
+     try {
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
-
             expLastActionTime = now + 500;
-
             expCurrentTargetId = null;
-
             expLastTargetSwitchAt = 0; 
-
             expEmptyScans = 0;
-
             expAttackLockUntil = 0; 
-
             window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-
+            window.expWasInBattle = true; // Oznaczamy trwającą walkę
             return;
-
+        } else if (window.expWasInBattle) {
+            // Walka właśnie się skończyła - dajemy serwerowi twarde 1.5 sekundy na oddech!
+            window.expWasInBattle = false;
+            expLastActionTime = now + 1500; 
+            return;
         }
-
     } catch (e) {}
 
 
