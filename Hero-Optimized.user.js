@@ -4235,7 +4235,51 @@ function setExpBerserkState(shouldEnable) {
 window.expLastMoveTx = -1;
 window.expLastMoveTy = -1;
 window.expMoveLockUntil = 0;
+// --- NOWY ALGORYTM WYZNACZANIA PRAWDZIWEJ DROGI (Bierze pod uwagę ściany i przeszkody) ---
+window.getRealWalkingDistance = function(sx, sy, tx, ty, maxDepth = 60) {
+    if (sx === tx && sy === ty) return 0;
+    let queue = [{x: sx, y: sy, dist: 0}];
+    let visited = new Set([`${sx},${sy}`]);
 
+    // Funkcja czytająca fizyczne przeszkody na mapie z silnika Margonem (NI)
+    const canWalk = (x, y) => {
+        if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return false;
+        if (x < 0 || y < 0 || x >= Engine.map.d.x || y >= Engine.map.d.y) return false;
+        
+        if (Engine.map.col && typeof Engine.map.col.check === 'function') {
+            return !Engine.map.col.check(x, y);
+        }
+        return true; 
+    };
+
+    let head = 0;
+    while(head < queue.length) {
+        let curr = queue[head++];
+        if (curr.dist > maxDepth) continue; // Odpuszczamy liczenie dla bardzo dalekich tras (oszczędność CPU)
+        if (curr.x === tx && curr.y === ty) return curr.dist;
+
+        // Możliwe ruchy w Margonem (przód, tył, boki i ukosy)
+        const moves = [
+            {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0},
+            {dx: -1, dy: -1}, {dx: 1, dy: -1}, {dx: -1, dy: 1}, {dx: 1, dy: 1}
+        ];
+
+        for (let m of moves) {
+            let nx = curr.x + m.dx;
+            let ny = curr.y + m.dy;
+            let key = `${nx},${ny}`;
+            
+            if (!visited.has(key)) {
+                visited.add(key);
+                // Zezwalamy na wejście na ostatnią kratkę (sam potwór ma kolizję, więc musimy to zignorować przy uderzeniu)
+                if ((nx === tx && ny === ty) || canWalk(nx, ny)) {
+                    queue.push({x: nx, y: ny, dist: curr.dist + 1});
+                }
+            }
+        }
+    }
+    return Infinity; // Brak drogi (mob jest za ścianą / na dole skarpy bez zejścia)
+};
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
@@ -4384,39 +4428,58 @@ arr.forEach(npcObj => {
             return;
         }
 
-        // 1. Podział na zasięg lokalny (do 15 kratek) i globalny
-        let localMobs = availableMobs.filter(m => m.dist <= 15);
-        let targetList = localMobs.length > 0 ? localMobs : availableMobs;
+        // 1. Zgrubne sortowanie w linii prostej (odrzucamy to co jest fizycznie daleko na mapie)
+        availableMobs.sort((a, b) => a.manhattan - b.manhattan);
 
-        // 2. Sortowanie po "Manhattanie" (symulacja najkrótszej ścieżki pieszej)
-        targetList.sort((a, b) => a.manhattan - b.manhattan);
-
-        let bestTarget = targetList[0]; 
-        let target = null;
-
-       if (expCurrentTargetId) {
-            let currentTarget = availableMobs.find(m => String(m.id) === String(expCurrentTargetId));
-            if (currentTarget) {
-                // Zmiana celu, tylko jeśli nowy jest wyraźnie bliżej i minął czas blokady
-                if (bestTarget.id !== currentTarget.id && bestTarget.manhattan < currentTarget.manhattan && now > expLastTargetSwitchAt + 8500) {
-                    target = bestTarget;
-                    expLastTargetSwitchAt = now; 
-                    window.logExp(`🔄 Zmieniam cel na bliższy: ${target.nick}`, "#00e5ff");
-                } else {
-                    target = currentTarget;
-                }
-            } else {
-                target = bestTarget; 
-                expLastTargetSwitchAt = now;
-                window.logExp(`🏃 Nowy cel: ${target.nick}`, "#00e5ff");
-            }
-        } else {
-            target = bestTarget;
-            expLastTargetSwitchAt = now;
-            window.logExp(`🏃 Namierzono: ${target.nick}`, "#00e5ff");
+        // 2. Wyliczamy PRAWDZIWĄ odległość pieszą (omijanie ścian) dla maks 12 najbliższych mobów (dla optymalizacji i braku lagów)
+        let maxToCheck = Math.min(12, availableMobs.length);
+        for(let i = 0; i < maxToCheck; i++) {
+            // maxDepth = 60 kratek, wystarczy by znaleźć drogę
+            availableMobs[i].realDist = window.getRealWalkingDistance(hx, hy, availableMobs[i].x, availableMobs[i].y, 60);
+        }
+        
+        // Zabezpieczenie dla potworów poza pierwszą dwunastką (traktujemy je jako dużo dalsze)
+        for(let i = maxToCheck; i < availableMobs.length; i++) {
+            availableMobs[i].realDist = availableMobs[i].manhattan + 1000;
         }
 
-        expCurrentTargetId = target.id;
+        // 3. Odrzucamy wszystkie potwory znajdujące się całkowicie za nieprzekraczalną ścianą (Infinity)
+        let reachableMobs = availableMobs.filter(m => m.realDist !== Infinity);
+
+        if (reachableMobs.length === 0) {
+            // Widzimy potwory, ale ŻADEN nie jest w naszym zasięgu chodu! (np. wszystkie na dnie klifu)
+            window.logExp(`Potwory w pobliżu są niedostępne (za ścianą). Szukam dalej...`, "#ff9800");
+            // Odpalamy Smart-Roam (przeskok do sekcji podspodem symulując pustą mapę)
+            availableMobs = []; 
+        } else {
+            // Sortujemy OSTATECZNIE po PRAWDZIWYM czasie dotarcia omijającym przeszkody!
+            reachableMobs.sort((a, b) => a.realDist - b.realDist);
+
+            let bestTarget = reachableMobs[0]; 
+            let target = null;
+
+           if (expCurrentTargetId) {
+                let currentTarget = reachableMobs.find(m => String(m.id) === String(expCurrentTargetId));
+                if (currentTarget) {
+                    if (bestTarget.id !== currentTarget.id && bestTarget.realDist < currentTarget.realDist && now > expLastTargetSwitchAt + 8500) {
+                        target = bestTarget;
+                        expLastTargetSwitchAt = now; 
+                        window.logExp(`🔄 Zmieniam cel na bliższy: ${target.nick}`, "#00e5ff");
+                    } else {
+                        target = currentTarget; 
+                    }
+                } else {
+                    target = bestTarget; 
+                    expLastTargetSwitchAt = now;
+                    window.logExp(`🏃 Nowy cel: ${target.nick}`, "#00e5ff");
+                }
+            } else {
+                target = bestTarget;
+                expLastTargetSwitchAt = now;
+                window.logExp(`🏃 Namierzono: ${target.nick}`, "#00e5ff");
+            }
+
+            expCurrentTargetId = target.id;
         const targetDist = Math.max(Math.abs(target.x - hx), Math.abs(target.y - hy));
 
         // BIEGNIEMY DO POTWORA
