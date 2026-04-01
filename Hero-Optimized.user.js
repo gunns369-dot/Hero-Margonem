@@ -4688,28 +4688,23 @@ function runExpLogic() {
 
 
 
-    // --- ZAAWANSOWANE SORTOWANIE (ELITY -> DYSTANS Z ANTY-PINGPONGIEM) ---
-
+    // --- ZAAWANSOWANE SORTOWANIE (ELITY -> TWARDY LOCK -> DYSTANS) ---
     rawMobs.sort((a, b) => {
-
         let aElite = (a.ranga !== "normal") ? 1 : 0;
-
         let bElite = (b.ranga !== "normal") ? 1 : 0;
-
         if (aElite !== bElite) return bElite - aElite;
-
         
+        // TWARDA BLOKADA NA 8 SEKUND
+        let isALocked = (a.id === expCurrentTargetId && now < (window.expTargetLockTime || 0));
+        let isBLocked = (b.id === expCurrentTargetId && now < (window.expTargetLockTime || 0));
+        
+        if (isALocked && !isBLocked) return -1;
+        if (isBLocked && !isALocked) return 1;
 
-        // Dajemy obecnemu celowi bonus -3 kratki. Dzięki temu bot nie skacze między dwoma mobami,
-
-        // ale pójdzie do innego, jeśli ten drugi jest WYRAŹNIE bliżej!
-
+        // Jeśli żaden nie jest w trakcie 8-sekundowego locka, liczymy czysty dystans z lekką lepkością
         let distA = a.dist - (a.id === expCurrentTargetId ? 3 : 0);
-
         let distB = b.dist - (b.id === expCurrentTargetId ? 3 : 0);
-
         return distA - distB;
-
     });
 
 
