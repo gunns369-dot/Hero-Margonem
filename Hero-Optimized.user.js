@@ -4597,22 +4597,32 @@ arr.forEach(npcObj => {
         return;
     }
 
-    // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
-    if (!isHeroMoving && now >= expGatewayLockUntil) {
-        // Jeśli cel osiągnięty, ale przejście nie zadziałało
-        if (hx === dx && hy === dy) {
-            window.logExp(`[Smart-Roam] Zacięcie w bramie! Robię krok w bok...`, "#ff9800");
-            // Krok w dół lub górę, aby zejść z bramy
-            let stepY = hy + (Math.random() > 0.5 ? 1 : -1);
-            Engine.hero.autoGoTo({ x: hx, y: stepY });
-            window.expLastMoveTx = -1; // Resetujemy cel, żeby w następnej klatce znów kliknął w bramę!
-            expGatewayLockUntil = now + 1200;
-        } else {
-            Engine.hero.autoGoTo({ x: dx, y: dy });
+ // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
+    if (hx === dx && hy === dy) {
+        // Fizycznie stoimy na bramie
+        if (!window.expGatewayArrivalTime) {
+            window.expGatewayArrivalTime = now; // Rejestrujemy moment dotarcia
+            Engine.hero.autoGoTo({ x: dx, y: dy }); // Podwójne kliknięcie dla pewności
+        } else if (now - window.expGatewayArrivalTime > Math.floor(Math.random() * 1500) + 3000) {
+            // Czekaliśmy od 3 do 4.5 sekundy - robimy krok w bok by wejść ponownie
+            window.logExp(`[Smart-Roam] Brama zamuliła! Robię krok w bok...`, "#ff9800");
+            let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+            let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+            Engine.hero.autoGoTo({ x: stepX, y: stepY });
+            
             window.expLastMoveTx = -1;
             window.expLastMoveTy = -1;
-            expGatewayLockUntil = now + 2200;
+            window.expGatewayArrivalTime = 0; // Reset, po kroku wejdzie znowu
+            expGatewayLockUntil = now + 1500;
         }
+        expLastActionTime = now + 200;
+        return;
+    } else if (!isHeroMoving && now >= expGatewayLockUntil) {
+        // Zacięcie przed dotarciem do bramy
+        Engine.hero.autoGoTo({ x: dx, y: dy });
+        window.expLastMoveTx = -1;
+        window.expLastMoveTy = -1;
+        expGatewayLockUntil = now + 2200;
         expMapTransitionCooldown = now + 2600;
         expLastActionTime = now + 900;
     } else {
