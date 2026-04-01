@@ -4354,7 +4354,7 @@ function runExpLogic() {
         return a.dist - b.dist;
     });
 
-    // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
+// --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (rawMobs.length > 0) {
         let target = rawMobs[0];
         const targetDist = target.dist;
@@ -4377,31 +4377,34 @@ function runExpLogic() {
                 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-                window.expTargetPursuitStart = now;
-                window.expMoveLockUntil = now + 600; // 600ms dla silnika na rozpoczęcie ruchu
+                window.expTargetPursuitStart = now; // Zaczynamy liczyć czas od momentu kliknięcia
+                
+                window.expMoveLockUntil = now + 1000; // Dajemy postaci 1 sekundę na rozpoczęcie marszu
             } else {
-                // CEL JEST JUŻ ŚLEDZONY - KONTROLOWANIE POSTĘPU
+                // KONTROLA RUCHU FIZYCZNEGO
                 if (now > window.expMoveLockUntil) {
                     
-                    // 🚨 ZŁOTY WARUNEK: Jeśli postać stoi w miejscu, a cel nadal jest daleko!
-                    if (!isHeroMoving) {
-                        window.logExp(`🚨 Utknięto na koordynatach [${hx}, ${hy}]. Mob [${target.nick}] jest nieosiągalny. Omijam go.`, "#ff5252");
+                    // Jeśli postać fizycznie zmieniła kratkę = idzie! Resetujemy stoper zacięcia.
+                    if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
+                        window.expPursuitLastX = hx; 
+                        window.expPursuitLastY = hy;
+                        window.expTargetPursuitStart = now; 
+                    }
+                    
+                    let timeStandingStill = now - window.expTargetPursuitStart;
+
+                    // 🚨 ZŁOTY WARUNEK: Jeśli postać stoi fizycznie w miejscu przez ponad 1.5 sekundy, a cel nadal jest daleko!
+                    if (timeStandingStill > 1500) {
+                        window.logExp(`🚨 Zatrzymano na [${hx}, ${hy}]. Mob [${target.nick}] niedostępny. Czarna lista.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
                         expCurrentTargetId = null;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         return;
                     }
 
-                    // Zapasowy bezpiecznik w razie tańczenia w miejscu (zmiana o 1 kratkę od 3 sekund)
-                    if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
-                        window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-                        window.expTargetPursuitStart = now; // Resetujemy stoper
-                    } else if (now - window.expTargetPursuitStart > 3000) {
-                        window.logExp(`🚨 Zapętlenie / Brak postępów. Omijam [${target.nick}].`, "#ff5252");
-                        window.expUnreachableMobs.add(target.id);
-                        expCurrentTargetId = null;
-                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                        return;
+                    // Co jakiś czas przypominamy silnikowi o ruchu, żeby uniknąć laga serwera
+                    if (timeStandingStill > 1000 && (now % 1000 < 150)) {
+                        Engine.hero.autoGoTo({ x: target.x, y: target.y });
                     }
                 }
             }
@@ -4409,6 +4412,7 @@ function runExpLogic() {
             return;
         }
 
+        // --- WALKA (Jesteśmy obok celu) ---
         if (targetDist <= 1) {
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
@@ -4450,7 +4454,7 @@ function runExpLogic() {
         return;
     }
 
-    // Szukamy najlepszej bramy tranzytowej na mapie przy użyciu getShortestPath
+    // Szukamy najlepszej bramy tranzytowej na mapie
     let gateways = globalGateways[currMap] || {};
     let nextStepMap = null;
     let targetGateway = null;
@@ -4504,22 +4508,28 @@ function runExpLogic() {
                 Engine.hero.autoGoTo({ x: dx, y: dy });
                 
                 window.expLastMoveTx = dx; window.expLastMoveTy = dy;
-                window.expMoveLockUntil = now + 600;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
                 window.expTargetPursuitStart = now;
+                window.expMoveLockUntil = now + 1000;
             } else if (now > window.expMoveLockUntil) {
-                // Taka sama ochrona przed zacięciem jak w przypadku mobów!
-                if (!isHeroMoving && distToDoor > 1) {
-                    window.logExp(`🚨 Oznaczona brama jest niedostępna fizycznie!`, "#ff5252");
-                    expMapTransitionCooldown = now + 4000;
-                    return;
-                }
+                
+                // Taka sama ochrona fizyczna dla przejść przez bramy
                 if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
                     window.expPursuitLastX = hx; window.expPursuitLastY = hy;
                     window.expTargetPursuitStart = now;
-                } else if (now - window.expTargetPursuitStart > 3000) {
-                    Engine.hero.autoGoTo({ x: dx, y: dy }); // Zapasowy impuls
-                    window.expTargetPursuitStart = now;
+                }
+                
+                let timeStandingStill = now - window.expTargetPursuitStart;
+                
+                if (timeStandingStill > 2000) {
+                    window.logExp(`🚨 Oznaczona brama zablokowana!`, "#ff5252");
+                    expMapTransitionCooldown = now + 4000;
+                    window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                    return;
+                }
+
+                if (timeStandingStill > 1000 && (now % 1000 < 150)) {
+                    Engine.hero.autoGoTo({ x: dx, y: dy }); 
                 }
             }
             expLastActionTime = now + 100;
