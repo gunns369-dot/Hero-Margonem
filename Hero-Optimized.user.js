@@ -5823,7 +5823,7 @@ window.clearExpMaps = () => {
         container.innerHTML = html;
     };
 
-    // Obsługa klikania i zapisywania teleportów w pamięci bota
+// Obsługa klikania i zapisywania teleportów w pamięci bota
     document.addEventListener('change', (e) => {
         if (e.target && e.target.classList.contains('chk-teleport')) {
             let mapName = e.target.getAttribute('data-map');
@@ -5831,6 +5831,11 @@ window.clearExpMaps = () => {
             botSettings.unlockedTeleports[mapName] = e.target.checked;
             if (typeof saveSettings === 'function') saveSettings();
             if (window.logHero) window.logHero(`[System] Zaktualizowano teleport: ${mapName}`, "#00acc1");
+        }
+
+        // NOWOŚĆ: Nasłuchiwanie na zmianę w filtrze ekwipunku
+        if (e.target && e.target.id === 'eqTypeFilter') {
+            if (typeof window.renderEqItems === 'function') window.renderEqItems(e.target.value);
         }
     });
 // --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW ---
@@ -5846,40 +5851,119 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-        // 2. POKAŻ POLECANE EQ
+       // 2. POKAŻ POLECANE EQ (Z filtrowaniem typu)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
-            let items = window.DatabaseModule.getRecommendedEq();
-            let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Ekwipunek (-5/+5 lvl):</div>`;
-            items.forEach((item, index) => {
-                html += `
-                    <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; margin-bottom:3px; background:#1a1a1a;">
-                        <div style="display:flex; justify-content:space-between; width:100%;">
-                            <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
-                            <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
-                        </div>
-                        <div id="seller_info_eq_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
-                    </div>`;
-            });
-            eqList.innerHTML = html;
+            
+            // Rysujemy interfejs dropdowna (rozsuwanej listy) jeśli jeszcze go nie ma
+            if (!document.getElementById('eqTypeFilter')) {
+                eqList.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:#1a1a1a; padding:4px; border:1px solid #333;">
+                        <span style="color:#a99a75; font-size:10px; font-weight:bold;">Filtruj:</span>
+                        <select id="eqTypeFilter" style="background:#000; color:#d4af37; border:1px solid #333; font-size:10px; padding:2px; font-weight:bold; cursor:pointer;">
+                            <option value="Wszystkie">Wszystkie (-5 / +5 lvl)</option>
+                            <option value="bro">Broń (Jedno / Dwuręczna)</option>
+                            <option value="dystansowe">Broń Dystansowa</option>
+                            <option value="zbroj">Zbroja</option>
+                            <option value="hełm">Hełm</option>
+                            <option value="but">Buty</option>
+                            <option value="rękaw">Rękawice</option>
+                            <option value="pierś">Pierścień</option>
+                            <option value="naszyj">Naszyjnik</option>
+                            <option value="tarcz">Tarcza</option>
+                            <option value="pomocnicze">Pomocnicze</option>
+                        </select>
+                    </div>
+                    <div id="eqListContent" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:3px;"></div>
+                `;
+            }
+            
+            // Funkcja odpowiadająca za rysowanie (podpięta pod zmianę typu)
+            window.renderEqItems = function(filterVal = "Wszystkie") {
+                let content = document.getElementById('eqListContent');
+                if (!content) return;
+                let items = window.DatabaseModule.getRecommendedEq();
+                
+                if (filterVal !== "Wszystkie") {
+                    items = items.filter(i => i.type && i.type.toLowerCase().includes(filterVal));
+                }
+                
+                let html = '';
+                if(items.length === 0) {
+                    html = `<span style="color:#777; font-size:10px; text-align:center; padding:10px; display:block;">Brak sprzętu w tej kategorii (-5 / +5 lvl).</span>`;
+                } else {
+                    items.forEach((item, index) => {
+                        let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
+                        let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
+                        html += `
+                            <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; background:#1a1a1a;">
+                                <div style="display:flex; justify-content:space-between; width:100%;">
+                                    <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                                    <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
+                                    <span style="color:#a99a75; font-size:9px;">Typ: <b style="color:#fff">${item.type}</b></span>
+                                    <span style="color:${profColor}; font-size:9px;">${profText}</span>
+                                </div>
+                                <div id="seller_info_eq_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
+                            </div>`;
+                    });
+                }
+                content.innerHTML = html;
+            };
+            // Rysuj natychmiast na podstawie tego, co jest aktualnie wybrane
+            window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
 
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
-        // 4. MIKSTURY I LECZENIE (Poprawiony filtr "leczy")
+        // 4. MIKSTURY I LECZENIE (Zintegrowane z Uzdrowicielami)
         if (e.target && e.target.closest('#btnShowPotions')) {
             hideAllTabs(); if (potList) potList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { 
                 potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; 
             }
             
-            // Filtrujemy przedmioty, które w statystykach mają słowo "leczy" (małe/wielkie litery)
-            let potions = window.DatabaseModule.ekwipunek.filter(i => i.stats.toLowerCase().includes('leczy'));
+            let potionsMap = new Map();
+
+            // KROK 1: Przedmioty z ogólnej bazy, które leczą (filtr dla innych NPC)
+            window.DatabaseModule.ekwipunek.forEach(i => {
+                if (i.stats.toLowerCase().includes('leczy') || i.stats.toLowerCase().includes('przywraca')) {
+                    potionsMap.set(i.name, i);
+                }
+            });
+
+            // KROK 2: Przedmioty wyciągnięte BEZPOŚREDNIO od NPC zaczynających się na "Uzdrow"
+            window.DatabaseModule.kupcy.forEach(k => {
+                if (k.npc_name && k.npc_name.toLowerCase().startsWith('uzdrow')) {
+                    if (k.items) {
+                        k.items.forEach(i => {
+                            let cleanName = i.name.split('Typ:')[0].trim();
+                            if (!potionsMap.has(cleanName)) {
+                                let typeMatch = i.name.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/);
+                                let itemType = typeMatch ? typeMatch[1] : (i.slot_type || "Konsumpcyjne");
+                                let lvlMatch = i.name.match(/Wymagany poziom:\s*(\d+)/);
+                                let lvl = lvlMatch ? parseInt(lvlMatch[1]) : (i.required_level || 1);
+                                
+                                potionsMap.set(cleanName, {
+                                    name: cleanName,
+                                    level: lvl,
+                                    prof: [], 
+                                    type: itemType,
+                                    stats: i.tooltip_text || i.raw_detected_text || i.name
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+
+            let potions = Array.from(potionsMap.values());
             potions.sort((a,b) => a.level - b.level);
 
-            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Mikstury (filtr: leczy):</div>`;
+            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Mikstury i Uzdrawiacze (${potions.length} szt.):</div>`;
             potions.forEach((item, index) => {
                 html += `
                     <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d81b60; margin-bottom:3px; background:#1a1a1a;">
