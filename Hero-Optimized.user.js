@@ -2514,9 +2514,13 @@ const teleportsGui = document.createElement('div');
         teleportsGui.style.width = '320px'; 
         teleportsGui.style.maxHeight = '560px';
         teleportsGui.innerHTML = `
-            teleportsGui.innerHTML = `
+ teleportsGui.innerHTML = `
             <div class="gui-header">🚀 Teleporty <button class="btn-close" onclick="document.getElementById('heroTeleportsGUI').style.display='none'">✖</button></div>
             <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
+                <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
+                    <span style="color:#00acc1; font-weight:bold; font-size:11px;">Zakonnicy Planu Astralnego</span><br>
+                    <span style="color:#a99a75; font-size:9px;">Zaznacz miasta, do których wykupiłeś zezwolenie na teleport. Algorytm trasy sam ich użyje!</span>
+                </div>
                 <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;"></div>
             </div>
         `;
