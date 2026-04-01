@@ -5832,6 +5832,44 @@ window.clearExpMaps = () => {
             }
         });
     }
+    // --- SYSTEM RYSOWANIA TELEPORTÓW ---
+    window.renderTeleportList = function() {
+        let container = document.getElementById('heroTeleportsGUI');
+        if (!container) return;
+        
+        // Pobieramy miasta z bazy ZAKONNICY, a jeśli jej nie ma - używamy listy awaryjnej
+        let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : [
+            "Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", 
+            "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", 
+            "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", 
+            "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"
+        ];
+        
+        let html = '<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty (Zakonnicy):</div>';
+        
+        tpList.forEach(map => {
+            let isChecked = (botSettings.unlockedTeleports && botSettings.unlockedTeleports[map]) ? 'checked' : '';
+            html += `
+                <label style="display:flex; align-items:center; background:#1a1a1a; padding:4px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px; border-left: 2px solid #00838f;">
+                    <input type="checkbox" class="chk-teleport" data-map="${map}" ${isChecked} style="margin-right:8px; cursor:pointer;">
+                    <b>${map}</b>
+                </label>
+            `;
+        });
+        
+        container.innerHTML = html;
+    };
+
+    // Obsługa klikania i zapisywania teleportów w pamięci bota
+    document.addEventListener('change', (e) => {
+        if (e.target && e.target.classList.contains('chk-teleport')) {
+            let mapName = e.target.getAttribute('data-map');
+            if (!botSettings.unlockedTeleports) botSettings.unlockedTeleports = {};
+            botSettings.unlockedTeleports[mapName] = e.target.checked;
+            if (typeof saveSettings === 'function') saveSettings();
+            if (window.logHero) window.logHero(`[System] Zaktualizowano teleport: ${mapName}`, "#00acc1");
+        }
+    });
 // --- GŁÓWNY SYSTEM NASŁUCHIWANIA PRZYCISKÓW ---
     document.addEventListener('click', (e) => {
         
