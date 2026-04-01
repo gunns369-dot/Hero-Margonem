@@ -2350,14 +2350,9 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
 
-                <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
-                    <div style="background:rgba(0, 172, 193, 0.1); border:1px solid #00acc1; padding:6px; margin-bottom:8px; border-radius:2px;">
-                        <span style="color:#00acc1; font-weight:bold; font-size:11px;">Skonfiguruj Teleporty</span><br>
-                        <span style="color:#a99a75; font-size:9px;">Kliknij poniżej, aby wybrać miasta.</span>
-                    </div>
-                   <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="document.getElementById('heroTeleportsGUI').style.display='flex'; if(typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+               <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
+                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="let p = document.getElementById('heroTeleportsGUI'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                 </div>
-            </div>
         `;
 
         document.body.appendChild(mainGui);
@@ -4606,28 +4601,37 @@ arr.forEach(npcObj => {
         return;
     }
 
-    // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
-    if (!isHeroMoving && now >= expGatewayLockUntil) {
-        // Jeśli cel osiągnięty, ale przejście nie zadziałało
-        if (hx === dx && hy === dy) {
-            window.logExp(`[Smart-Roam] Zacięcie w bramie! Robię krok w bok...`, "#ff9800");
-            // Krok w dół lub górę, aby zejść z bramy
-            let stepY = hy + (Math.random() > 0.5 ? 1 : -1);
-            Engine.hero.autoGoTo({ x: hx, y: stepY });
-            window.expLastMoveTx = -1; // Resetujemy cel, żeby w następnej klatce znów kliknął w bramę!
-            expGatewayLockUntil = now + 1200;
-        } else {
-            Engine.hero.autoGoTo({ x: dx, y: dy });
+   // --- ZACIĘCIE NA BRAMIE (STOIMY NA KRATCE BRAMY) ---
+    if (hx === dx && hy === dy) {
+        // Fizycznie stoimy na bramie
+        if (!window.expGatewayArrivalTime) {
+            window.expGatewayArrivalTime = now; // Rejestrujemy moment dotarcia
+            Engine.hero.autoGoTo({ x: dx, y: dy }); // Podwójne kliknięcie dla pewności
+        } else if (now - window.expGatewayArrivalTime > Math.floor(Math.random() * 1500) + 3000) {
+            // Czekaliśmy od 3 do 4.5 sekundy - robimy krok w bok by wejść ponownie
+            window.logExp(`[Smart-Roam] Brama zamuliła! Robię krok w bok...`, "#ff9800");
+            let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+            let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+            Engine.hero.autoGoTo({ x: stepX, y: stepY });
+            
             window.expLastMoveTx = -1;
             window.expLastMoveTy = -1;
-            expGatewayLockUntil = now + 2200;
+            window.expGatewayArrivalTime = 0; // Reset, po kroku wejdzie znowu
+            expGatewayLockUntil = now + 1500;
         }
+        expLastActionTime = now + 200;
+        return;
+    } else if (!isHeroMoving && now >= expGatewayLockUntil) {
+        // Zacięcie przed dotarciem do bramy
+        Engine.hero.autoGoTo({ x: dx, y: dy });
+        window.expLastMoveTx = -1;
+        window.expLastMoveTy = -1;
+        expGatewayLockUntil = now + 2200;
         expMapTransitionCooldown = now + 2600;
         expLastActionTime = now + 900;
     } else {
         expLastActionTime = now + 150;
     }
-}
     setInterval(runExpLogic, 150);
 
     // --- BAZA DANYCH PROFILI EXPOWISK ---
