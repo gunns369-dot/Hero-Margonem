@@ -5908,17 +5908,18 @@ window.clearExpMaps = () => {
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
-        // 4. NOWOŚĆ: MIKSTURY I LECZENIE
+        // 4. MIKSTURY I LECZENIE (Poprawiony filtr "leczy")
         if (e.target && e.target.closest('#btnShowPotions')) {
             hideAllTabs(); if (potList) potList.style.display = 'flex';
-            if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
+            if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { 
+                potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; 
+            }
             
-            // Filtrujemy tylko potki
-            let potions = window.DatabaseModule.ekwipunek.filter(i => i.stats.includes('Leczy') || i.stats.includes('Przywraca') || i.stats.includes('Pełne leczenie'));
-            // Sortujemy po sile leczenia lub levelu
+            // Filtrujemy przedmioty, które w statystykach mają słowo "leczy" (małe/wielkie litery)
+            let potions = window.DatabaseModule.ekwipunek.filter(i => i.stats.toLowerCase().includes('leczy'));
             potions.sort((a,b) => a.level - b.level);
 
-            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Znaleziono ${potions.length} mikstur leczniczych:</div>`;
+            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Mikstury (filtr: leczy):</div>`;
             potions.forEach((item, index) => {
                 html += `
                     <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d81b60; margin-bottom:3px; background:#1a1a1a;">
@@ -5942,7 +5943,7 @@ window.clearExpMaps = () => {
                 if (sellerDiv.style.display === 'block') { sellerDiv.style.display = 'none'; return; }
                 let sellers = window.DatabaseModule.kupcy.filter(k => k.items && k.items.some(i => i.name && i.name.includes(itemName)));
                 
-                if (sellers.length > 0) {
+               if (sellers.length > 0) {
                     let sHtml = '';
                     sellers.forEach((s, sIdx) => {
                         let isPotion = index.startsWith('pot_');
@@ -5951,19 +5952,30 @@ window.clearExpMaps = () => {
                                 <b style="color:#e65100; font-size:10px;">${s.npc_name}</b><br>
                                 <span style="color:#888; font-size:9px;">🌍 ${s.map_name} [${s.x}, ${s.y}]</span>
                                 
-                                <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px;">
-                                    ${isPotion ? `<input type="number" id="buy_amt_${index}_${sIdx}" value="50" min="1" max="1000" style="width:40px; height:18px; font-size:10px; background:#000; color:#fff; border:1px solid #444; margin-right:4px; text-align:center;" title="Ilość sztuk do kupienia">` : ''}
-                                    <button class="btn-go-npc" data-buy-input="${isPotion ? `buy_amt_${index}_${sIdx}` : ''}" data-item="${itemName}" data-npc="${s.npc_name}" data-map="${s.map_name}" data-x="${s.x}" data-y="${s.y}" style="background:${isPotion ? '#d81b60' : '#4caf50'}; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">${isPotion ? '🏃 IDŹ I KUP' : '🏃 IDŹ'}</button>
+                                <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px; gap:6px;">
+                                    ${isPotion ? 
+                                        `<input type="number" id="buy_amt_${index}_${sIdx}" value="50" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center;">` 
+                                        : 
+                                        `<label style="color:#aaa; font-size:9px; cursor:pointer; display:flex; align-items:center; gap:2px;">
+                                            <input type="checkbox" id="buy_eq_chk_${index}_${sIdx}" style="margin:0; width:12px; height:12px;"> kup
+                                         </label>`
+                                    }
+                                    <button class="btn-go-npc" 
+                                        data-mode="${isPotion ? 'potion' : 'eq'}"
+                                        data-buy-input="${isPotion ? `buy_amt_${index}_${sIdx}` : `buy_eq_chk_${index}_${sIdx}`}" 
+                                        data-item="${itemName}" 
+                                        data-npc="${s.npc_name}" 
+                                        data-map="${s.map_name}" 
+                                        data-x="${s.x}" 
+                                        data-y="${s.y}" 
+                                        style="background:${isPotion ? '#d81b60' : '#4caf50'}; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">
+                                        🏃 IDŹ
+                                    </button>
                                 </div>
                             </div>`;
                     });
                     sellerDiv.innerHTML = sHtml;
-                } else {
-                    sellerDiv.innerHTML = `<span style="color:#777; font-size:9px;">Przedmiot nie występuje w sklepach (Drop z potworów).</span>`;
                 }
-                sellerDiv.style.display = 'block';
-            }
-        }
 
         // 6. ROZWIJANIE ASORTYMENTU WYSZUKIWARKI
         if (e.target && e.target.classList.contains('toggle-items-btn')) {
@@ -5976,11 +5988,31 @@ window.clearExpMaps = () => {
             }
         }
 
-        // 7. SMART WALK (Z AUTO-KUPNEM)
+   // 7. SMART WALK (Z AUTO-KUPNEM)
         if (e.target && e.target.classList.contains('btn-go-npc')) {
             let mapName = e.target.getAttribute('data-map');
             let targetX = parseInt(e.target.getAttribute('data-x'));
             let targetY = parseInt(e.target.getAttribute('data-y'));
+            
+            let mode = e.target.getAttribute('data-mode');
+            let inputId = e.target.getAttribute('data-buy-input');
+            let buyAmount = 0;
+
+            if (mode === 'potion') {
+                buyAmount = parseInt(document.getElementById(inputId).value) || 0;
+            } else if (mode === 'eq') {
+                // Dla EQ sprawdzamy czy checkbox jest zaznaczony
+                let isChecked = document.getElementById(inputId).checked;
+                if (isChecked) buyAmount = 1;
+            }
+
+            if (buyAmount > 0) {
+                window.autoBuyTask = { npc: e.target.getAttribute('data-npc'), item: e.target.getAttribute('data-item'), amount: buyAmount };
+                window.logHero(`🛒 Zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}.`, "#d81b60");
+            } else {
+                window.autoBuyTask = null;
+                window.logHero(`🏃 Obieram kurs na: [${mapName}]`, "#00e5ff");
+            }
             
             // Konfiguracja Auto-Kupowania
             let inputId = e.target.getAttribute('data-buy-input');
