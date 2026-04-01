@@ -6334,13 +6334,17 @@ window.clearExpMaps = () => {
                     });
                     
                     if (shopOpt) {
-                        if (typeof shopOpt.click === 'function') shopOpt.click();
-                        else if (typeof MouseEvent !== 'undefined') {
-                            shopOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                            shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                        }
+                        // Humanizacja: losowe opóźnienie 400-900ms przed kliknięciem dialogu
+                        let humanDelay = Math.floor(Math.random() * 501) + 400;
+                        setTimeout(() => {
+                            if (typeof shopOpt.click === 'function') shopOpt.click();
+                            else if (typeof MouseEvent !== 'undefined') {
+                                shopOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                                shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                            }
+                        }, humanDelay);
+                        return; // Czekamy aż gra załaduje sklep
                     }
-                    return; // Kliknęliśmy odpowiedź, czekamy aż gra załaduje sklep
                 }
 
                 // 2. KUPNO W SKLEPIE (Gdy okno sklepu fizycznie się pokaże)
@@ -6351,23 +6355,30 @@ window.clearExpMaps = () => {
                         let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
                         
                         if (itemToBuy) {
+                            // Humanizacja: czekamy 500-1200ms po otwarciu sklepu zanim kupimy
+                            let buyDelay = Math.floor(Math.random() * 701) + 500;
+                            
                             if (window.logHero) window.logHero(`💸 Kupuję: ${window.autoBuyTask.amount}x ${window.autoBuyTask.item}...`, "#8bc34a");
                             
-                            // Bezpośrednie wysłanie polecenia kupna do serwera (wsparcie NI)
-                            if (typeof window._g === 'function') {
-                                window._g(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
-                            } else if (typeof window._t !== 'undefined' && window._t.send) {
-                                window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
-                            }
-                            
-                            window.autoBuyTask = null; // Czyszczenie zlecenia
-                            
-                            // Zamykanie sklepu
-                            setTimeout(() => { 
-                                if(typeof Engine.shop.close === 'function') Engine.shop.close(); 
-                                let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close');
-                                if(closeBtn) closeBtn.click();
-                            }, 800);
+                            setTimeout(() => {
+                                // Wysłanie komendy kupna
+                                if (typeof window._g === 'function') {
+                                    window._g(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
+                                } else if (typeof window._t !== 'undefined' && window._t.send) {
+                                    window._t.send(`shop&buy=${itemToBuy.id}&amount=${window.autoBuyTask.amount}`);
+                                }
+                                
+                                window.autoBuyTask = null; // Zlecenie wykonane
+                                
+                                // Humanizacja: Losowy czas do zamknięcia sklepu (600-1400ms po kupnie)
+                                let closeDelay = Math.floor(Math.random() * 801) + 600;
+                                setTimeout(() => { 
+                                    if(typeof Engine.shop.close === 'function') Engine.shop.close(); 
+                                    let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close');
+                                    if(closeBtn) closeBtn.click();
+                                }, closeDelay);
+                            }, buyDelay);
+
                         } else {
                             if (window.logHero) window.logHero(`❌ Sprzedawca nie posiada obecnie [${window.autoBuyTask.item}]!`, "#e53935");
                             window.autoBuyTask = null;
@@ -6375,6 +6386,6 @@ window.clearExpMaps = () => {
                     }
                 }
             }
-        }, 800);
+        }, 800); // Główny cykl demona
     }
 })(); // Koniec kodu
