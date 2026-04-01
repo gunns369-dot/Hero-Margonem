@@ -4477,7 +4477,7 @@ function runExpLogic() {
             window.expLastDistImprovementTime = now;
         }
 
-       if (targetDist > 1) {
+     if (targetDist > 1) {
             expAttackLockUntil = 0; 
             
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
@@ -4488,35 +4488,34 @@ function runExpLogic() {
                 window.expLastMoveTx = target.x; 
                 window.expLastMoveTy = target.y;
                 
-                // Rejestrujemy czas startu i dystans
-                window.expTargetPursuitStart = now;
-                window.expPursuitLastDist = targetDist;
-                
-                // Dajemy silnikowi gry 500ms na faktyczne rozpoczęcie kroku, żeby uniknąć fałszywych alarmów
-                window.expMoveLockUntil = now + 500; 
-                expAntiLagTime = now + getAntiLagDelay(); 
+                // Zapisujemy fizyczną pozycję startową i czas
+                window.expPursuitLastX = hx;
+                window.expPursuitLastY = hy;
+                window.expLastPhysicalMoveTime = now;
             } else {
-                // --- ROZWIĄZANIE TWOJEGO POMYSŁU: ZATRZYMANIE Z DALA OD MOBA ---
-                // Jeśli postać fizycznie STOI (!isHeroMoving) i minął czas na start ruchu,
-                // ale potwór NADAL jest dalej niż 1 kratka - jesteśmy na skarpie/ścianie!
-                if (!isHeroMoving && now > window.expMoveLockUntil) {
-                    window.logExp(`🚨 Droga do [${target.nick}] urwana! (Utknął ${targetDist} kratek stąd). Czarna lista.`, "#ff5252");
+                // --- FIZYCZNE SPRAWDZANIE RUCHU ---
+                // Jeżeli postać zmieniła kratkę X lub Y, znaczy że fizycznie IDZIE!
+                if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
+                    window.expPursuitLastX = hx;
+                    window.expPursuitLastY = hy;
+                    window.expLastPhysicalMoveTime = now; // Resetujemy stoper, bo postać maszeruje!
+                }
+
+                // Liczymy, jak długo stoimy dokładnie na tej samej kratce
+                let timeStandingStill = now - window.expLastPhysicalMoveTime;
+
+                // Jeśli STOIMY w miejscu bez ruchu przez równe 2 sekundy - klif/ściana!
+                if (timeStandingStill > 2000) {
+                    window.logExp(`🚨 Droga zablokowana! (Stoję). Czarna lista.`, "#ff5252");
                     window.expUnreachableMobs.add(target.id);
                     expCurrentTargetId = null;
                     window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                     return;
                 }
 
-                // Zapasowy Anti-Ping-Pong (Brak zmniejszenia dystansu przez 3.5 sekundy)
-                if (targetDist < window.expPursuitLastDist) {
-                    window.expPursuitLastDist = targetDist;
-                    window.expTargetPursuitStart = now; // Resetujemy stoper bo postać idzie do przodu
-                } else if (now - window.expTargetPursuitStart > 3500) {
-                    window.logExp(`🚨 Zapętlenie w drodze do [${target.nick}]! Czarna lista.`, "#ff5252");
-                    window.expUnreachableMobs.add(target.id);
-                    expCurrentTargetId = null;
-                    window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                    return;
+                // Subtelne ponowienie kliknięcia po 1s stania (zapobiega lagom od strony serwera)
+                if (timeStandingStill > 1000 && (now % 1000 < 150)) {
+                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
                 }
             }
             expLastActionTime = now + 100;
