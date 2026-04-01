@@ -6117,4 +6117,67 @@ let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znale
             container.innerHTML = html;
         }
     });
+    // --- SILNIK GRAFICZNY CUSTOMOWYCH TOOLTIPÓW (Styl Margonem) ---
+    
+    // Tworzenie ukrytego okienka w HTML (tylko raz)
+    if (!document.getElementById('customMargoTooltip')) {
+        let tt = document.createElement('div');
+        tt.id = 'customMargoTooltip';
+        tt.style.cssText = 'display:none; position:absolute; z-index:999999; background:rgba(15,15,15,0.95); border:1px solid #a99a75; padding:6px 8px; border-radius:3px; box-shadow:0px 0px 10px rgba(0,0,0,0.9); pointer-events:none; font-family:Tahoma, sans-serif; min-width:180px; max-width:280px;';
+        document.body.appendChild(tt);
+    }
+
+    // Wyświetlanie tooltipa
+    document.addEventListener('mouseover', (e) => {
+        if (e.target && e.target.classList.contains('toggle-seller-btn')) {
+            let tt = document.getElementById('customMargoTooltip');
+            let name = e.target.getAttribute('data-name');
+            let rawStats = e.target.getAttribute('data-stats');
+            
+            if (tt && rawStats) {
+                // 1. Wycinamy nazwę z początku tekstu, żeby jej nie dublować
+                let desc = rawStats.replace(name, '').trim();
+                
+                // 2. Łamanie linii przed kluczowymi słowami (Pogrubienie)
+                desc = desc.replace(/Typ:/g, '<br><b style="color:#888;">Typ:</b>');
+                desc = desc.replace(/Wymagany poziom:/g, '<br><b style="color:#888;">Wymagany poziom:</b>');
+                desc = desc.replace(/Wymagana profesja:/g, '<br><b style="color:#888;">Wymagana profesja:</b>');
+                desc = desc.replace(/Wartość:/g, '<br><b style="color:#888;">Wartość:</b><span style="color:#ffca28;">');
+                
+                // 3. Kolorowanie rzadkości przedmiotów
+                desc = desc.replace(/Pospolity/g, '<span style="color:#aaa;">Pospolity</span><br>');
+                desc = desc.replace(/Unikat/g, '<span style="color:#fbc02d;">Unikat</span><br>');
+                desc = desc.replace(/Heroik/g, '<span style="color:#29b6f6;">Heroik</span><br>');
+                desc = desc.replace(/Legendarny/g, '<span style="color:#ef5350;">Legendarny</span><br>');
+                
+                // 4. Zielone statystyki (Wszystko z plusem)
+                desc = desc.replace(/(\+[0-9]+%?)/g, '<span style="color:#66bb6a;">$1</span>');
+                
+                // 5. Budowanie gotowego HTML
+                let html = `<div style="color:#ffca28; font-weight:bold; font-size:12px; border-bottom:1px solid #443c2c; padding-bottom:4px; margin-bottom:4px; text-align:center; text-shadow:1px 1px 0 #000;">${name}</div>`;
+                html += `<div style="color:#ddd; font-size:10px; line-height:1.5;">${desc}</span></div>`;
+                
+                tt.innerHTML = html;
+                tt.style.display = 'block';
+            }
+        }
+    });
+
+    // Podążanie tooltipa za kursorem
+    document.addEventListener('mousemove', (e) => {
+        let tt = document.getElementById('customMargoTooltip');
+        if (tt && tt.style.display === 'block') {
+            // Dodajemy mały offset (15px), żeby myszka nie zasłaniała tekstu
+            tt.style.left = (e.pageX + 15) + 'px';
+            tt.style.top = (e.pageY + 15) + 'px';
+        }
+    });
+
+    // Chowanie tooltipa po zjechaniu myszką
+    document.addEventListener('mouseout', (e) => {
+        if (e.target && e.target.classList.contains('toggle-seller-btn')) {
+            let tt = document.getElementById('customMargoTooltip');
+            if (tt) tt.style.display = 'none';
+        }
+    });
 })(); // Koniec kodu
