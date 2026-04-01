@@ -5933,7 +5933,7 @@ window.clearExpMaps = () => {
             potList.innerHTML = html;
         }
 
-        // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
+      // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
         if (e.target && e.target.classList.contains('toggle-seller-btn')) {
             let itemName = e.target.getAttribute('data-name');
             let index = e.target.getAttribute('data-index');
@@ -5975,7 +5975,12 @@ window.clearExpMaps = () => {
                             </div>`;
                     });
                     sellerDiv.innerHTML = sHtml;
+                } else {
+                    sellerDiv.innerHTML = `<span style="color:#777; font-size:9px;">Przedmiot nie występuje w sklepach (Drop z potworów).</span>`;
                 }
+                sellerDiv.style.display = 'block';
+            }
+        }
 
         // 6. ROZWIJANIE ASORTYMENTU WYSZUKIWARKI
         if (e.target && e.target.classList.contains('toggle-items-btn')) {
