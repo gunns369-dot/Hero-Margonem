@@ -215,8 +215,99 @@
 }
     };
 
+// ==========================================
+    // MODUŁ ZEWNĘTRZNYCH BAZ DANYCH (MargoWorld)
     // ==========================================
-    // BAZA DANYCH HEROSÓW
+    window.DatabaseModule = {
+        kupcy: [],
+        ekwipunek: [],
+
+        initDatabases: async function() {
+            try {
+                // TUTAJ WKLEJ LINKI RAW DO SWOICH PLIKÓW NA GITHUBIE:
+                let urlShops = 'https://twoj-serwer.pl/margoworld_shops_full_database.json';
+                let urlTooltips = 'https://twoj-serwer.pl/margoworld_tooltip_cache_full.json';
+
+                console.log("[Baza] Rozpoczęto pobieranie zewnętrznych baz danych...");
+                let [resShops, resEq] = await Promise.all([fetch(urlShops), fetch(urlTooltips)]);
+                let rawShops = await resShops.json();
+                let rawEq = await resEq.json();
+
+                this.parseShops(rawShops);
+                this.parseEq(rawEq);
+                console.log(`[Baza] Pomyślnie załadowano: ${this.kupcy.length} kupców i ${this.ekwipunek.length} przedmiotów!`);
+            } catch (e) {
+                console.error("[Baza] Błąd pobierania plików JSON. Sprawdź linki!", e);
+            }
+        },
+
+        parseShops: function(rawShops) {
+            let merchants = [];
+            for (let category in rawShops) {
+                let shopsInCategory = rawShops[category];
+                for (let shopUrl in shopsInCategory) {
+                    let shopData = shopsInCategory[shopUrl];
+                    if (shopData.shop_npcs) {
+                        shopData.shop_npcs.forEach(npc => {
+                            if (npc.maps) {
+                                npc.maps.forEach(mapObj => {
+                                    if (mapObj.coords) {
+                                        mapObj.coords.forEach(coord => {
+                                            merchants.push({
+                                                npc_name: npc.npc_name,
+                                                map_name: mapObj.map_name,
+                                                x: coord.x, y: coord.y,
+                                                category: shopData.category
+                                            });
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+            this.kupcy = merchants;
+        },
+
+        parseEq: function(rawEq) {
+            let items = [];
+            for (let itemUrl in rawEq) {
+                let itemData = rawEq[itemUrl];
+                if (itemData.required_level) {
+                    // Wyciąganie czystej nazwy
+                    let cleanName = itemData.name.split(" Typ:")[0].split(" Pospolity")[0].trim();
+                    items.push({
+                        name: cleanName,
+                        level: itemData.required_level,
+                        prof: itemData.allowed_professions || [],
+                        type: itemData.slot_type || "nieznany",
+                        url: itemUrl
+                    });
+                }
+            }
+            this.ekwipunek = items;
+        },
+
+        getRecommendedEq: function() {
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return [];
+            let myLvl = Engine.hero.d.lvl;
+            let myProfLetter = Engine.hero.d.prof; 
+            
+            // Mapowanie literek z gry na pełne nazwy z bazy MargoWorld
+            const profMap = { "w": "Wojownik", "m": "Mag", "t": "Tropiciel", "p": "Paladyn", "b": "Tancerz Ostrzy", "h": "Łowca" };
+            let fullProf = profMap[myProfLetter] || "";
+
+            return this.ekwipunek.filter(item => {
+                let isLevelOk = (item.level >= myLvl - 5) && (item.level <= myLvl + 5);
+                let isProfOk = item.prof.length === 0 || item.prof.includes(fullProf); // Jeśli puste to dla każdego (neutralne)
+                return isLevelOk && isProfOk;
+            }).sort((a, b) => a.level - b.level);
+        }
+    };
+
+    // Automatyczne załadowanie bazy 3 sekundy po włączeniu gry
+    setTimeout(() => window.DatabaseModule.initDatabases(), 3000);
     // ==========================================
     // BAZA DANYCH HEROSÓW
     // ==========================================
@@ -2382,8 +2473,13 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
 
-                <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:10px;">
-                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;" onclick="let p = document.getElementById('heroTeleportsGUI'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+               <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
+                    <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
+                    <button id="btnShowRecommendedEq" class="btn-sepia" style="padding:6px; background:#4caf50; font-weight:bold;">🎒 POKAŻ POLECANE EQ (-5 / +5 LVL)</button>
+                    
+                    <div id="recommendedEqList" style="flex:1; border:1px solid #3a3020; background:#141414; overflow-y:auto; padding:4px;">
+                        <span style="color:#777; font-size:10px; text-align:center; display:block;">Kliknij przycisk powyżej, by wczytać przedmioty z bazy...</span>
+                    </div>
                 </div>
         `;
 
@@ -3259,7 +3355,45 @@ selHero.addEventListener('change', (e) => {
                         }
                     }
                 });
+let btnShowEq = document.getElementById('btnShowRecommendedEq');
+        if (btnShowEq) {
+            btnShowEq.addEventListener('click', () => {
+                let container = document.getElementById('recommendedEqList');
+                if (!container) return;
+                
+                if (window.DatabaseModule.ekwipunek.length === 0) {
+                    container.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center; display:block;">Baza danych jest pusta lub nadal się ładuje. Upewnij się, że podałeś poprawne linki!</span>`;
+                    return;
+                }
 
+                let items = window.DatabaseModule.getRecommendedEq();
+                
+                if (items.length === 0) {
+                    container.innerHTML = `<span style="color:#777; font-size:10px; text-align:center; display:block;">Nie znaleziono odpowiedniego sprzętu dla Twojego poziomu i profesji.</span>`;
+                    return;
+                }
+
+                let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px;">Znaleziono ${items.length} pasujących przedmiotów:</div>`;
+                
+                items.forEach(item => {
+                    let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
+                    html += `
+                        <div class="list-item" style="flex-direction:column; align-items:flex-start; padding: 4px; border-left: 3px solid #d4af37;">
+                            <div style="display:flex; justify-content:space-between; width:100%;">
+                                <a href="${item.url}" target="_blank" style="color:#d4af37; font-weight:bold; font-size:11px; text-decoration:none;">${item.name}</a>
+                                <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
+                                <span style="color:#a99a75; font-size:9px;">Typ: ${item.type}</span>
+                                <span style="color:${profColor}; font-size:9px;">${item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły'}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            });
+        }
                 if(addedCount > 0) {
                     localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
                     
