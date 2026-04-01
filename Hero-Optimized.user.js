@@ -3941,7 +3941,15 @@ window.mapClearTimes = window.mapClearTimes || {};
     };
 
 
-
+window.logHero = function(msg, color="#a99a75") {
+        let consoleDiv = document.getElementById('heroConsole');
+        if (!consoleDiv) return;
+        let time = new Date().toLocaleTimeString('pl-PL', {hour12: false});
+        let entry = document.createElement('div');
+        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${msg}</span>`;
+        consoleDiv.appendChild(entry);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    };
 
 
 
