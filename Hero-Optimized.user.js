@@ -2691,7 +2691,7 @@ if (btnExp) {
             expMapEnteredAt = Date.now();
             expLastMapName = "";
             expCurrentMapOrderIndex = -1;
-
+window.expGlobalTargetMap = null;
             if (typeof window.logExp === 'function') {
                 window.logExp("Uruchomiono tryb automatyczny!", "#4caf50");
             }
@@ -4492,46 +4492,55 @@ function runExpLogic() {
 
     if (now < expMapTransitionCooldown) return;
 
-    let maps = botSettings.exp.mapOrder || [];
+let maps = botSettings.exp.mapOrder || [];
     if (!maps.length) return;
 
-    let currIndex = maps.indexOf(currMap);
-    let nextMap = null;
-
-    if (currIndex !== -1) {
-        expCurrentMapOrderIndex = currIndex;
-        window.mapClearTimes[currMap] = now;
-        let nextIndex = maps.length > 1 ? ((currIndex + 1) % maps.length) : currIndex;
-        nextMap = maps[nextIndex];
+    // === FIX: PAMIĘĆ GLOBALNEGO CELU TRASY ===
+    // Wymusza trzymanie się wyznaczonego celu, dopóki do niego nie dotrzemy!
+    if (!window.expGlobalTargetMap || window.expGlobalTargetMap === currMap || !maps.includes(window.expGlobalTargetMap)) {
+        window.expGlobalTargetMap = null;
+        let currIndex = maps.indexOf(currMap);
         
-        if (nextMap === currMap) {
-            if (now - expMapTransitionCooldown > 3000) {
-                window.logExp("Jedyna mapa na liście jest czysta. Czekam na resp...", "#777");
-                expMapTransitionCooldown = now + 3000;
+        if (currIndex !== -1) {
+            window.mapClearTimes[currMap] = now;
+            let nextIndex = maps.length > 1 ? ((currIndex + 1) % maps.length) : currIndex;
+            window.expGlobalTargetMap = maps[nextIndex];
+            
+            if (window.expGlobalTargetMap === currMap) {
+                if (now - expMapTransitionCooldown > 3000) {
+                    window.logExp("Jedyna mapa na liście jest czysta. Czekam na resp...", "#777");
+                    expMapTransitionCooldown = now + 3000;
+                }
+                return;
             }
-            return;
-        }
-    } else {
-        let bestPath = null;
-        for (let m of maps) {
-            let p = getShortestPath(currMap, m);
-            if (p && (!bestPath || p.length < bestPath.length)) {
-                bestPath = p;
-                nextMap = m;
+            window.logExp(`[Trasa] Następny cel wyznaczony: ${window.expGlobalTargetMap}`, "#ffb300");
+        } else {
+            // Jeśli zabłądziliśmy, szukamy najbliższej mapy z naszej trasy
+            let bestPath = null;
+            for (let m of maps) {
+                let p = getShortestPath(currMap, m);
+                if (p && (!bestPath || p.length < bestPath.length)) {
+                    bestPath = p;
+                    window.expGlobalTargetMap = m;
+                }
             }
-        }
 
-        if (!nextMap) {
-            window.logExp(`Brak drogi na expowisko! Zapisz przejścia skanerem!`, "#e53935");
-            expMapTransitionCooldown = now + 4000;
-            return;
+            if (!window.expGlobalTargetMap) {
+                window.logExp(`Brak drogi na expowisko! Zapisz przejścia skanerem!`, "#e53935");
+                expMapTransitionCooldown = now + 4000;
+                return;
+            }
+            window.logExp(`[Trasa] Wracam na expowisko: ${window.expGlobalTargetMap}`, "#ffb300");
         }
     }
+
+    let nextMap = window.expGlobalTargetMap;
 
     let path = getShortestPath(currMap, nextMap);
     if (!path || path.length <= 1) {
         window.logExp(`Błąd trasy do: ${nextMap}`, "#e53935");
         expMapTransitionCooldown = now + 2000;
+        window.expGlobalTargetMap = null; // Reset uszkodzonego celu
         return;
     }
 
