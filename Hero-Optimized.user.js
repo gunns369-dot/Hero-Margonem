@@ -4745,7 +4745,7 @@ function runExpLogic() {
                 if (expCurrentTargetId !== target.id) {
                     window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
-                    window.expTargetLockTime = now + 8000; // 8 SEKUND TWARDEJ BLOKADY!
+                    window.expTargetLockTime = now + 4000; // 4 SEKUNDy TWARDEJ BLOKADY!
                 }
 
                 
