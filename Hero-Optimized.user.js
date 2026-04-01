@@ -6347,7 +6347,7 @@ window.clearExpMaps = () => {
                     }
                 }
 
-                // 2. FIZYCZNE KUPNO W SKLEPIE (Gdy okno sklepu się pokaże)
+                // 2. KUPNO W SKLEPIE (Bezpośredni strzał w silnik gry)
                 if (Engine.shop && Engine.shop.items) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window');
                     
@@ -6356,48 +6356,27 @@ window.clearExpMaps = () => {
                         let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
                         
                         if (itemToBuy) {
-                            if (window.logHero) window.logHero(`💸 Wybieram: ${window.autoBuyTask.item}...`, "#8bc34a");
+                            if (window.logHero) window.logHero(`💸 Odnaleziono: ${window.autoBuyTask.item}...`, "#8bc34a");
                             
-                            // ETAP A: Zaznaczenie przedmiotu na liście
-                            let itemElement = shopWrapper.querySelector(`[data-id="${itemToBuy.id}"]`) || shopWrapper.querySelector(`.item-slot[data-id="${itemToBuy.id}"]`);
-                            if (itemElement) {
-                                itemElement.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                                itemElement.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                                if (typeof itemElement.click === 'function') itemElement.click();
-                            }
-
-                            // Zapisujemy cel do tymczasowej zmiennej i usuwamy zadanie główne, żeby nie zapętlać
                             let finalAmount = window.autoBuyTask.amount;
                             let finalItemId = itemToBuy.id;
-                            window.autoBuyTask = null; 
-
-                            // ETAP B: Wpisanie ilości i kliknięcie "KUP" (Po krótkim opóźnieniu na animację okna)
-                            let buyDelay = Math.floor(Math.random() * 401) + 500; // 500-900ms
+                            window.autoBuyTask = null; // Usuwamy zadanie, żeby się nie zapętliło
+                            
+                            // Humanizacja: Czekamy chwilę na załadowanie grafik w sklepie (600-1000ms)
+                            let buyDelay = Math.floor(Math.random() * 401) + 600; 
+                            
                             setTimeout(() => {
-                                // Szukamy pola na wpisanie sztuk
-                                let amountInput = shopWrapper.querySelector('input[type="text"], input[type="number"], .amount-input, .buy-amount');
-                                if (amountInput) {
-                                    amountInput.value = finalAmount;
-                                    amountInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                    amountInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                }
-
-                                // Szukamy przycisku kupna
-                                let buttons = Array.from(shopWrapper.querySelectorAll('.button, .btn, .green, .buy-btn'));
-                                let buyBtn = buttons.find(b => {
-                                    let t = (b.innerText || b.textContent || "").toLowerCase();
-                                    return t.includes('kup') || t.includes('akceptuj') || t.includes('tak');
-                                });
-
-                                if (buyBtn) {
-                                    if (typeof buyBtn.click === 'function') buyBtn.click();
-                                } else {
-                                    // Jeśli UI całkowicie się zmieniło, awaryjnie uderzamy w serwer
-                                    if (typeof window._g === 'function') window._g(`shop&buy=${finalItemId}&amount=${finalAmount}`);
+                                // WYSYŁAMY PAKIET KUPNA "KUP WIĘCEJ" PROSTO DO SERWERA (Zamiast klikać po UI)
+                                if (typeof Engine.communicator !== 'undefined' && typeof Engine.communicator.send === 'function') {
+                                    Engine.communicator.send(`shop&buy=${finalItemId}&amount=${finalAmount}`);
+                                } else if (typeof window._t !== 'undefined' && typeof window._t.send === 'function') {
+                                    window._t.send(`shop&buy=${finalItemId}&amount=${finalAmount}`); // Fallback SI
                                 }
                                 
-                                // ETAP C: Zamknięcie sklepu i powrót
-                                let closeDelay = Math.floor(Math.random() * 501) + 600; // 600-1100ms
+                                if (window.logHero) window.logHero(`✅ Zakupiono ${finalAmount} sztuk!`, "#4caf50");
+
+                                // Zamknięcie sklepu po krótkim odstępie czasu (600-1100ms)
+                                let closeDelay = Math.floor(Math.random() * 501) + 600; 
                                 setTimeout(() => { 
                                     if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
                                     let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close');
