@@ -4261,11 +4261,12 @@ function runExpLogic() {
 
     if (now < expLastActionTime) return;
 
-    // 1. Ochrona podczas walki
+  // 1. Ochrona podczas walki
     try {
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
             expCurrentTargetId = null;
+            expLastTargetSwitchAt = 0; // Reset blokady po walce
             expEmptyScans = 0;
             expAttackLockUntil = 0; 
             window.expLastMoveTx = -1; 
@@ -4376,7 +4377,7 @@ function runExpLogic() {
         return a.manhattan - b.manhattan;
     });
 
-    // --- LOGIKA CHODZENIA DO MOBÓW ---
+// --- LOGIKA CHODZENIA DO MOBÓW ---
     if (availableMobs.length > 0) {
         
         if (expEmptyScans > 0) {
@@ -4392,18 +4393,24 @@ function runExpLogic() {
         if (expCurrentTargetId) {
             let currentTarget = availableMobs.find(m => String(m.id) === String(expCurrentTargetId));
             if (currentTarget) {
-                if (bestTarget.dist < currentTarget.dist) {
+                // BLOKADA CZASOWA: Zmienia cel tylko, jeśli minęło 4.5 sekundy od ostatniej zmiany.
+                // Eliminuje to tzw. ping-pong, gdy dwa potwory są w podobnej odległości.
+                if (bestTarget.id !== currentTarget.id && bestTarget.dist < currentTarget.dist && now > expLastTargetSwitchAt + 4500) {
                     target = bestTarget;
-                    if (target.id !== currentTarget.id) window.logExp(`🔄 Zmieniam cel na bliższy: ${target.nick}`, "#00e5ff");
+                    expLastTargetSwitchAt = now; // Zapisujemy czas zmiany celu
+                    window.logExp(`🔄 Zmieniam cel na bliższy: ${target.nick}`, "#00e5ff");
                 } else {
-                    target = currentTarget;
+                    target = currentTarget; // Trzymaj się obecnego celu
                 }
             } else {
+                // Obecny cel zniknął (np. ktoś go zabił) - bierzemy od razu nowy
                 target = bestTarget; 
+                expLastTargetSwitchAt = now;
                 window.logExp(`🏃 Nowy cel: ${target.nick}`, "#00e5ff");
             }
         } else {
             target = bestTarget;
+            expLastTargetSwitchAt = now;
             window.logExp(`🏃 Namierzono: ${target.nick}`, "#00e5ff");
         }
 
