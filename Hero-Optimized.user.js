@@ -5150,15 +5150,5 @@ window.clearExpMaps = () => {
         }
     };
 
-    let btnOpenTp = document.getElementById('btnOpenTeleports');
-    if (btnOpenTp) {
-        btnOpenTp.addEventListener('click', () => {
-            let p = document.getElementById('heroTeleportsGUI');
-            p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
-            if(p.style.display === 'flex' && typeof window.renderTeleportOptions === 'function') {
-                window.renderTeleportOptions();
-            }
-        });
-    }
 
 })(); // Koniec kodu
