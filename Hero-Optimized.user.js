@@ -2241,7 +2241,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
                     <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
                     <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
-                    <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;"><span class="btn-icon">✖</span></button>
+                   <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;" onclick="window.toggleMainVisibility()"><span class="btn-icon">✖</span></button>
                 </div>
             </div>
 
