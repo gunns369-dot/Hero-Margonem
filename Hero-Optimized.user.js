@@ -4371,6 +4371,13 @@ function runExpLogic() {
     }
 
 // --- POPRAWIONA SEKCJA SKANOWANIA POTWORÓW ---
+window.expUnreachableMobs = window.expUnreachableMobs || new Set();
+
+// Czyszczenie czarnej listy przy zmianie mapy
+if (expLastMapName !== currMap) {
+    window.expUnreachableMobs.clear();
+}
+
 const arr = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
 let availableMobs = [];
 
@@ -4381,25 +4388,22 @@ arr.forEach(npcObj => {
     let n = npcObj?.d || npcObj;
     if (!n) return;
     
-    // Ignorujemy martwe, dekoracje (type 4) i NPC (type 0/1)
-    if (n.dead || n.del || n.type === 4 || n.type < 2) return;
+    // Ignorujemy martwe, dekoracje, NPC oraz MOBY NA CZARNEJ LIŚCIE (za ścianą)
+    if (n.dead || n.del || n.type === 4 || n.type < 2 || window.expUnreachableMobs.has(n.id)) return;
 
     let lvl = parseInt(n.lvl, 10);
     if (isNaN(lvl) || lvl <= 0) return;
     if (lvl < minL || lvl > maxL) return;
 
-    // --- NOWA LOGIKA KLASYFIKACJI (Na podstawie Twoich danych) ---
     let wt = parseInt(n.wt, 10);
-    let ranga = "normal"; // Domyślnie zwykły (type 3)
+    let ranga = "normal"; 
 
     if (n.type === 2) {
-        // Skoro type = 2, to na pewno jest to Elita lub wyżej
         if (wt === 11 || wt === 1) ranga = "elite1"; 
         else if (wt === 12 || wt === 2) ranga = "elite2";
         else if (wt >= 13 || wt >= 3) ranga = "hero";
     }
 
-    // --- FILTROWANIE ZGODNIE Z TWOIMI USTAWIENIAMI ---
     if (ranga === "normal" && !wantNormal) return;
     if (ranga === "elite1" && !wantElite) return;
     if (ranga === "elite2" && !bE2) return;
@@ -4422,37 +4426,29 @@ arr.forEach(npcObj => {
     if (availableMobs.length > 0) {
         
         if (expEmptyScans > 0) {
-            window.logExp(`✨ Zauważono nowy resp! Czekam 2 sekundy...`, "#8bc34a");
+            window.logExp(`✨ Zauważono nowy resp! Czekam...`, "#8bc34a");
             expEmptyScans = 0; 
             expLastActionTime = now + 2000;
             return;
         }
 
-        // 1. Zgrubne sortowanie w linii prostej (odrzucamy to co jest fizycznie daleko na mapie)
         availableMobs.sort((a, b) => a.manhattan - b.manhattan);
 
-        // 2. Wyliczamy PRAWDZIWĄ odległość pieszą (omijanie ścian) dla maks 12 najbliższych mobów (dla optymalizacji i braku lagów)
         let maxToCheck = Math.min(12, availableMobs.length);
         for(let i = 0; i < maxToCheck; i++) {
-            // maxDepth = 60 kratek, wystarczy by znaleźć drogę
             availableMobs[i].realDist = window.getRealWalkingDistance(hx, hy, availableMobs[i].x, availableMobs[i].y, 60);
         }
         
-        // Zabezpieczenie dla potworów poza pierwszą dwunastką (traktujemy je jako dużo dalsze)
         for(let i = maxToCheck; i < availableMobs.length; i++) {
             availableMobs[i].realDist = availableMobs[i].manhattan + 1000;
         }
 
-        // 3. Odrzucamy wszystkie potwory znajdujące się całkowicie za nieprzekraczalną ścianą (Infinity)
         let reachableMobs = availableMobs.filter(m => m.realDist !== Infinity);
 
         if (reachableMobs.length === 0) {
-            // Widzimy potwory, ale ŻADEN nie jest w naszym zasięgu chodu! (np. wszystkie na dnie klifu)
-            window.logExp(`Potwory w pobliżu są niedostępne (za ścianą). Szukam dalej...`, "#ff9800");
-            // Odpalamy Smart-Roam (przeskok do sekcji podspodem symulując pustą mapę)
+            window.logExp(`Potwory w pobliżu są za ścianą. Szukam dalej...`, "#ff9800");
             availableMobs = []; 
         } else {
-            // Sortujemy OSTATECZNIE po PRAWDZIWYM czasie dotarcia omijającym przeszkody!
             reachableMobs.sort((a, b) => a.realDist - b.realDist);
 
             let bestTarget = reachableMobs[0]; 
@@ -4493,14 +4489,38 @@ arr.forEach(npcObj => {
                     Engine.hero.autoGoTo({ x: target.x, y: target.y });
                     window.expLastMoveTx = target.x;
                     window.expLastMoveTy = target.y;
-                    // Randomizacja od 2 do 3.5 sekundy
+                    
+                    // --- NOWOŚĆ: SYSTEM ANTI-STUCK ---
+                    // Zapisujemy moment startu i koordynaty, żeby sprawdzić czy się ruszymy
+                    window.expTargetPursuitStart = now;
+                    window.expPursuitLastX = hx;
+                    window.expPursuitLastY = hy;
+
                     window.expMoveLockUntil = now + Math.floor(Math.random() * 1500) + 2000; 
                     expAntiLagTime = now + getAntiLagDelay(); 
-                } else if (!isHeroMoving && now > window.expMoveLockUntil) {
-                    // Postać zacięła się na drodze, ponów kliknięcie
-                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                    window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
-                    expAntiLagTime = now + getAntiLagDelay(); 
+                } else {
+                    // Sprawdzamy czy postać się zawiesiła (Brak ruchu przez 2 sekundy)
+                    if (now - window.expTargetPursuitStart > 2000) {
+                        if (hx === window.expPursuitLastX && hy === window.expPursuitLastY) {
+                            window.logExp(`🚨 Potwór [${target.nick}] jest za klifem/ścianą! Ignoruję go.`, "#ff5252");
+                            window.expUnreachableMobs.add(target.id);
+                            
+                            expCurrentTargetId = null;
+                            window.expLastMoveTx = -1;
+                            window.expLastMoveTy = -1;
+                            return;
+                        }
+                        // Jeśli się ruszył chociaż o kratkę, odświeżamy stoper
+                        window.expTargetPursuitStart = now;
+                        window.expPursuitLastX = hx;
+                        window.expPursuitLastY = hy;
+                    }
+
+                    if (!isHeroMoving && now > window.expMoveLockUntil) {
+                        Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                        window.expMoveLockUntil = now + Math.floor(Math.random() * 1000) + 2000;
+                        expAntiLagTime = now + getAntiLagDelay(); 
+                    }
                 }
                 
                 expLastActionTime = now + 100;
@@ -4522,7 +4542,7 @@ arr.forEach(npcObj => {
                 if (expAttackLockUntil === 0) {
                     expAttackLockUntil = now + (isBerserkActive ? 2500 : 0);
                 } else if (now > expAttackLockUntil) {
-                    window.logExp(`Zacięcie przy walce z: ${target.nick}. Odbiegam kawałek...`, "#ff9800");
+                    window.logExp(`Zacięcie przy walce z: ${target.nick}. Odbiegam...`, "#ff9800");
                     
                     let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                     let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
@@ -4538,8 +4558,7 @@ arr.forEach(npcObj => {
             return;
         }
     }
-
-    // --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
+// --- SMART ROAM (PULA MAP BEZ KOLEJNOŚCI) ---
     if (now - expMapEnteredAt < 1200) {
         expLastActionTime = now + 120;
         return;
