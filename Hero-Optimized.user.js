@@ -4236,6 +4236,7 @@ window.expLastMoveTx = -1;
 window.expLastMoveTy = -1;
 window.expMoveLockUntil = 0;
 window.expUnreachableMobs = window.expUnreachableMobs || new Set();
+window.expLastFightTime = window.expLastFightTime || Date.now(); // NOWOŚĆ: Główny stoper czasu bez walki
 
 function runExpLogic() {
     if (!window.isExping) return;
@@ -4252,6 +4253,7 @@ function runExpLogic() {
 
     if (now < expLastActionTime) return;
 
+    // --- ZABEZPIECZENIE WALKI ---
     try {
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
@@ -4260,6 +4262,7 @@ function runExpLogic() {
             expEmptyScans = 0;
             expAttackLockUntil = 0; 
             window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+            window.expLastFightTime = now; // RESET STOPERA (Walka trwa!)
             return;
         }
     } catch (e) {}
@@ -4270,9 +4273,9 @@ function runExpLogic() {
     const maxL = parseInt(document.getElementById('expMaxL')?.value || botSettings.exp.maxLvl, 10);
     const displayTarget = document.getElementById('expTargetDisplay');
     
-    // Zmienna wbudowana w silnik NI określająca czy postać się porusza
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
 
+    // --- WEJŚCIE NA NOWĄ MAPĘ ---
     if (expLastMapName !== currMap) {
         window.expLastVisitedMap = expLastMapName; 
         expLastMapName = currMap;
@@ -4282,7 +4285,8 @@ function runExpLogic() {
         expAttackLockUntil = 0;
         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
-        window.expUnreachableMobs.clear(); // Czyścimy czarną listę na nowej mapie
+        window.expUnreachableMobs.clear(); // Reset czarnej listy na nowej mapie
+        window.expLastFightTime = now; // Reset stopera na wejściu
     }
 
     const isOnGateway = (x, y) => {
@@ -4321,7 +4325,7 @@ function runExpLogic() {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
         
-        // 🚨 KLUCZOWE: Omijamy zablokowane potwory wpisane na czarną listę!
+        // KLUCZOWE: Omijamy potwory z czarnej listy!
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
@@ -4346,15 +4350,35 @@ function runExpLogic() {
         });
     });
 
-    // Sortujemy: najpierw Elity, potem najkrótszy dystans
+    if (rawMobs.length === 0) {
+        window.expLastFightTime = now; // Pauzujemy stoper, gdy nie ma wrogów
+    } else {
+        // --- MASTER TIMEOUT (Ewakuacja 25s) ---
+        if (now - window.expLastFightTime > 25000) {
+            window.logExp(`⏳ Brak walki przez 25s! Zablokowane moby dodaję do ignorowanych.`, "#ffb300");
+            rawMobs.forEach(m => window.expUnreachableMobs.add(m.id)); // Masowo na czarną listę
+            rawMobs = []; 
+            window.expLastFightTime = now;
+        }
+    }
+
+    // --- SORTOWANIE Z LOJALNOŚCIĄ (ANTI PING-PONG) ---
     rawMobs.sort((a, b) => {
+        // 1. Priorytet: Elity
         let aElite = (a.ranga !== "normal") ? 1 : 0;
         let bElite = (b.ranga !== "normal") ? 1 : 0;
         if (aElite !== bElite) return bElite - aElite;
+
+        // 2. Priorytet: OBECNY CEL (Trzymamy się go jak rzep psiego ogona!)
+        let aCurrent = (a.id === expCurrentTargetId) ? 1 : 0;
+        let bCurrent = (b.id === expCurrentTargetId) ? 1 : 0;
+        if (aCurrent !== bCurrent) return bCurrent - aCurrent;
+
+        // 3. W ostateczności Dystans (liczony tylko dla nowych, wolnych celów)
         return a.dist - b.dist;
     });
 
-// --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
+    // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (rawMobs.length > 0) {
         let target = rawMobs[0];
         const targetDist = target.dist;
@@ -4369,42 +4393,40 @@ function runExpLogic() {
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
             if (isNewDestination) {
-                // NOWY CEL! Zapisujemy jego dane i wydajemy komendę
-                window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
+                // Ustawienie i logowanie nowego celu tylko raz!
+                if (expCurrentTargetId !== target.id) {
+                    window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
+                    expCurrentTargetId = target.id;
+                }
                 
+                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
                 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-                window.expTargetPursuitStart = now; // Zaczynamy liczyć czas od momentu kliknięcia
-                
-                window.expMoveLockUntil = now + 1000; // Dajemy postaci 1 sekundę na rozpoczęcie marszu
+                window.expTargetPursuitStart = now;
+                window.expMoveLockUntil = now + 600; 
             } else {
-                // KONTROLA RUCHU FIZYCZNEGO
                 if (now > window.expMoveLockUntil) {
-                    
-                    // Jeśli postać fizycznie zmieniła kratkę = idzie! Resetujemy stoper zacięcia.
-                    if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
-                        window.expPursuitLastX = hx; 
-                        window.expPursuitLastY = hy;
-                        window.expTargetPursuitStart = now; 
-                    }
-                    
-                    let timeStandingStill = now - window.expTargetPursuitStart;
-
-                    // 🚨 ZŁOTY WARUNEK: Jeśli postać stoi fizycznie w miejscu przez ponad 1.5 sekundy, a cel nadal jest daleko!
-                    if (timeStandingStill > 1500) {
-                        window.logExp(`🚨 Zatrzymano na [${hx}, ${hy}]. Mob [${target.nick}] niedostępny. Czarna lista.`, "#ff5252");
+                    // Jeśli postać fizycznie zatrzymała się daleko od celu (niedostępny mob)
+                    if (!isHeroMoving) {
+                        window.logExp(`🚨 Utknięto przy: ${target.nick}. Omijam go.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
                         expCurrentTargetId = null;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         return;
                     }
 
-                    // Co jakiś czas przypominamy silnikowi o ruchu, żeby uniknąć laga serwera
-                    if (timeStandingStill > 1000 && (now % 1000 < 150)) {
-                        Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                    // Reset stopera, jeśli postać idzie
+                    if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
+                        window.expPursuitLastX = hx; window.expPursuitLastY = hy;
+                        window.expTargetPursuitStart = now; 
+                    } else if (now - window.expTargetPursuitStart > 3000) {
+                        window.logExp(`🚨 Zapętlenie kroku. Omijam: ${target.nick}.`, "#ff5252");
+                        window.expUnreachableMobs.add(target.id);
+                        expCurrentTargetId = null;
+                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                        return;
                     }
                 }
             }
@@ -4412,7 +4434,7 @@ function runExpLogic() {
             return;
         }
 
-        // --- WALKA (Jesteśmy obok celu) ---
+        // WALKA (Odległość 1 kratka lub 0)
         if (targetDist <= 1) {
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
@@ -4443,18 +4465,17 @@ function runExpLogic() {
     let mapsPool = botSettings.exp.mapOrder || [];
     if (!mapsPool.length) return;
 
-    // Oznacz obecną mapę jako "czystą" na ten cykl
     window.mapClearTimes[currMap] = now;
     let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m] && m !== currMap);
 
     if (uncheckedMaps.length === 0) {
-        window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s...", "#ffb300");
-        expMapTransitionCooldown = now + 45000; // Reset pętli, postać grzecznie czeka
+        window.logExp("⏳ Wszystkie mapy wyczyszczone. Czekam 45s...", "#ffb300");
+        expMapTransitionCooldown = now + 45000; 
         window.mapClearTimes = {}; 
+        window.expLastFightTime = now;
         return;
     }
 
-    // Szukamy najlepszej bramy tranzytowej na mapie
     let gateways = globalGateways[currMap] || {};
     let nextStepMap = null;
     let targetGateway = null;
@@ -4510,33 +4531,28 @@ function runExpLogic() {
                 window.expLastMoveTx = dx; window.expLastMoveTy = dy;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
                 window.expTargetPursuitStart = now;
-                window.expMoveLockUntil = now + 1000;
+                window.expMoveLockUntil = now + 600;
             } else if (now > window.expMoveLockUntil) {
                 
-                // Taka sama ochrona fizyczna dla przejść przez bramy
                 if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
                     window.expPursuitLastX = hx; window.expPursuitLastY = hy;
                     window.expTargetPursuitStart = now;
                 }
-                
                 let timeStandingStill = now - window.expTargetPursuitStart;
                 
                 if (timeStandingStill > 2000) {
-                    window.logExp(`🚨 Oznaczona brama zablokowana!`, "#ff5252");
+                    window.logExp(`🚨 Brama zablokowana! Wykorzystaj skaner przejść.`, "#ff5252");
                     expMapTransitionCooldown = now + 4000;
                     window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                     return;
                 }
 
-                if (timeStandingStill > 1000 && (now % 1000 < 150)) {
-                    Engine.hero.autoGoTo({ x: dx, y: dy }); 
-                }
+                if (timeStandingStill > 1000 && (now % 1000 < 150)) Engine.hero.autoGoTo({ x: dx, y: dy }); 
             }
             expLastActionTime = now + 100;
             return;
         }
 
-        // Wejście w bramę
         if (hx === dx && hy === dy) {
             if (!window.expGatewayArrivalTime) {
                 window.expGatewayArrivalTime = now; Engine.hero.autoGoTo({ x: dx, y: dy }); 
