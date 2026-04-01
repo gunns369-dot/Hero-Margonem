@@ -4498,10 +4498,6 @@ function runExpLogic() {
 
     if (now < expLastActionTime) return;
 
-
-
-    try {
-
      try {
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
