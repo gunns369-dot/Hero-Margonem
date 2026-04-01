@@ -2715,15 +2715,7 @@ window.expGlobalTargetMap = null;
         }
     });
 }
-window.logHero = function(msg, color="#a99a75") {
-        let consoleDiv = document.getElementById('heroConsole');
-        if (!consoleDiv) return;
-        let time = new Date().toLocaleTimeString('pl-PL', {hour12: false});
-        let entry = document.createElement('div');
-        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${msg}</span>`;
-        consoleDiv.appendChild(entry);
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
-    };
+
         // ZAPISYWANIE USTAWIEŃ EXP I REAGOWANIE NA ZMIANY
 
         document.getElementById('expMinL').onchange = (e) => { botSettings.exp.minLvl = parseInt(e.target.value) || 1; saveSettings(); if(botSettings.exp.useAggro) window.toggleNativeAggroVisuals(true); };
@@ -3694,527 +3686,169 @@ function optimizeRoute() {
 
 
 
- function stopPatrol(hardStop = false) {
-
-
-
+function stopPatrol(hardStop = false) {
         isPatrolling = false;
-
-
-
         isRushing = false;
-
-
-
         clearTimeout(rushInterval);
 
-
-
-
-
-
-
         let btn = document.getElementById('btnStartStop');
-
-
-
         if (btn) {
-
-
-
             btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>';
-
-
-
             btn.style.color = "#4caf50";
-
-
-
             btn.style.borderColor = "#4caf50";
-
-
-
         }
-
-
-
         checkedPoints.clear();
-
-
-
         clearTimeout(smoothPatrolInterval);
-
-
-
         renderCordsList(-1);
-
-
-
-
-
-
+        
+        window.logHero("Zatrzymano patrol.", "#f44336");
 
         if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-
-
-
             try {
-
-
-
                 if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-
-
-
                 Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
-
-
-
                 if (Engine.hero.d.path) Engine.hero.d.path = [];
-
-
-
             } catch(e) {}
-
-
-
         }
-
-
-
     }
-
-
-
-
-
-
 
     function startPatrol() {
-
-
-
-        let hero = document.getElementById('selHero').value; let mapList = heroMapOrder[hero];
-
-
+        let hero = document.getElementById('selHero').value; 
+        let mapList = heroMapOrder[hero];
+        if (!hero) { window.logHero("Błąd: Nie wybrano herosa z listy!", "#e53935"); return; }
 
         if (hero && mapList) {
-
-
-
             let currentSysMap = lastMapName;
-
-
-
-            if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) { currentRouteIndex = mapList.indexOf(currentSysMap); sessionStorage.setItem('hero_route_index', currentRouteIndex); updateUI(); }
-
-
-
+            if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) { 
+                currentRouteIndex = mapList.indexOf(currentSysMap); 
+                sessionStorage.setItem('hero_route_index', currentRouteIndex); 
+                updateUI(); 
+            }
         }
-
-
-
         isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
-
-
-
-        let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; executePatrolStep();
-
-
-
+        let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; 
+        
+        window.logHero(`Rozpoczęto patrol (Heros: ${hero}).`, "#4caf50");
+        executePatrolStep();
     }
-
-
-
-
-
-
 
     function executePatrolStep() {
-
-
-
         if (!isPatrolling) return;
-
-
-
-
-
-
-
         checkVisionRange();
 
-
-
-
-
-
-
-        while (patrolIndex < currentCordsList.length && checkedPoints.has(patrolIndex)) {
-
-
-
-            patrolIndex++;
-
-
-
+        // BEZWZGLĘDNA WERYFIKACJA KOORDYNATÓW (Szuka pierwszego NIEODWIEDZONEGO punktu)
+        let nextUnvisitedIndex = -1;
+        for (let i = 0; i < currentCordsList.length; i++) {
+            if (!checkedPoints.has(i)) {
+                nextUnvisitedIndex = i;
+                break;
+            }
         }
-
-
-
-
-
-
+        patrolIndex = nextUnvisitedIndex;
 
         let hero = document.getElementById('selHero').value;
-
-
-
         let currentSysMap = lastMapName;
 
-
-
-
-
-
-
-        if (patrolIndex >= currentCordsList.length || currentCordsList.length === 0) {
-
-
-
+        // Jeśli indeks to -1, oznacza to, że ŻADEN punkt na liście nie pozostał do sprawdzenia
+        if (patrolIndex === -1 || currentCordsList.length === 0) {
             clearTimeout(smoothPatrolInterval);
-
-
-
-
-
-
-
             if (!checkedMapsThisSession.has(currentSysMap)) { checkedMapsThisSession.add(currentSysMap); saveCheckedMaps(); }
 
-
-
-
-
-
+            window.logHero(`Odhaczono wszystkie kordy na: ${currentSysMap}`, "#8bc34a");
 
             if(hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0) {
-
-
-
                 let mapList = heroMapOrder[hero];
-
-
-
-
-
-
-
                 let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
-
-
-
                 let finalDestinationMap = mapList[nextRouteIndex];
 
-
-
-
-
-
-
-              let path = getShortestPath(currentSysMap, finalDestinationMap);
-
-
-
+                let path = getShortestPath(currentSysMap, finalDestinationMap);
                 if (path && path.length > 1) {
-
                     let immediateNextMap = path[1];
-
                     let tp = ZAKONNICY[currentSysMap];
-
                     let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
-
                     let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-
                     let isTeleport = tp && (botSettings.unlockedTeleports[immediateNextMap] || isFakeDoor);
 
-
-
                     if (isTeleport) {
-
-                        console.log(`%c[HERO] Koniec respów na mapie. Teleport w patrolu do [${immediateNextMap}]...`, "color: #9c27b0;");
-
+                        window.logHero(`Zmieniam mapę. Teleportacja do: [${immediateNextMap}]...`, "#9c27b0");
                         clearTimeout(smoothPatrolInterval);
-
                         smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(immediateNextMap), 200);
-
                         return;
-
                     } else if (door) {
-
                         let targetX = door.x; let targetY = door.y;
-
                         if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
 
-
-
+                        window.logHero(`Zmieniam mapę. Przechodzę do: [${immediateNextMap}]`, "#00acc1");
                         safeGoTo(targetX, targetY, false);
-
                         return;
-
                     }
-
                 }
 
-
-
-
-
-
-
                 stopPatrol(true);
-
-
-
                 let fallbackMissing = path ? path[1] : finalDestinationMap;
-
-
-
-                heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy (wyjścia/powroty z podziemi). Kliknij 🎥 Nagrywam i przejdź tam!`);
-
-
-
+                window.logHero(`❌ BRAK PRZEJŚCIA z [${currentSysMap}] do [${fallbackMissing}]! Wymagany skan.`, "#e53935");
+                heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy. Kliknij 🎥 Nagrywam i przejdź tam!`);
                 return;
-
-
-
             }
 
-
-
-
-
-
-
-            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true); heroAlert("✅ Trasa zrobiona!"); return;
-
-
-
+            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true); 
+            window.logHero(`✅ Pętla ukończona!`, "#4caf50");
+            heroAlert("✅ Trasa zrobiona!"); return;
         }
 
-
-
-
-
-
-
         renderCordsList(patrolIndex);
-
-
-
         let target = currentCordsList[patrolIndex];
-
-
-
+        
+        window.logHero(`Biegnę pod kord: [${target[0]}, ${target[1]}]`, "#d4af37");
         safeGoTo(target[0], target[1], true);
-
-
-
         stuckCount = 0; clearTimeout(smoothPatrolInterval);
 
-
-
-
-
-
-
         let pingDelay = Math.floor(Math.random() * (botSettings.stepMax - botSettings.stepMin + 1)) + botSettings.stepMin;
-
-
-
         smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
-
-
-
     }
 
-
-
-
-
-
-
     function checkSmoothArrival() {
-
-
-
         if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d) return;
-
-
-
-
-
-
-
         checkVisionRange();
-
-
-
-
-
-
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
 
-
-
-
-
-
-
         if (checkedPoints.has(patrolIndex)) {
-
-
-
             clearTimeout(smoothPatrolInterval);
-
-
-
-            patrolIndex++;
-
-
-
+            window.logHero(`Kord zaliczony z zasięgu wzroku.`, "#8bc34a");
             executePatrolStep();
-
-
-
             return;
-
-
-
         }
-
-
-
-
-
-
 
         let target = currentCordsList[patrolIndex];
-
-
-
         let dist = Math.abs(cx - target[0]) + Math.abs(cy - target[1]);
 
-
-
-
-
-
-
         if (dist <= 1) {
-
-
-
             clearTimeout(smoothPatrolInterval);
-
-
-
             checkedPoints.add(patrolIndex);
-
-
-
-
-
-
+            window.logHero(`Dotarłem do [${target[0]}, ${target[1]}]. Punkt czysty.`, "#8bc34a");
 
             let waitDelay = Math.floor(Math.random() * (botSettings.waitMax - botSettings.waitMin + 1)) + botSettings.waitMin;
-
-
-
-
-
-
-
-            patrolIndex++;
-
-
-
             setTimeout(executePatrolStep, waitDelay);
-
-
-
         } else {
-
-
-
             if (cx === lastX && cy === lastY) {
-
-
-
                 stuckCount++;
-
-
-
                 if (stuckCount > 8) {
-
-
-
-                    clearTimeout(smoothPatrolInterval); checkedPoints.add(patrolIndex); patrolIndex++; executePatrolStep(); return;
-
-
-
+                    clearTimeout(smoothPatrolInterval); 
+                    checkedPoints.add(patrolIndex); 
+                    window.logHero(`Zaciąłem się! Uznaję punkt [${target[0]}, ${target[1]}] za odwiedzony.`, "#ff9800");
+                    executePatrolStep(); 
+                    return;
                 }
-
-
-
             } else {
-
-
-
                 stuckCount = 0;
-
-
-
             }
 
-
-
-
-
-
-
             let pingDelay = Math.floor(Math.random() * (botSettings.stepMax - botSettings.stepMin + 1)) + botSettings.stepMin;
-
-
-
             smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
-
-
-
         }
-
-
-
         lastX = cx; lastY = cy;
-
-
-
-        lastX = cx; lastY = cy;
-
-
-
     }
-
-
-
-
-
-
-
-
-
-
 
 // ==========================================
 
