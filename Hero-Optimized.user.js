@@ -6287,7 +6287,7 @@ window.clearExpMaps = () => {
         setInterval(() => {
             if (window.autoBuyTask && typeof Engine !== 'undefined') {
                 
-                // 1. OMIJANIE DIALOGÓW
+                // 1. OMIJANIE DIALOGÓW (Zaczepienie NPC otwiera dialog zamiast sklepu)
                 let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                 if (dialogOptions.length > 0) {
                     let shopOpt = dialogOptions.find(el => {
@@ -6296,6 +6296,7 @@ window.clearExpMaps = () => {
                     });
                     
                     if (shopOpt) {
+                        // Humanizacja: losowe opóźnienie przed kliknięciem dialogu
                         let humanDelay = Math.floor(Math.random() * 401) + 400;
                         setTimeout(() => {
                             if (typeof shopOpt.click === 'function') shopOpt.click();
@@ -6304,11 +6305,11 @@ window.clearExpMaps = () => {
                                 shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                             }
                         }, humanDelay);
-                        return; 
+                        return; // Kliknęliśmy, czekamy na załadowanie sklepu
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Z wykorzystaniem koszyka i przeliczania staków)
+                // 2. KUPNO W SKLEPIE (Natywny mechanizm z Koszykiem - Engine.shop.basket)
                 if (Engine.shop && Engine.shop.items && Engine.shop.basket) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
                     
@@ -6321,33 +6322,37 @@ window.clearExpMaps = () => {
                         });
                         
                         if (itemToBuy) {
-                            if (window.logHero) window.logHero(`🛒 Pakuję do koszyka: ${window.autoBuyTask.item}...`, "#8bc34a");
+                            if (window.logHero) window.logHero(`🛒 Dodaję do koszyka: ${window.autoBuyTask.item}...`, "#8bc34a");
                             
                             let finalAmount = window.autoBuyTask.amount;
-                            let mode = window.autoBuyTask.mode;
-                            window.autoBuyTask = null; 
+                            let mode = window.autoBuyTask.mode; // 'potion' lub 'eq'
+                            window.autoBuyTask = null; // Usuwamy zadanie, aby się nie zapętliło
                             
+                            // Humanizacja: Czekamy chwilę na animacje okna sklepu
                             let buyDelay = Math.floor(Math.random() * 301) + 500; 
                             
                             setTimeout(() => {
                                 if (typeof Engine.shop.basket.buyItem === 'function') {
-                                    
-                                    // PRZELICZNIK: Jeśli to mikstury, 1 stak = 15 sztuk. 
-                                    // Ponieważ 1 kliknięcie w sklepie dodaje 5 sztuk, mnożymy ilość staków przez 3.
-                                    let clicksNeeded = (mode === 'potion') ? (finalAmount * 3) : finalAmount;
+                                    // LOGIKA ILOŚCI:
+                                    // Jeśli potki -> 1 stak = 15 sztuk = 3 kliknięcia w koszyku
+                                    // Jeśli EQ -> dokładnie 1 sztuka
+                                    let clicksNeeded = (mode === 'potion') ? (finalAmount * 3) : 1;
                                     
                                     for (let i = 0; i < clicksNeeded; i++) {
                                         Engine.shop.basket.buyItem(itemToBuy);
                                     }
                                 }
 
+                                // Krótka humanizowana przerwa przed kliknięciem "Akceptuj"
                                 let finalizeDelay = Math.floor(Math.random() * 301) + 300; 
                                 setTimeout(() => { 
                                     if (typeof Engine.shop.basket.finalize === 'function') {
                                         Engine.shop.basket.finalize(); 
-                                        if (window.logHero) window.logHero(`✅ Zatwierdzono zakup!`, "#4caf50");
+                                        let msg = mode === 'potion' ? `✅ Zakupiono ${finalAmount} staków (po 15 szt.)!` : `✅ Zakupiono 1 sztukę ekwipunku!`;
+                                        if (window.logHero) window.logHero(msg, "#4caf50");
                                     }
                                     
+                                    // Zamknięcie sklepu po naturalnym odstępie czasu
                                     let closeDelay = Math.floor(Math.random() * 501) + 500; 
                                     setTimeout(() => { 
                                         if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
