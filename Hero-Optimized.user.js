@@ -3007,7 +3007,7 @@ window.expGlobalTargetMap = null;
             p.style.display = p.style.display === 'none' ? 'block' : 'none'; 
         });
         
-     // Pętla milczącego ładownia profili (dla Auto-Expowiska)
+    // Pętla milczącego ładownia profili (dla Auto-Expowiska)
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
             if(p) {
@@ -3028,7 +3028,6 @@ window.expGlobalTargetMap = null;
                 saveSettings();
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
                 
-                // WYMUSZENIE NATYCHMIASTOWEGO RENDEROWANIA LISTY
                 setTimeout(() => {
                     if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
                 }, 100);
@@ -3045,7 +3044,6 @@ window.expGlobalTargetMap = null;
             let highestValidLvl = -1; 
             let profIdx = -1;
             
-            // Skanuje całą bazę i wybiera najwyższe możliwe expowisko (<= nasz level)
             botSettings.expProfiles.forEach((p, idx) => {
                 let match = p.name.match(/\((\d+)\s*lvl\)/i);
                 if (match) {
@@ -3072,33 +3070,39 @@ window.expGlobalTargetMap = null;
             if (e.target.checked) {
                 window.checkAndLoadBestExpProfile(true); 
             } else {
-                // Jeśli odznaczamy - czyścimy trasę z automatu
                 if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
                 if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
             }
             
-            // Wymuszone odświeżenie UI natychmiast po kliknięciu checkboxa!
             setTimeout(() => {
                 if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }, 100);
         });
+
+        // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry
+        window.updateServerBerserk = function() {
+            if (typeof window._g !== 'function') return;
+            let b = botSettings.berserk;
             
-           if (window._lastBerserkLogState !== b.enabled) {
-    window._lastBerserkLogState = b.enabled;
-    if (b.enabled && typeof window.logExp === 'function') {
-        window.logExp("⚔️ Aktywowano serwerowego Kieszonkowego Berserka!", "#ff9800");
-    } else if (typeof window.logExp === 'function') {
-        window.logExp("🛡️ Wyłączono Kieszonkowego Berserka.", "#ff9800");
-    }
-}
-// Inicjalizacja Auto-Sprzedaży
-        if (!botSettings.autosell) {
-            botSettings.autosell = { enabled: false, maxCapacity: 42 };
-            saveSettings();
-        }
-        bindChange('autosellEnabled', (e) => { botSettings.autosell.enabled = e.target.checked; saveSettings(); });
-        bindChange('autosellCapacity', (e) => { botSettings.autosell.maxCapacity = parseInt(e.target.value) || 42; saveSettings(); });
-            // Odświeżenie ikonek nad głowami mobów na NI
+            [34, 35].forEach(id => {
+                window._g(`settings&action=update&id=${id}&v=${b.enabled ? 1 : 0}`);
+                if (b.enabled) {
+                    window._g(`settings&action=update&id=${id}&key=common&v=${b.common ? 1 : 0}`);
+                    window._g(`settings&action=update&id=${id}&key=elite&v=${b.e1 ? 1 : 0}`);
+                    window._g(`settings&action=update&id=${id}&key=elite2&v=${(b.e2 || b.hero) ? 1 : 0}`);
+                    window._g(`settings&action=update&id=${id}&key=lvlmin&v=${b.minLvlOffset}`);
+                    window._g(`settings&action=update&id=${id}&key=lvlmax&v=${b.maxLvlOffset}`);
+                }
+            });
+            
+            if (window._lastBerserkLogState !== b.enabled) {
+                window._lastBerserkLogState = b.enabled;
+                if (b.enabled && typeof window.logExp === 'function') window.logExp("⚔️ Aktywowano serwerowego Kieszonkowego Berserka!", "#ff9800");
+                else if (typeof window.logExp === 'function') window.logExp("🛡️ Wyłączono Kieszonkowego Berserka.", "#ff9800");
+            }
+
+            if (!botSettings.autosell) { botSettings.autosell = { enabled: false, maxCapacity: 42 }; saveSettings(); }
+            
             try {
                 if (typeof Engine !== 'undefined' && Engine.settings && Engine.settings.d) {
                     Engine.settings.d.fight_auto_solo = b.enabled ? 1 : 0;
@@ -3113,50 +3117,18 @@ window.expGlobalTargetMap = null;
                 }
             } catch(e) {}
         };
-// Zapisywanie zmian w panelu Berserka i wyzwalanie update'u na serwerze
-bindChange('berserkEnabled', (e) => {
-    botSettings.berserk.userEnabled = e.target.checked;
-    botSettings.berserk.enabled = e.target.checked;
-    saveSettings();
-    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-});
 
-bindChange('berserkCommon', (e) => {
-    botSettings.berserk.common = e.target.checked;
-    saveSettings();
-    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-});
+        bindChange('autosellEnabled', (e) => { botSettings.autosell.enabled = e.target.checked; saveSettings(); });
+        bindChange('autosellCapacity', (e) => { botSettings.autosell.maxCapacity = parseInt(e.target.value) || 42; saveSettings(); });
 
-bindChange('berserkE1', (e) => {
-    botSettings.berserk.e1 = e.target.checked;
-    saveSettings();
-    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-});
-
-bindChange('berserkE2', (e) => {
-    botSettings.berserk.e2 = e.target.checked;
-    saveSettings();
-    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-});
-
-bindChange('berserkHero', (e) => {
-    botSettings.berserk.hero = e.target.checked;
-    saveSettings();
-    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-});
-
-bindChange('berserkMaxLvl', (e) => {
-    botSettings.berserk.maxLvlOffset = parseInt(e.target.value, 10) || 100;
-    saveSettings();
-    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-});
-
-bindChange('berserkMinLvl', (e) => {
-    botSettings.berserk.minLvlOffset = -(parseInt(e.target.value, 10) || 20);
-    saveSettings();
-    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-});
-
+        bindChange('berserkEnabled', (e) => { botSettings.berserk.userEnabled = e.target.checked; botSettings.berserk.enabled = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+        bindChange('berserkCommon', (e) => { botSettings.berserk.common = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+        bindChange('berserkE1', (e) => { botSettings.berserk.e1 = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+        bindChange('berserkE2', (e) => { botSettings.berserk.e2 = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+        bindChange('berserkHero', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+        bindChange('berserkMaxLvl', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value, 10) || 100; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+        bindChange('berserkMinLvl', (e) => { botSettings.berserk.minLvlOffset = -(parseInt(e.target.value, 10) || 20); saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+       
 // ZAPISYWANIE USTAWIEŃ EXP
 setOnChange('expMinL', (e) => {
     botSettings.exp.minLvl = parseInt(e.target.value, 10) || 1;
