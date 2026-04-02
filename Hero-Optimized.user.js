@@ -1839,7 +1839,7 @@ function autoDetectEngineData() {
 // ==========================================
     // RUSH MODE (PŁYNNY RUCH)
     // ==========================================
-    window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) {
+  window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) {
         let currentSysMap = lastMapName;
 
         if (currentSysMap === targetMapName) {
@@ -1847,9 +1847,9 @@ function autoDetectEngineData() {
             return;
         }
 
-        // Płynne przejęcie kontroli (nie używamy stopPatrol(true), żeby nie szarpać postaci)
         isPatrolling = false;
         isRushing = true;
+        window.isRushing = true; // Synchronizacja dla bezpiecznika
         rushTarget = targetMapName;
         rushTargetX = x;
         rushTargetY = y;
@@ -1862,20 +1862,26 @@ function autoDetectEngineData() {
             btn.style.borderColor = "#00acc1";
         }
 
-        // Widoczne logowanie w oknie!
+        // Zabezpieczenie przed podwójnymi logami
         let msg = `🏃 Obieram kurs na: [${targetMapName}]`;
-        if (window.logHero) window.logHero(msg, "#00acc1");
-        if (window.logExp) window.logExp(msg, "#00acc1");
+        if (window._lastRushTargetLog !== msg) {
+            if (window.logHero) window.logHero(msg, "#00acc1");
+            if (window.logExp) window.logExp(msg, "#00acc1");
+            window._lastRushTargetLog = msg;
+        }
 
         window.executeRushStep(); 
     };
 
-  window.executeRushStep = function() {
-        if (!isRushing) return;
+    window.executeRushStep = function() {
+        if (!isRushing && !window.isRushing) return;
         let currentSysMap = lastMapName;
 
         if (currentSysMap === rushTarget) {
             isRushing = false;
+            window.isRushing = false;
+            window._lastRushNextMap = null; // Reset logów
+            window._lastRushTargetLog = null;
             let btn = document.getElementById('btnStartStop');
             if (btn) { btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>'; btn.style.color = "#4caf50"; btn.style.borderColor = "#4caf50"; }
             
@@ -1904,6 +1910,7 @@ function autoDetectEngineData() {
 
         if (!nextMap) {
             isRushing = false;
+            window.isRushing = false;
             let msg = `🚨 BŁĄD TRASY! Bot nie wie jak dojść z [${currentSysMap}] do [${rushTarget}].`;
             if (window.logHero) window.logHero(msg, "#e53935");
             if (window.logExp) window.logExp(msg, "#e53935");
@@ -1918,13 +1925,17 @@ function autoDetectEngineData() {
         let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
 
         if (isTeleportRoute) {
-            // INFORMOWANIE W KONSOLI O UŻYCIU TELEPORTU
-            if (window.logExp) window.logExp(`🚀 Teleportuję do: ${nextMap}`, "#9c27b0");
+            if (window._lastRushNextMap !== nextMap) {
+                if (window.logExp) window.logExp(`🚀 Teleportuję do: ${nextMap}`, "#9c27b0");
+                window._lastRushNextMap = nextMap;
+            }
             clearTimeout(rushInterval);
             rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
         } else if (door) {
-            // INFORMOWANIE W KONSOLI O ZWYKŁYM RUCHU
-            if (window.logExp) window.logExp(`🚪 Biegnę do przejścia na: ${nextMap}`, "#ba68c8");
+            if (window._lastRushNextMap !== nextMap) {
+                if (window.logExp) window.logExp(`🚪 Biegnę do przejścia na: ${nextMap}`, "#ba68c8");
+                window._lastRushNextMap = nextMap;
+            }
             
             let targetX = door.x; let targetY = door.y;
             if (door.allCoords && door.allCoords.length > 0) {
@@ -1934,7 +1945,7 @@ function autoDetectEngineData() {
             
             window.rushLastX = Engine.hero.d.x;
             window.rushLastY = Engine.hero.d.y;
-            stuckCount = 0; // Reset
+            stuckCount = 0; 
             
             safeGoTo(targetX, targetY, false); 
             clearTimeout(rushInterval);
@@ -4878,7 +4889,7 @@ function runExpLogic() {
                 return; // Trwa blokada, czekamy
             }
 
-     // --- 2. RUCH NA EXPOWISKO ---
+    // --- 2. RUCH NA EXPOWISKO ---
             let mapOrder = botSettings.exp.mapOrder || [];
             let targetExpMap = Engine.map.d.name; // Domyślnie stoi i bije w miejscu
             
@@ -4887,25 +4898,26 @@ function runExpLogic() {
                     // Jesteśmy już na jednej z map expowiska - expi i szuka potworów
                     targetExpMap = Engine.map.d.name;
                 } else {
-                    // Inteligentny algorytm BFS: Szuka najbliższej mapy z całej trasy, do której faktycznie zna drogę!
+                    // Inteligentny algorytm BFS: Szuka najbliższej mapy z całej trasy
                     let closestObj = typeof getClosestExpMapPath === 'function' ? getClosestExpMapPath(Engine.map.d.name) : null;
                     if (closestObj && closestObj.targetMap) {
                         targetExpMap = closestObj.targetMap;
                     } else {
-                        // Jeśli żadna z map nie ma przypisanej drogi w Twojej bazie, wymusza pierwszą by pokazać błąd "Brak trasy"
                         targetExpMap = mapOrder[0];
                     }
                 }
             }
             
             if (Engine.map.d.name !== targetExpMap) {
-                // Odpalamy algorytm biegu TYLKO, jeśli bot jeszcze nie ruszył
-                if (!window.isRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
+                // NAPRAWA: Ochrona przed spamem - sprawdzamy obie zmienne ruchu!
+                let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
+                
+                if (!currentlyRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
                     if (typeof window.rushToMap === 'function') {
                         window.rushToMap(targetExpMap);
                     }
                 }
-                return; // Przerywa wykonywanie reszty skryptu (nie szuka potworów w trakcie podróży do spotu)
+                return; // Przerywa wykonywanie reszty skryptu podczas biegu
             }
 
     const now = Date.now();
