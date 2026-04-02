@@ -324,11 +324,13 @@ getRecommendedEq: function() {
                     isProfOk = profArray.some(p => p.includes(fullProf));
                 }
 
-                return isLevelOk && isProfOk;
-            }).sort((a, b) => a.level - b.level);
-        }
-    // Automatyczne załadowanie bazy 3 sekundy po włączeniu gry
-    setTimeout(() => window.DatabaseModule.initDatabases(), 3000);
+              return isLevelOk && isProfOk;
+        }).sort((a, b) => a.level - b.level);
+    }
+}; // <--- TEGO ZNAKU BRAKOWAŁO (Zamknięcie całego obiektu DatabaseModule)
+
+// Automatyczne załadowanie bazy 3 sekundy po włączeniu gry
+setTimeout(() => window.DatabaseModule.initDatabases(), 3000);
     // ==========================================
     // BAZA DANYCH HEROSÓW
     // ==========================================
