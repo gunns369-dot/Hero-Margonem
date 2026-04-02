@@ -6970,7 +6970,7 @@ window.clearExpMaps = () => {
                 }
             }
 
-            // 2. Cykl obsługi sprzedaży
+           // 2. Cykl obsługi sprzedaży
             if (window.autoSellState.active) {
                 if (Date.now() < window.autoSellState.nextActionTime) return; // Symulacja refleksu gracza
                 window.isExpSuspended = true; 
@@ -7038,11 +7038,17 @@ window.clearExpMaps = () => {
                                 }
                             }
                         } else if (!window.isRushingToShop) {
-                            Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y});
-                            window.autoSellState.nextActionTime = Date.now() + 500;
+                            // SPRAWDZENIE CZY BOT JUZ IDZIE (Zapobiega spamowaniu kliknięć z radaru)
+                            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+                            if (!isMoving) {
+                                Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y});
+                                window.autoSellState.nextActionTime = Date.now() + 1000; // Po wysłaniu komendy czeka sekunde
+                            } else {
+                                window.autoSellState.nextActionTime = Date.now() + 300; // Jeśli idzie, tylko podglądamy postępy co 300ms
+                            }
                         }
                     }
-               } else if (window.autoSellState.step === 2) {
+                } else if (window.autoSellState.step === 2) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window, .shop-container');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
@@ -7053,26 +7059,30 @@ window.clearExpMaps = () => {
                         window.autoSellState.lastFreeSlots = typeof window.getBagStats === 'function' ? window.getBagStats().freeSlots : 0;
                         window.autoSellState.nextActionTime = Date.now() + 500;
                     } else {
-                        // Szukamy opcji dialogowej (dodano nowe słowa kluczowe i selektory!)
+                        // IDEALNA LOGIKA Z KUPOWANIA MIKSTUR - Oczekuje i skanuje wszystkie opcje
                         let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
-                        let shopOpt = dialogOptions.find(el => {
-                            let txt = (el.innerText || el.textContent).toLowerCase();
-                            // Teraz wyłapie "Pokaż mi swoje towary", "Kup" itp.
-                            return txt.includes('sklep') || txt.includes('handl') || txt.includes('sprzedaj') || txt.includes('pokaż') || txt.includes('towar') || txt.includes('kup');
-                        });
-                        
-                        if (shopOpt) {
-                            // Twoja niezawodna symulacja kliknięcia dla okien dialogowych
-                            if (window.jQuery) jQuery(shopOpt).trigger("click");
-                            if (typeof shopOpt.click === 'function') shopOpt.click();
-                            shopOpt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-                            shopOpt.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+                        if (dialogOptions.length > 0) {
+                            let shopOpt = dialogOptions.find(el => {
+                                let txt = (el.innerText || el.textContent).toLowerCase();
+                                return txt.includes('sklep') || txt.includes('handl') || txt.includes('wywar') || txt.includes('lecznicz') || txt.includes('towar') || txt.includes('sprzedaj') || txt.includes('pokaż');
+                            });
                             
-                            window.autoSellState.nextActionTime = Date.now() + 600; // Nie spamować klikania dialogu
+                            if (shopOpt) {
+                                let humanDelay = Math.floor(Math.random() * 401) + 400; // Humanizacja opóźnienia (400-800ms)
+                                window.autoSellState.nextActionTime = Date.now() + humanDelay + 500; // Zamrożenie pętli bota na czas klikania przez timeout
+
+                                setTimeout(() => {
+                                    if (typeof shopOpt.click === 'function') shopOpt.click();
+                                    else if (typeof MouseEvent !== 'undefined') {
+                                        shopOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                                        shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                                    }
+                                    if (window.jQuery) jQuery(shopOpt).trigger("click");
+                                }, humanDelay);
+                            }
                         }
                     }
                 } else if (window.autoSellState.step === 3) {
-                    // TWOJA LOGIKA SPRZEDAŻY 
                     let s = typeof window.getBagStats === 'function' ? window.getBagStats() : { bagsCount: 4 };
                     
                     if (window.autoSellState.bagToSell <= s.bagsCount) {
@@ -7081,20 +7091,20 @@ window.clearExpMaps = () => {
                         if (window.logHero) window.logHero(msg, "#ffb300");
                         if (window.logExp) window.logExp(msg, "#ffb300");
                         
-                        // Używamy Twojej funkcji z randomowym opóźnieniem (150-350ms)
+                        // Używamy Twojej funkcji z randomowym opóźnieniem ludzkim (150-350ms)
                         window.runSuperSellerBagAndAccept(bagNo, Math.floor(Math.random() * 200) + 150);
                         
                         window.autoSellState.bagToSell++;
-                        window.autoSellState.nextActionTime = Date.now() + Math.floor(Math.random() * 300) + 800; // Randomowy odstęp między kliknięciem toreb (0.8s - 1.1s)
+                        window.autoSellState.nextActionTime = Date.now() + Math.floor(Math.random() * 300) + 800; // Opóźnienie pomiędzy torbami
                     } else {
                         // Wszystkie torby przeklikane
                         window.autoSellState.step = 4;
-                        window.autoSellState.nextActionTime = Date.now() + 1000; // Dajemy serwerowi sekunde na policzenie miejsca
+                        window.autoSellState.nextActionTime = Date.now() + 1000; // Dajemy serwerowi sekunde na policzenie zrobionego miejsca
                     }
                 } else if (window.autoSellState.step === 4) {
                     let stats = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99 };
                     
-                    // Magia: Jeśli zwolniło się nowe miejsce, powtarzamy cykl od pierwszej torby!
+                    // Magia: Jeśli zwolniło się nowe miejsce, powtarzamy cykl od pierwszej torby! (Na wypadek odblokowania staków)
                     if (stats.freeSlots > window.autoSellState.lastFreeSlots) {
                         let msg = `♻️ Odblokowano nowe miejsce! Robię kolejne okrążenie po torbach...`;
                         if (window.logHero) window.logHero(msg, "#00e5ff");
@@ -7105,7 +7115,7 @@ window.clearExpMaps = () => {
                         window.autoSellState.step = 3;
                         window.autoSellState.nextActionTime = Date.now() + 500;
                     } else {
-                        // Nic więcej nie da się sprzedać
+                        // Nic więcej nie da się sprzedać - powrót
                         let profit = Engine.hero.d.gold - window.autoSellState.oldGold;
                         if (profit > 0) {
                             let msg = `✅ Opróżnianie zakończone! Zarobek: ${profit.toLocaleString()} zł. Wracam do pracy.`;
@@ -7132,6 +7142,6 @@ window.clearExpMaps = () => {
                     }
                 }
             }
-        }, 300); // 300ms pętla, ale akcje są bezpiecznie blokowane przez `nextActionTime`!
+        }, 300); // 300ms pętla, ale akcje są bezpiecznie blokowane przez `nextActionTime`
     }
 })(); // Koniec kodu
