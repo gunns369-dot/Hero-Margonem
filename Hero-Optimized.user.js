@@ -5886,7 +5886,7 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-     // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
+    // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
@@ -5902,11 +5902,33 @@ window.clearExpMaps = () => {
                     parseStats: function(statStr) {
                         if (!statStr || typeof statStr !== "string") return {};
                         const out = {};
-                        statStr.split(";").forEach(part => {
-                            const [k, v] = part.split("=");
-                            if (!k) return;
-                            out[k] = v ?? true;
-                        });
+                        
+                        // Jeśli to surowe dane silnika (zawiera '=')
+                        if (statStr.includes("=")) {
+                            statStr.split(";").forEach(part => {
+                                const [k, v] = part.split("=");
+                                if (k) out[k] = v ?? true;
+                            });
+                        } else {
+                            // TŁUMACZ Z POLSKIEGO TEKSTU NA SUROWE ZMIENNE
+                            let t = statStr.toLowerCase();
+                            let dmgMatch = t.match(/obrażenia:\s*(\d+)(?:-(\d+))?/);
+                            if (dmgMatch) out.dmg = dmgMatch[2] ? `${dmgMatch[1]},${dmgMatch[2]}` : dmgMatch[1];
+                            let acMatch = t.match(/pancerz:\s*(\d+)/); if (acMatch) out.ac = acMatch[1];
+                            let saMatch = t.match(/szybkość ataku:\s*([0-9.]+)/); if (saMatch) out.sa = saMatch[1];
+                            let hpMatch = t.match(/życie:\s*\+?(\d+)/); if (hpMatch) out.hp = hpMatch[1];
+                            let fireMatch = t.match(/od ognia:\s*(\d+)(?:-(\d+))?/); if (fireMatch) out.fire = fireMatch[2] ? `${fireMatch[1]},${fireMatch[2]}` : fireMatch[1];
+                            let frostMatch = t.match(/od zimna:\s*(\d+)(?:-(\d+))?/); if (frostMatch) out.frost = frostMatch[2] ? `${frostMatch[1]},${frostMatch[2]}` : frostMatch[1];
+                            let lightMatch = t.match(/od błyskawic:\s*(\d+)(?:-(\d+))?/); if (lightMatch) out.light = lightMatch[2] ? `${lightMatch[1]},${lightMatch[2]}` : lightMatch[1];
+                            let poisonMatch = t.match(/od trucizny:\s*(\d+)(?:-(\d+))?/); if (poisonMatch) out.poison = poisonMatch[2] ? `${poisonMatch[1]},${poisonMatch[2]}` : poisonMatch[1];
+                            let critMatch = t.match(/cios krytyczny:\s*\+?([0-9.]+)/); if (critMatch) out.crit = critMatch[1];
+                            let evadeMatch = t.match(/unik:\s*\+?([0-9.]+)/); if (evadeMatch) out.evade = evadeMatch[1];
+                            let absorbMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń/); if (absorbMatch) out.absorb = absorbMatch[1];
+                            let absorbmMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń magicz/); if (absorbmMatch) out.absorbm = absorbmMatch[1];
+                            let daMatch = t.match(/podwójny atak:\s*\+?([0-9.]+)/); if (daMatch) out.da = daMatch[1];
+                            let healMatch = t.match(/leczenie zbroją:\s*\+?([0-9.]+)/); if (healMatch) out.heal = healMatch[1];
+                            let pierceMatch = t.match(/przebicie pancerza:\s*\+?([0-9.]+)/); if (pierceMatch) out.pierce = pierceMatch[1];
+                        }
                         return out;
                     },
 
@@ -5944,10 +5966,10 @@ window.clearExpMaps = () => {
                     },
 
                     getEquippedItemByCl: function(cl) {
-                        if (typeof Engine === 'undefined' || !Engine.heroEquipment || typeof Engine.heroEquipment.getHItems !== 'function') return null;
-                        let items = Object.values(Engine.heroEquipment.getHItems() || {});
-                        // Szukamy ubranego przedmiotu (st > 0) o tej samej klasie (cl)
-                        return items.find(i => Number(i.st) > 0 && Number(i._cachedStats?.cl || i.cl) === Number(cl));
+                        if (typeof Engine === 'undefined' || !Engine.heroEquipment || typeof Engine.heroEquipment.getEqItems !== 'function') return null;
+                        // Pobieramy całe ubrane eq (Nowy Interfejs)
+                        let eqItems = Object.values(Engine.heroEquipment.getEqItems());
+                        return eqItems.find(i => i && i._cachedStats && Number(i._cachedStats.cl) === Number(cl));
                     },
 
                     getClFromDbItem: function(item) {
@@ -5956,9 +5978,9 @@ window.clearExpMaps = () => {
                         let parsed = this.parseStats(rawStat);
                         if (parsed.cl) return Number(parsed.cl);
                         
-                        // Zapasowe rozpoznawanie klasy po typie tekstu z tooltipa
-                        let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
+                        let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ\s]+)/) : null;
                         let type = typeMatch ? typeMatch[1].toLowerCase() : (item.type || "").toLowerCase();
+                        
                         if (type.includes("bro") || type.includes("dystans")) return 4;
                         if (type.includes("zbro")) return 8;
                         if (type.includes("hełm")) return 9;
@@ -5973,24 +5995,21 @@ window.clearExpMaps = () => {
 
                     compareWithEquipped: function(dbItem) {
                         let cl = this.getClFromDbItem(dbItem);
-                        if (!cl) return null;
+                        if (!cl) return { val: null, reason: 'no_cl' };
 
                         let eqItem = this.getEquippedItemByCl(cl);
-                        if (!eqItem) return null; // Brak założonego itemu w tym slocie (nowy jest bezwzględnie lepszy)
+                        if (!eqItem) return { val: null, reason: 'no_eq' }; // Slot jest pusty
 
                         let eqStat = eqItem._cachedStats?.stat || eqItem.stat || "";
                         let dbStat = dbItem.stat || dbItem.stats || "";
 
-                        // Bezpiecznik: jeśli baza nie zawiera surowych statów (np. dmg=100;sa=1), nie da się przeliczyć
-                        if (!dbStat.includes("=")) return null;
-
                         let eqScore = this.calculateScore(eqStat, cl);
                         let dbScore = this.calculateScore(dbStat, cl);
 
-                        if (eqScore <= 0) return null;
+                        if (eqScore <= 0) return { val: null, reason: 'zero_score' };
                         
                         let percent = ((dbScore / eqScore) - 1) * 100;
-                        return Number(percent.toFixed(2));
+                        return { val: Number(percent.toFixed(2)), reason: 'ok' };
                     }
                 };
             }
@@ -6026,8 +6045,8 @@ window.clearExpMaps = () => {
                 let count = 0;
                 
                 items.forEach((item, index) => {
-                    let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
-                    let displayType = typeMatch ? typeMatch[1] : (item.type && item.type !== 'null' ? item.type : "Inne");
+                    let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ\s]+)/) : null;
+                    let displayType = typeMatch ? typeMatch[1].trim() : (item.type && item.type !== 'null' ? item.type : "Inne");
                     
                     if (filterVal !== "Wszystkie" && !displayType.toLowerCase().includes(filterVal.toLowerCase())) return;
                     
@@ -6035,18 +6054,20 @@ window.clearExpMaps = () => {
                     let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                     let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
                     
-                    // Odpalamy Twój potężny moduł do matematyki
-                    let percentBetter = window.EquipmentScorer.compareWithEquipped(item);
+                    // --- ODPALAMY MATEMATYKĘ ---
+                    let cmp = window.EquipmentScorer.compareWithEquipped(item);
                     let badgeHtml = '';
                     
-                    if (percentBetter !== null) {
-                        if (percentBetter > 0) {
-                            badgeHtml = `<span style="color:#00e676; font-size:10px; font-weight:bold; margin-left:6px; background:#003300; padding:1px 3px; border-radius:2px; border:1px solid #00e676;">+${percentBetter}% EXP</span>`;
-                        } else if (percentBetter < 0) {
-                            badgeHtml = `<span style="color:#e53935; font-size:9px; font-weight:bold; margin-left:6px;">${percentBetter}% exp</span>`;
+                    if (cmp.val !== null) {
+                        if (cmp.val > 0) {
+                            badgeHtml = `<span style="color:#00e676; font-size:10px; font-weight:bold; margin-left:6px; background:#003300; padding:1px 4px; border-radius:3px; border:1px solid #00e676; box-shadow: 0 0 3px #00e676;">+${cmp.val}% EXP</span>`;
+                        } else if (cmp.val < 0) {
+                            badgeHtml = `<span style="color:#e53935; font-size:9px; font-weight:bold; margin-left:6px;">${cmp.val}% exp</span>`;
                         } else {
                             badgeHtml = `<span style="color:#9e9e9e; font-size:9px; font-weight:bold; margin-left:6px;">== exp</span>`;
                         }
+                    } else if (cmp.reason === 'no_eq') {
+                        badgeHtml = `<span style="color:#00e5ff; font-size:9px; font-weight:bold; margin-left:6px;">[PUSTY SLOT]</span>`;
                     }
 
                     html += `
@@ -6071,7 +6092,7 @@ window.clearExpMaps = () => {
             };
             
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
-        }
+        };
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
