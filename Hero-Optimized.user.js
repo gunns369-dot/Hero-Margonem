@@ -5897,8 +5897,8 @@ window.clearExpMaps = () => {
                 tt.id = 'radarDualTooltip';
                 tt.style.cssText = 'position:fixed; z-index:999999; display:none; pointer-events:none; flex-direction:row; gap:5px; background:transparent; font-family: Tahoma, sans-serif;';
                 tt.innerHTML = `
-                    <div id="rdt-left" style="background:rgba(15,15,15,0.95); border:1px solid #d4af37; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:160px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.3;"></div>
-                    <div id="rdt-right" style="background:rgba(15,15,15,0.95); border:1px solid #4caf50; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:160px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.3;"></div>
+                    <div id="rdt-left" style="background:rgba(15,15,15,0.95); border:1px solid #ffb300; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:180px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.4;"></div>
+                    <div id="rdt-right" style="background:rgba(15,15,15,0.95); border:1px solid #4caf50; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:180px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.4;"></div>
                 `;
                 document.body.appendChild(tt);
                 
@@ -5914,7 +5914,7 @@ window.clearExpMaps = () => {
                     if (tt.style.display !== 'none') {
                         let x = e.clientX + 15;
                         let y = e.clientY + 15;
-                        let w = tt.offsetWidth || 350;
+                        let w = tt.offsetWidth || 380;
                         let h = tt.offsetHeight || 150;
                         if (x + w > window.innerWidth) x = window.innerWidth - w - 10;
                         if (y + h > window.innerHeight) y = window.innerHeight - h - 10;
@@ -5927,7 +5927,7 @@ window.clearExpMaps = () => {
                 };
             }
 
-            // --- MODUŁ MATEMATYCZNY ---
+            // --- MODUŁ MATEMATYCZNY I FORMATUJĄCY ---
             if (!window.EquipmentScorer) {
                 window.EquipmentScorer = {
                     WEIGHTS_WEAPON_EXP: { dmg: 5.0, fire: 4.5, frost: 4.5, light: 4.5, poison: 4.5, sa: 3.0, pierce: 2.2, crit: 1.8, evade: 1.2, hp: 0.5, ac: 0.3 },
@@ -5937,7 +5937,8 @@ window.clearExpMaps = () => {
 
                     parseStats: function(itemData) {
                         const out = {};
-                        let rawStat = itemData.stat || itemData.rawStat;
+                        let rawStat = itemData.stat || itemData.rawStat || itemData.stats;
+                        
                         if (rawStat && typeof rawStat === "string" && rawStat.includes("=")) {
                             rawStat.split(";").forEach(part => {
                                 const [k, v] = part.split("=");
@@ -5953,24 +5954,34 @@ window.clearExpMaps = () => {
                         let extractRange = (name) => { let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)(?:\\s*-\\s*([0-9.,]+))?"); let m = str.match(regex); if (!m) return null; if (m[2]) return `${m[1].replace(',','.')},${m[2].replace(',','.')}`; return m[1].replace(',','.'); };
 
                         out.dmg = extractRange("obrażenia(?: fizyczne| dystansowe| magiczne)?") || extractRange("atak");
+                        out.pdmg = extract("obrażenia fizyczne");
                         out.ac = extract("pancerz");
                         out.sa = extract("szybkość ataku");
                         out.hp = extract("życie");
+                        out.mana = extract("mana");
+                        out.all = extract("wszystkie cechy");
+                        out.str = extract("siła");
+                        out.agi = extract("zręczność");
+                        out.int = extract("intelekt");
                         out.fire = extractRange("od ognia");
                         out.frost = extractRange("od zimna");
                         out.light = extractRange("od błyskawic");
                         out.poison = extractRange("od trucizny");
+                        out.resfire = extract("odporność na ogień");
+                        out.resfrost = extract("odporność na zimno");
+                        out.reslight = extract("odporność na błyskawice");
+                        out.respoison = extract("odporność na truciznę");
                         out.crit = extract("cios krytyczny");
+                        out.critm = extract("moc ciosu krytycznego(?: magicznego)?");
                         out.evade = extract("unik");
+                        out.act = extract("aktywny unik");
                         out.da = extract("podwójny atak");
-                        out.heal = extract("leczenie zbroją");
+                        out.dz = extract("niszczenie pancerza");
+                        out.heal = extract("leczenie(?: turowe| zbroją)?") || extract("przywraca");
                         out.pierce = extract("przebicie pancerza");
-                        out.pdmg = extract("obrażenia fizyczne");
 
-                        let abs1 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń(?! magicz)/);
-                        if(abs1) out.absorb = abs1[1].replace(',', '.');
-                        let abs2 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń magicznych/);
-                        if(abs2) out.absorbm = abs2[1].replace(',', '.');
+                        let abs1 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń(?! magicz)/); if(abs1) out.absorb = abs1[1].replace(',', '.');
+                        let abs2 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń magicznych/); if(abs2) out.absorbm = abs2[1].replace(',', '.');
 
                         return out;
                     },
@@ -6025,7 +6036,7 @@ window.clearExpMaps = () => {
                         if (!eqItem) return { val: null, reason: 'no_eq' };
 
                         let dbStats = this.parseStats(dbItem);
-                        let eqStats = this.parseStats({ stat: eqItem.stat });
+                        let eqStats = this.parseStats({ stat: eqItem.stat || eqItem._cachedStats?.stat });
 
                         const weights = this.getWeightsForItem(cl);
                         let eqScore = 0; let dbScore = 0;
@@ -6042,34 +6053,56 @@ window.clearExpMaps = () => {
                         return { val: Number(percent.toFixed(2)), reason: 'ok' };
                     },
 
-                    formatEqItem: function(eqItem, displayType) {
-                        if (!eqItem) return `<div style="text-align:center; padding:10px;"><span style="color:#00e5ff; font-weight:bold; font-size:12px;">[PUSTY SLOT]</span><br><br><span style="color:#aaa;">Brak założonego przedmiotu<br>w tym miejscu.</span></div>`;
+                    // WSPÓLNY FORMATTER DLA OBU TOOLTIPÓW (Sklep i Założone)
+                    formatItemHTML: function(itemObj, displayType, isDb) {
+                        if (!itemObj && !isDb) return `<div style="text-align:center; padding:10px;"><span style="color:#00e5ff; font-weight:bold; font-size:12px;">[PUSTY SLOT]</span><br><br><span style="color:#aaa;">Brak założonego przedmiotu<br>w tym miejscu.</span></div>`;
                         
-                        let stats = this.parseStats({ stat: eqItem.stat || eqItem._cachedStats?.stat });
-                        let name = eqItem._cachedStats?.name || eqItem.name || "Nieznany";
+                        let stats = this.parseStats(isDb ? itemObj : { stat: itemObj.stat || itemObj._cachedStats?.stat });
+                        let name = isDb ? itemObj.name : (itemObj._cachedStats?.name || itemObj.name || "Nieznany");
                         
-                        let html = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:#4caf50; font-size:12px;">[Obecnie Założony]</b><br><b style="color:#d4af37; font-size:12px;">${name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>`;
+                        let lvl = isDb ? itemObj.level : "";
+                        let prof = isDb ? (itemObj.prof && itemObj.prof.length > 0 ? itemObj.prof.join(', ') : "Zwykły") : "";
                         
-                        let renderLine = (label, val, color="#fff") => { if (val) html += `<span style="color:${color}">${label}: <b>${String(val).replace(',', ' - ')}</b></span><br>`; };
-                        let renderPlus = (label, val, color="#fff") => { if (val) html += `<span style="color:${color}">${label}: <b>+${String(val).replace(',', ' - ')}</b></span><br>`; };
+                        if (!isDb && itemObj) {
+                            let sStr = itemObj.stat || itemObj._cachedStats?.stat || "";
+                            let mLvl = sStr.match(/lvl=(\d+)/); if (mLvl) lvl = mLvl[1];
+                            let mReqp = sStr.match(/reqp=([a-z]+)/); 
+                            if (mReqp) {
+                                let pMap = {"w":"Wojownik", "m":"Mag", "t":"Tropiciel", "p":"Paladyn", "h":"Łowca", "b":"Tancerz ostrzy"};
+                                prof = mReqp[1].split('').map(x => pMap[x] || x).join(', ');
+                            } else { prof = "Zwykły"; }
+                        }
+
+                        let titleColor = isDb ? "#ffb300" : "#4caf50";
+                        let titleText = isDb ? "[Ze Sklepu / Bazy]" : "[Obecnie Założony]";
                         
-                        renderLine("Obrażenia", stats.dmg);
-                        renderPlus("Pancerz", stats.ac);
-                        renderLine("Szybkość ataku", stats.sa);
-                        renderPlus("Życie", stats.hp, "#4caf50");
+                        let html = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:${titleColor}; font-size:12px;">${titleText}</b><br><b style="color:#d4af37; font-size:12px;">${name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>`;
                         
-                        renderLine("Od ognia", stats.fire, "#ff9800");
-                        renderLine("Od zimna", stats.frost, "#00e5ff");
-                        renderLine("Od błyskawic", stats.light, "#e040fb");
-                        renderLine("Od trucizny", stats.poison, "#64dd17");
+                        const statOrder = [
+                            {k:'dmg', l:'Obrażenia', c:'#fff'}, {k:'pdmg', l:'Obrażenia fizyczne', c:'#fff'}, {k:'ac', l:'Pancerz', c:'#fff', p:true},
+                            {k:'resfire', l:'Odporność na ogień', c:'#ff9800', p:true, pct:true}, {k:'resfrost', l:'Odporność na zimno', c:'#00e5ff', p:true, pct:true}, {k:'reslight', l:'Odporność na błyskawice', c:'#e040fb', p:true, pct:true}, {k:'respoison', l:'Odporność na truciznę', c:'#64dd17', p:true, pct:true},
+                            {k:'all', l:'Wszystkie cechy', c:'#fff', p:true}, {k:'str', l:'Siła', c:'#fff', p:true}, {k:'agi', l:'Zręczność', c:'#fff', p:true}, {k:'int', l:'Intelekt', c:'#fff', p:true},
+                            {k:'hp', l:'Życie', c:'#4caf50', p:true}, {k:'mana', l:'Mana', c:'#2196f3', p:true},
+                            {k:'fire', l:'Od ognia', c:'#ff9800'}, {k:'frost', l:'Od zimna', c:'#00e5ff'}, {k:'light', l:'Od błyskawic', c:'#e040fb'}, {k:'poison', l:'Od trucizny', c:'#64dd17'},
+                            {k:'sa', l:'Szybkość ataku', c:'#fff', p:true}, {k:'crit', l:'Cios krytyczny', c:'#fff', p:true, pct:true}, {k:'critm', l:'Moc ciosu krytycznego', c:'#fff', p:true, pct:true},
+                            {k:'evade', l:'Unik', c:'#fff', p:true}, {k:'act', l:'Aktywny unik', c:'#fff', p:true}, {k:'da', l:'Podwójny atak', c:'#fff', p:true},
+                            {k:'pierce', l:'Przebicie pancerza', c:'#fff', p:true}, {k:'dz', l:'Niszczenie pancerza', c:'#fff', p:true},
+                            {k:'absorb', l:'Absorbuje fizyczne', c:'#fff'}, {k:'absorbm', l:'Absorbuje magiczne', c:'#fff'}, {k:'heal', l:'Leczenie turowe', c:'#4caf50', p:true}
+                        ];
                         
-                        renderPlus("Cios krytyczny", stats.crit);
-                        renderPlus("Unik", stats.evade);
-                        if (stats.absorb) html += `<span style="color:#fff">Absorbuje <b>${stats.absorb}</b> obrażeń</span><br>`;
-                        if (stats.absorbm) html += `<span style="color:#fff">Absorbuje <b>${stats.absorbm}</b> obr. magicznych</span><br>`;
-                        renderPlus("Podwójny atak", stats.da);
-                        renderPlus("Leczenie turowe", stats.heal, "#4caf50");
-                        renderPlus("Przebicie pancerza", stats.pierce);
+                        statOrder.forEach(st => {
+                            let val = stats[st.k];
+                            if (val) {
+                                let pre = (st.p && Number(val) > 0) ? '+' : '';
+                                let post = st.pct ? '%' : '';
+                                html += `<span style="color:${st.c}">${st.l}: <b>${pre}${String(val).replace(',', ' - ')}${post}</b></span><br>`;
+                            }
+                        });
+                        
+                        html += `<div style="margin-top:6px; padding-top:4px; border-top:1px solid #333; font-size:9px; color:#888;">`;
+                        if (prof) html += `Profesja: <span style="color:#aaa">${prof}</span><br>`;
+                        if (lvl) html += `Poziom: <span style="color:#aaa">${lvl}</span>`;
+                        html += `</div>`;
                         
                         return html;
                     }
@@ -6133,17 +6166,16 @@ window.clearExpMaps = () => {
                         badgeHtml = `<span style="color:#00e5ff; font-size:9px; font-weight:bold; margin-left:6px;">[PUSTY SLOT]</span>`;
                     }
 
-                    // --- GENEROWANIE DANYCH DO PODWÓJNEGO TOOLTIPA ---
-                    let dbHtml = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:#ffb300; font-size:12px;">[Ze Sklepu / Bazy]</b><br><b style="color:#d4af37; font-size:12px;">${item.name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>` + (item.stats || "");
+                    // --- JEDNOLITE TWORZENIE OBU STRON TOOLTIPA ---
+                    let dbHtml = window.EquipmentScorer.formatItemHTML(item, displayType, true);
                     
                     let cl = window.EquipmentScorer.getClFromDbItem(item, displayType);
                     let eqItem = window.EquipmentScorer.getEquippedItemByCl(cl);
-                    let eqHtml = window.EquipmentScorer.formatEqItem(eqItem, displayType);
+                    let eqHtml = window.EquipmentScorer.formatItemHTML(eqItem, displayType, false);
                     
                     let encDb = encodeURIComponent(dbHtml);
                     let encEq = encodeURIComponent(eqHtml);
 
-                    // Usunięto klasę 'margo-tooltip-trigger' by uniknąć konfliktów. Teraz używamy customowych onmouseenter!
                     html += `
                         <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; background:#1a1a1a;">
                             <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
