@@ -5886,7 +5886,7 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-    // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
+   // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
@@ -5903,24 +5903,22 @@ window.clearExpMaps = () => {
                         if (!statStr || typeof statStr !== "string") return {};
                         const out = {};
                         
-                        // Jeśli to surowe dane silnika (zawiera '=')
                         if (statStr.includes("=")) {
                             statStr.split(";").forEach(part => {
                                 const [k, v] = part.split("=");
                                 if (k) out[k] = v ?? true;
                             });
                         } else {
-                            // TŁUMACZ Z POLSKIEGO TEKSTU NA SUROWE ZMIENNE
                             let t = statStr.toLowerCase();
                             let dmgMatch = t.match(/obrażenia:\s*(\d+)(?:-(\d+))?/);
                             if (dmgMatch) out.dmg = dmgMatch[2] ? `${dmgMatch[1]},${dmgMatch[2]}` : dmgMatch[1];
-                            let acMatch = t.match(/pancerz:\s*(\d+)/); if (acMatch) out.ac = acMatch[1];
-                            let saMatch = t.match(/szybkość ataku:\s*([0-9.]+)/); if (saMatch) out.sa = saMatch[1];
+                            let acMatch = t.match(/pancerz:\s*\+?(\d+)/); if (acMatch) out.ac = acMatch[1];
+                            let saMatch = t.match(/szybkość ataku:\s*\+?([0-9.]+)/); if (saMatch) out.sa = saMatch[1];
                             let hpMatch = t.match(/życie:\s*\+?(\d+)/); if (hpMatch) out.hp = hpMatch[1];
-                            let fireMatch = t.match(/od ognia:\s*(\d+)(?:-(\d+))?/); if (fireMatch) out.fire = fireMatch[2] ? `${fireMatch[1]},${fireMatch[2]}` : fireMatch[1];
-                            let frostMatch = t.match(/od zimna:\s*(\d+)(?:-(\d+))?/); if (frostMatch) out.frost = frostMatch[2] ? `${frostMatch[1]},${frostMatch[2]}` : frostMatch[1];
-                            let lightMatch = t.match(/od błyskawic:\s*(\d+)(?:-(\d+))?/); if (lightMatch) out.light = lightMatch[2] ? `${lightMatch[1]},${lightMatch[2]}` : lightMatch[1];
-                            let poisonMatch = t.match(/od trucizny:\s*(\d+)(?:-(\d+))?/); if (poisonMatch) out.poison = poisonMatch[2] ? `${poisonMatch[1]},${poisonMatch[2]}` : poisonMatch[1];
+                            let fireMatch = t.match(/od ognia:\s*\+?(\d+)(?:-(\d+))?/); if (fireMatch) out.fire = fireMatch[2] ? `${fireMatch[1]},${fireMatch[2]}` : fireMatch[1];
+                            let frostMatch = t.match(/od zimna:\s*\+?(\d+)(?:-(\d+))?/); if (frostMatch) out.frost = frostMatch[2] ? `${frostMatch[1]},${frostMatch[2]}` : frostMatch[1];
+                            let lightMatch = t.match(/od błyskawic:\s*\+?(\d+)(?:-(\d+))?/); if (lightMatch) out.light = lightMatch[2] ? `${lightMatch[1]},${lightMatch[2]}` : lightMatch[1];
+                            let poisonMatch = t.match(/od trucizny:\s*\+?(\d+)(?:-(\d+))?/); if (poisonMatch) out.poison = poisonMatch[2] ? `${poisonMatch[1]},${poisonMatch[2]}` : poisonMatch[1];
                             let critMatch = t.match(/cios krytyczny:\s*\+?([0-9.]+)/); if (critMatch) out.crit = critMatch[1];
                             let evadeMatch = t.match(/unik:\s*\+?([0-9.]+)/); if (evadeMatch) out.evade = evadeMatch[1];
                             let absorbMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń/); if (absorbMatch) out.absorb = absorbMatch[1];
@@ -5966,10 +5964,31 @@ window.clearExpMaps = () => {
                     },
 
                     getEquippedItemByCl: function(cl) {
-                        if (typeof Engine === 'undefined' || !Engine.heroEquipment || typeof Engine.heroEquipment.getEqItems !== 'function') return null;
-                        // Pobieramy całe ubrane eq (Nowy Interfejs)
-                        let eqItems = Object.values(Engine.heroEquipment.getEqItems());
-                        return eqItems.find(i => i && i._cachedStats && Number(i._cachedStats.cl) === Number(cl));
+                        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return null;
+                        let eqItems = [];
+                        
+                        // Zabezpieczenie dla Nowego Interfejsu - filtrowanie tylko poprawnych obiektów
+                        if (typeof Engine.heroEquipment.getEqItems === 'function') {
+                            eqItems = Object.values(Engine.heroEquipment.getEqItems()).filter(i => i);
+                        } else if (typeof Engine.heroEquipment.getHItems === 'function') {
+                            eqItems = Object.values(Engine.heroEquipment.getHItems()).filter(i => i && Number(i.st) > 0);
+                        }
+                        
+                        return eqItems.find(i => {
+                            let itemCl = i._cachedStats?.cl || i.cl;
+                            
+                            // Brutalne wyciąganie klasy ze statystyk, jeśli NI ukrywa `cl`
+                            if (!itemCl && i._cachedStats?.stat) {
+                                let m = i._cachedStats.stat.match(/cl=(\d+)/);
+                                if (m) itemCl = m[1];
+                            }
+                            if (!itemCl && i.stat) {
+                                let m = i.stat.match(/cl=(\d+)/);
+                                if (m) itemCl = m[1];
+                            }
+                            
+                            return Number(itemCl) === Number(cl);
+                        });
                     },
 
                     getClFromDbItem: function(item) {
@@ -5978,16 +5997,16 @@ window.clearExpMaps = () => {
                         let parsed = this.parseStats(rawStat);
                         if (parsed.cl) return Number(parsed.cl);
                         
-                        let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ\s]+)/) : null;
+                        let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
                         let type = typeMatch ? typeMatch[1].toLowerCase() : (item.type || "").toLowerCase();
                         
-                        if (type.includes("bro") || type.includes("dystans")) return 4;
-                        if (type.includes("zbro")) return 8;
-                        if (type.includes("hełm")) return 9;
+                        if (type.includes("bro") || type.includes("dystans") || type.includes("łuk")) return 4;
+                        if (type.includes("zbro") || type.includes("kaftan")) return 8;
+                        if (type.includes("hełm") || type.includes("czapk") || type.includes("kaptur")) return 9;
                         if (type.includes("but")) return 10;
-                        if (type.includes("rękaw")) return 11;
+                        if (type.includes("rękaw") || type.includes("bransol")) return 11;
                         if (type.includes("pierś")) return 12;
-                        if (type.includes("naszyj")) return 13;
+                        if (type.includes("naszyj") || type.includes("ozdob")) return 13;
                         if (type.includes("tarcz")) return 15;
                         if (type.includes("amunicja") || type.includes("strzał")) return 29;
                         return 0;
@@ -5998,7 +6017,7 @@ window.clearExpMaps = () => {
                         if (!cl) return { val: null, reason: 'no_cl' };
 
                         let eqItem = this.getEquippedItemByCl(cl);
-                        if (!eqItem) return { val: null, reason: 'no_eq' }; // Slot jest pusty
+                        if (!eqItem) return { val: null, reason: 'no_eq' };
 
                         let eqStat = eqItem._cachedStats?.stat || eqItem.stat || "";
                         let dbStat = dbItem.stat || dbItem.stats || "";
@@ -6045,7 +6064,8 @@ window.clearExpMaps = () => {
                 let count = 0;
                 
                 items.forEach((item, index) => {
-                    let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ\s]+)/) : null;
+                    // Pokażemy tylko pierwsze słowo po dwukropku (np. tylko "Rękawice")
+                    let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
                     let displayType = typeMatch ? typeMatch[1].trim() : (item.type && item.type !== 'null' ? item.type : "Inne");
                     
                     if (filterVal !== "Wszystkie" && !displayType.toLowerCase().includes(filterVal.toLowerCase())) return;
@@ -6054,7 +6074,6 @@ window.clearExpMaps = () => {
                     let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                     let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
                     
-                    // --- ODPALAMY MATEMATYKĘ ---
                     let cmp = window.EquipmentScorer.compareWithEquipped(item);
                     let badgeHtml = '';
                     
@@ -6092,7 +6111,7 @@ window.clearExpMaps = () => {
             };
             
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
-        };
+        }
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
