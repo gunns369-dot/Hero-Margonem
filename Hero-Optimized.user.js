@@ -1694,26 +1694,42 @@ function autoDetectEngineData() {
 
     let currentName = Engine.map.d.name;
     if (!currentName || currentName === "undefined") return;
-// --- ŁATKA: SPRAWDZANIE AWANSU I SYNCHRONIZACJA POZIOMÓW ---
+// --- ŁATKA: SPRAWDZANIE AWANSU, SYNCHRONIZACJA POZIOMÓW I AUTO-EXPOWISKO ---
     if (Engine.hero && Engine.hero.d && Engine.hero.d.lvl) {
         let currentLvl = Engine.hero.d.lvl;
         if (window.lastHeroExpLevel !== currentLvl) {
             if (window.lastHeroExpLevel !== 0 && currentLvl > window.lastHeroExpLevel) {
-                if (typeof window.logExp === 'function') window.logExp(`🎉 Awans na ${currentLvl} poziom! Automatyczna aktualizacja przedziału.`, "#4caf50");
+                if (typeof window.logExp === 'function') window.logExp(`🎉 Awans na ${currentLvl} poziom!`, "#4caf50");
+                
+                // AUTO-ZMIANA EXPOWISKA
+                if (botSettings.exp.autoChangeRoute && botSettings.expProfiles) {
+                    let bestProfile = null; let highestValidLvl = -1; let profIdx = -1;
+                    botSettings.expProfiles.forEach((p, idx) => {
+                        let match = p.name.match(/\((\d+)\s*lvl\)/i);
+                        if (match) {
+                            let pLvl = parseInt(match[1]);
+                            if (pLvl <= currentLvl && pLvl > highestValidLvl) {
+                                highestValidLvl = pLvl; bestProfile = p; profIdx = idx;
+                            }
+                        }
+                    });
+
+                    if (bestProfile) {
+                        if (typeof window.logExp === 'function') window.logExp(`🗺️ Automatycznie wczytuję nowe expowisko dla poziomu ${currentLvl}: ${bestProfile.name}!`, "#00e5ff");
+                        if (typeof stopPatrol === 'function') stopPatrol(true); // Zatrzymuje obecny ruch
+                        window.autoLoadExpProfile(profIdx); // Wczytuje nową mapę w locie bez alertu
+                    }
+                }
             }
             window.lastHeroExpLevel = currentLvl;
             
-            // Kalkulacja widełek na podstawie offsetów berserka
             let minOff = Math.abs(botSettings.berserk.minLvlOffset || 20);
             let maxOff = parseInt(botSettings.berserk.maxLvlOffset || 100);
-            
             botSettings.exp.minLvl = Math.max(1, currentLvl - minOff);
             botSettings.exp.maxLvl = currentLvl + maxOff;
             
-            let elMin = document.getElementById('expMinL');
-            let elMax = document.getElementById('expMaxL');
-            if (elMin) elMin.value = botSettings.exp.minLvl;
-            if (elMax) elMax.value = botSettings.exp.maxLvl;
+            let elMin = document.getElementById('expMinL'); let elMax = document.getElementById('expMaxL');
+            if (elMin) elMin.value = botSettings.exp.minLvl; if (elMax) elMax.value = botSettings.exp.maxLvl;
             
             saveSettings();
             if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
@@ -2508,24 +2524,34 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
                         </div>
                     </div>
-
-                    <div class="accordion-header" id="accAutoheal" onclick="toggleSettingsAcc('accAutoheal')" style="background: rgba(76, 175, 80, 0.2); border-color: #4caf50; color: #4caf50; margin-bottom: 0;">
+<div class="accordion-header" id="accAutoheal" onclick="toggleSettingsAcc('accAutoheal')" style="background: rgba(76, 175, 80, 0.2); border-color: #4caf50; color: #4caf50; margin-bottom: 0;">
                         ▼ AUTOHEAL I AUTO-SPRZEDAŻ
                     </div>
                     <div id="accAutohealContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #4caf50; border-top: none; margin-bottom: 5px;">
-                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                            <div style="display:flex; gap:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <div style="display:flex; gap:10px; align-items:center;">
                                 <label style="color:#4caf50; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
                                     <input type="checkbox" id="autohealEnabled" ${botSettings.autoheal?.enabled ? 'checked' : ''}> Autoheal
                                 </label>
-                                <label style="color:#e91e63; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
-                                    <input type="checkbox" id="autopotEnabled" ${botSettings.autopot?.enabled ? 'checked' : ''}> Auto Poty
-                                </label>
+                                <div style="display:flex; align-items:center; gap:5px;">
+                                    <label style="color:#e91e63; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
+                                        <input type="checkbox" id="autopotEnabled" ${botSettings.autopot?.enabled ? 'checked' : ''}> Auto Poty
+                                    </label>
+                                    <span id="btnAutoPotSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia Auto-Potów">⚙️</span>
+                                </div>
                             </div>
                             <label style="color:#a99a75; font-size:10px; display:flex; align-items:center; gap:5px; margin:0;">
-                                Od ilu % leczyć: <input type="number" id="autohealThreshold" value="${botSettings.autoheal?.threshold ?? 80}" min="1" max="99" style="width:40px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
+                                Od ilu %: <input type="number" id="autohealThreshold" value="${botSettings.autoheal?.threshold ?? 80}" min="1" max="99" style="width:35px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
                             </label>
                         </div>
+                        
+                        <div id="autopotSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e91e63; border-radius:3px; margin-bottom:8px;">
+                            <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; justify-content:space-between; margin:0;">
+                                Ilość staków do kupienia (1 stak = 15 szt): 
+                                <input type="number" id="autopotStacks" value="${botSettings.autopot?.stacks ?? 14}" min="1" max="50" style="width:40px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
+                            </label>
+                        </div>
+
                         <div style="display:flex; gap:5px;">
                             <div style="flex:1;">
                                 <label style="color:#a99a75; font-size:9px; display:block; margin-bottom:2px;">Nigdy nie używaj przedmiotów:</label>
@@ -2536,7 +2562,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                                 <textarea id="autohealUnid" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.unidItems || ""}</textarea>
                             </div>
                         </div>
-                     <div style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+                        <div style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
                             <label style="color:#ffb300; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
                                 <input type="checkbox" id="autosellEnabled" ${botSettings.autosell?.enabled ? 'checked' : ''}> Auto-Sprzedaż
                             </label>
@@ -2548,9 +2574,14 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
 
                     <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
-                    <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:0;">
+                    <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
                         <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
                         <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
+                    </div>
+                    <div style="margin-bottom:4px; text-align:center; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px;">
+                        <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
+                            <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska po awansie!
+                        </label>
                     </div>
                     <input type="hidden" id="expRange" value="999">
                     <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px;">
@@ -2966,21 +2997,42 @@ window.expGlobalTargetMap = null;
         if (botSettings.berserk.userEnabled === undefined) {
             botSettings.berserk.userEnabled = botSettings.berserk.enabled;
         }
-        // Inicjalizacja ustawień AutoHeala i AutoPotów
-        if (!botSettings.autoheal) {
-            botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" };
-            saveSettings();
-        }
-        if (!botSettings.autopot) {
-            botSettings.autopot = { enabled: false };
-            saveSettings();
-        }
+       // Inicjalizacja ustawień AutoHeala i Auto-Potów
+        if (!botSettings.autoheal) { botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" }; saveSettings(); }
+        if (!botSettings.autopot) { botSettings.autopot = { enabled: false, stacks: 14 }; saveSettings(); }
+        if (botSettings.exp.autoChangeRoute === undefined) { botSettings.exp.autoChangeRoute = false; saveSettings(); }
 
-        // Bindowanie akcji z panelu Autoheala
         bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
         bindChange('autopotEnabled', (e) => { botSettings.autopot.enabled = e.target.checked; saveSettings(); });
         bindChange('autohealThreshold', (e) => { botSettings.autoheal.threshold = parseInt(e.target.value) || 80; saveSettings(); });
-
+        bindChange('autopotStacks', (e) => { botSettings.autopot.stacks = parseInt(e.target.value) || 14; saveSettings(); });
+        bindChange('autoChangeExpRoute', (e) => { botSettings.exp.autoChangeRoute = e.target.checked; saveSettings(); });
+        
+        bindClick('btnAutoPotSettings', () => { 
+            let p = document.getElementById('autopotSettingsPanel'); 
+            p.style.display = p.style.display === 'none' ? 'block' : 'none'; 
+        });
+        
+        // Pętla milczącego ładownia profili (dla Auto-Expowiska)
+        window.autoLoadExpProfile = function(index) {
+            let p = botSettings.expProfiles[index];
+            if(p) {
+                botSettings.exp.mapOrder = [...p.maps];
+                localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+                let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+                if(lvlMatch && lvlMatch[1]) {
+                    let baseLvl = parseInt(lvlMatch[1]);
+                    botSettings.exp.minLvl = Math.max(1, baseLvl - 5);
+                    botSettings.exp.maxLvl = baseLvl + 15;
+                    let mIn = document.getElementById('expMinL'); let mAx = document.getElementById('expMaxL');
+                    if (mIn) mIn.value = botSettings.exp.minLvl; if (mAx) mAx.value = botSettings.exp.maxLvl;
+                }
+                window.mapClearTimes = {}; expCurrentTargetId = null; expMapTransitionCooldown = 0; expLastActionTime = 0; expAntiLagTime = 0;
+                saveSettings();
+                expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
+                if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            }
+        };
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
         window.updateServerBerserk = function() {
             if (typeof window._g !== 'function') return;
@@ -6930,7 +6982,7 @@ window.clearExpMaps = () => {
             }
         }, 1000); 
     }
-    // --- DAEMON: AUTO-POTY (Kupowanie mikstur) ---
+ // --- DAEMON: AUTO-POTY (Kupowanie mikstur z humanizacją) ---
     if (!window.autoPotDaemonInstalled) {
         window.autoPotDaemonInstalled = true;
         window.autoPotState = { active: false, step: 0, nextActionTime: 0, targetNpc: null, targetItem: null };
@@ -6939,25 +6991,21 @@ window.clearExpMaps = () => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
             
-            // Żeby bot nie oszalał, blokujemy kupowanie potów jeśli właśnie sprzedaje drop
-            if (window.autoSellState && window.autoSellState.active) return;
+            if (window.autoSellState && window.autoSellState.active) return; // Priorytety (Sprzedaż ważniejsza)
 
-            // 1. Sprawdzanie ilości mikstur (Twój świetny kalkulator)
+            // 1. Sprawdzanie mikstur przy użyciu optymalnego reduce()
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {})
-                    .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
-                    .reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
+                  .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
+                  .reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
 
                 if (potCount <= 0) {
                     if (typeof stopPatrol === 'function') stopPatrol(true);
                     window.autoPotState.active = true;
                     
-                    // Szukamy idealnej mikstury dla postaci
                     let maxhp = Engine.hero.d.maxhp || 1000;
-                    let targetHeal = maxhp * 0.45; // Celujemy w mikstury leczące ok. 45% HP
-                    let bestNpc = null;
-                    let bestItemName = null;
-                    let bestDiff = Infinity;
+                    let targetHeal = maxhp * 0.45; // Szuka potek leczących 45% hp
+                    let bestNpc = null; let bestItemName = null; let bestDiff = Infinity;
 
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
                     healers.forEach(k => {
@@ -6969,9 +7017,7 @@ window.clearExpMaps = () => {
                                     let healAmount = parseInt(healMatch[1].replace(/\s/g, ''));
                                     let diff = Math.abs(healAmount - targetHeal);
                                     if (diff < bestDiff) {
-                                        bestDiff = diff;
-                                        bestItemName = i.name.split('Typ:')[0].trim();
-                                        bestNpc = k;
+                                        bestDiff = diff; bestItemName = i.name.split('Typ:')[0].trim(); bestNpc = k;
                                     }
                                 }
                             });
@@ -6979,25 +7025,21 @@ window.clearExpMaps = () => {
                     });
 
                     if (bestNpc && bestItemName) {
-                        window.autoPotState.targetNpc = bestNpc;
-                        window.autoPotState.targetItem = bestItemName;
-                        window.autoPotState.step = 1;
-                        window.autoPotState.nextActionTime = Date.now() + 500;
-                        window.isRushing = true;
+                        window.autoPotState.targetNpc = bestNpc; window.autoPotState.targetItem = bestItemName;
+                        window.autoPotState.step = 1; window.autoPotState.nextActionTime = Date.now() + 500; window.isRushing = true;
                         
-                        let msg = `🧪 BRAK MIKSTUR! Zatrzymuję wszystko i idę do ${bestNpc.npc_name} po 14x ${bestItemName}.`;
+                        let stacksToBuy = botSettings.autopot.stacks || 14;
+                        let msg = `🧪 BRAK MIKSTUR! Zatrzymuję wszystko i idę do ${bestNpc.npc_name} po ${stacksToBuy} staków (${stacksToBuy * 15}x) [${bestItemName}].`;
                         if (window.logHero) window.logHero(msg, "#e91e63");
                         if (window.logExp) window.logExp(msg, "#e91e63");
                     } else {
                         window.autoPotState.active = false;
-                        let msg = `🚨 Brak mikstur, ale nie znaleziono żadnego uzdrowiciela w bazie MargoWorld!`;
-                        if (window.logHero) window.logHero(msg, "#e53935");
-                        if (window.logExp) window.logExp(msg, "#e53935");
+                        if (window.logHero) window.logHero(`🚨 Brak mikstur, ale nie znaleziono uzdrowiciela!`, "#e53935");
                     }
                 }
             }
 
-            // 2. Cykl dotarcia do Uzdrowiciela i zakupu
+            // 2. Cykl dotarcia i zakupu
             if (window.autoPotState.active) {
                 if (Date.now() < window.autoPotState.nextActionTime) return;
                 window.isExpSuspended = true;
@@ -7019,31 +7061,24 @@ window.clearExpMaps = () => {
                                 if (n.nick === bestNpc.npc_name) {
                                     if (Engine.npcs.interact) Engine.npcs.interact(n.id);
                                     else window._g(`talk&id=${n.id}`);
-                                    
                                     window.autoPotState.step = 2;
-                                    window.autoPotState.nextActionTime = Date.now() + 800; // Czekamy aż pojawi się opcja rozmowy
+                                    window.autoPotState.nextActionTime = Date.now() + 800; 
                                     break;
                                 }
                             }
                         } else if (!window.isRushingToShop) {
                             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-                            if (!isMoving) {
-                                Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y});
-                                window.autoPotState.nextActionTime = Date.now() + 1000;
-                            } else {
-                                window.autoPotState.nextActionTime = Date.now() + 300;
-                            }
+                            if (!isMoving) { Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); window.autoPotState.nextActionTime = Date.now() + 1000; } 
+                            else { window.autoPotState.nextActionTime = Date.now() + 300; }
                         }
                     }
                 } else if (window.autoPotState.step === 2) {
-                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window, .shop-container');
+                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window');
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
-                        // Sklep jest otwarty, przechodzimy do koszyka
                         window.autoPotState.step = 3;
                         window.autoPotState.nextActionTime = Date.now() + 500;
                     } else {
-                        // Wyszukiwanie odpowiedniej opcji dialogowej (leczenie / towary)
-                        let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
+                        let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, [data-option]'));
                         if (dialogOptions.length > 0) {
                             let shopOpt = dialogOptions.find(el => {
                                 let txt = (el.innerText || el.textContent).toLowerCase();
@@ -7069,35 +7104,38 @@ window.clearExpMaps = () => {
                     });
 
                     if (itemToBuy && typeof Engine.shop.basket?.buyItem === 'function') {
-                        // Kupujemy 14 staków dokładnie tak jak prosiłeś
-                        for (let i = 0; i < 14; i++) {
-                            Engine.shop.basket.buyItem(itemToBuy);
-                        }
+                        let stacksToBuy = botSettings.autopot.stacks || 14;
+                        let clicksNeeded = stacksToBuy * 3; // 1 kliknięcie w NI = 5 sztuk. 3 kliknięcia = 15 sztuk (1 pełny stak).
+                        
+                        let msg = `🛒 Wrzucam ${stacksToBuy} staków do koszyka...`;
+                        if (window.logHero) window.logHero(msg, "#8bc34a");
+                        if (window.logExp) window.logExp(msg, "#8bc34a");
+
+                        for (let i = 0; i < clicksNeeded; i++) Engine.shop.basket.buyItem(itemToBuy);
+
                         window.autoPotState.step = 4;
-                        window.autoPotState.nextActionTime = Date.now() + 500;
+                        window.autoPotState.nextActionTime = Date.now() + Math.floor(Math.random() * 300) + 500; // Human delay before accept
                     } else {
-                        let msg = `❌ Uzdrowiciel nie posiada potek ${window.autoPotState.targetItem}!`;
-                        if (window.logHero) window.logHero(msg, "#e53935");
-                        if (window.logExp) window.logExp(msg, "#e53935");
                         window.autoPotState.active = false;
                         window.isExpSuspended = false;
                         window.isRushing = false;
                         window.lastExpMap = null;
                     }
                 } else if (window.autoPotState.step === 4) {
-                    // Akceptacja koszyka - logiką z Auto-Sprzedaży
+                    // Natywny zakup (jak z Auto-sprzedaży)
+                    const root = Engine.shop?.wnd?.$?.[0] || document;
                     if (typeof Engine.shop.basket?.finalize === 'function') {
                         Engine.shop.basket.finalize();
                     }
                     
-                    const acceptBtn = [...document.querySelectorAll("button, div, a, span")].find(el => /akceptuj|kup/i.test((el.textContent || "").trim()) && el.offsetParent);
+                    const acceptBtn = [...root.querySelectorAll("button, div, a, span")].find(el => /akceptuj|kup/i.test((el.textContent || "").trim()) && el.offsetParent);
                     if (acceptBtn) {
                         if (window.jQuery) jQuery(acceptBtn).trigger("click");
                         acceptBtn.click();
                         acceptBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
                     }
 
-                    let msg = `✅ Zakupiono 14x staków [${window.autoPotState.targetItem}]. Zamykam i wracam do pracy.`;
+                    let msg = `✅ Otrzymano mikstury. Zamykam i wracam do pracy.`;
                     if (window.logHero) window.logHero(msg, "#4caf50");
                     if (window.logExp) window.logExp(msg, "#4caf50");
 
@@ -7110,7 +7148,7 @@ window.clearExpMaps = () => {
                     let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                     if (closeBtn) closeBtn.click();
                     
-                    window.lastExpMap = null; // Resetujemy logikę mapy, żeby moduł expa przeliczył trasę powrotną!
+                    window.lastExpMap = null; // Powrót na spot!
                 }
             }
         }, 500);
