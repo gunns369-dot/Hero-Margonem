@@ -5886,7 +5886,7 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-   // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
+  // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
@@ -5899,34 +5899,39 @@ window.clearExpMaps = () => {
                     WEIGHTS_JEWELRY_EXP: { sa: 3.0, crit: 2.2, da: 2.0, dz: 1.8, hp: 1.4, evade: 1.5, heal: 1.0, slow: 0.8, resfire: 0.4, resfrost: 0.4, reslight: 0.4 },
                     WEIGHTS_AMMO_EXP: { pdmg: 4.0, acdmg: 2.0, evade: 1.0, crit: 1.0, sa: 1.0 },
 
-                    parseStats: function(statStr) {
-                        if (!statStr || typeof statStr !== "string") return {};
+                    parseStats: function(itemData) {
                         const out = {};
-                        
-                        if (statStr.includes("=")) {
-                            statStr.split(";").forEach(part => {
+                        // 1. Sprawdzamy czy mamy dostęp do surowego kodu z serwera
+                        let rawStat = itemData.stat || itemData.rawStat;
+                        if (rawStat && typeof rawStat === "string" && rawStat.includes("=")) {
+                            rawStat.split(";").forEach(part => {
                                 const [k, v] = part.split("=");
-                                if (k) out[k] = v ?? true;
+                                if (k) out[k.trim()] = v ?? true;
                             });
-                        } else {
-                            let t = statStr.toLowerCase();
-                            let dmgMatch = t.match(/obrażenia:\s*(\d+)(?:-(\d+))?/);
-                            if (dmgMatch) out.dmg = dmgMatch[2] ? `${dmgMatch[1]},${dmgMatch[2]}` : dmgMatch[1];
-                            let acMatch = t.match(/pancerz:\s*\+?(\d+)/); if (acMatch) out.ac = acMatch[1];
-                            let saMatch = t.match(/szybkość ataku:\s*\+?([0-9.]+)/); if (saMatch) out.sa = saMatch[1];
-                            let hpMatch = t.match(/życie:\s*\+?(\d+)/); if (hpMatch) out.hp = hpMatch[1];
-                            let fireMatch = t.match(/od ognia:\s*\+?(\d+)(?:-(\d+))?/); if (fireMatch) out.fire = fireMatch[2] ? `${fireMatch[1]},${fireMatch[2]}` : fireMatch[1];
-                            let frostMatch = t.match(/od zimna:\s*\+?(\d+)(?:-(\d+))?/); if (frostMatch) out.frost = frostMatch[2] ? `${frostMatch[1]},${frostMatch[2]}` : frostMatch[1];
-                            let lightMatch = t.match(/od błyskawic:\s*\+?(\d+)(?:-(\d+))?/); if (lightMatch) out.light = lightMatch[2] ? `${lightMatch[1]},${lightMatch[2]}` : lightMatch[1];
-                            let poisonMatch = t.match(/od trucizny:\s*\+?(\d+)(?:-(\d+))?/); if (poisonMatch) out.poison = poisonMatch[2] ? `${poisonMatch[1]},${poisonMatch[2]}` : poisonMatch[1];
-                            let critMatch = t.match(/cios krytyczny:\s*\+?([0-9.]+)/); if (critMatch) out.crit = critMatch[1];
-                            let evadeMatch = t.match(/unik:\s*\+?([0-9.]+)/); if (evadeMatch) out.evade = evadeMatch[1];
-                            let absorbMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń/); if (absorbMatch) out.absorb = absorbMatch[1];
-                            let absorbmMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń magicz/); if (absorbmMatch) out.absorbm = absorbmMatch[1];
-                            let daMatch = t.match(/podwójny atak:\s*\+?([0-9.]+)/); if (daMatch) out.da = daMatch[1];
-                            let healMatch = t.match(/leczenie zbroją:\s*\+?([0-9.]+)/); if (healMatch) out.heal = healMatch[1];
-                            let pierceMatch = t.match(/przebicie pancerza:\s*\+?([0-9.]+)/); if (pierceMatch) out.pierce = pierceMatch[1];
+                            return out;
                         }
+
+                        // 2. Jeśli nie, czyścimy polski opis ze wszystkich tagów HTML i czytamy tekst
+                        let htmlStr = itemData.stats || itemData.tooltip_text || "";
+                        let t = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase(); 
+                        
+                        let dmgMatch = t.match(/(?:atak|obrażenia(?: fizyczne| dystansowe)?):\s*(\d+)(?:-(\d+))?/);
+                        if (dmgMatch) out.dmg = dmgMatch[2] ? `${dmgMatch[1]},${dmgMatch[2]}` : dmgMatch[1];
+                        let acMatch = t.match(/pancerz:\s*\+?(\d+)/); if (acMatch) out.ac = acMatch[1];
+                        let saMatch = t.match(/szybkość ataku:\s*\+?([0-9.]+)/); if (saMatch) out.sa = saMatch[1];
+                        let hpMatch = t.match(/życie:\s*\+?(\d+)/); if (hpMatch) out.hp = hpMatch[1];
+                        let fireMatch = t.match(/od ognia:\s*\+?(\d+)(?:-(\d+))?/); if (fireMatch) out.fire = fireMatch[2] ? `${fireMatch[1]},${fireMatch[2]}` : fireMatch[1];
+                        let frostMatch = t.match(/od zimna:\s*\+?(\d+)(?:-(\d+))?/); if (frostMatch) out.frost = frostMatch[2] ? `${frostMatch[1]},${frostMatch[2]}` : frostMatch[1];
+                        let lightMatch = t.match(/od błyskawic:\s*\+?(\d+)(?:-(\d+))?/); if (lightMatch) out.light = lightMatch[2] ? `${lightMatch[1]},${lightMatch[2]}` : lightMatch[1];
+                        let poisonMatch = t.match(/od trucizny:\s*\+?(\d+)(?:-(\d+))?/); if (poisonMatch) out.poison = poisonMatch[2] ? `${poisonMatch[1]},${poisonMatch[2]}` : poisonMatch[1];
+                        let critMatch = t.match(/cios krytyczny:\s*\+?([0-9.]+)/); if (critMatch) out.crit = critMatch[1];
+                        let evadeMatch = t.match(/unik:\s*\+?([0-9.]+)/); if (evadeMatch) out.evade = evadeMatch[1];
+                        let absorbMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń/); if (absorbMatch) out.absorb = absorbMatch[1];
+                        let absorbmMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń magicz/); if (absorbmMatch) out.absorbm = absorbmMatch[1];
+                        let daMatch = t.match(/podwójny atak:\s*\+?([0-9.]+)/); if (daMatch) out.da = daMatch[1];
+                        let healMatch = t.match(/leczenie zbroją:\s*\+?([0-9.]+)/); if (healMatch) out.heal = healMatch[1];
+                        let pierceMatch = t.match(/przebicie pancerza:\s*\+?([0-9.]+)/); if (pierceMatch) out.pierce = pierceMatch[1];
+                        
                         return out;
                     },
 
@@ -5952,56 +5957,24 @@ window.clearExpMaps = () => {
                         return {};
                     },
 
-                    calculateScore: function(statStr, cl) {
-                        const stats = this.parseStats(statStr);
-                        const weights = this.getWeightsForItem(cl);
-                        let score = 0;
-                        for (const [key, weight] of Object.entries(weights)) {
-                            const val = this.statToNumber(stats[key]);
-                            score += val * weight;
-                        }
-                        return Number(score.toFixed(2));
-                    },
-
                     getEquippedItemByCl: function(cl) {
+                        // Niezawodny odczyt pożyczony z Twojego skryptu!
                         if (typeof Engine === 'undefined' || !Engine.heroEquipment) return null;
-                        let eqItems = [];
-                        
-                        // Zabezpieczenie dla Nowego Interfejsu - filtrowanie tylko poprawnych obiektów
-                        if (typeof Engine.heroEquipment.getEqItems === 'function') {
-                            eqItems = Object.values(Engine.heroEquipment.getEqItems()).filter(i => i);
-                        } else if (typeof Engine.heroEquipment.getHItems === 'function') {
-                            eqItems = Object.values(Engine.heroEquipment.getHItems()).filter(i => i && Number(i.st) > 0);
-                        }
-                        
-                        return eqItems.find(i => {
-                            let itemCl = i._cachedStats?.cl || i.cl;
-                            
-                            // Brutalne wyciąganie klasy ze statystyk, jeśli NI ukrywa `cl`
-                            if (!itemCl && i._cachedStats?.stat) {
-                                let m = i._cachedStats.stat.match(/cl=(\d+)/);
-                                if (m) itemCl = m[1];
-                            }
-                            if (!itemCl && i.stat) {
-                                let m = i.stat.match(/cl=(\d+)/);
-                                if (m) itemCl = m[1];
-                            }
-                            
-                            return Number(itemCl) === Number(cl);
-                        });
+                        let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
+                        let eqItems = Object.values(hItems).filter(i => Number(i?.st) > 0);
+                        return eqItems.find(i => Number(i.cl) === Number(cl));
                     },
 
                     getClFromDbItem: function(item) {
                         if (item.cl) return Number(item.cl);
-                        let rawStat = item.stat || item.stats || "";
-                        let parsed = this.parseStats(rawStat);
+                        let parsed = this.parseStats(item);
                         if (parsed.cl) return Number(parsed.cl);
                         
                         let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
                         let type = typeMatch ? typeMatch[1].toLowerCase() : (item.type || "").toLowerCase();
                         
                         if (type.includes("bro") || type.includes("dystans") || type.includes("łuk")) return 4;
-                        if (type.includes("zbro") || type.includes("kaftan")) return 8;
+                        if (type.includes("zbro") || type.includes("kaftan") || type.includes("szat")) return 8;
                         if (type.includes("hełm") || type.includes("czapk") || type.includes("kaptur")) return 9;
                         if (type.includes("but")) return 10;
                         if (type.includes("rękaw") || type.includes("bransol")) return 11;
@@ -6019,11 +5992,20 @@ window.clearExpMaps = () => {
                         let eqItem = this.getEquippedItemByCl(cl);
                         if (!eqItem) return { val: null, reason: 'no_eq' };
 
-                        let eqStat = eqItem._cachedStats?.stat || eqItem.stat || "";
-                        let dbStat = dbItem.stat || dbItem.stats || "";
+                        let dbStats = this.parseStats(dbItem);
+                        let eqStats = this.parseStats({ stat: eqItem.stat }); // Pakujemy w obiekt żeby parser zadziałał
 
-                        let eqScore = this.calculateScore(eqStat, cl);
-                        let dbScore = this.calculateScore(dbStat, cl);
+                        const weights = this.getWeightsForItem(cl);
+                        
+                        let eqScore = 0;
+                        let dbScore = 0;
+
+                        for (const [key, weight] of Object.entries(weights)) {
+                            let eqVal = this.statToNumber(eqStats[key]);
+                            let dbVal = this.statToNumber(dbStats[key]);
+                            eqScore += eqVal * weight;
+                            dbScore += dbVal * weight;
+                        }
 
                         if (eqScore <= 0) return { val: null, reason: 'zero_score' };
                         
@@ -6064,7 +6046,7 @@ window.clearExpMaps = () => {
                 let count = 0;
                 
                 items.forEach((item, index) => {
-                    // Pokażemy tylko pierwsze słowo po dwukropku (np. tylko "Rękawice")
+                    // Usuwamy zbędny dopisek rzadkości, zostawiając samo "Rękawice"
                     let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
                     let displayType = typeMatch ? typeMatch[1].trim() : (item.type && item.type !== 'null' ? item.type : "Inne");
                     
@@ -6074,6 +6056,7 @@ window.clearExpMaps = () => {
                     let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                     let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
                     
+                    // Odpalamy matematykę
                     let cmp = window.EquipmentScorer.compareWithEquipped(item);
                     let badgeHtml = '';
                     
