@@ -5886,12 +5886,48 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
- // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
+// 2. POKAŻ POLECANE EQ (Z filtrowaniem, Porównywaniem i Podwójnym Tooltipem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
             
-            // --- MODUŁ MATEMATYCZNY DO PORÓWNYWANIA ITEMÓW ---
+            // --- INICJALIZACJA PODWÓJNEGO TOOLTIPA ---
+            if (!document.getElementById('radarDualTooltip')) {
+                let tt = document.createElement('div');
+                tt.id = 'radarDualTooltip';
+                tt.style.cssText = 'position:fixed; z-index:999999; display:none; pointer-events:none; flex-direction:row; gap:5px; background:transparent; font-family: Tahoma, sans-serif;';
+                tt.innerHTML = `
+                    <div id="rdt-left" style="background:rgba(15,15,15,0.95); border:1px solid #d4af37; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:160px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.3;"></div>
+                    <div id="rdt-right" style="background:rgba(15,15,15,0.95); border:1px solid #4caf50; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:160px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.3;"></div>
+                `;
+                document.body.appendChild(tt);
+                
+                window.showDualTooltip = function(e, dbStats, eqStatsRaw) {
+                    let tt = document.getElementById('radarDualTooltip');
+                    tt.style.display = 'flex';
+                    document.getElementById('rdt-left').innerHTML = decodeURIComponent(dbStats);
+                    document.getElementById('rdt-right').innerHTML = decodeURIComponent(eqStatsRaw);
+                    window.moveDualTooltip(e);
+                };
+                window.moveDualTooltip = function(e) {
+                    let tt = document.getElementById('radarDualTooltip');
+                    if (tt.style.display !== 'none') {
+                        let x = e.clientX + 15;
+                        let y = e.clientY + 15;
+                        let w = tt.offsetWidth || 350;
+                        let h = tt.offsetHeight || 150;
+                        if (x + w > window.innerWidth) x = window.innerWidth - w - 10;
+                        if (y + h > window.innerHeight) y = window.innerHeight - h - 10;
+                        tt.style.left = x + 'px';
+                        tt.style.top = y + 'px';
+                    }
+                };
+                window.hideDualTooltip = function() {
+                    document.getElementById('radarDualTooltip').style.display = 'none';
+                };
+            }
+
+            // --- MODUŁ MATEMATYCZNY ---
             if (!window.EquipmentScorer) {
                 window.EquipmentScorer = {
                     WEIGHTS_WEAPON_EXP: { dmg: 5.0, fire: 4.5, frost: 4.5, light: 4.5, poison: 4.5, sa: 3.0, pierce: 2.2, crit: 1.8, evade: 1.2, hp: 0.5, ac: 0.3 },
@@ -5901,8 +5937,6 @@ window.clearExpMaps = () => {
 
                     parseStats: function(itemData) {
                         const out = {};
-                        
-                        // 1. Zabezpieczenie: Jeśli item ma surowy ciąg serwerowy (np. dmg=10;sa=1) -> parsujemy bezbłędnie (Głównie dla ubranego EQ)
                         let rawStat = itemData.stat || itemData.rawStat;
                         if (rawStat && typeof rawStat === "string" && rawStat.includes("=")) {
                             rawStat.split(";").forEach(part => {
@@ -5912,23 +5946,11 @@ window.clearExpMaps = () => {
                             return out;
                         }
 
-                        // 2. Jeśli to obiekt z bazy (HTML): Czyścimy z tagów <br>, <span> i czytamy na siłę
                         let htmlStr = itemData.stats || itemData.tooltip_text || itemData.name || "";
                         let str = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase(); 
                         
-                        // Wyciągarki ignorujące brudny tekst
-                        let extract = (name) => {
-                            let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)");
-                            let m = str.match(regex);
-                            return m ? m[1].replace(',', '.') : null;
-                        };
-                        let extractRange = (name) => {
-                            let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)(?:\\s*-\\s*([0-9.,]+))?");
-                            let m = str.match(regex);
-                            if (!m) return null;
-                            if (m[2]) return `${m[1].replace(',','.')},${m[2].replace(',','.')}`;
-                            return m[1].replace(',','.');
-                        };
+                        let extract = (name) => { let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)"); let m = str.match(regex); return m ? m[1].replace(',', '.') : null; };
+                        let extractRange = (name) => { let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)(?:\\s*-\\s*([0-9.,]+))?"); let m = str.match(regex); if (!m) return null; if (m[2]) return `${m[1].replace(',','.')},${m[2].replace(',','.')}`; return m[1].replace(',','.'); };
 
                         out.dmg = extractRange("obrażenia(?: fizyczne| dystansowe| magiczne)?") || extractRange("atak");
                         out.ac = extract("pancerz");
@@ -5943,7 +5965,7 @@ window.clearExpMaps = () => {
                         out.da = extract("podwójny atak");
                         out.heal = extract("leczenie zbroją");
                         out.pierce = extract("przebicie pancerza");
-                        out.pdmg = extract("obrażenia fizyczne"); // Dla strzał
+                        out.pdmg = extract("obrażenia fizyczne");
 
                         let abs1 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń(?! magicz)/);
                         if(abs1) out.absorb = abs1[1].replace(',', '.');
@@ -5957,13 +5979,8 @@ window.clearExpMaps = () => {
                         if (v == null) return 0;
                         if (typeof v === "number") return v;
                         if (typeof v !== "string") return 0;
-                        if (v.includes(",")) {
-                            const parts = v.split(",").map(x => parseFloat(x)).filter(x => !isNaN(x));
-                            if (!parts.length) return 0;
-                            return parts.reduce((a, b) => a + b, 0) / parts.length;
-                        }
-                        const n = parseFloat(v);
-                        return isNaN(n) ? 0 : n;
+                        if (v.includes(",")) { const parts = v.split(",").map(x => parseFloat(x)).filter(x => !isNaN(x)); if (!parts.length) return 0; return parts.reduce((a, b) => a + b, 0) / parts.length; }
+                        const n = parseFloat(v); return isNaN(n) ? 0 : n;
                     },
 
                     getWeightsForItem: function(cl) {
@@ -5976,7 +5993,6 @@ window.clearExpMaps = () => {
                     },
 
                     getEquippedItemByCl: function(cl) {
-                        // Twój niezawodny skrypt do odczytu z torby (st > 0 to założone)
                         if (typeof Engine === 'undefined' || !Engine.heroEquipment) return null;
                         let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
                         let eqItems = Object.values(hItems).filter(i => Number(i?.st) > 0 && Number(i?.cl) !== 24);
@@ -6005,30 +6021,57 @@ window.clearExpMaps = () => {
                     compareWithEquipped: function(dbItem, displayType) {
                         let cl = this.getClFromDbItem(dbItem, displayType);
                         if (!cl) return { val: null, reason: 'no_cl' };
-
                         let eqItem = this.getEquippedItemByCl(cl);
                         if (!eqItem) return { val: null, reason: 'no_eq' };
 
                         let dbStats = this.parseStats(dbItem);
-                        let eqStats = this.parseStats({ stat: eqItem.stat }); // Opakowujemy w obiekt, żeby parser chwycił surowy ciąg
+                        let eqStats = this.parseStats({ stat: eqItem.stat });
 
                         const weights = this.getWeightsForItem(cl);
-                        
-                        let eqScore = 0;
-                        let dbScore = 0;
+                        let eqScore = 0; let dbScore = 0;
 
                         for (const [key, weight] of Object.entries(weights)) {
-                            let eqVal = this.statToNumber(eqStats[key]);
-                            let dbVal = this.statToNumber(dbStats[key]);
-                            eqScore += eqVal * weight;
-                            dbScore += dbVal * weight;
+                            eqScore += this.statToNumber(eqStats[key]) * weight;
+                            dbScore += this.statToNumber(dbStats[key]) * weight;
                         }
 
-                        if (eqScore <= 0 && dbScore > 0) return { val: 999, reason: 'ok' }; // Nowy item niszczy stary (który nie miał pkt)
+                        if (eqScore <= 0 && dbScore > 0) return { val: 999, reason: 'ok' };
                         if (eqScore <= 0) return { val: null, reason: 'zero_score' };
                         
                         let percent = ((dbScore / eqScore) - 1) * 100;
                         return { val: Number(percent.toFixed(2)), reason: 'ok' };
+                    },
+
+                    formatEqItem: function(eqItem, displayType) {
+                        if (!eqItem) return `<div style="text-align:center; padding:10px;"><span style="color:#00e5ff; font-weight:bold; font-size:12px;">[PUSTY SLOT]</span><br><br><span style="color:#aaa;">Brak założonego przedmiotu<br>w tym miejscu.</span></div>`;
+                        
+                        let stats = this.parseStats({ stat: eqItem.stat || eqItem._cachedStats?.stat });
+                        let name = eqItem._cachedStats?.name || eqItem.name || "Nieznany";
+                        
+                        let html = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:#4caf50; font-size:12px;">[Obecnie Założony]</b><br><b style="color:#d4af37; font-size:12px;">${name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>`;
+                        
+                        let renderLine = (label, val, color="#fff") => { if (val) html += `<span style="color:${color}">${label}: <b>${String(val).replace(',', ' - ')}</b></span><br>`; };
+                        let renderPlus = (label, val, color="#fff") => { if (val) html += `<span style="color:${color}">${label}: <b>+${String(val).replace(',', ' - ')}</b></span><br>`; };
+                        
+                        renderLine("Obrażenia", stats.dmg);
+                        renderPlus("Pancerz", stats.ac);
+                        renderLine("Szybkość ataku", stats.sa);
+                        renderPlus("Życie", stats.hp, "#4caf50");
+                        
+                        renderLine("Od ognia", stats.fire, "#ff9800");
+                        renderLine("Od zimna", stats.frost, "#00e5ff");
+                        renderLine("Od błyskawic", stats.light, "#e040fb");
+                        renderLine("Od trucizny", stats.poison, "#64dd17");
+                        
+                        renderPlus("Cios krytyczny", stats.crit);
+                        renderPlus("Unik", stats.evade);
+                        if (stats.absorb) html += `<span style="color:#fff">Absorbuje <b>${stats.absorb}</b> obrażeń</span><br>`;
+                        if (stats.absorbm) html += `<span style="color:#fff">Absorbuje <b>${stats.absorbm}</b> obr. magicznych</span><br>`;
+                        renderPlus("Podwójny atak", stats.da);
+                        renderPlus("Leczenie turowe", stats.heal, "#4caf50");
+                        renderPlus("Przebicie pancerza", stats.pierce);
+                        
+                        return html;
                     }
                 };
             }
@@ -6073,7 +6116,6 @@ window.clearExpMaps = () => {
                     let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                     let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
                     
-                    // --- ODPALAMY NOWĄ, BEZBŁĘDNĄ MATEMATYKĘ ---
                     let cmp = window.EquipmentScorer.compareWithEquipped(item, displayType);
                     let badgeHtml = '';
                     
@@ -6091,11 +6133,26 @@ window.clearExpMaps = () => {
                         badgeHtml = `<span style="color:#00e5ff; font-size:9px; font-weight:bold; margin-left:6px;">[PUSTY SLOT]</span>`;
                     }
 
+                    // --- GENEROWANIE DANYCH DO PODWÓJNEGO TOOLTIPA ---
+                    let dbHtml = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:#ffb300; font-size:12px;">[Ze Sklepu / Bazy]</b><br><b style="color:#d4af37; font-size:12px;">${item.name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>` + (item.stats || "");
+                    
+                    let cl = window.EquipmentScorer.getClFromDbItem(item, displayType);
+                    let eqItem = window.EquipmentScorer.getEquippedItemByCl(cl);
+                    let eqHtml = window.EquipmentScorer.formatEqItem(eqItem, displayType);
+                    
+                    let encDb = encodeURIComponent(dbHtml);
+                    let encEq = encodeURIComponent(eqHtml);
+
+                    // Usunięto klasę 'margo-tooltip-trigger' by uniknąć konfliktów. Teraz używamy customowych onmouseenter!
                     html += `
                         <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; background:#1a1a1a;">
                             <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
                                 <div style="display:flex; align-items:center;">
-                                    <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${(item.stats || "").replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                                    <span class="toggle-seller-btn" 
+                                          onmouseenter="window.showDualTooltip(event, '${encDb}', '${encEq}')"
+                                          onmousemove="window.moveDualTooltip(event)"
+                                          onmouseleave="window.hideDualTooltip()"
+                                          data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
                                     ${badgeHtml}
                                 </div>
                                 <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
