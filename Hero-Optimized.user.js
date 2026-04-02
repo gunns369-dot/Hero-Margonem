@@ -6325,8 +6325,8 @@ window.clearExpMaps = () => {
         setInterval(() => {
             if (window.autoBuyTask && typeof Engine !== 'undefined') {
                 
-                // 1. OMIJANIE DIALOGÓW (Zaczepienie uzdrowiciela otwiera dialog zamiast sklepu)
-                let dialogOptions = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
+                // 1. OMIJANIE DIALOGÓW (Z zaawansowanymi klasami Nowego Interfejsu)
+                let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                 if (dialogOptions.length > 0) {
                     let shopOpt = dialogOptions.find(el => {
                         let txt = (el.innerText || el.textContent).toLowerCase();
@@ -6343,18 +6343,18 @@ window.clearExpMaps = () => {
                                 shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                             }
                         }, humanDelay);
-                        return; 
+                        return; // Kliknęliśmy, czekamy na załadowanie sklepu
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Z wykorzystaniem Twojego odkrycia _cachedStats)
+                // 2. KUPNO W SKLEPIE (Z wykorzystaniem _cachedStats.name dla NI)
                 if (Engine.shop && Engine.shop.items) {
-                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window');
+                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         let shopItems = Object.values(Engine.shop.items);
                         
-                        // ODCZYT NAZWY Z NOWEGO INTERFEJSU (_cachedStats.name) ALBO STAREGO (.name)
+                        // Inteligentny odczyt nazwy (NI _cachedStats lub SI .name)
                         let itemToBuy = shopItems.find(i => {
                             let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
                             return realName === window.autoBuyTask.item;
@@ -6365,28 +6365,26 @@ window.clearExpMaps = () => {
                             
                             let finalAmount = window.autoBuyTask.amount;
                             let finalItemId = itemToBuy.id;
-                            window.autoBuyTask = null; // Usuwamy zadanie przed uderzeniem, by się nie zapętlało
+                            window.autoBuyTask = null; // Usuwamy zadanie przed uderzeniem w serwer
                             
-                            // Humanizacja: Czekamy chwilę na animacje sklepu (600-1000ms)
+                            // Czekamy chwilę na animacje okna sklepu
                             let buyDelay = Math.floor(Math.random() * 401) + 600; 
                             
                             setTimeout(() => {
-                                // WYSYŁAMY PAKIET KUPNA "KUP WIĘCEJ" PROSTO DO SERWERA (Zamiast klikać po UI)
-                                if (typeof Engine.communicator !== 'undefined' && typeof Engine.communicator.send === 'function') {
-                                    Engine.communicator.send(`shop&buy=${finalItemId}&amount=${finalAmount}`);
+                                // Komenda Kupna wprost do Serwera
+                                if (typeof window._g === 'function') {
+                                    window._g(`shop&buy=${finalItemId}&amount=${finalAmount}`);
                                 } else if (typeof window._t !== 'undefined' && typeof window._t.send === 'function') {
                                     window._t.send(`shop&buy=${finalItemId}&amount=${finalAmount}`);
-                                } else if (typeof window._g === 'function') {
-                                    window._g(`shop&buy=${finalItemId}&amount=${finalAmount}`);
                                 }
                                 
                                 if (window.logHero) window.logHero(`✅ Zakupiono ${finalAmount} sztuk!`, "#4caf50");
 
-                                // Zamknięcie sklepu po krótkim odstępie czasu (600-1100ms)
+                                // Zamknięcie sklepu po krótkim odstępie czasu
                                 let closeDelay = Math.floor(Math.random() * 501) + 600; 
                                 setTimeout(() => { 
                                     if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
-                                    let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close');
+                                    let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close, .close-cross');
                                     if (closeBtn) closeBtn.click();
                                 }, closeDelay);
                                 
