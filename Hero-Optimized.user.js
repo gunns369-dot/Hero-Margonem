@@ -6347,31 +6347,32 @@ window.clearExpMaps = () => {
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Z wykorzystaniem _cachedStats.name dla NI)
+                // 2. KUPNO W SKLEPIE (Z wykorzystaniem Twojego mapowania _cachedStats)
                 if (Engine.shop && Engine.shop.items) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
-                        let shopItems = Object.values(Engine.shop.items);
                         
-                        // Inteligentny odczyt nazwy (NI _cachedStats lub SI .name)
-                        let itemToBuy = shopItems.find(i => {
-                            let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
-                            return realName === window.autoBuyTask.item;
-                        });
+                        // Używamy Twojej logiki odczytu z _cachedStats!
+                        let shopItemsArray = Object.entries(Engine.shop.items).map(([slot, item]) => ({
+                            id: item.id,
+                            name: item._cachedStats?.name || item.name || "brak"
+                        }));
+                        
+                        let itemToBuy = shopItemsArray.find(i => i.name === window.autoBuyTask.item);
                         
                         if (itemToBuy) {
                             if (window.logHero) window.logHero(`💸 Odnaleziono w sklepie: ${window.autoBuyTask.item}...`, "#8bc34a");
                             
                             let finalAmount = window.autoBuyTask.amount;
                             let finalItemId = itemToBuy.id;
-                            window.autoBuyTask = null; // Usuwamy zadanie przed uderzeniem w serwer
+                            window.autoBuyTask = null; // Usuwamy zadanie, aby się nie zapętliło
                             
-                            // Czekamy chwilę na animacje okna sklepu
+                            // Humanizacja: Czekamy chwilę na animacje okna sklepu przed strzałem (600-1000ms)
                             let buyDelay = Math.floor(Math.random() * 401) + 600; 
                             
                             setTimeout(() => {
-                                // Komenda Kupna wprost do Serwera
+                                // BEZPIECZNA komenda Kupna (window._g odpowiednio pakuje request do serwera, nie wywala z gry!)
                                 if (typeof window._g === 'function') {
                                     window._g(`shop&buy=${finalItemId}&amount=${finalAmount}`);
                                 } else if (typeof window._t !== 'undefined' && typeof window._t.send === 'function') {
@@ -6380,7 +6381,7 @@ window.clearExpMaps = () => {
                                 
                                 if (window.logHero) window.logHero(`✅ Zakupiono ${finalAmount} sztuk!`, "#4caf50");
 
-                                // Zamknięcie sklepu po krótkim odstępie czasu
+                                // Zamknięcie sklepu po naturalnym odstępie czasu (600-1100ms)
                                 let closeDelay = Math.floor(Math.random() * 501) + 600; 
                                 setTimeout(() => { 
                                     if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
