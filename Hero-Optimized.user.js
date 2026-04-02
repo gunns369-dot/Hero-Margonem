@@ -6325,7 +6325,7 @@ window.clearExpMaps = () => {
         setInterval(() => {
             if (window.autoBuyTask && typeof Engine !== 'undefined') {
                 
-                // 1. OMIJANIE DIALOGÓW (Z zaawansowanymi klasami Nowego Interfejsu)
+                // 1. OMIJANIE DIALOGÓW (Zaczepienie uzdrowiciela otwiera dialog zamiast sklepu)
                 let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                 if (dialogOptions.length > 0) {
                     let shopOpt = dialogOptions.find(el => {
@@ -6347,47 +6347,53 @@ window.clearExpMaps = () => {
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Z wykorzystaniem Twojego mapowania _cachedStats)
-                if (Engine.shop && Engine.shop.items) {
+                // 2. KUPNO W SKLEPIE (Natywny mechanizm z Koszykiem - Engine.shop.basket)
+                if (Engine.shop && Engine.shop.items && Engine.shop.basket) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
+                        let shopItems = Object.values(Engine.shop.items);
                         
-                        // Używamy Twojej logiki odczytu z _cachedStats!
-                        let shopItemsArray = Object.entries(Engine.shop.items).map(([slot, item]) => ({
-                            id: item.id,
-                            name: item._cachedStats?.name || item.name || "brak"
-                        }));
-                        
-                        let itemToBuy = shopItemsArray.find(i => i.name === window.autoBuyTask.item);
+                        // Odczyt po zaktualizowanym kodzie (wsparcie dla _cachedStats)
+                        let itemToBuy = shopItems.find(i => {
+                            let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
+                            return realName === window.autoBuyTask.item;
+                        });
                         
                         if (itemToBuy) {
-                            if (window.logHero) window.logHero(`💸 Odnaleziono w sklepie: ${window.autoBuyTask.item}...`, "#8bc34a");
+                            if (window.logHero) window.logHero(`🛒 Dodaję do koszyka: ${window.autoBuyTask.item}...`, "#8bc34a");
                             
                             let finalAmount = window.autoBuyTask.amount;
-                            let finalItemId = itemToBuy.id;
                             window.autoBuyTask = null; // Usuwamy zadanie, aby się nie zapętliło
                             
-                            // Humanizacja: Czekamy chwilę na animacje okna sklepu przed strzałem (600-1000ms)
-                            let buyDelay = Math.floor(Math.random() * 401) + 600; 
+                            // Humanizacja: Czekamy chwilę na animacje okna sklepu (500-800ms)
+                            let buyDelay = Math.floor(Math.random() * 301) + 500; 
                             
                             setTimeout(() => {
-                                // BEZPIECZNA komenda Kupna (window._g odpowiednio pakuje request do serwera, nie wywala z gry!)
-                                if (typeof window._g === 'function') {
-                                    window._g(`shop&buy=${finalItemId}&amount=${finalAmount}`);
-                                } else if (typeof window._t !== 'undefined' && typeof window._t.send === 'function') {
-                                    window._t.send(`shop&buy=${finalItemId}&amount=${finalAmount}`);
+                                // Pętla dodająca wymaganą ilość do koszyka (zgodnie z Twoim rozwiązaniem)
+                                if (typeof Engine.shop.basket.buyItem === 'function') {
+                                    for (let i = 0; i < finalAmount; i++) {
+                                        Engine.shop.basket.buyItem(itemToBuy);
+                                    }
                                 }
-                                
-                                if (window.logHero) window.logHero(`✅ Zakupiono ${finalAmount} sztuk!`, "#4caf50");
 
-                                // Zamknięcie sklepu po naturalnym odstępie czasu (600-1100ms)
-                                let closeDelay = Math.floor(Math.random() * 501) + 600; 
+                                // Krótka humanizowana przerwa przed kliknięciem "Akceptuj"
+                                let finalizeDelay = Math.floor(Math.random() * 301) + 300; 
                                 setTimeout(() => { 
-                                    if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
-                                    let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close, .close-cross');
-                                    if (closeBtn) closeBtn.click();
-                                }, closeDelay);
+                                    if (typeof Engine.shop.basket.finalize === 'function') {
+                                        Engine.shop.basket.finalize(); // Zatwierdzenie zakupu
+                                        if (window.logHero) window.logHero(`✅ Zatwierdzono zakup ${finalAmount} szt.!`, "#4caf50");
+                                    }
+                                    
+                                    // Zamknięcie sklepu po naturalnym odstępie czasu
+                                    let closeDelay = Math.floor(Math.random() * 501) + 500; 
+                                    setTimeout(() => { 
+                                        if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
+                                        let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close, .close-cross');
+                                        if (closeBtn) closeBtn.click();
+                                    }, closeDelay);
+
+                                }, finalizeDelay);
                                 
                             }, buyDelay);
 
