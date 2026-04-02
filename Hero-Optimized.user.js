@@ -1853,7 +1853,7 @@ function autoDetectEngineData() {
         window.executeRushStep(); 
     };
 
-    window.executeRushStep = function() {
+  window.executeRushStep = function() {
         if (!isRushing) return;
         let currentSysMap = lastMapName;
 
@@ -1890,7 +1890,7 @@ function autoDetectEngineData() {
             let msg = `🚨 BŁĄD TRASY! Bot nie wie jak dojść z [${currentSysMap}] do [${rushTarget}].`;
             if (window.logHero) window.logHero(msg, "#e53935");
             if (window.logExp) window.logExp(msg, "#e53935");
-            if (window.isExping) document.getElementById('btnStartExp')?.click(); // Fizycznie klika Stop
+            if (window.isExping) document.getElementById('btnStartExp')?.click(); 
             return;
         }
 
@@ -1901,20 +1901,61 @@ function autoDetectEngineData() {
         let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
 
         if (isTeleportRoute) {
+            // INFORMOWANIE W KONSOLI O UŻYCIU TELEPORTU
+            if (window.logExp) window.logExp(`🚀 Teleportuję do: ${nextMap}`, "#9c27b0");
             clearTimeout(rushInterval);
             rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
         } else if (door) {
+            // INFORMOWANIE W KONSOLI O ZWYKŁYM RUCHU
+            if (window.logExp) window.logExp(`🚪 Biegnę do przejścia na: ${nextMap}`, "#ba68c8");
+            
             let targetX = door.x; let targetY = door.y;
             if (door.allCoords && door.allCoords.length > 0) {
                 let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
                 targetX = rnd[0]; targetY = rnd[1];
             }
             
-            stuckCount = 0; // Resetujemy zacięcie przed startem
-            safeGoTo(targetX, targetY, false); // Klikamy tylko raz na start!
+            window.rushLastX = Engine.hero.d.x;
+            window.rushLastY = Engine.hero.d.y;
+            stuckCount = 0; // Reset
+            
+            safeGoTo(targetX, targetY, false); 
             clearTimeout(rushInterval);
             rushInterval = setTimeout(window.checkRushArrival, 500);
         }
+    };
+
+    window.checkRushArrival = function() {
+        if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
+        let currentSysMap = lastMapName;
+        if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
+
+        let nextMap = window.rushNextMap;
+        if (!nextMap) return;
+        
+        let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+        if (!door) return;
+
+        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
+        let dist = Math.abs(cx - door.x) + Math.abs(cy - door.y);
+
+        if (dist > 1) {
+            // INTELIGENTNE FIZYCZNE SPRAWDZANIE CZY POSTAĆ IDZIE
+            if (cx !== window.rushLastX || cy !== window.rushLastY) {
+                window.rushLastX = cx;
+                window.rushLastY = cy;
+                stuckCount = 0; // Postać się porusza, więc nie klikamy!
+            } else {
+                stuckCount++;
+                // Jeśli stoi w miejscu totalnie nieruchomo przez 2 sekundy (4x500ms), ponawia kliknięcie
+                if (stuckCount >= 4) { 
+                    safeGoTo(door.x, door.y, false); 
+                    stuckCount = 0; 
+                }
+            }
+        }
+        
+        rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
     window.checkRushArrival = function() {
@@ -4032,10 +4073,11 @@ function optimizeRoute() {
 
 
 
-function stopPatrol(hardStop = false) {
-        let wasPatrolling = isPatrolling;
+function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
+        let wasMoving = isPatrolling || isRushing;
         isPatrolling = false;
         isRushing = false;
+        window.isRushingToShop = false;
         clearTimeout(rushInterval);
 
         let btn = document.getElementById('btnStartStop');
@@ -4048,13 +4090,13 @@ function stopPatrol(hardStop = false) {
         clearTimeout(smoothPatrolInterval);
         renderCordsList(-1);
         
-        // Zabezpieczenie przed spamem - logujemy tylko jeśli faktycznie coś zatrzymaliśmy
-        if (wasPatrolling && window.logHero) window.logHero("Zatrzymano patrol.", "#f44336");
+        if (wasMoving && window.logHero) window.logHero("Zatrzymano ruch.", "#f44336");
 
+        // TWARDE HAMOWANIE POSTACI W GRZE
         if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
             try {
                 if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
+                Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y}); // Resetuje trasę do punktu pod nogami
                 if (Engine.hero.d.path) Engine.hero.d.path = [];
             } catch(e) {}
         }
