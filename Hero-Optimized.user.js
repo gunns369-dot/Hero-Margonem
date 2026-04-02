@@ -5886,17 +5886,121 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-      // 2. POKAŻ POLECANE EQ (Z filtrowaniem)
+     // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
             
+            // --- MODUŁ MATEMATYCZNY DO PORÓWNYWANIA ITEMÓW ---
+            if (!window.EquipmentScorer) {
+                window.EquipmentScorer = {
+                    WEIGHTS_WEAPON_EXP: { dmg: 5.0, fire: 4.5, frost: 4.5, light: 4.5, poison: 4.5, sa: 3.0, pierce: 2.2, crit: 1.8, evade: 1.2, hp: 0.5, ac: 0.3 },
+                    WEIGHTS_ARMOR_EXP: { sa: 3.0, ac: 2.0, absorb: 1.8, absorbm: 1.5, evade: 2.0, hp: 1.3, da: 1.5, act: 0.8, resfire: 0.6, resfrost: 0.6, reslight: 0.6, heal: 0.5 },
+                    WEIGHTS_JEWELRY_EXP: { sa: 3.0, crit: 2.2, da: 2.0, dz: 1.8, hp: 1.4, evade: 1.5, heal: 1.0, slow: 0.8, resfire: 0.4, resfrost: 0.4, reslight: 0.4 },
+                    WEIGHTS_AMMO_EXP: { pdmg: 4.0, acdmg: 2.0, evade: 1.0, crit: 1.0, sa: 1.0 },
+
+                    parseStats: function(statStr) {
+                        if (!statStr || typeof statStr !== "string") return {};
+                        const out = {};
+                        statStr.split(";").forEach(part => {
+                            const [k, v] = part.split("=");
+                            if (!k) return;
+                            out[k] = v ?? true;
+                        });
+                        return out;
+                    },
+
+                    statToNumber: function(v) {
+                        if (v == null) return 0;
+                        if (typeof v === "number") return v;
+                        if (typeof v !== "string") return 0;
+                        if (v.includes(",")) {
+                            const parts = v.split(",").map(x => parseFloat(x)).filter(x => !isNaN(x));
+                            if (!parts.length) return 0;
+                            return parts.reduce((a, b) => a + b, 0) / parts.length;
+                        }
+                        const n = parseFloat(v);
+                        return isNaN(n) ? 0 : n;
+                    },
+
+                    getWeightsForItem: function(cl) {
+                        cl = Number(cl);
+                        if (cl === 4) return this.WEIGHTS_WEAPON_EXP;
+                        if ([8, 9, 10, 11, 15].includes(cl)) return this.WEIGHTS_ARMOR_EXP;
+                        if ([12, 13, 22].includes(cl)) return this.WEIGHTS_JEWELRY_EXP;
+                        if (cl === 29) return this.WEIGHTS_AMMO_EXP;
+                        return {};
+                    },
+
+                    calculateScore: function(statStr, cl) {
+                        const stats = this.parseStats(statStr);
+                        const weights = this.getWeightsForItem(cl);
+                        let score = 0;
+                        for (const [key, weight] of Object.entries(weights)) {
+                            const val = this.statToNumber(stats[key]);
+                            score += val * weight;
+                        }
+                        return Number(score.toFixed(2));
+                    },
+
+                    getEquippedItemByCl: function(cl) {
+                        if (typeof Engine === 'undefined' || !Engine.heroEquipment || typeof Engine.heroEquipment.getHItems !== 'function') return null;
+                        let items = Object.values(Engine.heroEquipment.getHItems() || {});
+                        // Szukamy ubranego przedmiotu (st > 0) o tej samej klasie (cl)
+                        return items.find(i => Number(i.st) > 0 && Number(i._cachedStats?.cl || i.cl) === Number(cl));
+                    },
+
+                    getClFromDbItem: function(item) {
+                        if (item.cl) return Number(item.cl);
+                        let rawStat = item.stat || item.stats || "";
+                        let parsed = this.parseStats(rawStat);
+                        if (parsed.cl) return Number(parsed.cl);
+                        
+                        // Zapasowe rozpoznawanie klasy po typie tekstu z tooltipa
+                        let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
+                        let type = typeMatch ? typeMatch[1].toLowerCase() : (item.type || "").toLowerCase();
+                        if (type.includes("bro") || type.includes("dystans")) return 4;
+                        if (type.includes("zbro")) return 8;
+                        if (type.includes("hełm")) return 9;
+                        if (type.includes("but")) return 10;
+                        if (type.includes("rękaw")) return 11;
+                        if (type.includes("pierś")) return 12;
+                        if (type.includes("naszyj")) return 13;
+                        if (type.includes("tarcz")) return 15;
+                        if (type.includes("amunicja") || type.includes("strzał")) return 29;
+                        return 0;
+                    },
+
+                    compareWithEquipped: function(dbItem) {
+                        let cl = this.getClFromDbItem(dbItem);
+                        if (!cl) return null;
+
+                        let eqItem = this.getEquippedItemByCl(cl);
+                        if (!eqItem) return null; // Brak założonego itemu w tym slocie (nowy jest bezwzględnie lepszy)
+
+                        let eqStat = eqItem._cachedStats?.stat || eqItem.stat || "";
+                        let dbStat = dbItem.stat || dbItem.stats || "";
+
+                        // Bezpiecznik: jeśli baza nie zawiera surowych statów (np. dmg=100;sa=1), nie da się przeliczyć
+                        if (!dbStat.includes("=")) return null;
+
+                        let eqScore = this.calculateScore(eqStat, cl);
+                        let dbScore = this.calculateScore(dbStat, cl);
+
+                        if (eqScore <= 0) return null;
+                        
+                        let percent = ((dbScore / eqScore) - 1) * 100;
+                        return Number(percent.toFixed(2));
+                    }
+                };
+            }
+
             if (!document.getElementById('eqTypeFilter')) {
                 eqList.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:#1a1a1a; padding:4px; border:1px solid #333;">
                         <span style="color:#a99a75; font-size:10px; font-weight:bold;">Filtruj typ:</span>
                         <select id="eqTypeFilter" style="background:#000; color:#d4af37; border:1px solid #333; font-size:10px; padding:2px; font-weight:bold; cursor:pointer;">
-                            <option value="Wszystkie">Wszystkie (-5 )</option>
+                            <option value="Wszystkie">Wszystkie (-5 do aktualnego)</option>
                             <option value="bro">Broń (Biała/Złoto)</option>
                             <option value="dystansowe">Dystansowe / Łuki</option>
                             <option value="zbroj">Zbroje</option>
@@ -5922,7 +6026,7 @@ window.clearExpMaps = () => {
                 let count = 0;
                 
                 items.forEach((item, index) => {
-                    let typeMatch = item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/);
+                    let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
                     let displayType = typeMatch ? typeMatch[1] : (item.type && item.type !== 'null' ? item.type : "Inne");
                     
                     if (filterVal !== "Wszystkie" && !displayType.toLowerCase().includes(filterVal.toLowerCase())) return;
@@ -5930,10 +6034,28 @@ window.clearExpMaps = () => {
                     count++;
                     let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                     let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
+                    
+                    // Odpalamy Twój potężny moduł do matematyki
+                    let percentBetter = window.EquipmentScorer.compareWithEquipped(item);
+                    let badgeHtml = '';
+                    
+                    if (percentBetter !== null) {
+                        if (percentBetter > 0) {
+                            badgeHtml = `<span style="color:#00e676; font-size:10px; font-weight:bold; margin-left:6px; background:#003300; padding:1px 3px; border-radius:2px; border:1px solid #00e676;">+${percentBetter}% EXP</span>`;
+                        } else if (percentBetter < 0) {
+                            badgeHtml = `<span style="color:#e53935; font-size:9px; font-weight:bold; margin-left:6px;">${percentBetter}% exp</span>`;
+                        } else {
+                            badgeHtml = `<span style="color:#9e9e9e; font-size:9px; font-weight:bold; margin-left:6px;">== exp</span>`;
+                        }
+                    }
+
                     html += `
                         <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; background:#1a1a1a;">
-                            <div style="display:flex; justify-content:space-between; width:100%;">
-                                <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${item.stats.replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <div style="display:flex; align-items:center;">
+                                    <span class="toggle-seller-btn margo-tooltip-trigger" data-stats="${(item.stats || "").replace(/"/g, '&quot;')}" data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
+                                    ${badgeHtml}
+                                </div>
                                 <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
                             </div>
                             <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
@@ -5950,7 +6072,6 @@ window.clearExpMaps = () => {
             
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
-
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
