@@ -5897,8 +5897,8 @@ window.clearExpMaps = () => {
                 tt.id = 'radarDualTooltip';
                 tt.style.cssText = 'position:fixed; z-index:999999; display:none; pointer-events:none; flex-direction:row; gap:5px; background:transparent; font-family: Tahoma, sans-serif;';
                 tt.innerHTML = `
-                    <div id="rdt-left" style="background:rgba(15,15,15,0.95); border:1px solid #ffb300; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:180px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.4;"></div>
-                    <div id="rdt-right" style="background:rgba(15,15,15,0.95); border:1px solid #4caf50; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:180px; max-width:250px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.4;"></div>
+                    <div id="rdt-left" style="background:rgba(15,15,15,0.95); border:1px solid #ffb300; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:180px; max-width:260px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.4;"></div>
+                    <div id="rdt-right" style="background:rgba(15,15,15,0.95); border:1px solid #4caf50; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:180px; max-width:260px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.4;"></div>
                 `;
                 document.body.appendChild(tt);
                 
@@ -5914,8 +5914,8 @@ window.clearExpMaps = () => {
                     if (tt.style.display !== 'none') {
                         let x = e.clientX + 15;
                         let y = e.clientY + 15;
-                        let w = tt.offsetWidth || 380;
-                        let h = tt.offsetHeight || 150;
+                        let w = tt.offsetWidth || 400;
+                        let h = tt.offsetHeight || 200;
                         if (x + w > window.innerWidth) x = window.innerWidth - w - 10;
                         if (y + h > window.innerHeight) y = window.innerHeight - h - 10;
                         tt.style.left = x + 'px';
@@ -5927,7 +5927,7 @@ window.clearExpMaps = () => {
                 };
             }
 
-            // --- MODUŁ MATEMATYCZNY I FORMATUJĄCY ---
+            // --- MODUŁ MATEMATYCZNY I FULL-FORMATTER ---
             if (!window.EquipmentScorer) {
                 window.EquipmentScorer = {
                     WEIGHTS_WEAPON_EXP: { dmg: 5.0, fire: 4.5, frost: 4.5, light: 4.5, poison: 4.5, sa: 3.0, pierce: 2.2, crit: 1.8, evade: 1.2, hp: 0.5, ac: 0.3 },
@@ -5939,6 +5939,7 @@ window.clearExpMaps = () => {
                         const out = {};
                         let rawStat = itemData.stat || itemData.rawStat || itemData.stats;
                         
+                        // ODCZYT RAW (Założone EQ lub NI Sklep)
                         if (rawStat && typeof rawStat === "string" && rawStat.includes("=")) {
                             rawStat.split(";").forEach(part => {
                                 const [k, v] = part.split("=");
@@ -5947,19 +5948,33 @@ window.clearExpMaps = () => {
                             return out;
                         }
 
+                        // ODCZYT HTML (Sklep / Baza)
                         let htmlStr = itemData.stats || itemData.tooltip_text || itemData.name || "";
                         let str = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase(); 
                         
+                        // Transformacje chroniące nazwy
+                        str = str.replace(/aktywny unik/g, "act_unik");
+                        str = str.replace(/moc ciosu krytycznego(?: magicznego)?/g, "critm_val");
+                        str = str.replace(/cios krytyczny/g, "crit_val");
+                        str = str.replace(/obrażenia fizyczne/g, "pdmg_val");
+                        str = str.replace(/obrażenia dystansowe/g, "acdmg_val");
+                        str = str.replace(/przebicie pancerza/g, "pierce_val");
+                        str = str.replace(/niszczenie pancerza/g, "dz_val");
+                        str = str.replace(/wszystkie cechy/g, "all_val");
+                        str = str.replace(/odporność na/g, "odp_na");
+                        str = str.replace(/odporności na/g, "odp_na");
+
                         let extract = (name) => { let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)"); let m = str.match(regex); return m ? m[1].replace(',', '.') : null; };
                         let extractRange = (name) => { let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)(?:\\s*-\\s*([0-9.,]+))?"); let m = str.match(regex); if (!m) return null; if (m[2]) return `${m[1].replace(',','.')},${m[2].replace(',','.')}`; return m[1].replace(',','.'); };
 
-                        out.dmg = extractRange("obrażenia(?: fizyczne| dystansowe| magiczne)?") || extractRange("atak");
-                        out.pdmg = extract("obrażenia fizyczne");
+                        out.dmg = extractRange("obrażenia(?: magiczne)?") || extractRange("atak");
+                        out.pdmg = extract("pdmg_val");
+                        out.acdmg = extract("acdmg_val");
                         out.ac = extract("pancerz");
                         out.sa = extract("szybkość ataku");
-                        out.hp = extract("życie");
-                        out.mana = extract("mana");
-                        out.all = extract("wszystkie cechy");
+                        out.hp = extract("życie") || extract("punktów życia");
+                        out.mana = extract("mana") || extract("punktów many");
+                        out.all = extract("all_val");
                         out.str = extract("siła");
                         out.agi = extract("zręczność");
                         out.int = extract("intelekt");
@@ -5967,18 +5982,20 @@ window.clearExpMaps = () => {
                         out.frost = extractRange("od zimna");
                         out.light = extractRange("od błyskawic");
                         out.poison = extractRange("od trucizny");
-                        out.resfire = extract("odporność na ogień");
-                        out.resfrost = extract("odporność na zimno");
-                        out.reslight = extract("odporność na błyskawice");
-                        out.respoison = extract("odporność na truciznę");
-                        out.crit = extract("cios krytyczny");
-                        out.critm = extract("moc ciosu krytycznego(?: magicznego)?");
+                        out.resfire = extract("odp_na ogień");
+                        out.resfrost = extract("odp_na zimno");
+                        out.reslight = extract("odp_na błyskawice");
+                        out.respoison = extract("odp_na truciznę");
+                        out.crit = extract("crit_val");
+                        out.critm = extract("critm_val");
                         out.evade = extract("unik");
-                        out.act = extract("aktywny unik");
+                        out.act = extract("act_unik");
                         out.da = extract("podwójny atak");
-                        out.dz = extract("niszczenie pancerza");
-                        out.heal = extract("leczenie(?: turowe| zbroją)?") || extract("przywraca");
-                        out.pierce = extract("przebicie pancerza");
+                        out.dz = extract("dz_val");
+                        out.pierce = extract("pierce_val");
+                        out.slow = extract("spowolnienie");
+                        out.block = extract("blok");
+                        out.heal = extract("leczenie(?: turowe| zbroją)?") || extract("przywraca[^0-9\\-]+([0-9.,]+)");
 
                         let abs1 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń(?! magicz)/); if(abs1) out.absorb = abs1[1].replace(',', '.');
                         let abs2 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń magicznych/); if(abs2) out.absorbm = abs2[1].replace(',', '.');
@@ -6053,7 +6070,6 @@ window.clearExpMaps = () => {
                         return { val: Number(percent.toFixed(2)), reason: 'ok' };
                     },
 
-                    // WSPÓLNY FORMATTER DLA OBU TOOLTIPÓW (Sklep i Założone)
                     formatItemHTML: function(itemObj, displayType, isDb) {
                         if (!itemObj && !isDb) return `<div style="text-align:center; padding:10px;"><span style="color:#00e5ff; font-weight:bold; font-size:12px;">[PUSTY SLOT]</span><br><br><span style="color:#aaa;">Brak założonego przedmiotu<br>w tym miejscu.</span></div>`;
                         
@@ -6078,15 +6094,16 @@ window.clearExpMaps = () => {
                         
                         let html = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:${titleColor}; font-size:12px;">${titleText}</b><br><b style="color:#d4af37; font-size:12px;">${name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>`;
                         
+                        // Lista wszystkich statystyk w odpowiedniej kolejności i kolorach
                         const statOrder = [
-                            {k:'dmg', l:'Obrażenia', c:'#fff'}, {k:'pdmg', l:'Obrażenia fizyczne', c:'#fff'}, {k:'ac', l:'Pancerz', c:'#fff', p:true},
-                            {k:'resfire', l:'Odporność na ogień', c:'#ff9800', p:true, pct:true}, {k:'resfrost', l:'Odporność na zimno', c:'#00e5ff', p:true, pct:true}, {k:'reslight', l:'Odporność na błyskawice', c:'#e040fb', p:true, pct:true}, {k:'respoison', l:'Odporność na truciznę', c:'#64dd17', p:true, pct:true},
+                            {k:'dmg', l:'Obrażenia', c:'#fff'}, {k:'pdmg', l:'Obrażenia fizyczne', c:'#fff'}, {k:'acdmg', l:'Obrażenia dystansowe', c:'#fff'}, {k:'ac', l:'Pancerz', c:'#fff', p:true}, {k:'block', l:'Blok', c:'#fff', p:true},
                             {k:'all', l:'Wszystkie cechy', c:'#fff', p:true}, {k:'str', l:'Siła', c:'#fff', p:true}, {k:'agi', l:'Zręczność', c:'#fff', p:true}, {k:'int', l:'Intelekt', c:'#fff', p:true},
                             {k:'hp', l:'Życie', c:'#4caf50', p:true}, {k:'mana', l:'Mana', c:'#2196f3', p:true},
                             {k:'fire', l:'Od ognia', c:'#ff9800'}, {k:'frost', l:'Od zimna', c:'#00e5ff'}, {k:'light', l:'Od błyskawic', c:'#e040fb'}, {k:'poison', l:'Od trucizny', c:'#64dd17'},
+                            {k:'resfire', l:'Odporność na ogień', c:'#ff9800', p:true, pct:true}, {k:'resfrost', l:'Odporność na zimno', c:'#00e5ff', p:true, pct:true}, {k:'reslight', l:'Odporność na błyskawice', c:'#e040fb', p:true, pct:true}, {k:'respoison', l:'Odporność na truciznę', c:'#64dd17', p:true, pct:true},
                             {k:'sa', l:'Szybkość ataku', c:'#fff', p:true}, {k:'crit', l:'Cios krytyczny', c:'#fff', p:true, pct:true}, {k:'critm', l:'Moc ciosu krytycznego', c:'#fff', p:true, pct:true},
                             {k:'evade', l:'Unik', c:'#fff', p:true}, {k:'act', l:'Aktywny unik', c:'#fff', p:true}, {k:'da', l:'Podwójny atak', c:'#fff', p:true},
-                            {k:'pierce', l:'Przebicie pancerza', c:'#fff', p:true}, {k:'dz', l:'Niszczenie pancerza', c:'#fff', p:true},
+                            {k:'pierce', l:'Przebicie pancerza', c:'#fff', p:true}, {k:'dz', l:'Niszczenie pancerza', c:'#fff', p:true}, {k:'slow', l:'Spowolnienie', c:'#fff', p:true},
                             {k:'absorb', l:'Absorbuje fizyczne', c:'#fff'}, {k:'absorbm', l:'Absorbuje magiczne', c:'#fff'}, {k:'heal', l:'Leczenie turowe', c:'#4caf50', p:true}
                         ];
                         
@@ -6166,9 +6183,7 @@ window.clearExpMaps = () => {
                         badgeHtml = `<span style="color:#00e5ff; font-size:9px; font-weight:bold; margin-left:6px;">[PUSTY SLOT]</span>`;
                     }
 
-                    // --- JEDNOLITE TWORZENIE OBU STRON TOOLTIPA ---
                     let dbHtml = window.EquipmentScorer.formatItemHTML(item, displayType, true);
-                    
                     let cl = window.EquipmentScorer.getClFromDbItem(item, displayType);
                     let eqItem = window.EquipmentScorer.getEquippedItemByCl(cl);
                     let eqHtml = window.EquipmentScorer.formatItemHTML(eqItem, displayType, false);
