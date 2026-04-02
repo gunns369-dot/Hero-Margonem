@@ -4654,7 +4654,37 @@ function runExpLogic() {
 
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
 
+// --- 0. PRIORYTET: AUTO-SPRZEDAŻ ---
+            // Jeśli plecak jest pełny, ta flaga zamraża całkowicie chodzenie na expa!
+            if (window.autoSellState && window.autoSellState.active) {
+                return; // Bot stoi w miejscu, oddając kontrolę systemowi sprzedaży
+            }
 
+            // --- 1. ZABEZPIECZENIE PRZED ZACIĘCIEM W DRZWIACH (MAP COOLDOWN) ---
+            if (window.lastExpMap !== Engine.map.d.name) {
+                window.lastExpMap = Engine.map.d.name;
+                window.mapCooldown = Date.now() + 1500; // 1.5 sekundy przerwy po zmianie mapy
+                window.isRushing = false; // Bezwzględny reset stanu biegu
+                if (window.logHero) window.logHero(`🌍 Załadowano: ${Engine.map.d.name}. Czekam na serwer...`, "#ff9800");
+                return; // Dajemy grze odetchnąć i załadować tekstury
+            }
+            if (window.mapCooldown && Date.now() < window.mapCooldown) {
+                return; // Trwa blokada, czekamy
+            }
+
+            // --- 2. RUCH NA EXPOWISKO ---
+            // Zmienna przechowująca cel (upewnij się, że używasz właściwej z Twojego kodu, np. botSettings.exp.maps[0])
+            let targetExpMap = botSettings.exp.maps[0]; 
+            
+            if (Engine.map.d.name !== targetExpMap) {
+                // Odpalamy algorytm ruchu TYLKO, jeśli bot jeszcze nie biegnie
+                if (!window.isRushing) {
+                    if (typeof window.rushToMap === 'function') {
+                        window.rushToMap(targetExpMap);
+                    }
+                }
+                return; // Jesteśmy w trasie do innej mapy, więc przerywamy pętlę (nie szukamy potworów)
+            }
 
     const now = Date.now();
 
@@ -6270,6 +6300,19 @@ window.clearExpMaps = () => {
             
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
+        // Funkcje pomocnicze dla plecaka
+    window.getBagInfo = function() {
+        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { occupied: 0, total: 42 };
+        
+        // Pobieramy całkowitą liczbę slotów z silnika gry
+        let total = (typeof Engine.heroEquipment.getBagTotalSlots === 'function') ? Engine.heroEquipment.getBagTotalSlots() : 42;
+        
+        // Liczymy zajęte sloty (przedmioty w torbach mają st === 0)
+        let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
+        let occupied = Object.values(hItems).filter(i => Number(i.st) === 0 && Number(i.cl) !== 24).length;
+        
+        return { occupied, total };
+    };
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
@@ -6816,7 +6859,7 @@ window.clearExpMaps = () => {
             }
         }, 1000); 
     }
-    // --- DAEMON: AUTO-SPRZEDAŻ (CZYSZCZENIE PLECAKA) ---
+   // --- DAEMON: AUTO-SPRZEDAŻ (Z DYNAMICZNĄ POJEMNOŚCIĄ I LOGAMI) ---
     if (!window.autoSellDaemonInstalled) {
         window.autoSellDaemonInstalled = true;
         window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1 };
@@ -6824,47 +6867,50 @@ window.clearExpMaps = () => {
         setInterval(() => {
             if (!botSettings.autosell || !botSettings.autosell.enabled) return;
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
-            if (Engine.battle && Engine.battle.show) return; // Nie sprzedajemy podczas walki
+            if (Engine.battle && Engine.battle.show) return;
 
-            // 1. Sprawdzanie pojemności
+            // 1. Sprawdzanie czy plecak jest PEŁNY (100% zajętych slotów)
             if (!window.autoSellState.active) {
-                let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
-                // Liczymy tylko przedmioty znajdujące się fizycznie w torbach
-                let bagItemsCount = Object.values(hItems).filter(i => Number(i.st) === 0 && Number(i.cl) !== 24).length;
-                
-                if (bagItemsCount >= botSettings.autosell.maxCapacity) {
+                let bag = window.getBagInfo();
+                if (bag.occupied >= bag.total && bag.total > 0) {
                     window.autoSellState.active = true;
                     window.autoSellState.step = 1;
-                    if (window.logHero) window.logHero("🎒 Plecak pełny! Przerywam exp, ruszam sprzedać złom...", "#ff9800");
+                    window.isRushing = true; // Blokujemy expa
+                    if (window.logHero) window.logHero(`🎒 Plecak pełny (${bag.occupied}/${bag.total})! Wstrzymuję exp i biegnę sprzedać drop...`, "#ffb300");
                 }
             }
 
-            // 2. Cykl Sprzedaży
+            // 2. Cykl obsługi sprzedaży
             if (window.autoSellState.active) {
-                window.isRushing = true; // Blokuje normalny exp, bot skupia się tylko na dojściu do kupca
-                
+                // To wyłącza ruch expa w innych funkcjach bota
+                window.isExpSuspended = true; 
+
                 if (window.autoSellState.step === 1) {
+                    // Wybór najbliższego/najlepszego kupca
                     let kupcy = window.DatabaseModule.kupcy || [];
-                    if (kupcy.length === 0) return;
+                    let bestNpc = kupcy.find(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n))) || kupcy[0];
                     
-                    // Szukamy najlepszego handlarza z bazy danych
-                    let bestNpc = kupcy.find(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n))) || kupcy[0];
-                    
+                    if (!bestNpc) {
+                        window.autoSellState.active = false;
+                        return;
+                    }
+
                     if (Engine.map.d.name !== bestNpc.map_name) {
-                        if (typeof window.rushToMap === 'function') window.rushToMap(bestNpc.map_name);
+                        if (!window.isRushingToShop) {
+                            window.isRushingToShop = true;
+                            if (window.logHero) window.logHero(`🏃 Idę do: ${bestNpc.map_name} (do sprzedawcy ${bestNpc.npc_name})`, "#00e5ff");
+                            if (typeof window.rushToMap === 'function') window.rushToMap(bestNpc.map_name, bestNpc.x, bestNpc.y);
+                        }
                     } else {
-                        // Jesteśmy na mapie kupca, podchodzimy na 2 kratki
+                        // Jesteśmy u kupca
                         let dist = Math.abs(Engine.hero.d.x - bestNpc.x) + Math.abs(Engine.hero.d.y - bestNpc.y);
-                        if (dist > 2 && !window.isWalkingToMerchant) {
-                            window.isWalkingToMerchant = true;
-                            Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y});
-                            setTimeout(() => { window.isWalkingToMerchant = false; }, 1000);
-                        } else if (dist <= 2) {
-                            // Rozpoczynamy dialog
+                        if (dist <= 2) {
+                            window.isRushingToShop = false;
                             let npcs = Engine.npcs.check ? Engine.npcs.check() : Engine.npcs.d;
                             for (let i in npcs) {
                                 let n = npcs[i].d || npcs[i];
                                 if (n.nick === bestNpc.npc_name) {
+                                    if (window.logHero) window.logHero(`💬 Rozpoczynam handel z ${n.nick}...`, "#4caf50");
                                     if (Engine.npcs.interact) Engine.npcs.interact(n.id);
                                     else window._g(`talk&id=${n.id}`);
                                     window.autoSellState.step = 2;
@@ -6874,56 +6920,54 @@ window.clearExpMaps = () => {
                         }
                     }
                 } else if (window.autoSellState.step === 2) {
-                    // Omijanie dialogów u kupca (klikamy w "Handluj" / "Sklep")
-                    let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
-                    if (dialogOptions.length > 0) {
-                        let shopOpt = dialogOptions.find(el => {
-                            let txt = (el.innerText || el.textContent).toLowerCase();
-                            return txt.includes('sklep') || txt.includes('handl') || txt.includes('sprzedaj') || txt.includes('pokaż');
-                        });
-                        if (shopOpt) {
-                            if (typeof shopOpt.click === 'function') shopOpt.click();
-                            else shopOpt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                        }
-                    }
+                    // Klikanie w dialog handlu
+                    let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li'));
+                    let shopOpt = dialogOptions.find(el => {
+                        let txt = (el.innerText || el.textContent).toLowerCase();
+                        return txt.includes('sklep') || txt.includes('handl') || txt.includes('sprzedaj');
+                    });
+                    if (shopOpt) shopOpt.click();
                     
-                    // Oczekiwanie na okno sklepu
-                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window, .shop-container');
+                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper');
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         window.autoSellState.step = 3;
                         window.autoSellState.oldGold = Engine.hero.d.gold;
-                        window.autoSellState.bagToSell = 1; // Zaczynamy sprzedaż od torby 1
+                        window.autoSellState.bagToSell = 1;
                     }
                 } else if (window.autoSellState.step === 3) {
-                    // Wymuszanie natywnej sprzedaży wszystkich toreb (od 1 do 4)
+                    // Automatyczna sprzedaż toreb (1-4)
                     if (window.autoSellState.bagToSell <= 4) {
+                        if (window.logHero) window.logHero(`💰 Sprzedaję zawartość torby ${window.autoSellState.bagToSell}...`, "#ffb300");
                         if (typeof window._g === 'function') window._g(`shop&sellbag=${window.autoSellState.bagToSell}`);
                         window.autoSellState.bagToSell++;
                     } else {
-                        // Sprawdzamy czy coś zarobiliśmy. Jeśli tak - powtarzamy cykl od nowa.
-                        window.autoSellState.step = 4; 
+                        window.autoSellState.step = 4;
                         setTimeout(() => {
                             let newGold = Engine.hero.d.gold;
-                            if (newGold > window.autoSellState.oldGold) {
-                                window.autoSellState.oldGold = newGold;
-                                window.autoSellState.bagToSell = 1;
-                                window.autoSellState.step = 3;
-                                if (window.logHero) window.logHero("💰 Sprzedałem kolejną porcję, sprawdzam dalej...", "#ffb300");
-                            } else {
-                                if (window.logHero) window.logHero("✅ Koniec! Odzyskano miejsce w plecaku. Wracam expić.", "#4caf50");
+                            let profit = newGold - window.autoSellState.oldGold;
+                            
+                            if (profit > 0) {
+                                if (window.logHero) window.logHero(`✅ Zarobiono: ${profit.toLocaleString()} zł! Czysty plecak.`, "#4caf50");
                                 window.autoSellState.active = false;
-                                window.isRushing = false; // Odblokowujemy expa
+                                window.isExpSuspended = false;
+                                window.isRushing = false;
                                 
                                 if (typeof Engine.shop.close === 'function') Engine.shop.close();
-                                let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close');
+                                let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close');
                                 if (closeBtn) closeBtn.click();
                                 
-                                window.lastExpMap = null; // Wymusza reset trasy
+                                window.lastExpMap = null; // Reset bota, żeby wrócił na expa
+                            } else {
+                                // Jeśli nic nie sprzedał (np. w torbach same unikaty), przerywamy by nie zapętlić
+                                window.autoSellState.active = false;
+                                window.isExpSuspended = false;
+                                window.isRushing = false;
+                                if (window.logHero) window.logHero("⚠️ Plecak pełny, ale nic nie sprzedano (sprawdź czy nie masz tam cennych itemów!).", "#e53935");
                             }
-                        }, 1200); // 1.2 sekundy na przetworzenie sprzedaży przez serwer
+                        }, 1500);
                     }
                 }
             }
-        }, 800);
+        }, 1000);
     }
 })(); // Koniec kodu
