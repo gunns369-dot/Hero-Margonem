@@ -1708,24 +1708,9 @@ function autoDetectEngineData() {
             if (window.lastHeroExpLevel !== 0 && currentLvl > window.lastHeroExpLevel) {
                 if (typeof window.logExp === 'function') window.logExp(`🎉 Awans na ${currentLvl} poziom!`, "#4caf50");
                 
-                // AUTO-ZMIANA EXPOWISKA
-                if (botSettings.exp.autoChangeRoute && botSettings.expProfiles) {
-                    let bestProfile = null; let highestValidLvl = -1; let profIdx = -1;
-                    botSettings.expProfiles.forEach((p, idx) => {
-                        let match = p.name.match(/\((\d+)\s*lvl\)/i);
-                        if (match) {
-                            let pLvl = parseInt(match[1]);
-                            if (pLvl <= currentLvl && pLvl > highestValidLvl) {
-                                highestValidLvl = pLvl; bestProfile = p; profIdx = idx;
-                            }
-                        }
-                    });
-
-                    if (bestProfile) {
-                        if (typeof window.logExp === 'function') window.logExp(`🗺️ Automatycznie wczytuję nowe expowisko dla poziomu ${currentLvl}: ${bestProfile.name}!`, "#00e5ff");
-                        if (typeof stopPatrol === 'function') stopPatrol(true); // Zatrzymuje obecny ruch
-                        window.autoLoadExpProfile(profIdx); // Wczytuje nową mapę w locie bez alertu
-                    }
+                // Bot sam sprawdzi, czy po tym awansie nie odblokowało się lepsze expowisko
+                if (typeof window.checkAndLoadBestExpProfile === 'function') {
+                    window.checkAndLoadBestExpProfile(false);
                 }
             }
             window.lastHeroExpLevel = currentLvl;
@@ -1743,7 +1728,7 @@ function autoDetectEngineData() {
             if (botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
         }
     }
-    // --- KONIEC ŁATKI ---
+// --- KONIEC ŁATKI ---
     updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
     updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
 
@@ -3020,10 +3005,11 @@ window.expGlobalTargetMap = null;
             p.style.display = p.style.display === 'none' ? 'block' : 'none'; 
         });
         
-        // Pętla milczącego ładownia profili (dla Auto-Expowiska)
+       // Pętla milczącego ładownia profili (dla Auto-Expowiska)
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
             if(p) {
+                botSettings.exp.activeProfileName = p.name; // Zapisujemy nazwę załadowanej trasy
                 botSettings.exp.mapOrder = [...p.maps];
                 localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
@@ -3040,6 +3026,44 @@ window.expGlobalTargetMap = null;
                 if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }
         };
+
+        // Algorytm sztucznej inteligencji: Zmienia expowisko na najlepsze możliwe
+        window.checkAndLoadBestExpProfile = function(forceLoad = false) {
+            if (!botSettings.exp.autoChangeRoute || !botSettings.expProfiles) return;
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.hero.d.lvl) return;
+            
+            let currentLvl = Engine.hero.d.lvl;
+            let bestProfile = null; 
+            let highestValidLvl = -1; 
+            let profIdx = -1;
+            
+            // Skanuje całą bazę i wybiera najwyższe możliwe expowisko (<= nasz level)
+            botSettings.expProfiles.forEach((p, idx) => {
+                let match = p.name.match(/\((\d+)\s*lvl\)/i);
+                if (match) {
+                    let pLvl = parseInt(match[1]);
+                    if (pLvl <= currentLvl && pLvl > highestValidLvl) {
+                        highestValidLvl = pLvl; bestProfile = p; profIdx = idx;
+                    }
+                }
+            });
+
+            if (bestProfile) {
+                // Ładujemy jeśli użytkownik to wymusił (kliknął checkbox) LUB jeśli to całkiem nowa trasa (awans)
+                if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || botSettings.exp.mapOrder.length === 0) {
+                    if (window.logExp) window.logExp(`🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`, "#00e5ff");
+                    if (typeof stopPatrol === 'function') stopPatrol(true); 
+                    window.autoLoadExpProfile(profIdx);
+                }
+            }
+        };
+
+        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
+        bindChange('autoChangeExpRoute', (e) => { 
+            botSettings.exp.autoChangeRoute = e.target.checked; 
+            saveSettings(); 
+            if (e.target.checked) window.checkAndLoadBestExpProfile(true); 
+        });
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
         window.updateServerBerserk = function() {
             if (typeof window._g !== 'function') return;
@@ -5903,9 +5927,17 @@ window.clearExpMaps = () => {
         }).join('');
     };
 
-    window.toggleTeleportLock = function(city, isChecked) {
+   window.toggleTeleportLock = function(city, isChecked) {
+        if (!botSettings.unlockedTeleports) botSettings.unlockedTeleports = {};
         botSettings.unlockedTeleports[city] = isChecked;
-        saveSettings(); // To wymusi solidny zapis w głównym jądrze bota!
+        
+        // Zapisujemy przypisując do nicku
+        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
+            let nick = Engine.hero.d.nick;
+            let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
+            allTps[nick] = botSettings.unlockedTeleports;
+            localStorage.setItem('hero_teleports_by_nick_v64', JSON.stringify(allTps));
+        }
     };
 
     window.renderTeleportOptions = function() {
