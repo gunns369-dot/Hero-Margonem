@@ -3011,8 +3011,9 @@ window.expGlobalTargetMap = null;
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
             if(p) {
-                botSettings.exp.activeProfileName = p.name; // Zapisujemy nazwę załadowanej trasy
-                botSettings.exp.mapOrder = [...p.maps];
+                botSettings.exp.activeProfileName = p.name; 
+                botSettings.exp.mapOrder = [...p.maps]; // Zapisujemy nową trasę
+                botSettings.exp.maps = [...p.maps]; // KLUCZOWE: synchronizacja tej drugiej zmiennej!
                 localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
                 
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
@@ -3029,9 +3030,7 @@ window.expGlobalTargetMap = null;
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
                 
                 // WYMUSZENIE NATYCHMIASTOWEGO RENDEROWANIA LISTY
-                setTimeout(() => {
-                    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
-                }, 150);
+                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }
         };
 
@@ -3057,7 +3056,7 @@ window.expGlobalTargetMap = null;
             });
 
             if (bestProfile) {
-                if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || botSettings.exp.mapOrder.length === 0) {
+                if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || !botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
                     if (window.logExp) window.logExp(`🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`, "#00e5ff");
                     if (typeof stopPatrol === 'function') stopPatrol(true); 
                     window.autoLoadExpProfile(profIdx);
@@ -3077,27 +3076,11 @@ window.expGlobalTargetMap = null;
                 if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
             }
             
-            // Twarde, wymuszone renderowanie listy map natychmiast po zmianie checkboxa
+            // Wymuszone odświeżenie UI natychmiast po kliknięciu!
             setTimeout(() => {
                 if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
-            }, 150);
+            }, 100);
         });
-        // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
-        window.updateServerBerserk = function() {
-            if (typeof window._g !== 'function') return;
-            let b = botSettings.berserk;
-            
-            // Wysyłanie pakietów konfiguracyjnych na serwer gry (dla trybu Solo[34] oraz Grupy[35])
-            [34, 35].forEach(id => {
-                window._g(`settings&action=update&id=${id}&v=${b.enabled ? 1 : 0}`);
-                if (b.enabled) {
-                    window._g(`settings&action=update&id=${id}&key=common&v=${b.common ? 1 : 0}`);
-                    window._g(`settings&action=update&id=${id}&key=elite&v=${b.e1 ? 1 : 0}`);
-                    window._g(`settings&action=update&id=${id}&key=elite2&v=${(b.e2 || b.hero) ? 1 : 0}`);
-                    window._g(`settings&action=update&id=${id}&key=lvlmin&v=${b.minLvlOffset}`);
-                    window._g(`settings&action=update&id=${id}&key=lvlmax&v=${b.maxLvlOffset}`);
-                }
-            });
             
            if (window._lastBerserkLogState !== b.enabled) {
     window._lastBerserkLogState = b.enabled;
@@ -4815,9 +4798,9 @@ function runExpLogic() {
                 return; // Trwa blokada, czekamy
             }
 
-      // --- 2. RUCH NA EXPOWISKO ---
+     // --- 2. RUCH NA EXPOWISKO ---
             let mapOrder = botSettings.exp.mapOrder || [];
-            // Jeśli lista map jest pusta, traktujemy obecną mapę jako cel (bot expi w miejscu)
+            // Jeśli lista map jest pusta, traktujemy obecną mapę jako cel (bot expi w miejscu i nie szuka dróg)
             let targetExpMap = mapOrder.length > 0 ? mapOrder[0] : Engine.map.d.name; 
             
             if (Engine.map.d.name !== targetExpMap) {
