@@ -1819,26 +1819,19 @@ function autoDetectEngineData() {
     }
 }
 
+// ==========================================
+    // RUSH MODE (PŁYNNY RUCH)
     // ==========================================
-
-    // RUSH MODE
-
-    // ==========================================
-
-window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) {
+    window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) {
         let currentSysMap = lastMapName;
 
         if (currentSysMap === targetMapName) {
-            if (x !== null && y !== null) {
-                console.log("%c[HERO] Już stoisz na tej mapie! Podchodzę pod resp...", "color: #4caf50;");
-                safeGoTo(x, y, false);
-            } else {
-                console.log("%c[HERO] Już stoisz na tej mapie!", "color: #4caf50;");
-            }
+            if (x !== null && y !== null) safeGoTo(x, y, false);
             return;
         }
 
-        stopPatrol(true);
+        // Płynne przejęcie kontroli (nie używamy stopPatrol(true), żeby nie szarpać postaci)
+        isPatrolling = false;
         isRushing = true;
         rushTarget = targetMapName;
         rushTargetX = x;
@@ -1852,7 +1845,11 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
             btn.style.borderColor = "#00acc1";
         }
 
-        console.log(`%c[HERO] 🏃 Biegne na: [${targetMapName}]`, "color: #00acc1; font-weight: bold;");
+        // Widoczne logowanie w oknie!
+        let msg = `🏃 Obieram kurs na: [${targetMapName}]`;
+        if (window.logHero) window.logHero(msg, "#00acc1");
+        if (window.logExp) window.logExp(msg, "#00acc1");
+
         window.executeRushStep(); 
     };
 
@@ -1861,44 +1858,39 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
         let currentSysMap = lastMapName;
 
         if (currentSysMap === rushTarget) {
-            stopPatrol(false);
+            isRushing = false;
+            let btn = document.getElementById('btnStartStop');
+            if (btn) { btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>'; btn.style.color = "#4caf50"; btn.style.borderColor = "#4caf50"; }
+            
             if (rushTargetX !== null && rushTargetY !== null) {
-                console.log("%c[HERO] Osiągnięto cel! Podchodzę pod punkt...", "color: #4caf50;");
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
             }
             return;
         }
 
         let nextMap = null;
-        let path = getShortestPath(currentSysMap, rushTarget);
+        let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
 
         if (path && path.length > 1) {
-            nextMap = path[1]; // Radar zna bezpośrednią drogę
+            nextMap = path[1]; 
         } else if (window.rushFullPath && window.rushFullPath.length > 0) {
-            // Nie znamy drogi - łapiemy się "nitki" z bazy
             let idx = window.rushFullPath.indexOf(currentSysMap);
             if (idx !== -1 && idx < window.rushFullPath.length - 1) {
                 nextMap = window.rushFullPath[idx + 1];
             } else {
                 let startMap = window.rushFullPath[0];
-                let pathToStart = getShortestPath(currentSysMap, startMap);
+                let pathToStart = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, startMap) : null;
                 if (pathToStart && pathToStart.length > 1) nextMap = pathToStart[1];
                 else if (currentSysMap === startMap && window.rushFullPath.length > 1) nextMap = window.rushFullPath[1];
             }
         }
 
-     if (!nextMap) {
-            stopPatrol(false);
-            let msg = `🚨 BŁĄD TRASY! Bot nie wie jak dojść z [${currentSysMap}] do [${rushTarget}]. Nagraj drogę używając Skanera!`;
-            console.log(`%c[HERO] ` + msg, "color: #e53935;");
+        if (!nextMap) {
+            isRushing = false;
+            let msg = `🚨 BŁĄD TRASY! Bot nie wie jak dojść z [${currentSysMap}] do [${rushTarget}].`;
             if (window.logHero) window.logHero(msg, "#e53935");
             if (window.logExp) window.logExp(msg, "#e53935");
-            
-            // Awaryjne wyłączenie silnika Expa, by przerwać nieskończoną pętlę
-            if (window.isExping) {
-                let btnExp = document.getElementById('btnStartExp');
-                if (btnExp) btnExp.click(); // Fizycznie klika Stop
-            }
+            if (window.isExping) document.getElementById('btnStartExp')?.click(); // Fizycznie klika Stop
             return;
         }
 
@@ -1917,13 +1909,49 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
                 let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
                 targetX = rnd[0]; targetY = rnd[1];
             }
-            safeGoTo(targetX, targetY, false);
+            
+            stuckCount = 0; // Resetujemy zacięcie przed startem
+            safeGoTo(targetX, targetY, false); // Klikamy tylko raz na start!
             clearTimeout(rushInterval);
             rushInterval = setTimeout(window.checkRushArrival, 500);
-        } else {
-            stopPatrol(false);
-            console.log(`%c[HERO] Błąd! Bot chce wejść do [${nextMap}], ale skaner nie zapisał tam bramy. Podejdź do niej ręcznie!`, "color: #e53935;");
         }
+    };
+
+    window.checkRushArrival = function() {
+        if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
+        let currentSysMap = lastMapName;
+        if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
+
+        let nextMap = window.rushNextMap;
+        if (!nextMap) return;
+        
+        let tp = ZAKONNICY[currentSysMap];
+        let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+        if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
+        
+        if (!door) return;
+
+        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
+        let dist = Math.abs(cx - door.x) + Math.abs(cy - door.y);
+
+        if (dist > 1) {
+            // SPRAWDZAMY CZY POSTAĆ WŁAŚNIE IDZIE
+            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+            
+            if (!isMoving) {
+                stuckCount++;
+                // Jeśli stoi w miejscu przez co najmniej 2 sekundy (4x500ms), ponawia kliknięcie
+                if (stuckCount > 3) { 
+                    safeGoTo(door.x, door.y, false); 
+                    stuckCount = 0; 
+                }
+            } else {
+                stuckCount = 0; // Jeśli idzie, zerujemy licznik zacięcia
+            }
+        }
+        
+        rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
     window.checkRushArrival = function() {
@@ -2909,19 +2937,20 @@ const btnExp = document.getElementById('btnStartExp');
 if (btnExp) {
     btnExp.addEventListener('click', function() {
         window.isExping = !window.isExping;
-
         const chk = document.getElementById('berserkEnabled');
 
         if (window.isExping) {
             this.innerHTML = "⏹ STOP";
             this.style.borderColor = "#f44336";
             this.style.color = "#f44336";
-// --- BEZWZGLĘDNY RESET BLOKAD RUCHU ---
+
+            // BEZWZGLĘDNY RESET BLOKAD RUCHU
             window.isRushing = false;
             window.isRushingToShop = false;
             if (window.autoSellState) window.autoSellState.active = false;
             if (window.autoPotState) window.autoPotState.active = false;
             if (window.rushInterval) clearTimeout(window.rushInterval);
+
             expCurrentTargetId = null;
             expEmptyScans = 0;
             expAttackLockUntil = 0;
@@ -2931,34 +2960,23 @@ if (btnExp) {
             expMapEnteredAt = Date.now();
             expLastMapName = "";
             expCurrentMapOrderIndex = -1;
-window.expGlobalTargetMap = null;
-            if (typeof window.logExp === 'function') {
-                window.logExp("Uruchomiono tryb automatyczny!", "#4caf50");
-            }
-
-            // NIE włączaj berserka na sztywno przy starcie
-            if (botSettings.berserk) {
-                botSettings.berserk.userEnabled = true;
-                if (chk) chk.checked = true;
-                saveSettings();
-            }
+            window.expGlobalTargetMap = null;
+            if (typeof window.logExp === 'function') window.logExp("🚀 Uruchomiono tryb automatyczny!", "#4caf50");
+            
+            if (botSettings.berserk) { botSettings.berserk.userEnabled = true; if (chk) chk.checked = true; saveSettings(); }
         } else {
             this.innerHTML = "▶ START";
             this.style.borderColor = "#4caf50";
             this.style.color = "#4caf50";
-
-            if (typeof window.logExp === 'function') {
-                window.logExp("Zatrzymano tryb automatyczny.", "#f44336");
-            }
-
-            // po stopie wyłącz całkowicie
-            if (botSettings.berserk) {
-                botSettings.berserk.userEnabled = false;
-                botSettings.berserk.enabled = false;
-                if (chk) chk.checked = false;
-                saveSettings();
-                if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-            }
+            
+            // TWARDE ZATRZYMANIE BOTA I POSTACI
+            window.isRushing = false;
+            if (window.rushInterval) clearTimeout(window.rushInterval);
+            if (typeof stopPatrol === 'function') stopPatrol(true); // Wciska fizyczny hamulec na mapie
+            
+            if (typeof window.logExp === 'function') window.logExp("🛑 Zatrzymano tryb automatyczny.", "#f44336");
+            
+            if (botSettings.berserk) { botSettings.berserk.userEnabled = false; botSettings.berserk.enabled = false; if (chk) chk.checked = false; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); }
         }
     });
 }
