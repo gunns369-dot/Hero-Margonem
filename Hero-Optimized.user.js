@@ -1691,7 +1691,7 @@ function autoDetectEngineData() {
     let currentName = Engine.map.d.name;
     if (!currentName || currentName === "undefined") return;
     
-    // --- ŁATKA: SYNCHRONIZACJA TELEPORTÓW NA PODSTAWIE NICKU ---
+ // --- ŁATKA: SYNCHRONIZACJA TELEPORTÓW NA PODSTAWIE NICKU ---
     if (Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
         if (window.lastLoadedNick !== Engine.hero.d.nick) {
             window.lastLoadedNick = Engine.hero.d.nick;
@@ -1702,8 +1702,9 @@ function autoDetectEngineData() {
             } else {
                 botSettings.unlockedTeleports = {"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false};
             }
-            if (typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();
-            if (typeof window.renderTeleportList === 'function' && document.getElementById('heroTeleportsGUI').style.display !== 'none') window.renderTeleportList();
+            if (typeof window.renderTeleportList === 'function' && document.getElementById('heroTeleportsGUI') && document.getElementById('heroTeleportsGUI').style.display !== 'none') {
+                window.renderTeleportList();
+            }
         }
     }
     // --- KONIEC ŁATKI ---
@@ -2985,13 +2986,14 @@ window.expGlobalTargetMap = null;
             p.style.display = p.style.display === 'none' ? 'block' : 'none'; 
         });
         
-       // Pętla milczącego ładownia profili (dla Auto-Expowiska)
+      // Pętla milczącego ładownia profili (dla Auto-Expowiska)
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
             if(p) {
                 botSettings.exp.activeProfileName = p.name; // Zapisujemy nazwę załadowanej trasy
                 botSettings.exp.mapOrder = [...p.maps];
                 localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
+                
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
                 if(lvlMatch && lvlMatch[1]) {
                     let baseLvl = parseInt(lvlMatch[1]);
@@ -3000,9 +3002,12 @@ window.expGlobalTargetMap = null;
                     let mIn = document.getElementById('expMinL'); let mAx = document.getElementById('expMaxL');
                     if (mIn) mIn.value = botSettings.exp.minLvl; if (mAx) mAx.value = botSettings.exp.maxLvl;
                 }
+                
                 window.mapClearTimes = {}; expCurrentTargetId = null; expMapTransitionCooldown = 0; expLastActionTime = 0; expAntiLagTime = 0;
                 saveSettings();
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
+                
+                // WYMUSZENIE NATYCHMIASTOWEGO RENDEROWANIA LISTY
                 if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }
         };
@@ -6005,9 +6010,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"
         ];
         
-        // Zabezpieczenie na wypadek, gdy nick załaduje się później
         let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
-        
         let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div>`;
         
         tpList.forEach(map => {
@@ -6020,26 +6023,11 @@ window.toggleTeleportLock = function(city, isChecked) {
             `;
         });
         
-        html += `<button id="btnSaveTeleportsManual" class="btn btn-go-sepia" style="margin-top:6px; color:#4caf50; font-weight:bold; border-color:#4caf50;">💾 ZAPISZ TELEPORTY</button>`;
-        container.innerHTML = html;
-    };
-        
-        let html = '<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty (Zakonnicy):</div>';
-        
-        tpList.forEach(map => {
-            let isChecked = (botSettings.unlockedTeleports && botSettings.unlockedTeleports[map]) ? 'checked' : '';
-            html += `
-                <label style="display:flex; align-items:center; background:#1a1a1a; padding:4px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px; border-left: 2px solid #00838f;">
-                    <input type="checkbox" class="chk-teleport" data-map="${map}" ${isChecked} style="margin-right:8px; cursor:pointer;">
-                    <b>${map}</b>
-                </label>
-            `;
-        });
-        
+        html += `<button id="btnSaveTeleportsManual" class="btn btn-go-sepia" style="margin-top:6px; color:#4caf50; font-weight:bold; border-color:#4caf50; width:100%; padding:6px;">💾 ZAPISZ TELEPORTY</button>`;
         container.innerHTML = html;
     };
 
-// Obsługa klikania teleportów w pamięci tymczasowej
+    // Obsługa klikania teleportów w pamięci tymczasowej
     document.addEventListener('change', (e) => {
         if (e.target && e.target.classList.contains('chk-teleport')) {
             let mapName = e.target.getAttribute('data-map');
@@ -6068,7 +6056,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                 let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
                 allTps[nick] = botSettings.unlockedTeleports;
                 localStorage.setItem('hero_teleports_by_nick_v64', JSON.stringify(allTps));
-                saveSettings(); // Nadpisuje też ogólne ustawienia
+                saveSettings(); 
                 if (window.logHero) window.logHero(`✅ Zapisano ustawienia teleportów dla: ${nick}!`, "#4caf50");
                 e.target.innerText = "✅ ZAPISANO!";
                 setTimeout(() => { if(e.target) e.target.innerText = "💾 ZAPISZ TELEPORTY"; }, 1500);
