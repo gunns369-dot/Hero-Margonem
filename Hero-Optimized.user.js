@@ -1690,8 +1690,8 @@ function autoDetectEngineData() {
 
     let currentName = Engine.map.d.name;
     if (!currentName || currentName === "undefined") return;
-    
- // --- ŁATKA: SYNCHRONIZACJA TELEPORTÓW NA PODSTAWIE NICKU ---
+
+    // --- ŁATKA: SYNCHRONIZACJA TELEPORTÓW NA PODSTAWIE NICKU ---
     if (Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
         if (window.lastLoadedNick !== Engine.hero.d.nick) {
             window.lastLoadedNick = Engine.hero.d.nick;
@@ -1707,16 +1707,13 @@ function autoDetectEngineData() {
             }
         }
     }
-    // --- KONIEC ŁATKI ---
 
-// --- ŁATKA: SPRAWDZANIE AWANSU, SYNCHRONIZACJA POZIOMÓW I AUTO-EXPOWISKO ---
+    // --- ŁATKA: SPRAWDZANIE AWANSU I AUTO-EXPOWISKO ---
     if (Engine.hero && Engine.hero.d && Engine.hero.d.lvl) {
         let currentLvl = Engine.hero.d.lvl;
         if (window.lastHeroExpLevel !== currentLvl) {
             if (window.lastHeroExpLevel !== 0 && currentLvl > window.lastHeroExpLevel) {
                 if (typeof window.logExp === 'function') window.logExp(`🎉 Awans na ${currentLvl} poziom!`, "#4caf50");
-                
-                // Opóźniamy zmianę o 500ms, aby gra przetrawiła awans, a UI zdążyło zareagować!
                 if (typeof window.checkAndLoadBestExpProfile === 'function') {
                     setTimeout(() => window.checkAndLoadBestExpProfile(false), 500);
                 }
@@ -1736,7 +1733,35 @@ function autoDetectEngineData() {
             if (botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
         }
     }
-// --- KONIEC ŁATKI ---
+
+    updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
+    updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
+
+    if (currentName !== lastMapName) {
+        positionHistory = [];
+        lastMapName = currentName;
+        heroFoundAlerted = false;
+
+        if (typeof autoLearnGateways === 'function') autoLearnGateways();
+
+        const domMap = document.getElementById('currentMapNameDisplay');
+        if (domMap) domMap.innerText = currentName;
+
+        const domHero = document.getElementById('selHero');
+        const heroModeToggle = document.getElementById('heroModeToggle');
+
+        if (domHero && heroModeToggle && heroModeToggle.classList.contains('active-tab')) {
+            let matchingHero = domHero.value;
+            let mapHasCurrent = matchingHero && heroData[matchingHero] && heroData[matchingHero][currentName];
+
+            if (!isPatrolling && !isRushing && !mapHasCurrent) {
+                let foundHero = null;
+                for (const h in heroData) {
+                    if (heroData[h][currentName]) {
+                        foundHero = h;
+                        break;
+                    }
+                }
                 if (foundHero) matchingHero = foundHero;
             }
 
@@ -1757,11 +1782,8 @@ function autoDetectEngineData() {
                 let mapList = heroMapOrder[matchingHero];
 
                 if (currentRouteIndex !== -1 && mapList[currentRouteIndex] === currentName) {
-                    // jesteśmy na poprawnej mapie
-                } else if (
-                    currentRouteIndex !== -1 &&
-                    mapList[(currentRouteIndex + 1) % mapList.length] === currentName
-                ) {
+                    // Oczekiwana mapa
+                } else if (currentRouteIndex !== -1 && mapList[(currentRouteIndex + 1) % mapList.length] === currentName) {
                     currentRouteIndex = (currentRouteIndex + 1) % mapList.length;
                     sessionStorage.setItem('hero_route_index', currentRouteIndex);
                 } else if (mapList.includes(currentName)) {
@@ -1781,34 +1803,34 @@ function autoDetectEngineData() {
                 updateUI();
 
                 setTimeout(() => {
-                    if (currentCordsList.length > 0) optimizeRoute();
-                    renderCordsList();
+                    if (currentCordsList.length > 0 && typeof optimizeRoute === 'function') optimizeRoute();
+                    if (typeof renderCordsList === 'function') renderCordsList();
                 }, 200);
             } else {
                 currentCordsList = [];
                 checkedPoints.clear();
-                renderCordsList();
+                if (typeof renderCordsList === 'function') renderCordsList();
                 updateUI();
             }
-        } else if (!document.getElementById('heroModeToggle').classList.contains('active-tab')) {
+        } else if (heroModeToggle && !heroModeToggle.classList.contains('active-tab')) {
             currentCordsList = [];
             checkedPoints.clear();
-            renderCordsList();
+            if (typeof renderCordsList === 'function') renderCordsList();
             updateUI();
         }
 
-      if (isRushing) {
+        if (isRushing) {
             clearTimeout(rushInterval);
             let loadDelay = Math.floor(Math.random() * (botSettings.mapLoadMax - botSettings.mapLoadMin + 1)) + botSettings.mapLoadMin;
             setTimeout(() => {
-                if (isRushing) executeRushStep();
+                if (isRushing && typeof window.executeRushStep === 'function') window.executeRushStep();
             }, loadDelay);
         } else if (isPatrolling) {
             clearTimeout(smoothPatrolInterval);
             let loadDelay = Math.floor(Math.random() * (botSettings.mapLoadMax - botSettings.mapLoadMin + 1)) + botSettings.mapLoadMin;
             if (typeof window.logHero === 'function') window.logHero(`Wczytywanie mapy... Czekam ${(loadDelay/1000).toFixed(1)}s.`, "#777");
             setTimeout(() => {
-                if (isPatrolling) executePatrolStep();
+                if (isPatrolling && typeof executePatrolStep === 'function') executePatrolStep();
             }, loadDelay);
         }
     }
