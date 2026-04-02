@@ -1061,16 +1061,18 @@ let opacityValue = 0.95;
 
 
     function updateUI() {
-// --- NOWE: DYNAMICZNY LICZNIK MIEJSCA W EKWIPUNKU ---
+        // --- DYNAMICZNY LICZNIK WOLNEGO MIEJSCA ---
         if (document.getElementById('autosellCapacityDisplay') && typeof window.getBagInfo === 'function') {
             let bag = window.getBagInfo();
             let display = document.getElementById('autosellCapacityDisplay');
-            display.innerText = `${bag.occupied} / ${bag.total}`;
-            // Zmiana koloru na czerwony, gdy plecak jest pełny
-            if (bag.total > 0 && bag.occupied >= bag.total) display.style.color = "#e53935"; 
-            else display.style.color = "#fff";
+            display.innerText = bag.free;
+            
+            // Czerwony, gdy nie ma miejsca, zielony gdy jest
+            if (bag.free <= 0) display.style.color = "#e53935"; 
+            else display.style.color = "#4caf50";
         }
-        // -----------------------------------------------------
+        // ------------------------------------------
+
         if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
 
             renderGatewaysDatabase();
@@ -2512,7 +2514,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                                 <input type="checkbox" id="autosellEnabled" ${botSettings.autosell?.enabled ? 'checked' : ''}> Auto-Sprzedaż (Gdy pełny)
                             </label>
                             <span style="color:#a99a75; font-size:10px; margin:0;">
-                                Zajęte miejsce: <b id="autosellCapacityDisplay" style="color:#fff;">0 / 0</b>
+                                Wolne miejsce: <b id="autosellCapacityDisplay" style="color:#4caf50;">?</b>
                             </span>
                         </div>
                     </div>
@@ -6309,18 +6311,28 @@ window.clearExpMaps = () => {
             
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
-        // Funkcje pomocnicze dla plecaka
+       // Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
     window.getBagInfo = function() {
-        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { occupied: 0, total: 42 };
+        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { free: 0, occupied: 0, total: 42 };
         
-        // Pobieramy całkowitą liczbę slotów z silnika gry
-        let total = (typeof Engine.heroEquipment.getBagTotalSlots === 'function') ? Engine.heroEquipment.getBagTotalSlots() : 42;
-        
-        // Liczymy zajęte sloty (przedmioty w torbach mają st === 0)
         let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
-        let occupied = Object.values(hItems).filter(i => Number(i.st) === 0 && Number(i.cl) !== 24).length;
+        let itemsArr = Object.values(hItems).filter(i => i);
         
-        return { occupied, total };
+        // 1. Ręczne zliczanie pojemności (Baza 42 kratek + założone torby cl=24)
+        let total = 42;
+        itemsArr.forEach(i => {
+            if (Number(i.st) > 0 && Number(i.cl) === 24) { 
+                let statStr = i._cachedStats?.stat || i.stat || "";
+                let match = statStr.match(/pojemnosc=(\d+)/) || statStr.match(/capacity=(\d+)/);
+                if (match) total += parseInt(match[1]);
+            }
+        });
+        
+        // 2. Liczenie zajętych kratek (st === 0 to przedmioty w plecaku)
+        let occupied = itemsArr.filter(i => Number(i.st) === 0).length;
+        let free = Math.max(0, total - occupied);
+        
+        return { free, occupied, total };
     };
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
@@ -6878,14 +6890,14 @@ window.clearExpMaps = () => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
 
-            // 1. Sprawdzanie czy plecak jest PEŁNY (100% zajętych slotów)
+           // 1. Sprawdzanie czy plecak jest PEŁNY (0 wolnego miejsca)
             if (!window.autoSellState.active) {
                 let bag = window.getBagInfo();
-                if (bag.occupied >= bag.total && bag.total > 0) {
+                if (bag.free <= 0 && bag.total > 0) {
                     window.autoSellState.active = true;
                     window.autoSellState.step = 1;
                     window.isRushing = true; // Blokujemy expa
-                    if (window.logHero) window.logHero(`🎒 Plecak pełny (${bag.occupied}/${bag.total})! Wstrzymuję exp i biegnę sprzedać drop...`, "#ffb300");
+                    if (window.logHero) window.logHero(`🎒 Brak wolnego miejsca! Wstrzymuję exp i biegnę sprzedać drop...`, "#ffb300");
                 }
             }
 
