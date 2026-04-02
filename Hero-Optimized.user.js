@@ -2907,7 +2907,12 @@ if (btnExp) {
             this.innerHTML = "⏹ STOP";
             this.style.borderColor = "#f44336";
             this.style.color = "#f44336";
-
+// --- BEZWZGLĘDNY RESET BLOKAD RUCHU ---
+            window.isRushing = false;
+            window.isRushingToShop = false;
+            if (window.autoSellState) window.autoSellState.active = false;
+            if (window.autoPotState) window.autoPotState.active = false;
+            if (window.rushInterval) clearTimeout(window.rushInterval);
             expCurrentTargetId = null;
             expEmptyScans = 0;
             expAttackLockUntil = 0;
@@ -2979,7 +2984,23 @@ window.expGlobalTargetMap = null;
         bindChange('autopotEnabled', (e) => { botSettings.autopot.enabled = e.target.checked; saveSettings(); });
         bindChange('autohealThreshold', (e) => { botSettings.autoheal.threshold = parseInt(e.target.value) || 80; saveSettings(); });
         bindChange('autopotStacks', (e) => { botSettings.autopot.stacks = parseInt(e.target.value) || 14; saveSettings(); });
-        bindChange('autoChangeExpRoute', (e) => { botSettings.exp.autoChangeRoute = e.target.checked; saveSettings(); });
+       // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
+        bindChange('autoChangeExpRoute', (e) => { 
+            botSettings.exp.autoChangeRoute = e.target.checked; 
+            saveSettings(); 
+            if (e.target.checked) {
+                if (typeof window.checkAndLoadBestExpProfile === 'function') window.checkAndLoadBestExpProfile(true); 
+            } else {
+                // Jeśli odznaczamy - czyścimy trasę z automatu
+                if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
+                if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
+            }
+            
+            // Wymuszone odświeżenie UI natychmiast po kliknięciu!
+            setTimeout(() => {
+                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            }, 100);
+        });
         
         bindClick('btnAutoPotSettings', () => { 
             let p = document.getElementById('autopotSettingsPanel'); 
@@ -4795,13 +4816,13 @@ function runExpLogic() {
             }
 
       // --- 2. RUCH NA EXPOWISKO ---
-            // Zmienna przechowująca cel. Jeśli lista jest pusta, traktujemy obecną mapę jako cel!
             let mapOrder = botSettings.exp.mapOrder || [];
+            // Jeśli lista map jest pusta, traktujemy obecną mapę jako cel (bot expi w miejscu)
             let targetExpMap = mapOrder.length > 0 ? mapOrder[0] : Engine.map.d.name; 
             
             if (Engine.map.d.name !== targetExpMap) {
                 // Odpalamy algorytm ruchu TYLKO, jeśli bot jeszcze nie biegnie
-                if (!window.isRushing) {
+                if (!window.isRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
                     if (typeof window.rushToMap === 'function') {
                         window.rushToMap(targetExpMap);
                     }
