@@ -1042,17 +1042,6 @@ function loadData() {
             botSettings = {...botSettings, ...parsed};
         }
         
-        // NOWOŚĆ: Ładowanie teleportów dla konkretnego nicku!
-        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
-            let nick = Engine.hero.d.nick;
-            let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
-            if (allTps[nick]) {
-                botSettings.unlockedTeleports = allTps[nick];
-            } else {
-                botSettings.unlockedTeleports = {"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false};
-            }
-        }
-
         let s2 = localStorage.getItem('hero_global_gateways_v20'); if (s2) globalGateways = JSON.parse(s2);
         let s3 = localStorage.getItem('hero_map_order_v20'); if (s3) heroMapOrder = JSON.parse(s3);
     }
@@ -1701,34 +1690,25 @@ function autoDetectEngineData() {
 
     let currentName = Engine.map.d.name;
     if (!currentName || currentName === "undefined") return;
-// --- ŁATKA: SPRAWDZANIE AWANSU, SYNCHRONIZACJA POZIOMÓW I AUTO-EXPOWISKO ---
-    if (Engine.hero && Engine.hero.d && Engine.hero.d.lvl) {
-        let currentLvl = Engine.hero.d.lvl;
-        if (window.lastHeroExpLevel !== currentLvl) {
-            if (window.lastHeroExpLevel !== 0 && currentLvl > window.lastHeroExpLevel) {
-                if (typeof window.logExp === 'function') window.logExp(`🎉 Awans na ${currentLvl} poziom!`, "#4caf50");
-                
-                // Bot sam sprawdzi, czy po tym awansie nie odblokowało się lepsze expowisko
-                if (typeof window.checkAndLoadBestExpProfile === 'function') {
-                    window.checkAndLoadBestExpProfile(false);
-                }
+    
+    // --- ŁATKA: SYNCHRONIZACJA TELEPORTÓW NA PODSTAWIE NICKU ---
+    if (Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
+        if (window.lastLoadedNick !== Engine.hero.d.nick) {
+            window.lastLoadedNick = Engine.hero.d.nick;
+            let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
+            
+            if (allTps[window.lastLoadedNick]) {
+                botSettings.unlockedTeleports = allTps[window.lastLoadedNick];
+            } else {
+                botSettings.unlockedTeleports = {"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false};
             }
-            window.lastHeroExpLevel = currentLvl;
-            
-            let minOff = Math.abs(botSettings.berserk.minLvlOffset || 20);
-            let maxOff = parseInt(botSettings.berserk.maxLvlOffset || 100);
-            botSettings.exp.minLvl = Math.max(1, currentLvl - minOff);
-            botSettings.exp.maxLvl = currentLvl + maxOff;
-            
-            let elMin = document.getElementById('expMinL'); let elMax = document.getElementById('expMaxL');
-            if (elMin) elMin.value = botSettings.exp.minLvl; if (elMax) elMax.value = botSettings.exp.maxLvl;
-            
-            saveSettings();
-            if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-            if (botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
+            if (typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();
+            if (typeof window.renderTeleportList === 'function' && document.getElementById('heroTeleportsGUI').style.display !== 'none') window.renderTeleportList();
         }
     }
-// --- KONIEC ŁATKI ---
+    // --- KONIEC ŁATKI ---
+
+// --- ŁATKA: SPRAWDZANIE AWANSU, SYNCHRONIZACJA POZIOMÓW I AUTO-EXPOWISKO ---
     updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
     updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
 
@@ -5927,7 +5907,7 @@ window.clearExpMaps = () => {
         }).join('');
     };
 
-   window.toggleTeleportLock = function(city, isChecked) {
+window.toggleTeleportLock = function(city, isChecked) {
         if (!botSettings.unlockedTeleports) botSettings.unlockedTeleports = {};
         botSettings.unlockedTeleports[city] = isChecked;
         
@@ -5938,6 +5918,8 @@ window.clearExpMaps = () => {
             allTps[nick] = botSettings.unlockedTeleports;
             localStorage.setItem('hero_teleports_by_nick_v64', JSON.stringify(allTps));
         }
+        
+        if (typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();
     };
 
     window.renderTeleportOptions = function() {
