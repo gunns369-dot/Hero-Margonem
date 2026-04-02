@@ -5920,14 +5920,13 @@ window.clearExpMaps = () => {
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
-        // 4. MIKSTURY I LECZENIE (Lista Uzdrowicieli ze wskaźnikiem leczenia)
+     // 4. MIKSTURY I LECZENIE (Lista Uzdrowicieli ze wskaźnikiem leczenia)
         if (e.target && e.target.closest('#btnShowPotions')) {
             hideAllTabs(); if (potList) potList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) { 
                 potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; 
             }
 
-            // Szukamy NPC ze słowem "uzdrow"
             let healers = window.DatabaseModule.kupcy.filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
             
             let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Uzdrowiciele (${healers.length} postaci):</div>`;
@@ -5942,7 +5941,6 @@ window.clearExpMaps = () => {
                         let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
                         let fullStats = i.tooltip_text || i.raw_detected_text || i.name;
                         
-                        // Ekstrakcja ilości leczenia
                         let healMatch = fullStats.match(/Leczy\s+([0-9\s]+)\s+punkt/i);
                         let healAmount = healMatch ? healMatch[1].trim() : "??";
                         
@@ -5953,7 +5951,7 @@ window.clearExpMaps = () => {
                                     <div style="color:#8bc34a; font-size:8px; margin-left:6px;">❤️ Leczy: ${healAmount} HP</div>
                                 </div>
                                 <div style="display:flex; align-items:center;">
-                                    <input type="number" id="buy_amt_heal_${index}_${sIdx}" value="50" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center; margin-right:4px;">
+                                    <input type="number" id="buy_amt_heal_${index}_${sIdx}" value="10" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center; margin-right:4px;">
                                     <button class="btn-go-npc" 
                                         data-mode="potion"
                                         data-buy-input="buy_amt_heal_${index}_${sIdx}" 
@@ -5993,7 +5991,8 @@ window.clearExpMaps = () => {
             });
             potList.innerHTML = html;
         }
-   // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
+
+        // 5. ROZWIJANIE KUPCA Z AUTO-KUPNEM
         if (e.target && e.target.classList.contains('toggle-seller-btn')) {
             let itemName = e.target.getAttribute('data-name');
             let index = e.target.getAttribute('data-index');
@@ -6014,7 +6013,7 @@ window.clearExpMaps = () => {
                                 
                                 <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px; gap:6px;">
                                     ${isPotion ? 
-                                        `<input type="number" id="buy_amt_${index}_${sIdx}" value="50" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center;">` 
+                                        `<input type="number" id="buy_amt_${index}_${sIdx}" value="10" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center;">` 
                                         : 
                                         `<label style="color:#aaa; font-size:9px; cursor:pointer; display:flex; align-items:center; gap:2px;">
                                             <input type="checkbox" id="buy_eq_chk_${index}_${sIdx}" style="margin:0; width:12px; height:12px;"> kup
@@ -6041,7 +6040,6 @@ window.clearExpMaps = () => {
                 sellerDiv.style.display = 'block';
             }
         }
-
         // 6. ROZWIJANIE ASORTYMENTU WYSZUKIWARKI
         if (e.target && e.target.classList.contains('toggle-items-btn')) {
             let index = e.target.getAttribute('data-index');
@@ -6053,7 +6051,7 @@ window.clearExpMaps = () => {
             }
         }
 
-// 7. SMART WALK (Z AUTO-KUPNEM)
+// 7. SMART WALK (Z AUTO-KUPNEM I RUSH-TO-MAP)
         if (e.target && e.target.classList.contains('btn-go-npc')) {
             let mapName = e.target.getAttribute('data-map');
             let targetX = parseInt(e.target.getAttribute('data-x'));
@@ -6067,16 +6065,13 @@ window.clearExpMaps = () => {
                 let el = document.getElementById(inputId);
                 buyAmount = el ? parseInt(el.value) || 0 : 0;
             } else if (mode === 'eq') {
-                // Dla EQ sprawdzamy czy checkbox jest zaznaczony
                 let el = document.getElementById(inputId);
                 if (el && el.checked) buyAmount = 1;
             }
 
             if (buyAmount > 0) {
-                // Zapisujemy dodatkowo tryb (mode), żeby wiedzieć czy przeliczać staki
                 window.autoBuyTask = { npc: e.target.getAttribute('data-npc'), item: e.target.getAttribute('data-item'), amount: buyAmount, mode: mode };
-                
-                let logMsg = mode === 'potion' ? `🛒 Zlecenie: Kupić ${buyAmount} staków (po 15 szt.) ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}.` : `🛒 Zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}.`;
+                let logMsg = mode === 'potion' ? `🛒 Zlecenie: Kupić ${buyAmount} staków (po 15 szt.) ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}. Wyruszam!` : `🛒 Zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}. Wyruszam!`;
                 if (window.logHero) window.logHero(logMsg, "#d81b60");
             } else {
                 window.autoBuyTask = null;
@@ -6084,87 +6079,51 @@ window.clearExpMaps = () => {
             }
 
             if (btnStop) btnStop.style.display = 'block';
+            
+            // Używamy zintegrowanego silnika Rush, który sam teleportuje się Zakonnikami!
+            if (typeof window.rushToMap === 'function') {
+                window.rushToMap(mapName, targetX, targetY);
+            } else {
+                // Fallback dla tej samej mapy
+                if (typeof Engine.hero.autoGoTo === 'function') Engine.hero.autoGoTo({x: targetX, y: targetY});
+            }
+
             if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
             
-            let lastMap = null;
-            let stuckTicks = 0;
-            
-            // INTELIGENTNY INTERWAŁ RUCHU (Bez spamu!)
+            // Lekki nasłuchiwacz czekający aż bot zakończy bieg w innym mieście
             window.npcWalkInterval = setInterval(() => {
-                if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
-                let currentSysMap = Engine.map.d.name;
-
-                // Sprawdzamy, czy postać fizycznie się przemieszcza
-                let isMoving = (Engine.hero.d.x !== Engine.hero.d.tx) || (Engine.hero.d.y !== Engine.hero.d.ty);
+                if (!window.autoBuyTask) {
+                    clearInterval(window.npcWalkInterval);
+                    if (btnStop) btnStop.style.display = 'none';
+                    return;
+                }
                 
-                // Pauzujemy akcję na chwilę, by dać mapie czas na załadowanie
-                if (lastMap !== currentSysMap) { lastMap = currentSysMap; stuckTicks = 0; return; }
-
-                if (currentSysMap === mapName) {
-                    let dist = Math.abs(Engine.hero.d.x - targetX) + Math.abs(Engine.hero.d.y - targetY);
-                    if (dist <= 2) {
-                        if (window.logHero) window.logHero(`✅ Dotarłem do celu!`, "#8bc34a");
-                        clearInterval(window.npcWalkInterval);
-                        if (btnStop) btnStop.style.display = 'none';
-                        
-                      // ODPALANIE ROZMOWY Z NPC (Auto-Kupno)
-                        if (window.autoBuyTask) {
+                if (typeof Engine !== 'undefined' && Engine.map && Engine.hero) {
+                    if (Engine.map.d.name === mapName) {
+                        let dist = Math.abs(Engine.hero.d.x - targetX) + Math.abs(Engine.hero.d.y - targetY);
+                        // Czekamy aż skończy biec (isRushing jest flagą z algorytmu dróg)
+                        if (dist <= 2 && !isRushing) {
                             if (window.logHero) window.logHero(`💬 Zaczepiam NPC ${window.autoBuyTask.npc}...`, "#ffeb3b");
+                            clearInterval(window.npcWalkInterval);
+                            if (btnStop) btnStop.style.display = 'none';
+                            
                             let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
                             for (let i in npcs) {
                                 let n = npcs[i];
                                 let nData = n.d || n;
                                 if (nData.nick === window.autoBuyTask.npc && Math.abs(nData.x - Engine.hero.d.x) <= 2 && Math.abs(nData.y - Engine.hero.d.y) <= 2) {
                                     if (typeof Engine.npcs.interact === 'function') {
-                                        Engine.npcs.interact(nData.id); // Metoda dla NI
+                                        Engine.npcs.interact(nData.id);
                                     } else if (typeof window._g === 'function') {
-                                        window._g(`talk&id=${nData.id}`); // Awaryjna
+                                        window._g(`talk&id=${nData.id}`);
                                     }
                                     break;
                                 }
                             }
                         }
-                        return;
-                    }
-                    
-                    // Postać stoi lub zablokowała się przez 3 sekundy - wymuszamy nowy ruch
-                    if (!isMoving || stuckTicks > 6) { Engine.hero.autoGoTo({x: targetX, y: targetY}); stuckTicks = 0; } 
-                    else { stuckTicks++; }
-                } else {
-                    if (typeof getShortestPath === 'function') {
-                        let path = getShortestPath(currentSysMap, mapName);
-                        if (path && path.length > 1) {
-                            let nextMap = path[1];
-                            let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-                            
-                            if (!door && typeof HeroScannerModule !== 'undefined') {
-                                let localGates = HeroScannerModule.scanCurrentMap(currentSysMap, null);
-                                let found = localGates.find(g => g.targetMap === nextMap);
-                                if (found) {
-                                    door = { x: found.x, y: found.y };
-                                    if(!globalGateways[currentSysMap]) globalGateways[currentSysMap] = {};
-                                    globalGateways[currentSysMap][nextMap] = door; 
-                                }
-                            }
-
-                            if (door) {
-                                let doorX = door.x; let doorY = door.y;
-                                if (door.allCoords && door.allCoords.length > 0) { doorX = door.allCoords[0][0]; doorY = door.allCoords[0][1]; }
-                                
-                                let distToDoor = Math.abs(Engine.hero.d.x - doorX) + Math.abs(Engine.hero.d.y - doorY);
-                                if (!isMoving || stuckTicks > 6 || distToDoor <= 1) {
-                                    if (typeof safeGoTo === 'function') safeGoTo(doorX, doorY, false);
-                                    else Engine.hero.autoGoTo({x: doorX, y: doorY});
-                                    stuckTicks = 0;
-                                } else { stuckTicks++; }
-                            } else {
-                                clearInterval(window.npcWalkInterval);
-                                if (btnStop) btnStop.style.display = 'none';
-                            }
-                        }
                     }
                 }
-            }, 500); // Mniejszy odstęp czasu, bo blokujemy spamowanie komendami!
+            }, 500);
         }
         // 8. ZATRZYMYWANIE RUCHU
         if (e.target && e.target.closest('#btnStopWalk')) {
