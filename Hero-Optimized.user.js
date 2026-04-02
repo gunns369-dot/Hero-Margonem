@@ -2526,7 +2526,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
                     </div>
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
-                </div> ```
+                </div>
 
           <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
                     <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
