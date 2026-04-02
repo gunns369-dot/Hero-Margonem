@@ -5477,16 +5477,15 @@ function runExpLogic() {
 
                 
 
-                if (timeStandingStill > 2500) {
-
-                    window.logExp(`🚨 Oznaczona brama na [${dx}, ${dy}] jest niedostępna!`, "#ff5252");
-
-                    expMapTransitionCooldown = now + 4000;
-
+           if (timeStandingStill > 2500) {
+                    window.logExp(`🚨 Brama na [${dx}, ${dy}] (do ${nextStepMap}) jest zablokowana! Pomijam tę mapę.`, "#ff5252");
+                    
+                    // Magia: Tymczasowo oznaczamy niedostępną mapę jako "wyczyszczoną", aby algorytm od razu poszedł do następnej!
+                    window.mapClearTimes[nextStepMap] = now; 
+                    
+                    expMapTransitionCooldown = now + 500; // Szybki reset, bot od razu przelicza nową trasę
                     window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-
                     return;
-
                 }
 
 
@@ -6924,35 +6923,6 @@ window.toggleTeleportLock = function(city, isChecked) {
             if (tt) tt.style.display = 'none';
         }
     });
-    // --- SYSTEM OMIJANIA NIEDOSTĘPNYCH BRAM I BŁĘDÓW TRASY ---
-    if (!window.gateBypassInstalled) {
-        window.gateBypassInstalled = true;
-        let originalLogHero = window.logHero;
-        
-        window.logHero = function(msg, color) {
-            originalLogHero(msg, color); // Najpierw wypisujemy normalnie
-            
-            // Jeśli bot wykryje zablokowaną bramę w konsoli:
-            if (msg.includes("jest niedostępna") || msg.includes("nie możesz do niej dojść") || msg.includes("nie odnaleziono ścieżki")) {
-                if (botSettings.exp && botSettings.exp.maps && botSettings.exp.maps.length > 1) {
-                    
-                    let failedMap = botSettings.exp.maps.shift(); // Usuwamy niedostępną mapę z początku
-                    botSettings.exp.maps.push(failedMap);         // Wrzucamy ją na sam koniec kolejki
-                    
-                    window.isRushing = false;     // Odblokowujemy możliwość ruchu
-                    window.lastExpMap = null;     // Wymuszamy na bocie przeliczenie trasy od nowa
-                    
-                    originalLogHero(`➡️ Przeskakuję niedostępną mapę. Nowy cel: ${botSettings.exp.maps[0]}`, "#00e5ff");
-                    
-                    let mapList = document.getElementById('expMapList');
-                    if (mapList) {
-                        // Aktualizacja interfejsu (lista map)
-                        mapList.innerHTML = botSettings.exp.maps.map((m, i) => `<div style="display:flex; justify-content:space-between; align-items:center; padding:2px; background:#111; margin-bottom:2px; border-left:2px solid #555;"><span style="color:#e0d8c0; font-size:10px; font-weight:bold;"><span style="color:#e53935; cursor:pointer; margin-right:4px;" onclick="removeExpMap(${i})">❌</span> ${m}</span><div style="cursor:ns-resize; color:#777;">↕</div></div>`).join('');
-                    }
-                }
-            }
-        };
-    }
 // --- DAEMON: AUTOMATYCZNE KUPNO PRZEDMIOTU W SKLEPIE I DIALOGI ---
     if (!window.autoBuyDaemonInstalled) {
         window.autoBuyDaemonInstalled = true;
