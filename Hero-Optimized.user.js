@@ -1060,29 +1060,28 @@ let opacityValue = 0.95;
 
 
 
-// Twój kalkulator pojemności plecaka (Zabezpieczony przed błędami serwera)
+// Twój perfekcyjny kalkulator na bazie Engine.bags
     window.getBagStats = function() {
-        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { freeSlots: 0, occupied: 0, total: 42 };
-        let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
-        let itemsArr = Object.values(hItems).filter(i => i);
-        
-        // Próba odczytu z wbudowanej funkcji, lub domyślne 42 sloty
-        let total = (typeof Engine.heroEquipment.getBagTotalSlots === 'function') ? Engine.heroEquipment.getBagTotalSlots() : 42;
-        if (total === 0 || total === undefined) total = 42; 
+        if (typeof Engine === 'undefined' || !Engine.bags) return { freeSlots: 0, usedSlots: 0, totalCapacity: 0 };
 
-        // Ręczne przeliczanie pojemności toreb, na wypadek błędu serwera
-        if (total === 42) {
-            itemsArr.forEach(i => {
-                if (Number(i.st) > 0 && Number(i.cl) === 24) { 
-                    let statStr = i._cachedStats?.stat || i.stat || "";
-                    let match = statStr.match(/pojemnosc=(\d+)/) || statStr.match(/capacity=(\d+)/);
-                    if (match) total += parseInt(match[1]);
-                }
-            });
-        }
-        
-        let occupied = itemsArr.filter(i => Number(i.st) === 0).length;
-        return { freeSlots: Math.max(0, total - occupied), occupied: occupied, total: total };
+        const bagsRaw = Engine.bags || [];
+        const bags = bagsRaw
+            .map((b, idx) => {
+                if (!Array.isArray(b) || !b[2]) return null;
+                return {
+                    capacity: Number(b[0]) || 0,
+                    used: Number(b[1]) || 0,
+                    free: (Number(b[0]) || 0) - (Number(b[1]) || 0)
+                };
+            })
+            .filter(Boolean);
+
+        return {
+            bagsCount: bags.length,
+            totalCapacity: bags.reduce((s, b) => s + b.capacity, 0),
+            usedSlots: bags.reduce((s, b) => s + b.used, 0),
+            freeSlots: bags.reduce((s, b) => s + b.free, 0)
+        };
     };
 
     function updateUI() {
