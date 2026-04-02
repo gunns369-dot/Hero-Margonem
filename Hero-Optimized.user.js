@@ -5886,7 +5886,7 @@ window.clearExpMaps = () => {
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
 
-  // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
+ // 2. POKAŻ POLECANE EQ (Z filtrowaniem i Zaawansowanym Porównywaniem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
@@ -5901,7 +5901,8 @@ window.clearExpMaps = () => {
 
                     parseStats: function(itemData) {
                         const out = {};
-                        // 1. Sprawdzamy czy mamy dostęp do surowego kodu z serwera
+                        
+                        // 1. Zabezpieczenie: Jeśli item ma surowy ciąg serwerowy (np. dmg=10;sa=1) -> parsujemy bezbłędnie (Głównie dla ubranego EQ)
                         let rawStat = itemData.stat || itemData.rawStat;
                         if (rawStat && typeof rawStat === "string" && rawStat.includes("=")) {
                             rawStat.split(";").forEach(part => {
@@ -5911,27 +5912,44 @@ window.clearExpMaps = () => {
                             return out;
                         }
 
-                        // 2. Jeśli nie, czyścimy polski opis ze wszystkich tagów HTML i czytamy tekst
-                        let htmlStr = itemData.stats || itemData.tooltip_text || "";
-                        let t = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase(); 
+                        // 2. Jeśli to obiekt z bazy (HTML): Czyścimy z tagów <br>, <span> i czytamy na siłę
+                        let htmlStr = itemData.stats || itemData.tooltip_text || itemData.name || "";
+                        let str = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase(); 
                         
-                        let dmgMatch = t.match(/(?:atak|obrażenia(?: fizyczne| dystansowe)?):\s*(\d+)(?:-(\d+))?/);
-                        if (dmgMatch) out.dmg = dmgMatch[2] ? `${dmgMatch[1]},${dmgMatch[2]}` : dmgMatch[1];
-                        let acMatch = t.match(/pancerz:\s*\+?(\d+)/); if (acMatch) out.ac = acMatch[1];
-                        let saMatch = t.match(/szybkość ataku:\s*\+?([0-9.]+)/); if (saMatch) out.sa = saMatch[1];
-                        let hpMatch = t.match(/życie:\s*\+?(\d+)/); if (hpMatch) out.hp = hpMatch[1];
-                        let fireMatch = t.match(/od ognia:\s*\+?(\d+)(?:-(\d+))?/); if (fireMatch) out.fire = fireMatch[2] ? `${fireMatch[1]},${fireMatch[2]}` : fireMatch[1];
-                        let frostMatch = t.match(/od zimna:\s*\+?(\d+)(?:-(\d+))?/); if (frostMatch) out.frost = frostMatch[2] ? `${frostMatch[1]},${frostMatch[2]}` : frostMatch[1];
-                        let lightMatch = t.match(/od błyskawic:\s*\+?(\d+)(?:-(\d+))?/); if (lightMatch) out.light = lightMatch[2] ? `${lightMatch[1]},${lightMatch[2]}` : lightMatch[1];
-                        let poisonMatch = t.match(/od trucizny:\s*\+?(\d+)(?:-(\d+))?/); if (poisonMatch) out.poison = poisonMatch[2] ? `${poisonMatch[1]},${poisonMatch[2]}` : poisonMatch[1];
-                        let critMatch = t.match(/cios krytyczny:\s*\+?([0-9.]+)/); if (critMatch) out.crit = critMatch[1];
-                        let evadeMatch = t.match(/unik:\s*\+?([0-9.]+)/); if (evadeMatch) out.evade = evadeMatch[1];
-                        let absorbMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń/); if (absorbMatch) out.absorb = absorbMatch[1];
-                        let absorbmMatch = t.match(/absorbuje\s*([0-9.]+)\s*obrażeń magicz/); if (absorbmMatch) out.absorbm = absorbmMatch[1];
-                        let daMatch = t.match(/podwójny atak:\s*\+?([0-9.]+)/); if (daMatch) out.da = daMatch[1];
-                        let healMatch = t.match(/leczenie zbroją:\s*\+?([0-9.]+)/); if (healMatch) out.heal = healMatch[1];
-                        let pierceMatch = t.match(/przebicie pancerza:\s*\+?([0-9.]+)/); if (pierceMatch) out.pierce = pierceMatch[1];
-                        
+                        // Wyciągarki ignorujące brudny tekst
+                        let extract = (name) => {
+                            let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)");
+                            let m = str.match(regex);
+                            return m ? m[1].replace(',', '.') : null;
+                        };
+                        let extractRange = (name) => {
+                            let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)(?:\\s*-\\s*([0-9.,]+))?");
+                            let m = str.match(regex);
+                            if (!m) return null;
+                            if (m[2]) return `${m[1].replace(',','.')},${m[2].replace(',','.')}`;
+                            return m[1].replace(',','.');
+                        };
+
+                        out.dmg = extractRange("obrażenia(?: fizyczne| dystansowe| magiczne)?") || extractRange("atak");
+                        out.ac = extract("pancerz");
+                        out.sa = extract("szybkość ataku");
+                        out.hp = extract("życie");
+                        out.fire = extractRange("od ognia");
+                        out.frost = extractRange("od zimna");
+                        out.light = extractRange("od błyskawic");
+                        out.poison = extractRange("od trucizny");
+                        out.crit = extract("cios krytyczny");
+                        out.evade = extract("unik");
+                        out.da = extract("podwójny atak");
+                        out.heal = extract("leczenie zbroją");
+                        out.pierce = extract("przebicie pancerza");
+                        out.pdmg = extract("obrażenia fizyczne"); // Dla strzał
+
+                        let abs1 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń(?! magicz)/);
+                        if(abs1) out.absorb = abs1[1].replace(',', '.');
+                        let abs2 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń magicznych/);
+                        if(abs2) out.absorbm = abs2[1].replace(',', '.');
+
                         return out;
                     },
 
@@ -5958,21 +5976,19 @@ window.clearExpMaps = () => {
                     },
 
                     getEquippedItemByCl: function(cl) {
-                        // Niezawodny odczyt pożyczony z Twojego skryptu!
+                        // Twój niezawodny skrypt do odczytu z torby (st > 0 to założone)
                         if (typeof Engine === 'undefined' || !Engine.heroEquipment) return null;
                         let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
-                        let eqItems = Object.values(hItems).filter(i => Number(i?.st) > 0);
+                        let eqItems = Object.values(hItems).filter(i => Number(i?.st) > 0 && Number(i?.cl) !== 24);
                         return eqItems.find(i => Number(i.cl) === Number(cl));
                     },
 
-                    getClFromDbItem: function(item) {
+                    getClFromDbItem: function(item, displayType) {
                         if (item.cl) return Number(item.cl);
                         let parsed = this.parseStats(item);
                         if (parsed.cl) return Number(parsed.cl);
                         
-                        let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
-                        let type = typeMatch ? typeMatch[1].toLowerCase() : (item.type || "").toLowerCase();
-                        
+                        let type = displayType.toLowerCase();
                         if (type.includes("bro") || type.includes("dystans") || type.includes("łuk")) return 4;
                         if (type.includes("zbro") || type.includes("kaftan") || type.includes("szat")) return 8;
                         if (type.includes("hełm") || type.includes("czapk") || type.includes("kaptur")) return 9;
@@ -5981,19 +5997,20 @@ window.clearExpMaps = () => {
                         if (type.includes("pierś")) return 12;
                         if (type.includes("naszyj") || type.includes("ozdob")) return 13;
                         if (type.includes("tarcz")) return 15;
+                        if (type.includes("talizman")) return 22;
                         if (type.includes("amunicja") || type.includes("strzał")) return 29;
                         return 0;
                     },
 
-                    compareWithEquipped: function(dbItem) {
-                        let cl = this.getClFromDbItem(dbItem);
+                    compareWithEquipped: function(dbItem, displayType) {
+                        let cl = this.getClFromDbItem(dbItem, displayType);
                         if (!cl) return { val: null, reason: 'no_cl' };
 
                         let eqItem = this.getEquippedItemByCl(cl);
                         if (!eqItem) return { val: null, reason: 'no_eq' };
 
                         let dbStats = this.parseStats(dbItem);
-                        let eqStats = this.parseStats({ stat: eqItem.stat }); // Pakujemy w obiekt żeby parser zadziałał
+                        let eqStats = this.parseStats({ stat: eqItem.stat }); // Opakowujemy w obiekt, żeby parser chwycił surowy ciąg
 
                         const weights = this.getWeightsForItem(cl);
                         
@@ -6007,6 +6024,7 @@ window.clearExpMaps = () => {
                             dbScore += dbVal * weight;
                         }
 
+                        if (eqScore <= 0 && dbScore > 0) return { val: 999, reason: 'ok' }; // Nowy item niszczy stary (który nie miał pkt)
                         if (eqScore <= 0) return { val: null, reason: 'zero_score' };
                         
                         let percent = ((dbScore / eqScore) - 1) * 100;
@@ -6046,7 +6064,6 @@ window.clearExpMaps = () => {
                 let count = 0;
                 
                 items.forEach((item, index) => {
-                    // Usuwamy zbędny dopisek rzadkości, zostawiając samo "Rękawice"
                     let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
                     let displayType = typeMatch ? typeMatch[1].trim() : (item.type && item.type !== 'null' ? item.type : "Inne");
                     
@@ -6056,13 +6073,15 @@ window.clearExpMaps = () => {
                     let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
                     let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
                     
-                    // Odpalamy matematykę
-                    let cmp = window.EquipmentScorer.compareWithEquipped(item);
+                    // --- ODPALAMY NOWĄ, BEZBŁĘDNĄ MATEMATYKĘ ---
+                    let cmp = window.EquipmentScorer.compareWithEquipped(item, displayType);
                     let badgeHtml = '';
                     
                     if (cmp.val !== null) {
-                        if (cmp.val > 0) {
+                        if (cmp.val > 0 && cmp.val !== 999) {
                             badgeHtml = `<span style="color:#00e676; font-size:10px; font-weight:bold; margin-left:6px; background:#003300; padding:1px 4px; border-radius:3px; border:1px solid #00e676; box-shadow: 0 0 3px #00e676;">+${cmp.val}% EXP</span>`;
+                        } else if (cmp.val === 999) {
+                            badgeHtml = `<span style="color:#00e5ff; font-size:10px; font-weight:bold; margin-left:6px;">UPGRADE!</span>`;
                         } else if (cmp.val < 0) {
                             badgeHtml = `<span style="color:#e53935; font-size:9px; font-weight:bold; margin-left:6px;">${cmp.val}% exp</span>`;
                         } else {
