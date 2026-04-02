@@ -4988,7 +4988,7 @@ function runExpLogic() {
 
 
 
- if (hx !== expLastX || hy !== expLastY) {
+if (hx !== expLastX || hy !== expLastY) {
         expLastX = hx;
         expLastY = hy;
         expAntiLagTime = now + getAntiLagDelay();
@@ -4996,17 +4996,17 @@ function runExpLogic() {
     } else if (now > expAntiLagTime) {
         if (isOnGateway(hx, hy)) {
             if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
-            // Odbiega dopiero gdy stoi na samej bramie ponad 2.5 sekundy
-            if (now - window.expGatewayStandTime > 2500) {
-                window.logExp(`[Anti-Lag] Brama zablokowana. Odbiegam...`, "#ff9800");
+            // WYDŁUŻONY CZAS: Odbiega dopiero gdy stoi na samej bramie ponad 5 sekund!
+            if (now - window.expGatewayStandTime > 5000) {
+                window.logExp(`[Anti-Lag] Zacięcie na bramie. Odbiegam...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
-                expAntiLagTime = now + 1500; expMapTransitionCooldown = now + 1500; expLastActionTime = now + 500;
+                expAntiLagTime = now + 2000; expMapTransitionCooldown = now + 2000; expLastActionTime = now + 500;
                 expCurrentTargetId = null; window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                 window.expGatewayStandTime = 0;
             }
-            return; // Bot grzecznie czeka na teleport
+            return; // Bot cierpliwie czeka na zmianę mapy
         }
         expAntiLagTime = now + getAntiLagDelay();
     }
@@ -5502,34 +5502,27 @@ function runExpLogic() {
 
 
 
-        // Wejście w bramę
-
+       // Wejście w bramę
         if (hx === dx && hy === dy) {
-
             if (!window.expGatewayArrivalTime) {
-
-                window.expGatewayArrivalTime = now; Engine.hero.autoGoTo({ x: dx, y: dy }); 
-
-            } else if (now - window.expGatewayArrivalTime > Math.floor(Math.random() * 1500) + 3000) {
-
+                window.expGatewayArrivalTime = now; 
+                // USUNIĘTO KOMENDĘ RUCHU: Bot po prostu wchodzi na klatkę i milczy, pozwalając grze załadować mapę!
+            } else if (now - window.expGatewayArrivalTime > 5000) {
+                window.logExp(`🚨 Brama nie reaguje! Odbiegam by ponowić...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
-
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
-
-                window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expGatewayArrivalTime = 0; 
-
-                expGatewayLockUntil = now + 1500;
-
+                
+                window.expLastMoveTx = -1; window.expLastMoveTy = -1; 
+                window.expGatewayArrivalTime = 0; 
+                expGatewayLockUntil = now + 2000;
             }
-
-            expLastActionTime = now + 200;
-
+            expLastActionTime = now + 200; // Czekamy w spokoju
             return;
-
+        } else {
+            // Jeśli zeszliśmy z bramy, resetujemy timer
+            window.expGatewayArrivalTime = 0;
         }
-
     }
 
 }
