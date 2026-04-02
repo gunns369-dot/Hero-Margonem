@@ -3038,7 +3038,7 @@ window.expGlobalTargetMap = null;
             }
         };
 
-     // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
+    // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
         bindChange('autoChangeExpRoute', (e) => { 
             botSettings.exp.autoChangeRoute = e.target.checked; 
             saveSettings(); 
@@ -3048,6 +3048,11 @@ window.expGlobalTargetMap = null;
                 // Jeśli odznaczamy - czyścimy trasę z automatu
                 if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
                 if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
+            }
+            
+            // Twarde, wymuszone renderowanie listy map natychmiast po zmianie
+            if (typeof window.renderExpMaps === 'function') {
+                setTimeout(() => window.renderExpMaps(), 50); // Minimalne opóźnienie dla przeglądarki
             }
         });
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
@@ -5988,18 +5993,36 @@ window.toggleTeleportLock = function(city, isChecked) {
             }
         });
     }
-    // --- SYSTEM RYSOWANIA TELEPORTÓW ---
+// --- SYSTEM RYSOWANIA TELEPORTÓW ---
     window.renderTeleportList = function() {
         let container = document.getElementById('heroTeleportsGUI');
         if (!container) return;
         
-        // Pobieramy miasta z bazy ZAKONNICY, a jeśli jej nie ma - używamy listy awaryjnej
         let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : [
             "Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", 
             "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", 
             "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", 
             "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"
         ];
+        
+        // Zabezpieczenie na wypadek, gdy nick załaduje się później
+        let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
+        
+        let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div>`;
+        
+        tpList.forEach(map => {
+            let isChecked = (botSettings.unlockedTeleports && botSettings.unlockedTeleports[map]) ? 'checked' : '';
+            html += `
+                <label style="display:flex; align-items:center; background:#1a1a1a; padding:4px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px; border-left: 2px solid #00838f;">
+                    <input type="checkbox" class="chk-teleport" data-map="${map}" ${isChecked} style="margin-right:8px; cursor:pointer;">
+                    <b>${map}</b>
+                </label>
+            `;
+        });
+        
+        html += `<button id="btnSaveTeleportsManual" class="btn btn-go-sepia" style="margin-top:6px; color:#4caf50; font-weight:bold; border-color:#4caf50;">💾 ZAPISZ TELEPORTY</button>`;
+        container.innerHTML = html;
+    };
         
         let html = '<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty (Zakonnicy):</div>';
         
@@ -6016,17 +6039,13 @@ window.toggleTeleportLock = function(city, isChecked) {
         container.innerHTML = html;
     };
 
-// Obsługa klikania i zapisywania teleportów w pamięci bota
+// Obsługa klikania teleportów w pamięci tymczasowej
     document.addEventListener('change', (e) => {
         if (e.target && e.target.classList.contains('chk-teleport')) {
             let mapName = e.target.getAttribute('data-map');
             if (!botSettings.unlockedTeleports) botSettings.unlockedTeleports = {};
             botSettings.unlockedTeleports[mapName] = e.target.checked;
-            if (typeof saveSettings === 'function') saveSettings();
-            if (window.logHero) window.logHero(`[System] Zaktualizowano teleport: ${mapName}`, "#00acc1");
         }
-        
-        // NOWOŚĆ: Zmiana w filtrze ekwipunku
         if (e.target && e.target.id === 'eqTypeFilter') {
             if (typeof window.renderEqItems === 'function') window.renderEqItems(e.target.value);
         }
@@ -6041,6 +6060,22 @@ window.toggleTeleportLock = function(city, isChecked) {
         let btnStop = document.getElementById('btnStopWalk');
 
         let hideAllTabs = () => { if(tpGui) tpGui.style.display='none'; if(eqList) eqList.style.display='none'; if(potList) potList.style.display='none'; if(shopsWrap) shopsWrap.style.display='none'; };
+
+        // 0. ZAPISYWANIE TELEPORTÓW DLA NICKU
+        if (e.target && e.target.id === 'btnSaveTeleportsManual') {
+            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
+                let nick = Engine.hero.d.nick;
+                let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
+                allTps[nick] = botSettings.unlockedTeleports;
+                localStorage.setItem('hero_teleports_by_nick_v64', JSON.stringify(allTps));
+                saveSettings(); // Nadpisuje też ogólne ustawienia
+                if (window.logHero) window.logHero(`✅ Zapisano ustawienia teleportów dla: ${nick}!`, "#4caf50");
+                e.target.innerText = "✅ ZAPISANO!";
+                setTimeout(() => { if(e.target) e.target.innerText = "💾 ZAPISZ TELEPORTY"; }, 1500);
+            } else {
+                heroAlert("Błąd: Silnik gry jeszcze nie wczytał nazwy Twojej postaci.");
+            }
+        }
 
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
