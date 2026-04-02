@@ -6287,7 +6287,7 @@ window.clearExpMaps = () => {
         setInterval(() => {
             if (window.autoBuyTask && typeof Engine !== 'undefined') {
                 
-                // 1. OMIJANIE DIALOGÓW (Zaczepienie NPC otwiera dialog zamiast sklepu)
+                // 1. OMIJANIE DIALOGÓW
                 let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                 if (dialogOptions.length > 0) {
                     let shopOpt = dialogOptions.find(el => {
@@ -6308,7 +6308,7 @@ window.clearExpMaps = () => {
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Natywny mechanizm z Koszykiem - Engine.shop.basket)
+                // 2. KUPNO W SKLEPIE (Z wykorzystaniem Koszyka)
                 if (Engine.shop && Engine.shop.items && Engine.shop.basket) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
                     
@@ -6325,14 +6325,14 @@ window.clearExpMaps = () => {
                             
                             let finalAmount = window.autoBuyTask.amount;
                             let mode = window.autoBuyTask.mode; // 'potion' lub 'eq'
-                            let finalItemName = window.autoBuyTask.item; // Zapamiętujemy nazwę dla Auto-Equip
+                            let finalItemName = window.autoBuyTask.item; // Zapamiętujemy do Auto-Equip
                             window.autoBuyTask = null; // Usuwamy zadanie
                             
                             let buyDelay = Math.floor(Math.random() * 301) + 500; 
                             
                             setTimeout(() => {
                                 if (typeof Engine.shop.basket.buyItem === 'function') {
-                                    // Potki mnożymy x3 (aby wpisać ilość staków), EQ zawsze 1 sztuka
+                                    // Mnożymy potki x3 dla staków, eq zawsze 1 raz
                                     let clicksNeeded = (mode === 'potion') ? (finalAmount * 3) : 1;
                                     for (let i = 0; i < clicksNeeded; i++) {
                                         Engine.shop.basket.buyItem(itemToBuy);
@@ -6347,35 +6347,30 @@ window.clearExpMaps = () => {
                                         let msg = mode === 'potion' ? `✅ Zakupiono ${finalAmount} staków (po 15 szt.)!` : `✅ Zakupiono 1 sztukę ekwipunku!`;
                                         if (window.logHero) window.logHero(msg, "#4caf50");
                                         
-                                        // B. AUTO-ZAKŁADANIE EKWIPUNKU
+                                        // B. AUTO-ZAKŁADANIE EKWIPUNKU Z UŻYCIEM NATYWNEJ FUNKCJI SILNIKA
                                         if (mode === 'eq') {
                                             setTimeout(() => {
-                                                // Skanowanie torby w poszukiwaniu nowo kupionego przedmiotu
-                                                let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
+                                                if (typeof Engine.heroEquipment === 'undefined' || typeof Engine.heroEquipment.getHItems !== 'function') return;
+                                                
+                                                let hItems = Engine.heroEquipment.getHItems();
                                                 let bagItems = Object.values(hItems);
                                                 
+                                                // Skanujemy torbę w poszukiwaniu nowo kupionego przedmiotu
                                                 let boughtItem = bagItems.find(i => {
                                                     let n = i._cachedStats?.name || i.name || "";
-                                                    // Upewniamy się, że item jest fizycznie w torbie (st > 8 w SI lub loc === "g" w NI)
-                                                    let inBag = i.loc === "g" || Number(i.st) > 8 || Number(i.slot) > 29;
+                                                    // Sprawdzamy czy fizycznie leży w torbie, używając weryfikacji Number(i.st) === 0 lub loc == "g"
+                                                    let inBag = Number(i.st) === 0 || i.loc === "g" || Number(i.st) > 8;
                                                     return n === finalItemName && inBag;
                                                 });
                                                 
                                                 if (boughtItem) {
-                                                    // Mapowanie klas przedmiotów na docelowe sloty założenia
-                                                    // 1:Broń(5), 2:Zbroja(6), 3:Hełm(1), 4:Buty(8), 5:Tarcza(7), 6:Pierścień(2), 7:Naszyjnik(3), 8:Rękawice(4)
-                                                    const clToSt = { 1:5, 2:6, 3:1, 4:8, 5:7, 6:2, 7:3, 8:4, 15:2, 16:5, 18:7 };
-                                                    let targetSt = clToSt[boughtItem.cl] || 1;
-                                                    
-                                                    // Wysyłanie komendy założenia
-                                                    if (typeof Engine.communicator !== 'undefined' && typeof Engine.communicator.send === 'function') {
-                                                        Engine.communicator.send(`moveitem&id=${boughtItem.id}&st=${targetSt}`);
-                                                    } else if (typeof window._g === 'function') {
-                                                        window._g(`moveitem&id=${boughtItem.id}&st=${targetSt}`);
+                                                    // Używamy odkrytej przez Ciebie natywnej komendy!
+                                                    if (typeof Engine.heroEquipment.sendUseRequest === 'function') {
+                                                        Engine.heroEquipment.sendUseRequest(boughtItem);
+                                                        if (window.logHero) window.logHero(`🛡️ Automatycznie założono: ${finalItemName}!`, "#00acc1");
                                                     }
-                                                    if (window.logHero) window.logHero(`🛡️ Automatycznie założono: ${finalItemName}!`, "#00acc1");
                                                 }
-                                            }, 1200); // 1.2 sekundy na zaktualizowanie się torby przez serwer gry po zakupie
+                                            }, 1500); // Czekamy 1.5s aż serwer wrzuci item do torby
                                         }
                                     }
                                     
