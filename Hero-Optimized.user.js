@@ -3012,8 +3012,7 @@ window.expGlobalTargetMap = null;
             let p = botSettings.expProfiles[index];
             if(p) {
                 botSettings.exp.activeProfileName = p.name; 
-                botSettings.exp.mapOrder = [...p.maps]; // Zapisujemy nową trasę
-                botSettings.exp.maps = [...p.maps]; // KLUCZOWE: synchronizacja tej drugiej zmiennej!
+                botSettings.exp.mapOrder = [...p.maps];
                 localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
                 
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
@@ -3030,7 +3029,9 @@ window.expGlobalTargetMap = null;
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
                 
                 // WYMUSZENIE NATYCHMIASTOWEGO RENDEROWANIA LISTY
-                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+                setTimeout(() => {
+                    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+                }, 100);
             }
         };
 
@@ -3076,7 +3077,7 @@ window.expGlobalTargetMap = null;
                 if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
             }
             
-            // Wymuszone odświeżenie UI natychmiast po kliknięciu!
+            // Wymuszone odświeżenie UI natychmiast po kliknięciu checkboxa!
             setTimeout(() => {
                 if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }, 100);
