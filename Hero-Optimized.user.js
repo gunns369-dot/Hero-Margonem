@@ -5896,7 +5896,7 @@ window.clearExpMaps = () => {
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; background:#1a1a1a; padding:4px; border:1px solid #333;">
                         <span style="color:#a99a75; font-size:10px; font-weight:bold;">Filtruj typ:</span>
                         <select id="eqTypeFilter" style="background:#000; color:#d4af37; border:1px solid #333; font-size:10px; padding:2px; font-weight:bold; cursor:pointer;">
-                            <option value="Wszystkie">Wszystkie (-5 / +5 lvl)</option>
+                            <option value="Wszystkie">Wszystkie (-5 )</option>
                             <option value="bro">Broń (Biała/Złoto)</option>
                             <option value="dystansowe">Dystansowe / Łuki</option>
                             <option value="zbroj">Zbroje</option>
