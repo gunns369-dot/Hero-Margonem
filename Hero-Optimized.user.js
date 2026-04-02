@@ -6347,22 +6347,27 @@ window.clearExpMaps = () => {
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Bezpośredni strzał w silnik gry)
+                // 2. KUPNO W SKLEPIE (Z wykorzystaniem Twojego odkrycia _cachedStats)
                 if (Engine.shop && Engine.shop.items) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         let shopItems = Object.values(Engine.shop.items);
-                        let itemToBuy = shopItems.find(i => i.name === window.autoBuyTask.item);
+                        
+                        // ODCZYT NAZWY Z NOWEGO INTERFEJSU (_cachedStats.name) ALBO STAREGO (.name)
+                        let itemToBuy = shopItems.find(i => {
+                            let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
+                            return realName === window.autoBuyTask.item;
+                        });
                         
                         if (itemToBuy) {
-                            if (window.logHero) window.logHero(`💸 Odnaleziono: ${window.autoBuyTask.item}...`, "#8bc34a");
+                            if (window.logHero) window.logHero(`💸 Odnaleziono w sklepie: ${window.autoBuyTask.item}...`, "#8bc34a");
                             
                             let finalAmount = window.autoBuyTask.amount;
                             let finalItemId = itemToBuy.id;
-                            window.autoBuyTask = null; // Usuwamy zadanie, żeby się nie zapętliło
+                            window.autoBuyTask = null; // Usuwamy zadanie przed uderzeniem, by się nie zapętlało
                             
-                            // Humanizacja: Czekamy chwilę na załadowanie grafik w sklepie (600-1000ms)
+                            // Humanizacja: Czekamy chwilę na animacje sklepu (600-1000ms)
                             let buyDelay = Math.floor(Math.random() * 401) + 600; 
                             
                             setTimeout(() => {
@@ -6370,7 +6375,9 @@ window.clearExpMaps = () => {
                                 if (typeof Engine.communicator !== 'undefined' && typeof Engine.communicator.send === 'function') {
                                     Engine.communicator.send(`shop&buy=${finalItemId}&amount=${finalAmount}`);
                                 } else if (typeof window._t !== 'undefined' && typeof window._t.send === 'function') {
-                                    window._t.send(`shop&buy=${finalItemId}&amount=${finalAmount}`); // Fallback SI
+                                    window._t.send(`shop&buy=${finalItemId}&amount=${finalAmount}`);
+                                } else if (typeof window._g === 'function') {
+                                    window._g(`shop&buy=${finalItemId}&amount=${finalAmount}`);
                                 }
                                 
                                 if (window.logHero) window.logHero(`✅ Zakupiono ${finalAmount} sztuk!`, "#4caf50");
