@@ -313,7 +313,7 @@ getRecommendedEq: function() {
             let fullProf = profMap[myProfLetter];
 
             return this.ekwipunek.filter(item => {
-                // TUTA ZMIANA: Pokazuje tylko przedmioty od (Twój lvl - 5) do Twojego aktualnego poziomu
+                // TUTA ZMIANA: Pokazuje tylko przedmioty od (Twój lvl - 5) do Twojego aktualnego poziomu!
                 let isLevelOk = (item.level >= myLvl - 5) && (item.level <= myLvl);
                 
                 let profArray = item.prof.map(p => p.toLowerCase());
@@ -327,7 +327,6 @@ getRecommendedEq: function() {
                 return isLevelOk && isProfOk;
             }).sort((a, b) => a.level - b.level);
         }
-
     // Automatyczne załadowanie bazy 3 sekundy po włączeniu gry
     setTimeout(() => window.DatabaseModule.initDatabases(), 3000);
     // ==========================================
@@ -2451,7 +2450,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <div id="kolosyListContainer"></div>
                 </div>
 
-         <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
+        <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
                     <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 250px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
                         <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
                     </div>
@@ -6337,17 +6336,16 @@ window.clearExpMaps = () => {
                                 shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                             }
                         }, humanDelay);
-                        return; // Kliknęliśmy, czekamy na załadowanie sklepu
+                        return; 
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Z wykorzystaniem Koszyka)
+                // 2. KUPNO W SKLEPIE
                 if (Engine.shop && Engine.shop.items && Engine.shop.basket) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         let shopItems = Object.values(Engine.shop.items);
-                        
                         let itemToBuy = shopItems.find(i => {
                             let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
                             return realName === window.autoBuyTask.item;
@@ -6355,17 +6353,14 @@ window.clearExpMaps = () => {
                         
                         if (itemToBuy) {
                             if (window.logHero) window.logHero(`🛒 Dodaję do koszyka: ${window.autoBuyTask.item}...`, "#8bc34a");
-                            
                             let finalAmount = window.autoBuyTask.amount;
-                            let mode = window.autoBuyTask.mode; // 'potion' lub 'eq'
-                            let finalItemName = window.autoBuyTask.item; // Zapamiętujemy do Auto-Equip
-                            window.autoBuyTask = null; // Usuwamy zadanie
+                            let mode = window.autoBuyTask.mode;
+                            let finalItemName = window.autoBuyTask.item;
+                            window.autoBuyTask = null; 
                             
                             let buyDelay = Math.floor(Math.random() * 301) + 500; 
-                            
                             setTimeout(() => {
                                 if (typeof Engine.shop.basket.buyItem === 'function') {
-                                    // Mnożymy potki x3 dla staków, eq zawsze 1 raz
                                     let clicksNeeded = (mode === 'potion') ? (finalAmount * 3) : 1;
                                     for (let i = 0; i < clicksNeeded; i++) {
                                         Engine.shop.basket.buyItem(itemToBuy);
@@ -6374,40 +6369,30 @@ window.clearExpMaps = () => {
 
                                 let finalizeDelay = Math.floor(Math.random() * 301) + 300; 
                                 setTimeout(() => { 
-                                    // A. FINALIZACJA KOSZYKA
                                     if (typeof Engine.shop.basket.finalize === 'function') {
                                         Engine.shop.basket.finalize(); 
                                         let msg = mode === 'potion' ? `✅ Zakupiono ${finalAmount} staków (po 15 szt.)!` : `✅ Zakupiono 1 sztukę ekwipunku!`;
                                         if (window.logHero) window.logHero(msg, "#4caf50");
                                         
-                                        // B. AUTO-ZAKŁADANIE EKWIPUNKU Z UŻYCIEM NATYWNEJ FUNKCJI SILNIKA
                                         if (mode === 'eq') {
                                             setTimeout(() => {
                                                 if (typeof Engine.heroEquipment === 'undefined' || typeof Engine.heroEquipment.getHItems !== 'function') return;
-                                                
                                                 let hItems = Engine.heroEquipment.getHItems();
                                                 let bagItems = Object.values(hItems);
-                                                
-                                                // Skanujemy torbę w poszukiwaniu nowo kupionego przedmiotu
                                                 let boughtItem = bagItems.find(i => {
                                                     let n = i._cachedStats?.name || i.name || "";
-                                                    // Sprawdzamy czy fizycznie leży w torbie, używając weryfikacji Number(i.st) === 0 lub loc == "g"
-                                                    let inBag = Number(i.st) === 0 || i.loc === "g" || Number(i.st) > 8;
+                                                    let inBag = Number(i.st) === 0 || i.loc === "g" || Number(i.st) > 8 || Number(i.slot) > 29;
                                                     return n === finalItemName && inBag;
                                                 });
                                                 
-                                                if (boughtItem) {
-                                                    // Używamy odkrytej przez Ciebie natywnej komendy!
-                                                    if (typeof Engine.heroEquipment.sendUseRequest === 'function') {
-                                                        Engine.heroEquipment.sendUseRequest(boughtItem);
-                                                        if (window.logHero) window.logHero(`🛡️ Automatycznie założono: ${finalItemName}!`, "#00acc1");
-                                                    }
+                                                if (boughtItem && typeof Engine.heroEquipment.sendUseRequest === 'function') {
+                                                    Engine.heroEquipment.sendUseRequest(boughtItem);
+                                                    if (window.logHero) window.logHero(`🛡️ Automatycznie założono: ${finalItemName}!`, "#00acc1");
                                                 }
-                                            }, 1500); // Czekamy 1.5s aż serwer wrzuci item do torby
+                                            }, 1500);
                                         }
                                     }
                                     
-                                    // C. ZAMKNIĘCIE SKLEPU
                                     let closeDelay = Math.floor(Math.random() * 501) + 500; 
                                     setTimeout(() => { 
                                         if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
@@ -6416,9 +6401,7 @@ window.clearExpMaps = () => {
                                     }, closeDelay);
 
                                 }, finalizeDelay);
-                                
                             }, buyDelay);
-
                         } else {
                             if (window.logHero) window.logHero(`❌ Sprzedawca nie posiada obecnie [${window.autoBuyTask.item}]!`, "#e53935");
                             window.autoBuyTask = null;
@@ -6428,13 +6411,12 @@ window.clearExpMaps = () => {
             }
         }, 800);
     }
+
     // --- DAEMON: AUTOHEAL ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
-            
-            // Autoheal nie odpala się podczas walki!
             if (Engine.battle && (Engine.battle.show || Engine.battle.d)) return;
 
             if (botSettings.autoheal && botSettings.autoheal.enabled) {
@@ -6442,15 +6424,11 @@ window.clearExpMaps = () => {
                 let maxhp = Engine.hero.d.maxhp;
                 
                 if (hp > 0 && maxhp > 0 && (hp / maxhp * 100) < botSettings.autoheal.threshold) {
-                    
-                    // Zabezpieczenie przed spamowaniem pakietami leczącymi (czekamy na odnowienie HP z serwera)
                     if (window.isHealingRightNow) return;
 
-                    // Wyciągamy przedmioty z torby w oparciu o Twój moduł odczytu z _cachedStats
                     let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
                     let bagItems = Object.values(hItems);
                     
-                    // Rozbijamy ignorowane teksty na małe litery
                     let ignored = (botSettings.autoheal.ignoreItems || "").split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
                     let unids = (botSettings.autoheal.unidItems || "").split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
                     
@@ -6458,7 +6436,6 @@ window.clearExpMaps = () => {
                         let inBag = Number(i.st) === 0 || i.loc === "g" || Number(i.st) > 8 || Number(i.slot) > 29;
                         if (!inBag) return false;
 
-                        // Szukamy w statystykach flagi odpowiadającej za leczenie w Margonem
                         let stat = i._cachedStats?.stat || i.stat || "";
                         if (!stat.includes("leczy=") && !stat.includes("fullheal=")) return false;
 
@@ -6470,25 +6447,23 @@ window.clearExpMaps = () => {
 
                     if (potions.length > 0) {
                         window.isHealingRightNow = true;
-                        let potion = potions[0]; // Bierzemy pierwszą dozwoloną z torby
+                        let potion = potions[0];
                         
                         if (window.logHero && window.lastHealLog !== potion.id) {
-                            window.logHero(`💚 Używam: ${potion._cachedStats?.name || potion.name}`, "#4caf50");
+                            window.logHero(`💚 Leczę się: ${potion._cachedStats?.name || potion.name}`, "#4caf50");
                             window.lastHealLog = potion.id;
                         }
                         
-                        // Używamy bezpiecznej, natywnej komendy silnika
                         if (typeof Engine.heroEquipment.sendUseRequest === 'function') {
                             Engine.heroEquipment.sendUseRequest(potion);
                         } else if (typeof window._g === 'function') {
-                            window._g(`moveitem&id=${potion.id}&st=1`); // Awaryjne dla SI
+                            window._g(`moveitem&id=${potion.id}&st=1`); 
                         }
                         
-                        // Blokujemy na 800ms, aby serwer zdążył załadować nam nowe punkty HP
                         setTimeout(() => { window.isHealingRightNow = false; }, 800);
                     }
                 }
             }
-        }, 1000); // Sprawdza pulę HP co sekundę
+        }, 1000); 
     }
 })(); // Koniec kodu
