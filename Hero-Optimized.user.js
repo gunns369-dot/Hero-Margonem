@@ -7042,7 +7042,7 @@ window.clearExpMaps = () => {
                             window.autoSellState.nextActionTime = Date.now() + 500;
                         }
                     }
-                } else if (window.autoSellState.step === 2) {
+               } else if (window.autoSellState.step === 2) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window, .shop-container');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
@@ -7053,14 +7053,21 @@ window.clearExpMaps = () => {
                         window.autoSellState.lastFreeSlots = typeof window.getBagStats === 'function' ? window.getBagStats().freeSlots : 0;
                         window.autoSellState.nextActionTime = Date.now() + 500;
                     } else {
-                        // Trzeba przeklikać dialogi ("Sklep", "Handluj" itp.)
-                        let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li'));
+                        // Szukamy opcji dialogowej (dodano nowe słowa kluczowe i selektory!)
+                        let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                         let shopOpt = dialogOptions.find(el => {
                             let txt = (el.innerText || el.textContent).toLowerCase();
-                            return txt.includes('sklep') || txt.includes('handl') || txt.includes('sprzedaj');
+                            // Teraz wyłapie "Pokaż mi swoje towary", "Kup" itp.
+                            return txt.includes('sklep') || txt.includes('handl') || txt.includes('sprzedaj') || txt.includes('pokaż') || txt.includes('towar') || txt.includes('kup');
                         });
+                        
                         if (shopOpt) {
-                            shopOpt.click();
+                            // Twoja niezawodna symulacja kliknięcia dla okien dialogowych
+                            if (window.jQuery) jQuery(shopOpt).trigger("click");
+                            if (typeof shopOpt.click === 'function') shopOpt.click();
+                            shopOpt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+                            shopOpt.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+                            
                             window.autoSellState.nextActionTime = Date.now() + 600; // Nie spamować klikania dialogu
                         }
                     }
