@@ -6927,33 +6927,41 @@ window.clearExpMaps = () => {
         window.autoSellDaemonInstalled = true;
         window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0 };
         
-        // Twoja ulepszona funkcja: Szuka przycisku akceptacji w CAŁYM dokumencie, a nie tylko w sklepie
-        window.runSuperSellerBagAndAccept = function(bagNo) {
-            const root = typeof Engine !== 'undefined' && Engine.shop && Engine.shop.wnd && Engine.shop.wnd.$ ? Engine.shop.wnd.$[0] : document;
+        // Twoja ostateczna funkcja do akceptowania koszyka
+        window.runSuperSellerBagAndAccept = function(bagNo, delay = 150) {
+            const root = Engine.shop?.wnd?.$?.[0] || document;
             const btn = root.querySelector(`.btn-num.grab-bag-${bagNo}`);
-            if (!btn) return false;
-            
-            // 1. Klikamy torbę
-            if (window.jQuery) jQuery(btn).trigger("click");
-            btn.click();
-            btn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-            btn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
 
-            // 2. Czekamy 400ms aż Margonem wyrenderuje okienko potwierdzenia i klikamy "Akceptuj" / "Tak"
+            if (!btn) {
+                console.log("Nie znaleziono przycisku torby:", bagNo);
+                return false;
+            }
+
+            btn.click();
+            btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+
             setTimeout(() => {
-                const acceptBtn = Array.from(document.querySelectorAll('.button, .btn, .green, .dialog-btn, .button-green, span')).find(el => {
-                    let txt = (el.innerText || el.textContent).toLowerCase().trim();
-                    return (txt === 'tak' || txt === 'akceptuj' || txt === 'sprzedaj' || txt === 'ok') && el.offsetParent !== null;
-                });
-                
-                if (acceptBtn) {
-                    if (window.jQuery) jQuery(acceptBtn).trigger("click");
-                    acceptBtn.click();
-                    acceptBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-                    acceptBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
-                    if (window.logHero) window.logHero(`✅ Zatwierdzono sprzedaż torby ${bagNo}.`, "#8bc34a");
+                // Szukamy w całym dokumencie, żeby na 100% złapać widoczny przycisk
+                const acceptBtn = [...document.querySelectorAll("button, div, a, span")]
+                    .find(el => /akceptuj/i.test((el.textContent || "").trim()) && el.offsetParent);
+
+                if (!acceptBtn) {
+                    console.log("Nie znaleziono przycisku Akceptuj");
+                    return;
                 }
-            }, 400);
+
+                console.log("Klikam Akceptuj:", acceptBtn);
+
+                if (window.jQuery) {
+                    jQuery(acceptBtn).trigger("click");
+                }
+
+                acceptBtn.click();
+                acceptBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+                
+                if (window.logHero) window.logHero(`✅ Zaakceptowano sprzedaż torby ${bagNo}.`, "#8bc34a");
+                if (window.logExp) window.logExp(`✅ Zaakceptowano sprzedaż torby ${bagNo}.`, "#8bc34a");
+            }, delay);
 
             return true;
         };
@@ -7041,7 +7049,7 @@ window.clearExpMaps = () => {
                                     else window._g(`talk&id=${n.id}`);
                                     
                                     window.autoSellState.step = 2;
-                                    window.autoSellState.nextActionTime = Date.now() + 800; // Czekamy na załadowanie dialogu
+                                    window.autoSellState.nextActionTime = Date.now() + 800; // Czas na pokazanie okna rozmowy
                                     break;
                                 }
                             }
@@ -7092,24 +7100,25 @@ window.clearExpMaps = () => {
                     
                     if (window.autoSellState.bagToSell <= s.bagsCount) {
                         let bagNo = window.autoSellState.bagToSell;
-                        let msg = `💰 Klikam torbę ${bagNo}...`;
+                        let msg = `💰 Dodaję torbę ${bagNo} do koszyka...`;
                         if (window.logHero) window.logHero(msg, "#ffb300");
                         if (window.logExp) window.logExp(msg, "#ffb300");
                         
-                        // Uruchomienie Twojej funkcji klikającej torbę, a po chwili (400ms) klikającej "Akceptuj"
-                        window.runSuperSellerBagAndAccept(bagNo);
+                        // Używamy Twojej funkcji z randomowym opóźnieniem (150-350ms) przed "Akceptuj"
+                        window.runSuperSellerBagAndAccept(bagNo, Math.floor(Math.random() * 200) + 150);
                         
                         window.autoSellState.bagToSell++;
-                        // Czekamy 1.5 sekundy, aż serwer zaktualizuje eq po sprzedaży, zanim klikniemy następną torbę
+                        // Czekamy 1.5s przed próbą dorzucenia i akceptacji kolejnej torby
                         window.autoSellState.nextActionTime = Date.now() + 1500; 
                     } else {
+                        // Wszystkie torby przeklikane
                         window.autoSellState.step = 4;
-                        window.autoSellState.nextActionTime = Date.now() + 1000; 
+                        window.autoSellState.nextActionTime = Date.now() + 1000; // Sekunda dla serwera
                     }
                 } else if (window.autoSellState.step === 4) {
                     let stats = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99 };
                     
-                    // Magia: Dopóki robi się miejsce, sprzedajemy dalej od torby nr 1
+                    // Magia: Dopóki miejsce rośnie, powtarzamy cykl od pierwszej torby!
                     if (stats.freeSlots > window.autoSellState.lastFreeSlots) {
                         let msg = `♻️ Miejsce rośnie (${window.autoSellState.lastFreeSlots} -> ${stats.freeSlots}). Sprzedaję dalej!`;
                         if (window.logHero) window.logHero(msg, "#00e5ff");
@@ -7120,7 +7129,7 @@ window.clearExpMaps = () => {
                         window.autoSellState.step = 3;
                         window.autoSellState.nextActionTime = Date.now() + 500;
                     } else {
-                        // Miejsce przestało rosnąć - koniec śmieci do sprzedaży
+                        // Wolne miejsce przestało rosnąć - koniec czyszczenia
                         let profit = Engine.hero.d.gold - window.autoSellState.oldGold;
                         if (profit > 0) {
                             let msg = `✅ Opróżnianie zakończone! Zarobek: ${profit.toLocaleString()} zł. Wracam do pracy.`;
@@ -7137,12 +7146,12 @@ window.clearExpMaps = () => {
                         window.isRushing = false;
                         window.isRushingToShop = false;
                         
-                        // Zamykanie okna sklepu
+                        // Zamykanie okna
                         if (typeof Engine.shop.close === 'function') Engine.shop.close();
                         let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                         if (closeBtn) closeBtn.click();
                         
-                        window.lastExpMap = null; 
+                        window.lastExpMap = null; // Wymusza na module przeliczenie trasy powrotnej
                     }
                 }
             }
