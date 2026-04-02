@@ -2479,7 +2479,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
 
                     <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
-                        ▼ KIESZONKOWY BERSERK (SERWEROWY AUTO-ATAK)
+                        ▼ KIESZONKOWY BERSERK
                     </div>
                     <div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
                         <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
@@ -2552,7 +2552,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
                     <div style="margin-bottom:4px; text-align:center; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px;">
                         <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
-                            <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska po awansie!
+                            <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
                         </label>
                     </div>
                     <input type="hidden" id="expRange" value="999">
@@ -3038,11 +3038,17 @@ window.expGlobalTargetMap = null;
             }
         };
 
-        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
+     // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
         bindChange('autoChangeExpRoute', (e) => { 
             botSettings.exp.autoChangeRoute = e.target.checked; 
             saveSettings(); 
-            if (e.target.checked) window.checkAndLoadBestExpProfile(true); 
+            if (e.target.checked) {
+                window.checkAndLoadBestExpProfile(true); 
+            } else {
+                // Jeśli odznaczamy - czyścimy trasę z automatu
+                if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
+                if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
+            }
         });
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
         window.updateServerBerserk = function() {
@@ -4777,9 +4783,10 @@ function runExpLogic() {
                 return; // Trwa blokada, czekamy
             }
 
-            // --- 2. RUCH NA EXPOWISKO ---
-            // Zmienna przechowująca cel (upewnij się, że używasz właściwej z Twojego kodu, np. botSettings.exp.maps[0])
-            let targetExpMap = botSettings.exp.maps[0]; 
+      // --- 2. RUCH NA EXPOWISKO ---
+            // Zmienna przechowująca cel. Jeśli lista jest pusta, traktujemy obecną mapę jako cel!
+            let mapOrder = botSettings.exp.mapOrder || [];
+            let targetExpMap = mapOrder.length > 0 ? mapOrder[0] : Engine.map.d.name; 
             
             if (Engine.map.d.name !== targetExpMap) {
                 // Odpalamy algorytm ruchu TYLKO, jeśli bot jeszcze nie biegnie
@@ -5163,30 +5170,23 @@ function runExpLogic() {
 
 
 
-    // --- ZAAWANSOWANY SMART ROAM: PĘTLE BRAM I TUNELI ---
-
+// --- ZAAWANSOWANY SMART ROAM: PĘTLE BRAM I TUNELI ---
     if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
 
-
-
     expEmptyScans++;
-
     if (displayTarget) displayTarget.innerText = `Czysto. Skanowanie... (${expEmptyScans}/6)`;
-
     if (expEmptyScans < 6) { expLastActionTime = now + 180; return; }
-
     if (now < expMapTransitionCooldown) return;
 
-
-
     let mapsPool = botSettings.exp.mapOrder || [];
-
-    if (!mapsPool.length) return;
-
-
+    if (!mapsPool.length) {
+        // Gdy lista map jest pusta, bot nie przechodzi dalej. Po prostu resetuje skany i stoi.
+        expEmptyScans = 0;
+        expLastActionTime = now + 1500;
+        return;
+    }
 
     // Oznacz obecną mapę jako "czystą"
-
     window.mapClearTimes[currMap] = now;
 
     let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m] && m !== currMap);
