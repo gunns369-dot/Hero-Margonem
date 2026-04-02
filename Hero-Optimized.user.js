@@ -2986,7 +2986,7 @@ window.expGlobalTargetMap = null;
             p.style.display = p.style.display === 'none' ? 'block' : 'none'; 
         });
         
-      // Pętla milczącego ładownia profili (dla Auto-Expowiska)
+     // Pętla milczącego ładownia profili (dla Auto-Expowiska)
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
             if(p) {
@@ -3008,7 +3008,9 @@ window.expGlobalTargetMap = null;
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
                 
                 // WYMUSZENIE NATYCHMIASTOWEGO RENDEROWANIA LISTY
-                if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+                setTimeout(() => {
+                    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+                }, 150);
             }
         };
 
@@ -3034,7 +3036,6 @@ window.expGlobalTargetMap = null;
             });
 
             if (bestProfile) {
-                // Ładujemy jeśli użytkownik to wymusił (kliknął checkbox) LUB jeśli to całkiem nowa trasa (awans)
                 if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || botSettings.exp.mapOrder.length === 0) {
                     if (window.logExp) window.logExp(`🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`, "#00e5ff");
                     if (typeof stopPatrol === 'function') stopPatrol(true); 
@@ -3043,7 +3044,7 @@ window.expGlobalTargetMap = null;
             }
         };
 
-    // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
+        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
         bindChange('autoChangeExpRoute', (e) => { 
             botSettings.exp.autoChangeRoute = e.target.checked; 
             saveSettings(); 
@@ -3055,10 +3056,10 @@ window.expGlobalTargetMap = null;
                 if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
             }
             
-            // Twarde, wymuszone renderowanie listy map natychmiast po zmianie
-            if (typeof window.renderExpMaps === 'function') {
-                setTimeout(() => window.renderExpMaps(), 50); // Minimalne opóźnienie dla przeglądarki
-            }
+            // Twarde, wymuszone renderowanie listy map natychmiast po zmianie checkboxa
+            setTimeout(() => {
+                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            }, 150);
         });
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
         window.updateServerBerserk = function() {
