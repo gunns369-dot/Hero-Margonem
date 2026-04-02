@@ -1710,38 +1710,33 @@ function autoDetectEngineData() {
     // --- KONIEC ŁATKI ---
 
 // --- ŁATKA: SPRAWDZANIE AWANSU, SYNCHRONIZACJA POZIOMÓW I AUTO-EXPOWISKO ---
-    updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
-    updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
-
-    if (currentName !== lastMapName) {
-        // Fizyczne nagrywanie starych śladów wyłączone.
-        // Przejścia łapie autoLearnGateways().
-
-        positionHistory = [];
-        lastMapName = currentName;
-        heroFoundAlerted = false;
-
-        autoLearnGateways();
-
-        const domMap = document.getElementById('currentMapNameDisplay');
-        if (domMap) domMap.innerText = currentName;
-
-        const domHero = document.getElementById('selHero');
-
-        if (domHero && document.getElementById('heroModeToggle').classList.contains('active-tab')) {
-            let matchingHero = domHero.value;
-            let mapHasCurrent = matchingHero && heroData[matchingHero] && heroData[matchingHero][currentName];
-
-            if (!isPatrolling && !isRushing && !mapHasCurrent) {
-                let foundHero = null;
-
-                for (const h in heroData) {
-                    if (heroData[h][currentName]) {
-                        foundHero = h;
-                        break;
-                    }
+    if (Engine.hero && Engine.hero.d && Engine.hero.d.lvl) {
+        let currentLvl = Engine.hero.d.lvl;
+        if (window.lastHeroExpLevel !== currentLvl) {
+            if (window.lastHeroExpLevel !== 0 && currentLvl > window.lastHeroExpLevel) {
+                if (typeof window.logExp === 'function') window.logExp(`🎉 Awans na ${currentLvl} poziom!`, "#4caf50");
+                
+                // Opóźniamy zmianę o 500ms, aby gra przetrawiła awans, a UI zdążyło zareagować!
+                if (typeof window.checkAndLoadBestExpProfile === 'function') {
+                    setTimeout(() => window.checkAndLoadBestExpProfile(false), 500);
                 }
-
+            }
+            window.lastHeroExpLevel = currentLvl;
+            
+            let minOff = Math.abs(botSettings.berserk.minLvlOffset || 20);
+            let maxOff = parseInt(botSettings.berserk.maxLvlOffset || 100);
+            botSettings.exp.minLvl = Math.max(1, currentLvl - minOff);
+            botSettings.exp.maxLvl = currentLvl + maxOff;
+            
+            let elMin = document.getElementById('expMinL'); let elMax = document.getElementById('expMaxL');
+            if (elMin) elMin.value = botSettings.exp.minLvl; if (elMax) elMax.value = botSettings.exp.maxLvl;
+            
+            saveSettings();
+            if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+            if (botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
+        }
+    }
+// --- KONIEC ŁATKI ---
                 if (foundHero) matchingHero = foundHero;
             }
 
@@ -3102,7 +3097,7 @@ if (btnExp) {
             }
         };
 
-       // Algorytm sztucznej inteligencji: Zmienia expowisko na najlepsze możliwe
+// Algorytm sztucznej inteligencji: Zmienia expowisko na najlepsze możliwe
         window.checkAndLoadBestExpProfile = function(forceLoad = false) {
             if (!botSettings.exp.autoChangeRoute || !botSettings.expProfiles) return;
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.hero.d.lvl) return;
@@ -3112,7 +3107,6 @@ if (btnExp) {
             let highestValidLvl = -1; 
             let profIdx = -1;
             
-            // Skanuje całą bazę i wybiera najwyższe możliwe expowisko (<= nasz level)
             botSettings.expProfiles.forEach((p, idx) => {
                 let match = p.name.match(/\((\d+)\s*lvl\)/i);
                 if (match) {
@@ -3124,8 +3118,9 @@ if (btnExp) {
             });
 
             if (bestProfile) {
-                if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || !botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
-                    // Zabezpieczenie przed podwójnym logiem w konsoli!
+                let currentProfileName = botSettings.exp.activeProfileName || "";
+                if (forceLoad || currentProfileName !== bestProfile.name || !botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
+                    
                     let logMsg = `🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`;
                     if (window._lastExpLog !== logMsg || Date.now() - (window._lastExpLogTime || 0) > 2000) {
                         if (window.logExp) window.logExp(logMsg, "#00e5ff");
@@ -3135,11 +3130,14 @@ if (btnExp) {
                     
                     if (typeof stopPatrol === 'function') stopPatrol(true); 
                     window.autoLoadExpProfile(profIdx);
+                    
+                    // Wymusza narysowanie map natychmiast po załadowaniu!
+                    setTimeout(() => { if (typeof window.renderExpMaps === 'function') window.renderExpMaps(); }, 150);
                 }
             }
         };
 
-        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska" (Zabezpieczone przed powielaniem)
+        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
         let chkAutoChange = document.getElementById('autoChangeExpRoute');
         if (chkAutoChange) {
             chkAutoChange.onchange = function(e) {
@@ -3160,7 +3158,7 @@ if (btnExp) {
                 
                 setTimeout(() => {
                     if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
-                }, 100);
+                }, 150);
             };
         }
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry
@@ -4944,28 +4942,21 @@ function runExpLogic() {
 
 
 
-    // --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
-
+// --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
     if (expLastMapName !== currMap) {
-
         window.expLastVisitedMap = expLastMapName; 
-
         expLastMapName = currMap;
-
         expMapEnteredAt = now;
-
         expEmptyScans = 0;
-
         expCurrentTargetId = null;
-
         expAttackLockUntil = 0;
-
         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-
         expGatewayLockUntil = now + 1200;
-
         window.expUnreachableMobs.clear(); 
-
+        
+        // Zabezpieczenie stoperów bram (czyszczenie po ekranie ładowania)
+        window.expGatewayStandTime = 0;
+        window.expGatewayArrivalTime = 0;
     }
 
 
@@ -4996,8 +4987,8 @@ if (hx !== expLastX || hy !== expLastY) {
     } else if (now > expAntiLagTime) {
         if (isOnGateway(hx, hy)) {
             if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
-            // WYDŁUŻONY CZAS: Odbiega dopiero gdy stoi na samej bramie ponad 5 sekund!
-            if (now - window.expGatewayStandTime > 5000) {
+            // WYDŁUŻONY CZAS: Odbiega dopiero, gdy stoi na samej bramie ponad 12 sekund!
+            if (now - window.expGatewayStandTime > 12000) {
                 window.logExp(`[Anti-Lag] Zacięcie na bramie. Odbiegam...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
@@ -5502,13 +5493,12 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
 
-       // Wejście w bramę
+// Wejście w bramę
         if (hx === dx && hy === dy) {
             if (!window.expGatewayArrivalTime) {
                 window.expGatewayArrivalTime = now; 
-                // USUNIĘTO KOMENDĘ RUCHU: Bot po prostu wchodzi na klatkę i milczy, pozwalając grze załadować mapę!
-            } else if (now - window.expGatewayArrivalTime > 5000) {
-                window.logExp(`🚨 Brama nie reaguje! Odbiegam by ponowić...`, "#ff9800");
+            } else if (now - window.expGatewayArrivalTime > 12000) {
+                window.logExp(`🚨 Brama nie reaguje przez 12s! Odbiegam by ponowić...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
@@ -5517,7 +5507,7 @@ if (hx !== expLastX || hy !== expLastY) {
                 window.expGatewayArrivalTime = 0; 
                 expGatewayLockUntil = now + 2000;
             }
-            expLastActionTime = now + 200; // Czekamy w spokoju
+            expLastActionTime = now + 200; // Czekamy w spokoju na czarny ekran ładowania
             return;
         } else {
             // Jeśli zeszliśmy z bramy, resetujemy timer
