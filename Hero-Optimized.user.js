@@ -304,7 +304,7 @@
             this.ekwipunek = items;
         },
 
-    getRecommendedEq: function() {
+getRecommendedEq: function() {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return [];
             let myLvl = Engine.hero.d.lvl;
             let myProfLetter = Engine.hero.d.prof; 
@@ -313,13 +313,13 @@
             let fullProf = profMap[myProfLetter];
 
             return this.ekwipunek.filter(item => {
-                let isLevelOk = (item.level >= myLvl - 5) && (item.level <= myLvl + 5);
+                // TUTA ZMIANA: Pokazuje tylko przedmioty od (Twój lvl - 5) do Twojego aktualnego poziomu
+                let isLevelOk = (item.level >= myLvl - 5) && (item.level <= myLvl);
                 
-                // Kuloodporne filtrowanie po klasie (z uwzględnieniem pustych tablic w bazie Margo)
                 let profArray = item.prof.map(p => p.toLowerCase());
                 let isProfOk = false;
                 if (profArray.length === 0) {
-                    isProfOk = true; // Neutralne
+                    isProfOk = true; 
                 } else {
                     isProfOk = profArray.some(p => p.includes(fullProf));
                 }
@@ -327,7 +327,6 @@
                 return isLevelOk && isProfOk;
             }).sort((a, b) => a.level - b.level);
         }
-    };
 
     // Automatyczne załadowanie bazy 3 sekundy po włączeniu gry
     setTimeout(() => window.DatabaseModule.initDatabases(), 3000);
@@ -2452,7 +2451,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <div id="kolosyListContainer"></div>
                 </div>
 
-                <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
+         <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
                     <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 250px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
                         <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
                     </div>
@@ -2473,6 +2472,30 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <div style="display:flex; justify-content: space-between; gap: 5px;">
                             <label style="color:#a99a75; font-size:10px; flex:1;">Większy od nas o lvl:<br><input type="number" id="berserkMaxLvl" value="${botSettings.berserk?.maxLvlOffset ?? 100}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
                             <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
+                        </div>
+                    </div>
+
+                    <div class="accordion-header" id="accAutoheal" onclick="toggleSettingsAcc('accAutoheal')" style="background: rgba(76, 175, 80, 0.2); border-color: #4caf50; color: #4caf50; margin-bottom: 0;">
+                        ▼ AUTOHEAL (AUTOMATYCZNE LECZENIE)
+                    </div>
+                    <div id="accAutohealContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #4caf50; border-top: none; margin-bottom: 5px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <label style="color:#4caf50; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
+                                <input type="checkbox" id="autohealEnabled" ${botSettings.autoheal?.enabled ? 'checked' : ''}> Autoheal włączony
+                            </label>
+                            <label style="color:#a99a75; font-size:10px; display:flex; align-items:center; gap:5px; margin:0;">
+                                Od ilu % leczyć: <input type="number" id="autohealThreshold" value="${botSettings.autoheal?.threshold ?? 80}" min="1" max="99" style="width:40px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
+                            </label>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            <div style="flex:1;">
+                                <label style="color:#a99a75; font-size:9px; display:block; margin-bottom:2px;">Nigdy nie używaj przedmiotów:</label>
+                                <textarea id="autohealIgnore" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.ignoreItems || ""}</textarea>
+                            </div>
+                            <div style="flex:1;">
+                                <label style="color:#a99a75; font-size:9px; display:block; margin-bottom:2px;">Przedmioty niezidentyfikowane:</label>
+                                <textarea id="autohealUnid" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.unidItems || ""}</textarea>
+                            </div>
                         </div>
                     </div>
 
@@ -2892,10 +2915,20 @@ window.expGlobalTargetMap = null;
             botSettings.berserk = { enabled: false, userEnabled: false, common: true, e1: false, e2: false, hero: false, minLvlOffset: -20, maxLvlOffset: 100 };
             saveSettings();
         }
-        // Migracja dla starszych wersji zapisu
         if (botSettings.berserk.userEnabled === undefined) {
             botSettings.berserk.userEnabled = botSettings.berserk.enabled;
         }
+        // Inicjalizacja ustawień AutoHeala
+        if (!botSettings.autoheal) {
+            botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" };
+            saveSettings();
+        }
+
+        // Bindowanie akcji z panelu Autoheala
+        bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
+        bindChange('autohealThreshold', (e) => { botSettings.autoheal.threshold = parseInt(e.target.value) || 80; saveSettings(); });
+        bindInput('autohealIgnore', (e) => { botSettings.autoheal.ignoreItems = e.target.value; saveSettings(); });
+        bindInput('autohealUnid', (e) => { botSettings.autoheal.unidItems = e.target.value; saveSettings(); });
 
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry (Pakiety z Gargonema)
         window.updateServerBerserk = function() {
@@ -6394,5 +6427,68 @@ window.clearExpMaps = () => {
                 }
             }
         }, 800);
+    }
+    // --- DAEMON: AUTOHEAL ---
+    if (!window.autoHealDaemonInstalled) {
+        window.autoHealDaemonInstalled = true;
+        setInterval(() => {
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+            
+            // Autoheal nie odpala się podczas walki!
+            if (Engine.battle && (Engine.battle.show || Engine.battle.d)) return;
+
+            if (botSettings.autoheal && botSettings.autoheal.enabled) {
+                let hp = Engine.hero.d.hp;
+                let maxhp = Engine.hero.d.maxhp;
+                
+                if (hp > 0 && maxhp > 0 && (hp / maxhp * 100) < botSettings.autoheal.threshold) {
+                    
+                    // Zabezpieczenie przed spamowaniem pakietami leczącymi (czekamy na odnowienie HP z serwera)
+                    if (window.isHealingRightNow) return;
+
+                    // Wyciągamy przedmioty z torby w oparciu o Twój moduł odczytu z _cachedStats
+                    let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
+                    let bagItems = Object.values(hItems);
+                    
+                    // Rozbijamy ignorowane teksty na małe litery
+                    let ignored = (botSettings.autoheal.ignoreItems || "").split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
+                    let unids = (botSettings.autoheal.unidItems || "").split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
+                    
+                    let potions = bagItems.filter(i => {
+                        let inBag = Number(i.st) === 0 || i.loc === "g" || Number(i.st) > 8 || Number(i.slot) > 29;
+                        if (!inBag) return false;
+
+                        // Szukamy w statystykach flagi odpowiadającej za leczenie w Margonem
+                        let stat = i._cachedStats?.stat || i.stat || "";
+                        if (!stat.includes("leczy=") && !stat.includes("fullheal=")) return false;
+
+                        let name = (i._cachedStats?.name || i.name || "").toLowerCase();
+                        if (ignored.includes(name) || unids.includes(name)) return false;
+
+                        return true;
+                    });
+
+                    if (potions.length > 0) {
+                        window.isHealingRightNow = true;
+                        let potion = potions[0]; // Bierzemy pierwszą dozwoloną z torby
+                        
+                        if (window.logHero && window.lastHealLog !== potion.id) {
+                            window.logHero(`💚 Używam: ${potion._cachedStats?.name || potion.name}`, "#4caf50");
+                            window.lastHealLog = potion.id;
+                        }
+                        
+                        // Używamy bezpiecznej, natywnej komendy silnika
+                        if (typeof Engine.heroEquipment.sendUseRequest === 'function') {
+                            Engine.heroEquipment.sendUseRequest(potion);
+                        } else if (typeof window._g === 'function') {
+                            window._g(`moveitem&id=${potion.id}&st=1`); // Awaryjne dla SI
+                        }
+                        
+                        // Blokujemy na 800ms, aby serwer zdążył załadować nam nowe punkty HP
+                        setTimeout(() => { window.isHealingRightNow = false; }, 800);
+                    }
+                }
+            }
+        }, 1000); // Sprawdza pulę HP co sekundę
     }
 })(); // Koniec kodu
