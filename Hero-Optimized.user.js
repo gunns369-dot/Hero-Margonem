@@ -5939,66 +5939,102 @@ window.clearExpMaps = () => {
                         const out = {};
                         let rawStat = itemData.stat || itemData.rawStat || itemData.stats;
                         
-                        // ODCZYT RAW (Założone EQ lub NI Sklep)
+                        // 1. ODCZYT RAW (Założone EQ lub NI Sklep) - Naprawa błędu sa=19 zamiast 0.19!
                         if (rawStat && typeof rawStat === "string" && rawStat.includes("=")) {
                             rawStat.split(";").forEach(part => {
                                 const [k, v] = part.split("=");
-                                if (k) out[k.trim()] = v ?? true;
+                                if (k) {
+                                    let key = k.trim();
+                                    let val = v ?? true;
+                                    // Margonem zapisuje szybkość ataku i spowolnienie bez przecinka w statach!
+                                    if (key === 'sa' || key === 'slow') {
+                                        if (val) val = (Number(val) / 100).toString(); 
+                                    }
+                                    out[key] = val;
+                                }
                             });
                             return out;
                         }
 
-                        // ODCZYT HTML (Sklep / Baza)
+                        // 2. ODCZYT HTML (Baza / Czysty tekst) - Zamiana polskiego tekstu na zmienne matematyczne
                         let htmlStr = itemData.stats || itemData.tooltip_text || itemData.name || "";
                         let str = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase(); 
                         
-                        // Transformacje chroniące nazwy
-                        str = str.replace(/aktywny unik/g, "act_unik");
+                        // Unikalne tokeny (zabezpieczają przed nakładaniem się słów)
+                        str = str.replace(/obniża szybkość ataku przeciwnika o/g, "slow_val");
+                        str = str.replace(/szybkość ataku/g, "sa_val");
                         str = str.replace(/moc ciosu krytycznego(?: magicznego)?/g, "critm_val");
                         str = str.replace(/cios krytyczny/g, "crit_val");
                         str = str.replace(/obrażenia fizyczne/g, "pdmg_val");
                         str = str.replace(/obrażenia dystansowe/g, "acdmg_val");
+                        str = str.replace(/obrażenia magiczne/g, "mdmg_val");
+                        str = str.replace(/obrażenia/g, "dmg_val");
+                        str = str.replace(/atak/g, "dmg_val");
                         str = str.replace(/przebicie pancerza/g, "pierce_val");
                         str = str.replace(/niszczenie pancerza/g, "dz_val");
                         str = str.replace(/wszystkie cechy/g, "all_val");
-                        str = str.replace(/odporność na/g, "odp_na");
-                        str = str.replace(/odporności na/g, "odp_na");
+                        str = str.replace(/siła/g, "str_val");
+                        str = str.replace(/zręczność/g, "agi_val");
+                        str = str.replace(/intelekt/g, "int_val");
+                        str = str.replace(/odporność na ogień/g, "resfire_val");
+                        str = str.replace(/odporność na zimno/g, "resfrost_val");
+                        str = str.replace(/odporność na błyskawice/g, "reslight_val");
+                        str = str.replace(/odporność na truciznę/g, "respoison_val");
+                        str = str.replace(/od ognia/g, "fire_val");
+                        str = str.replace(/od zimna/g, "frost_val");
+                        str = str.replace(/od błyskawic/g, "light_val");
+                        str = str.replace(/od trucizny/g, "poison_val");
+                        str = str.replace(/pancerz/g, "ac_val");
+                        str = str.replace(/punktów życia/g, "hp_val");
+                        str = str.replace(/życie/g, "hp_val");
+                        str = str.replace(/punktów many/g, "mana_val");
+                        str = str.replace(/mana/g, "mana_val");
+                        str = str.replace(/aktywny unik/g, "act_val");
+                        str = str.replace(/unik/g, "evade_val");
+                        str = str.replace(/podwójny atak/g, "da_val");
+                        str = str.replace(/leczenie turowe/g, "heal_val");
+                        str = str.replace(/leczenie zbroją/g, "heal_val");
+                        str = str.replace(/przywraca/g, "heal_val");
+                        str = str.replace(/blok/g, "block_val");
+                        str = str.replace(/absorbuje/g, "absorb_val");
 
-                        let extract = (name) => { let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)"); let m = str.match(regex); return m ? m[1].replace(',', '.') : null; };
-                        let extractRange = (name) => { let regex = new RegExp(name + "[^0-9\\-]+([0-9.,]+)(?:\\s*-\\s*([0-9.,]+))?"); let m = str.match(regex); if (!m) return null; if (m[2]) return `${m[1].replace(',','.')},${m[2].replace(',','.')}`; return m[1].replace(',','.'); };
+                        // Bezpieczne Regexy wyłapujące liczby z minusem lub bez
+                        let extract = (name) => { let regex = new RegExp(name + "[^0-9\\-]*(-?[0-9]+(?:[.,][0-9]+)?)"); let m = str.match(regex); return m ? m[1].replace(',', '.') : null; };
+                        let extractRange = (name) => { let regex = new RegExp(name + "[^0-9\\-]*(-?[0-9]+(?:[.,][0-9]+)?)(?:\\s*-\\s*(-?[0-9]+(?:[.,][0-9]+)?))?"); let m = str.match(regex); if (!m) return null; if (m[2]) return `${m[1].replace(',','.')},${m[2].replace(',','.')}`; return m[1].replace(',','.'); };
 
-                        out.dmg = extractRange("obrażenia(?: magiczne)?") || extractRange("atak");
+                        out.dmg = extractRange("dmg_val");
                         out.pdmg = extract("pdmg_val");
                         out.acdmg = extract("acdmg_val");
-                        out.ac = extract("pancerz");
-                        out.sa = extract("szybkość ataku");
-                        out.hp = extract("życie") || extract("punktów życia");
-                        out.mana = extract("mana") || extract("punktów many");
+                        out.mdmg = extract("mdmg_val");
+                        out.ac = extract("ac_val");
+                        out.sa = extract("sa_val");
+                        out.hp = extract("hp_val");
+                        out.mana = extract("mana_val");
                         out.all = extract("all_val");
-                        out.str = extract("siła");
-                        out.agi = extract("zręczność");
-                        out.int = extract("intelekt");
-                        out.fire = extractRange("od ognia");
-                        out.frost = extractRange("od zimna");
-                        out.light = extractRange("od błyskawic");
-                        out.poison = extractRange("od trucizny");
-                        out.resfire = extract("odp_na ogień");
-                        out.resfrost = extract("odp_na zimno");
-                        out.reslight = extract("odp_na błyskawice");
-                        out.respoison = extract("odp_na truciznę");
+                        out.str = extract("str_val");
+                        out.agi = extract("agi_val");
+                        out.int = extract("int_val");
+                        out.fire = extractRange("fire_val");
+                        out.frost = extractRange("frost_val");
+                        out.light = extractRange("light_val");
+                        out.poison = extractRange("poison_val");
+                        out.resfire = extract("resfire_val");
+                        out.resfrost = extract("resfrost_val");
+                        out.reslight = extract("reslight_val");
+                        out.respoison = extract("respoison_val");
                         out.crit = extract("crit_val");
                         out.critm = extract("critm_val");
-                        out.evade = extract("unik");
-                        out.act = extract("act_unik");
-                        out.da = extract("podwójny atak");
+                        out.evade = extract("evade_val");
+                        out.act = extract("act_val");
+                        out.da = extract("da_val");
                         out.dz = extract("dz_val");
                         out.pierce = extract("pierce_val");
-                        out.slow = extract("spowolnienie");
-                        out.block = extract("blok");
-                        out.heal = extract("leczenie(?: turowe| zbroją)?") || extract("przywraca[^0-9\\-]+([0-9.,]+)");
+                        out.slow = extract("slow_val");
+                        out.block = extract("block_val");
+                        out.heal = extract("heal_val");
 
-                        let abs1 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń(?! magicz)/); if(abs1) out.absorb = abs1[1].replace(',', '.');
-                        let abs2 = str.match(/absorbuje[^0-9\-]+([0-9.,]+)[a-z\s]*obrażeń magicznych/); if(abs2) out.absorbm = abs2[1].replace(',', '.');
+                        let abs1 = str.match(/absorb_val[^0-9\-]*([0-9.,]+)[^d]*dmg_val/); if(abs1) out.absorb = abs1[1].replace(',', '.');
+                        let abs2 = str.match(/absorb_val[^0-9\-]*([0-9.,]+)[^m]*mdmg_val/); if(abs2) out.absorbm = abs2[1].replace(',', '.');
 
                         return out;
                     },
@@ -6094,22 +6130,24 @@ window.clearExpMaps = () => {
                         
                         let html = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:${titleColor}; font-size:12px;">${titleText}</b><br><b style="color:#d4af37; font-size:12px;">${name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>`;
                         
-                        // Lista wszystkich statystyk w odpowiedniej kolejności i kolorach
+                        // Lista WSZYSTKICH statystyk (Pancerze, Cechy, Resy, Kryty itd.)
                         const statOrder = [
-                            {k:'dmg', l:'Obrażenia', c:'#fff'}, {k:'pdmg', l:'Obrażenia fizyczne', c:'#fff'}, {k:'acdmg', l:'Obrażenia dystansowe', c:'#fff'}, {k:'ac', l:'Pancerz', c:'#fff', p:true}, {k:'block', l:'Blok', c:'#fff', p:true},
+                            {k:'dmg', l:'Obrażenia', c:'#fff'}, {k:'pdmg', l:'Obrażenia fizyczne', c:'#fff'}, {k:'acdmg', l:'Obrażenia dystansowe', c:'#fff'}, {k:'mdmg', l:'Obrażenia magiczne', c:'#fff'},
+                            {k:'ac', l:'Pancerz', c:'#fff', p:true}, {k:'block', l:'Blok', c:'#fff', p:true},
                             {k:'all', l:'Wszystkie cechy', c:'#fff', p:true}, {k:'str', l:'Siła', c:'#fff', p:true}, {k:'agi', l:'Zręczność', c:'#fff', p:true}, {k:'int', l:'Intelekt', c:'#fff', p:true},
                             {k:'hp', l:'Życie', c:'#4caf50', p:true}, {k:'mana', l:'Mana', c:'#2196f3', p:true},
                             {k:'fire', l:'Od ognia', c:'#ff9800'}, {k:'frost', l:'Od zimna', c:'#00e5ff'}, {k:'light', l:'Od błyskawic', c:'#e040fb'}, {k:'poison', l:'Od trucizny', c:'#64dd17'},
                             {k:'resfire', l:'Odporność na ogień', c:'#ff9800', p:true, pct:true}, {k:'resfrost', l:'Odporność na zimno', c:'#00e5ff', p:true, pct:true}, {k:'reslight', l:'Odporność na błyskawice', c:'#e040fb', p:true, pct:true}, {k:'respoison', l:'Odporność na truciznę', c:'#64dd17', p:true, pct:true},
                             {k:'sa', l:'Szybkość ataku', c:'#fff', p:true}, {k:'crit', l:'Cios krytyczny', c:'#fff', p:true, pct:true}, {k:'critm', l:'Moc ciosu krytycznego', c:'#fff', p:true, pct:true},
                             {k:'evade', l:'Unik', c:'#fff', p:true}, {k:'act', l:'Aktywny unik', c:'#fff', p:true}, {k:'da', l:'Podwójny atak', c:'#fff', p:true},
-                            {k:'pierce', l:'Przebicie pancerza', c:'#fff', p:true}, {k:'dz', l:'Niszczenie pancerza', c:'#fff', p:true}, {k:'slow', l:'Spowolnienie', c:'#fff', p:true},
+                            {k:'pierce', l:'Przebicie pancerza', c:'#fff', p:true}, {k:'dz', l:'Niszczenie pancerza', c:'#fff', p:true}, {k:'slow', l:'Obniża SA przeciwnika', c:'#fff'},
                             {k:'absorb', l:'Absorbuje fizyczne', c:'#fff'}, {k:'absorbm', l:'Absorbuje magiczne', c:'#fff'}, {k:'heal', l:'Leczenie turowe', c:'#4caf50', p:true}
                         ];
                         
                         statOrder.forEach(st => {
                             let val = stats[st.k];
                             if (val) {
+                                // Dodajemy plusa (+) tylko jeśli p:true i liczba jest na plusie (dla ujemnego SA nie damy +)
                                 let pre = (st.p && Number(val) > 0) ? '+' : '';
                                 let post = st.pct ? '%' : '';
                                 html += `<span style="color:${st.c}">${st.l}: <b>${pre}${String(val).replace(',', ' - ')}${post}</b></span><br>`;
