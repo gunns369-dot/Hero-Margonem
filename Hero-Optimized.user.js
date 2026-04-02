@@ -1061,7 +1061,16 @@ let opacityValue = 0.95;
 
 
     function updateUI() {
-
+// --- NOWE: DYNAMICZNY LICZNIK MIEJSCA W EKWIPUNKU ---
+        if (document.getElementById('autosellCapacityDisplay') && typeof window.getBagInfo === 'function') {
+            let bag = window.getBagInfo();
+            let display = document.getElementById('autosellCapacityDisplay');
+            display.innerText = `${bag.occupied} / ${bag.total}`;
+            // Zmiana koloru na czerwony, gdy plecak jest pełny
+            if (bag.total > 0 && bag.occupied >= bag.total) display.style.color = "#e53935"; 
+            else display.style.color = "#fff";
+        }
+        // -----------------------------------------------------
         if (document.getElementById('heroGatewaysGUI') && document.getElementById('heroGatewaysGUI').style.display === 'flex') {
 
             renderGatewaysDatabase();
@@ -2498,13 +2507,13 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                                 <textarea id="autohealUnid" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.unidItems || ""}</textarea>
                             </div>
                         </div>
-                        <div style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+                     <div style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
                             <label style="color:#ffb300; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
                                 <input type="checkbox" id="autosellEnabled" ${botSettings.autosell?.enabled ? 'checked' : ''}> Auto-Sprzedaż (Gdy pełny)
                             </label>
-                            <label style="color:#a99a75; font-size:10px; display:flex; align-items:center; gap:5px; margin:0;">
-                                Pojemność: <input type="number" id="autosellCapacity" value="${botSettings.autosell?.maxCapacity ?? 42}" min="1" max="500" style="width:40px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
-                            </label>
+                            <span style="color:#a99a75; font-size:10px; margin:0;">
+                                Zajęte miejsce: <b id="autosellCapacityDisplay" style="color:#fff;">0 / 0</b>
+                            </span>
                         </div>
                     </div>
 
