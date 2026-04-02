@@ -1887,9 +1887,18 @@ window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) 
             }
         }
 
-        if (!nextMap) {
+     if (!nextMap) {
             stopPatrol(false);
-            console.log(`%c[HERO] Brak przejścia z ${currentSysMap} do ${rushTarget}. Użyj skanera by odblokować drogę!`, "color: #e53935;");
+            let msg = `🚨 BŁĄD TRASY! Bot nie wie jak dojść z [${currentSysMap}] do [${rushTarget}]. Nagraj drogę używając Skanera!`;
+            console.log(`%c[HERO] ` + msg, "color: #e53935;");
+            if (window.logHero) window.logHero(msg, "#e53935");
+            if (window.logExp) window.logExp(msg, "#e53935");
+            
+            // Awaryjne wyłączenie silnika Expa, by przerwać nieskończoną pętlę
+            if (window.isExping) {
+                let btnExp = document.getElementById('btnStartExp');
+                if (btnExp) btnExp.click(); // Fizycznie klika Stop
+            }
             return;
         }
 
@@ -3990,6 +3999,7 @@ function optimizeRoute() {
 
 
 function stopPatrol(hardStop = false) {
+        let wasPatrolling = isPatrolling;
         isPatrolling = false;
         isRushing = false;
         clearTimeout(rushInterval);
@@ -4004,7 +4014,8 @@ function stopPatrol(hardStop = false) {
         clearTimeout(smoothPatrolInterval);
         renderCordsList(-1);
         
-        window.logHero("Zatrzymano patrol.", "#f44336");
+        // Zabezpieczenie przed spamem - logujemy tylko jeśli faktycznie coś zatrzymaliśmy
+        if (wasPatrolling && window.logHero) window.logHero("Zatrzymano patrol.", "#f44336");
 
         if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
             try {
