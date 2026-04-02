@@ -6053,7 +6053,7 @@ window.clearExpMaps = () => {
             }
         }
 
- // 7. SMART WALK (Z AUTO-KUPNEM)
+// 7. SMART WALK (Z AUTO-KUPNEM)
         if (e.target && e.target.classList.contains('btn-go-npc')) {
             let mapName = e.target.getAttribute('data-map');
             let targetX = parseInt(e.target.getAttribute('data-x'));
@@ -6073,8 +6073,11 @@ window.clearExpMaps = () => {
             }
 
             if (buyAmount > 0) {
-                window.autoBuyTask = { npc: e.target.getAttribute('data-npc'), item: e.target.getAttribute('data-item'), amount: buyAmount };
-                if (window.logHero) window.logHero(`🛒 Otrzymano zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}. Wyruszam!`, "#d81b60");
+                // Zapisujemy dodatkowo tryb (mode), żeby wiedzieć czy przeliczać staki
+                window.autoBuyTask = { npc: e.target.getAttribute('data-npc'), item: e.target.getAttribute('data-item'), amount: buyAmount, mode: mode };
+                
+                let logMsg = mode === 'potion' ? `🛒 Zlecenie: Kupić ${buyAmount} staków (po 15 szt.) ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}.` : `🛒 Zlecenie: Kupić ${buyAmount}x ${window.autoBuyTask.item} od ${window.autoBuyTask.npc}.`;
+                if (window.logHero) window.logHero(logMsg, "#d81b60");
             } else {
                 window.autoBuyTask = null;
                 if (window.logHero) window.logHero(`🏃 Obieram kurs na: [${mapName}] (${targetX}, ${targetY})`, "#00e5ff");
@@ -6325,7 +6328,7 @@ window.clearExpMaps = () => {
         setInterval(() => {
             if (window.autoBuyTask && typeof Engine !== 'undefined') {
                 
-                // 1. OMIJANIE DIALOGÓW (Zaczepienie uzdrowiciela otwiera dialog zamiast sklepu)
+                // 1. OMIJANIE DIALOGÓW
                 let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                 if (dialogOptions.length > 0) {
                     let shopOpt = dialogOptions.find(el => {
@@ -6334,7 +6337,6 @@ window.clearExpMaps = () => {
                     });
                     
                     if (shopOpt) {
-                        // Humanizacja: losowe opóźnienie 400-800ms przed kliknięciem dialogu
                         let humanDelay = Math.floor(Math.random() * 401) + 400;
                         setTimeout(() => {
                             if (typeof shopOpt.click === 'function') shopOpt.click();
@@ -6343,49 +6345,50 @@ window.clearExpMaps = () => {
                                 shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                             }
                         }, humanDelay);
-                        return; // Kliknęliśmy, czekamy na załadowanie sklepu
+                        return; 
                     }
                 }
 
-                // 2. KUPNO W SKLEPIE (Natywny mechanizm z Koszykiem - Engine.shop.basket)
+                // 2. KUPNO W SKLEPIE (Z wykorzystaniem koszyka i przeliczania staków)
                 if (Engine.shop && Engine.shop.items && Engine.shop.basket) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
                     
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         let shopItems = Object.values(Engine.shop.items);
                         
-                        // Odczyt po zaktualizowanym kodzie (wsparcie dla _cachedStats)
                         let itemToBuy = shopItems.find(i => {
                             let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
                             return realName === window.autoBuyTask.item;
                         });
                         
                         if (itemToBuy) {
-                            if (window.logHero) window.logHero(`🛒 Dodaję do koszyka: ${window.autoBuyTask.item}...`, "#8bc34a");
+                            if (window.logHero) window.logHero(`🛒 Pakuję do koszyka: ${window.autoBuyTask.item}...`, "#8bc34a");
                             
                             let finalAmount = window.autoBuyTask.amount;
-                            window.autoBuyTask = null; // Usuwamy zadanie, aby się nie zapętliło
+                            let mode = window.autoBuyTask.mode;
+                            window.autoBuyTask = null; 
                             
-                            // Humanizacja: Czekamy chwilę na animacje okna sklepu (500-800ms)
                             let buyDelay = Math.floor(Math.random() * 301) + 500; 
                             
                             setTimeout(() => {
-                                // Pętla dodająca wymaganą ilość do koszyka (zgodnie z Twoim rozwiązaniem)
                                 if (typeof Engine.shop.basket.buyItem === 'function') {
-                                    for (let i = 0; i < finalAmount; i++) {
+                                    
+                                    // PRZELICZNIK: Jeśli to mikstury, 1 stak = 15 sztuk. 
+                                    // Ponieważ 1 kliknięcie w sklepie dodaje 5 sztuk, mnożymy ilość staków przez 3.
+                                    let clicksNeeded = (mode === 'potion') ? (finalAmount * 3) : finalAmount;
+                                    
+                                    for (let i = 0; i < clicksNeeded; i++) {
                                         Engine.shop.basket.buyItem(itemToBuy);
                                     }
                                 }
 
-                                // Krótka humanizowana przerwa przed kliknięciem "Akceptuj"
                                 let finalizeDelay = Math.floor(Math.random() * 301) + 300; 
                                 setTimeout(() => { 
                                     if (typeof Engine.shop.basket.finalize === 'function') {
-                                        Engine.shop.basket.finalize(); // Zatwierdzenie zakupu
-                                        if (window.logHero) window.logHero(`✅ Zatwierdzono zakup ${finalAmount} szt.!`, "#4caf50");
+                                        Engine.shop.basket.finalize(); 
+                                        if (window.logHero) window.logHero(`✅ Zatwierdzono zakup!`, "#4caf50");
                                     }
                                     
-                                    // Zamknięcie sklepu po naturalnym odstępie czasu
                                     let closeDelay = Math.floor(Math.random() * 501) + 500; 
                                     setTimeout(() => { 
                                         if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
