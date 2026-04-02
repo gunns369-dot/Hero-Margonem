@@ -3043,7 +3043,7 @@ window.expGlobalTargetMap = null;
             }
         };
 
-        // Algorytm sztucznej inteligencji: Zmienia expowisko na najlepsze możliwe
+       // Algorytm sztucznej inteligencji: Zmienia expowisko na najlepsze możliwe
         window.checkAndLoadBestExpProfile = function(forceLoad = false) {
             if (!botSettings.exp.autoChangeRoute || !botSettings.expProfiles) return;
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.hero.d.lvl) return;
@@ -3053,6 +3053,7 @@ window.expGlobalTargetMap = null;
             let highestValidLvl = -1; 
             let profIdx = -1;
             
+            // Skanuje całą bazę i wybiera najwyższe możliwe expowisko (<= nasz level)
             botSettings.expProfiles.forEach((p, idx) => {
                 let match = p.name.match(/\((\d+)\s*lvl\)/i);
                 if (match) {
@@ -3065,29 +3066,44 @@ window.expGlobalTargetMap = null;
 
             if (bestProfile) {
                 if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || !botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
-                    if (window.logExp) window.logExp(`🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`, "#00e5ff");
+                    // Zabezpieczenie przed podwójnym logiem w konsoli!
+                    let logMsg = `🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`;
+                    if (window._lastExpLog !== logMsg || Date.now() - (window._lastExpLogTime || 0) > 2000) {
+                        if (window.logExp) window.logExp(logMsg, "#00e5ff");
+                        window._lastExpLog = logMsg;
+                        window._lastExpLogTime = Date.now();
+                    }
+                    
                     if (typeof stopPatrol === 'function') stopPatrol(true); 
                     window.autoLoadExpProfile(profIdx);
                 }
             }
         };
 
-        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
-        bindChange('autoChangeExpRoute', (e) => { 
-            botSettings.exp.autoChangeRoute = e.target.checked; 
-            saveSettings(); 
-            if (e.target.checked) {
-                window.checkAndLoadBestExpProfile(true); 
-            } else {
-                if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
-                if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
-            }
-            
-            setTimeout(() => {
-                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
-            }, 100);
-        });
-
+        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska" (Zabezpieczone przed powielaniem)
+        let chkAutoChange = document.getElementById('autoChangeExpRoute');
+        if (chkAutoChange) {
+            chkAutoChange.onchange = function(e) {
+                botSettings.exp.autoChangeRoute = e.target.checked; 
+                saveSettings(); 
+                if (e.target.checked) {
+                    window.checkAndLoadBestExpProfile(true); 
+                } else {
+                    if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
+                    
+                    let logMsg = "🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.";
+                    if (window._lastExpLog !== logMsg || Date.now() - (window._lastExpLogTime || 0) > 2000) {
+                        if (window.logExp) window.logExp(logMsg, "#e53935");
+                        window._lastExpLog = logMsg;
+                        window._lastExpLogTime = Date.now();
+                    }
+                }
+                
+                setTimeout(() => {
+                    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+                }, 100);
+            };
+        }
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry
         window.updateServerBerserk = function() {
             if (typeof window._g !== 'function') return;
@@ -4784,17 +4800,32 @@ function runExpLogic() {
 
      // --- 2. RUCH NA EXPOWISKO ---
             let mapOrder = botSettings.exp.mapOrder || [];
-            // Jeśli lista map jest pusta, traktujemy obecną mapę jako cel (bot expi w miejscu i nie szuka dróg)
-            let targetExpMap = mapOrder.length > 0 ? mapOrder[0] : Engine.map.d.name; 
+            let targetExpMap = Engine.map.d.name; // Domyślnie stoi i bije w miejscu
+            
+            if (mapOrder.length > 0) {
+                if (mapOrder.includes(Engine.map.d.name)) {
+                    // Jesteśmy już na jednej z map expowiska - expi i szuka potworów
+                    targetExpMap = Engine.map.d.name;
+                } else {
+                    // Inteligentny algorytm BFS: Szuka najbliższej mapy z całej trasy, do której faktycznie zna drogę!
+                    let closestObj = typeof getClosestExpMapPath === 'function' ? getClosestExpMapPath(Engine.map.d.name) : null;
+                    if (closestObj && closestObj.targetMap) {
+                        targetExpMap = closestObj.targetMap;
+                    } else {
+                        // Jeśli żadna z map nie ma przypisanej drogi w Twojej bazie, wymusza pierwszą by pokazać błąd "Brak trasy"
+                        targetExpMap = mapOrder[0];
+                    }
+                }
+            }
             
             if (Engine.map.d.name !== targetExpMap) {
-                // Odpalamy algorytm ruchu TYLKO, jeśli bot jeszcze nie biegnie
+                // Odpalamy algorytm biegu TYLKO, jeśli bot jeszcze nie ruszył
                 if (!window.isRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
                     if (typeof window.rushToMap === 'function') {
                         window.rushToMap(targetExpMap);
                     }
                 }
-                return; // Jesteśmy w trasie do innej mapy, więc przerywamy pętlę (nie szukamy potworów)
+                return; // Przerywa wykonywanie reszty skryptu (nie szuka potworów w trakcie podróży do spotu)
             }
 
     const now = Date.now();
