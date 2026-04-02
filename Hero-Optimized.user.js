@@ -1028,24 +1028,31 @@ let opacityValue = 0.95;
 
 
 
-    function loadData() {
+function loadData() {
         let s1 = localStorage.getItem('hero_settings_db_v64') || localStorage.getItem('hero_settings_db_v61');
         if (s1) {
             let parsed = JSON.parse(s1);
             if (parsed.waitMin === undefined) { parsed.waitMin = 200; parsed.waitMax = 500; }
             if (parsed.autoAttack === undefined) { parsed.autoAttack = false; }
-            
-            // Usuwamy combatKey ze starych zapisów
             delete parsed.combatKey;
 
-            // --- ŁATKA: Blokada przed wczytaniem starej/zepsutej bazy z ogólnych ustawień ---
             if (!parsed.expProfiles || parsed.expProfiles.length !== window.defaultExpProfiles.length) {
                 parsed.expProfiles = JSON.parse(JSON.stringify(window.defaultExpProfiles));
             }
-            // -----------------------------------------------------------------------------
-
             botSettings = {...botSettings, ...parsed};
         }
+        
+        // NOWOŚĆ: Ładowanie teleportów dla konkretnego nicku!
+        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
+            let nick = Engine.hero.d.nick;
+            let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
+            if (allTps[nick]) {
+                botSettings.unlockedTeleports = allTps[nick];
+            } else {
+                botSettings.unlockedTeleports = {"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false};
+            }
+        }
+
         let s2 = localStorage.getItem('hero_global_gateways_v20'); if (s2) globalGateways = JSON.parse(s2);
         let s3 = localStorage.getItem('hero_map_order_v20'); if (s3) heroMapOrder = JSON.parse(s3);
     }
