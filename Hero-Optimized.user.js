@@ -6975,15 +6975,12 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         window.autoBuyDaemonInstalled = true;
         setInterval(() => {
             if (window.autoBuyTask && typeof Engine !== 'undefined') {
-                
-                // 1. OMIJANIE DIALOGÓW
                 let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                 if (dialogOptions.length > 0) {
                     let shopOpt = dialogOptions.find(el => {
                         let txt = (el.innerText || el.textContent).toLowerCase();
                         return txt.includes('sklep') || txt.includes('handl') || txt.includes('wywar') || txt.includes('lecznicz') || txt.includes('towar') || txt.includes('sprzedaj') || txt.includes('pokaż');
                     });
-                    
                     if (shopOpt) {
                         let humanDelay = Math.floor(Math.random() * 401) + 400;
                         setTimeout(() => {
@@ -6993,44 +6990,35 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                                 shopOpt.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                             }
                         }, humanDelay);
-                        return; 
+                        return;
                     }
                 }
-
-                // 2. KUPNO W SKLEPIE
                 if (Engine.shop && Engine.shop.items && Engine.shop.basket) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper') || document.querySelector('.shop-window') || document.querySelector('.shop-container');
-                    
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         let shopItems = Object.values(Engine.shop.items);
                         let itemToBuy = shopItems.find(i => {
                             let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
                             return realName === window.autoBuyTask.item;
                         });
-                        
                         if (itemToBuy) {
                             if (window.logHero) window.logHero(`🛒 Dodaję do koszyka: ${window.autoBuyTask.item}...`, "#8bc34a");
                             let finalAmount = window.autoBuyTask.amount;
                             let mode = window.autoBuyTask.mode;
                             let finalItemName = window.autoBuyTask.item;
-                            window.autoBuyTask = null; 
-                            
-                            let buyDelay = Math.floor(Math.random() * 301) + 500; 
+                            window.autoBuyTask = null;
+                            let buyDelay = Math.floor(Math.random() * 301) + 500;
                             setTimeout(() => {
                                 if (typeof Engine.shop.basket.buyItem === 'function') {
                                     let clicksNeeded = (mode === 'potion') ? (finalAmount * 3) : 1;
-                                    for (let i = 0; i < clicksNeeded; i++) {
-                                        Engine.shop.basket.buyItem(itemToBuy);
-                                    }
+                                    for (let i = 0; i < clicksNeeded; i++) Engine.shop.basket.buyItem(itemToBuy);
                                 }
-
-                                let finalizeDelay = Math.floor(Math.random() * 301) + 300; 
-                                setTimeout(() => { 
+                                let finalizeDelay = Math.floor(Math.random() * 301) + 300;
+                                setTimeout(() => {
                                     if (typeof Engine.shop.basket.finalize === 'function') {
-                                        Engine.shop.basket.finalize(); 
+                                        Engine.shop.basket.finalize();
                                         let msg = mode === 'potion' ? `✅ Zakupiono ${finalAmount} staków (po 15 szt.)!` : `✅ Zakupiono 1 sztukę ekwipunku!`;
                                         if (window.logHero) window.logHero(msg, "#4caf50");
-                                        
                                         if (mode === 'eq') {
                                             setTimeout(() => {
                                                 if (typeof Engine.heroEquipment === 'undefined' || typeof Engine.heroEquipment.getHItems !== 'function') return;
@@ -7041,7 +7029,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                                                     let inBag = Number(i.st) === 0 || i.loc === "g" || Number(i.st) > 8 || Number(i.slot) > 29;
                                                     return n === finalItemName && inBag;
                                                 });
-                                                
                                                 if (boughtItem && typeof Engine.heroEquipment.sendUseRequest === 'function') {
                                                     Engine.heroEquipment.sendUseRequest(boughtItem);
                                                     if (window.logHero) window.logHero(`🛡️ Automatycznie założono: ${finalItemName}!`, "#00acc1");
@@ -7049,14 +7036,12 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                                             }, 1500);
                                         }
                                     }
-                                    
-                                    let closeDelay = Math.floor(Math.random() * 501) + 500; 
-                                    setTimeout(() => { 
-                                        if (typeof Engine.shop.close === 'function') Engine.shop.close(); 
+                                    let closeDelay = Math.floor(Math.random() * 501) + 500;
+                                    setTimeout(() => {
+                                        if (typeof Engine.shop.close === 'function') Engine.shop.close();
                                         let closeBtn = document.querySelector('.shop-close-btn, .close-button, #shop-close, .window-close, .close-cross');
                                         if (closeBtn) closeBtn.click();
                                     }, closeDelay);
-
                                 }, finalizeDelay);
                             }, buyDelay);
                         } else {
@@ -7069,66 +7054,48 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 800);
     }
 
- // --- DAEMON: AUTOHEAL (Wersja V2 - Anty-Spam) ---
+    // --- DAEMON: AUTOHEAL (Wersja V2 - Anty-Spam) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
         window.lastHealTime = 0;
-        window.isHealLocked = false; // Twarda blokada przed wielokrotnym wywołaniem
-
+        window.isHealLocked = false;
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.heroEquipment || window.isHealLocked) return;
             if (Engine.battle && Engine.battle.show) return;
-
-            // Pancerne odczytywanie HP
             let hp = parseInt(Engine.hero.d.hp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
             let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
-            
+            if (!maxhp) {
+                let hpEl = document.querySelector('.health-val') || document.querySelector('.hp-values');
+                if (hpEl && hpEl.innerText) {
+                    let match = hpEl.innerText.match(/^(\d+)\s*\/\s*(\d+)/);
+                    if (match) { hp = parseInt(match[1]); maxhp = parseInt(match[2]); }
+                }
+            }
             if (!maxhp) return;
-            
             let threshold = botSettings.autoheal ? parseInt(botSettings.autoheal.threshold) || 80 : 80;
             let hpPercent = (hp / maxhp) * 100;
-
-            // Sprawdzamy próg HP i cooldown czasowy
             if (hpPercent < threshold && Date.now() > window.lastHealTime) {
                 let items = Object.values(Engine.heroEquipment.getHItems?.() || {});
                 let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null);
-                
                 if (potions.length > 0) {
-                    // Blokujemy proces, aby nie wywołać go w następnym ticku (300ms)
                     window.isHealLocked = true;
-
                     let missingHp = maxhp - hp;
                     potions.sort((a, b) => {
                         let healA = a.getLeczyStat() || 0;
                         let healB = b.getLeczyStat() || 0;
                         return Math.abs(healA - missingHp) - Math.abs(healB - missingHp);
                     });
-
                     let bestPot = potions[0];
                     let healValue = bestPot.getLeczyStat() || 0;
-
-                    // Logika leczenia
-                    if (typeof Engine.heroEquipment.useItem === 'function') {
-                        Engine.heroEquipment.useItem(bestPot.id);
-                    } else {
-                        window._g(`moveitem&st=1&id=${bestPot.id}`);
-                    }
-
-                    // --- PREDKYCJA HP (Klucz do rozwiązania problemu) ---
-                    // Dodajemy wartość leczenia do lokalnej zmiennej, by bot "myślał", że już jest uleczony
+                    if (typeof Engine.heroEquipment.useItem === 'function') Engine.heroEquipment.useItem(bestPot.id);
+                    else window._g(`moveitem&st=1&id=${bestPot.id}`);
                     if (Engine.hero.d.hp) Engine.hero.d.hp = Math.min(maxhp, hp + healValue);
-                    
-                    // Ustawiamy cooldown na 1.5 sekundy (bezpieczny czas dla serwera)
                     window.lastHealTime = Date.now() + 1500;
-
-                    // Odblokowujemy możliwość ponownego sprawdzania po 1.2s
                     setTimeout(() => { window.isHealLocked = false; }, 1200);
-
                     if (window.lastHealLog !== bestPot.id || Date.now() - (window._lastHealLogTime || 0) > 3000) {
                         let msg = `💚 Leczę się: ${bestPot._cachedStats?.name || bestPot.name} (+${healValue} HP)`;
                         if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
                         else if (window.logHero) window.logHero(msg, "#4caf50");
-                        
                         window.lastHealLog = bestPot.id;
                         window._lastHealLogTime = Date.now();
                     }
@@ -7136,27 +7103,20 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 300);
     }
- // --- DAEMON: AUTO-POTY (Kupowanie mikstur z humanizacją) ---
+
+    // --- DAEMON: AUTO-POTY (Kupowanie mikstur z humanizacją) ---
     if (!window.autoPotDaemonInstalled) {
         window.autoPotDaemonInstalled = true;
         window.autoPotState = { active: false, step: 0, nextActionTime: 0, targetNpc: null, targetItem: null };
-
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
-            
-            if (window.autoSellState && window.autoSellState.active) return; // Priorytety (Sprzedaż ważniejsza)
-
-   // 1. Sprawdzanie mikstur
+            if (window.autoSellState && window.autoSellState.active) return;
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
-                let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {})
-                  .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
-                  .reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
-
+                let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {}).filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null).reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
                 if (potCount <= 0) {
                     if (typeof stopPatrol === 'function') stopPatrol(true);
                     window.autoPotState.active = true;
-                    
                     window.autoPotState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                     if (window.autoPotState.wasBerserkOn) {
                         botSettings.berserk.enabled = false;
@@ -7165,8 +7125,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
                         if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do miasta.", "#ff9800");
                     }
-                    
-                    // PANCERNE ODCZYTYWANIE MAX HP (Teraz bot nigdy się nie pomyli!)
                     let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
                     if (!maxhp) {
                         let hpEl = document.querySelector('.health-val') || document.querySelector('.hp-values');
@@ -7175,57 +7133,41 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (match) maxhp = parseInt(match[1]);
                         }
                     }
-                    maxhp = maxhp || 5000; // Awaryjny fallback podniesiony do bezpieczniejszej wartości
-                    
+                    maxhp = maxhp || 5000;
                     let currentLvl = Engine.hero.d.lvl || 1;
-                    let targetHeal = Math.floor(maxhp * 0.30); // Szuka potki, która na JEDNO użycie leczy 30% HP
+                    let targetHeal = Math.floor(maxhp * 0.30);
                     let currMap = Engine.map.d.name;
-                    
                     let availablePotions = [];
-
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
                     healers.forEach(k => {
                         if (k.map_name !== currMap) {
                             let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name) : null;
-                            if (!path || path.length < 2) return; 
+                            if (!path || path.length < 2) return;
                         }
-
                         if (k.items) {
                             k.items.forEach(i => {
                                 let statString = (i.stat || i.stats || i.tooltip_text || i.raw_detected_text || i.name || "").toLowerCase();
-                                
                                 let itemLvl = i.lvl || 1;
                                 let lvlMatch = statString.match(/reqlvl[=:](\d+)/) || statString.match(/poziom:\s*(\d+)/);
                                 if (lvlMatch) itemLvl = parseInt(lvlMatch[1]);
                                 if (itemLvl > currentLvl) return;
-
                                 let healAmount = 0;
                                 let healMatch = statString.match(/leczy[=:](\d+)/) || statString.match(/leczy\s+([0-9\s]+)\s+punkt/);
                                 if (healMatch) healAmount = parseInt(healMatch[1].replace(/\s/g, ''));
-
                                 if (healAmount > 0) {
-                                    availablePotions.push({
-                                        npc: k,
-                                        itemName: i.name.split('Typ:')[0].trim(),
-                                        heal: healAmount
-                                    });
+                                    availablePotions.push({ npc: k, itemName: i.name.split('Typ:')[0].trim(), heal: healAmount });
                                 }
                             });
                         }
                     });
-
                     if (availablePotions.length > 0) {
-                        availablePotions.sort((a, b) => {
-                            return Math.abs(a.heal - targetHeal) - Math.abs(b.heal - targetHeal);
-                        });
-
+                        availablePotions.sort((a, b) => Math.abs(a.heal - targetHeal) - Math.abs(b.heal - targetHeal));
                         let bestChoice = availablePotions[0];
-                        window.autoPotState.targetNpc = bestChoice.npc; 
+                        window.autoPotState.targetNpc = bestChoice.npc;
                         window.autoPotState.targetItem = bestChoice.itemName;
-                        window.autoPotState.step = 1; 
-                        window.autoPotState.nextActionTime = Date.now() + 500; 
+                        window.autoPotState.step = 1;
+                        window.autoPotState.nextActionTime = Date.now() + 500;
                         window.isRushing = true;
-                        
                         let stacksToBuy = botSettings.autopot.stacks || 14;
                         let msg = `🧪 Analiza... Moje Max HP: ${maxhp}. Szukam potki na ~${targetHeal} HP. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name}.`;
                         if (window.logHero) window.logHero(msg, "#e91e63");
@@ -7237,11 +7179,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     }
                 }
             }
-            // 2. Cykl dotarcia i zakupu
             if (window.autoPotState.active) {
                 if (Date.now() < window.autoPotState.nextActionTime) return;
                 window.isExpSuspended = true;
-
                 if (window.autoPotState.step === 1) {
                     let bestNpc = window.autoPotState.targetNpc;
                     if (Engine.map.d.name !== bestNpc.map_name) {
@@ -7260,13 +7200,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                                     if (Engine.npcs.interact) Engine.npcs.interact(n.id);
                                     else window._g(`talk&id=${n.id}`);
                                     window.autoPotState.step = 2;
-                                    window.autoPotState.nextActionTime = Date.now() + 800; 
+                                    window.autoPotState.nextActionTime = Date.now() + 800;
                                     break;
                                 }
                             }
                         } else if (!window.isRushingToShop) {
                             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-                            if (!isMoving) { Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); window.autoPotState.nextActionTime = Date.now() + 1000; } 
+                            if (!isMoving) { Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); window.autoPotState.nextActionTime = Date.now() + 1000; }
                             else { window.autoPotState.nextActionTime = Date.now() + 300; }
                         }
                     }
@@ -7284,7 +7224,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             });
                             if (shopOpt) {
                                 let humanDelay = Math.floor(Math.random() * 401) + 400;
-                                window.autoPotState.nextActionTime = Date.now() + humanDelay + 500; 
+                                window.autoPotState.nextActionTime = Date.now() + humanDelay + 500;
                                 setTimeout(() => {
                                     if (window.jQuery) jQuery(shopOpt).trigger("click");
                                     if (typeof shopOpt.click === 'function') shopOpt.click();
@@ -7300,17 +7240,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         let realName = (i._cachedStats && i._cachedStats.name) ? i._cachedStats.name : i.name;
                         return realName && realName.includes(window.autoPotState.targetItem);
                     });
-
                     if (itemToBuy && typeof Engine.shop.basket?.buyItem === 'function') {
                         let stacksToBuy = botSettings.autopot.stacks || 14;
-                        let clicksNeeded = stacksToBuy * 3; 
-                        
+                        let clicksNeeded = stacksToBuy * 3;
                         let msg = `🛒 Wrzucam ${stacksToBuy} staków do koszyka...`;
                         if (window.logHero) window.logHero(msg, "#8bc34a");
                         if (window.logExp) window.logExp(msg, "#8bc34a");
-
                         for (let i = 0; i < clicksNeeded; i++) Engine.shop.basket.buyItem(itemToBuy);
-
                         window.autoPotState.step = 4;
                         window.autoPotState.nextActionTime = Date.now() + Math.floor(Math.random() * 300) + 500;
                     } else {
@@ -7321,54 +7257,42 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     }
                 } else if (window.autoPotState.step === 4) {
                     const root = Engine.shop?.wnd?.$?.[0] || document;
-                    if (typeof Engine.shop.basket?.finalize === 'function') {
-                        Engine.shop.basket.finalize();
-                    }
-                    
+                    if (typeof Engine.shop.basket?.finalize === 'function') Engine.shop.basket.finalize();
                     const acceptBtn = [...root.querySelectorAll("button, div, a, span")].find(el => /akceptuj|kup/i.test((el.textContent || "").trim()) && el.offsetParent);
                     if (acceptBtn) {
                         if (window.jQuery) jQuery(acceptBtn).trigger("click");
                         acceptBtn.click();
                         acceptBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
                     }
-
-        
-
                     let msg = `✅ Otrzymano mikstury. Zamykam i wracam do pracy.`;
                     if (window.logHero) window.logHero(msg, "#4caf50");
                     if (window.logExp) window.logExp(msg, "#4caf50");
-
                     window.autoPotState.active = false;
                     window.isExpSuspended = false;
                     window.isRushing = false;
                     window.isRushingToShop = false;
-                    
                     if (typeof Engine.shop.close === 'function') Engine.shop.close();
                     let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                     if (closeBtn) closeBtn.click();
-                    
-                    window.lastExpMap = null; 
+                    window.lastExpMap = null;
                 }
             }
         }, 500);
     }
-// --- DAEMON: AUTO-SPRZEDAŻ Z LUDZKĄ MECHANIKĄ SPRZEDAŻY TOREB ---
+
+    // --- DAEMON: AUTO-SPRZEDAŻ Z LUDZKĄ MECHANIKĄ SPRZEDAŻY TOREB ---
     if (!window.autoSellDaemonInstalled) {
         window.autoSellDaemonInstalled = true;
         window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0 };
-        
         window.runSuperSellerBagAndAccept = function(bagNo, delay = 250) {
             const root = typeof Engine !== 'undefined' && Engine.shop && Engine.shop.wnd && Engine.shop.wnd.$ ? Engine.shop.wnd.$[0] : document;
             const btn = root.querySelector(`.btn-num.grab-bag-${bagNo}`);
-
             if (!btn) return false;
-
             if (window.jQuery) jQuery(btn).trigger("click");
             btn.click();
             btn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
             btn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
             btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-
             setTimeout(() => {
                 if (typeof Engine !== 'undefined' && Engine.shop && Engine.shop.basket && typeof Engine.shop.basket.finalize === 'function') {
                     Engine.shop.basket.finalize();
@@ -7382,14 +7306,12 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (window.logHero) window.logHero(`✅ Zaakceptowano sprzedaż torby ${bagNo}.`, "#8bc34a");
                 if (window.logExp) window.logExp(`✅ Zaakceptowano sprzedaż torby ${bagNo}.`, "#8bc34a");
             }, delay);
-
             return true;
         };
 
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
-
             if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
                 const s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
                 if (s.freeSlots <= 0 && s.totalCapacity > 0) {
@@ -7399,7 +7321,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.autoSellState.nextActionTime = 0;
                     window.isRushingToShop = false;
                     window.isRushing = true;
-                    
                     window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                     if (window.autoSellState.wasBerserkOn) {
                         botSettings.berserk.enabled = false;
@@ -7408,41 +7329,30 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
                         if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
                     }
-                    
                     let msg = `🎒 TORBA PEŁNA → przerywam inne akcje i idę sprzedać!`;
                     if (window.logHero) window.logHero(msg, "#ffb300");
                     if (window.logExp) window.logExp(msg, "#ffb300");
                 }
             }
-
             if (window.autoSellState.active) {
-                if (Date.now() < window.autoSellState.nextActionTime) return; 
-                window.isExpSuspended = true; 
-
+                if (Date.now() < window.autoSellState.nextActionTime) return;
+                window.isExpSuspended = true;
                 if (window.autoSellState.step === 1) {
                     let kupcy = window.DatabaseModule.kupcy || [];
                     let validMerchants = kupcy.filter(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n)));
-                    
                     if (validMerchants.length === 0) validMerchants = kupcy;
                     if (validMerchants.length === 0) { window.autoSellState.active = false; return; }
-
                     let currMap = Engine.map.d.name;
                     let bestNpc = null;
                     let bestDist = Infinity;
-
                     validMerchants.forEach(m => {
-                        if (m.map_name === currMap) { bestDist = 0; bestNpc = m; } 
+                        if (m.map_name === currMap) { bestDist = 0; bestNpc = m; }
                         else if (bestDist > 0) {
                             let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, m.map_name) : null;
                             if (path && path.length < bestDist) { bestDist = path.length; bestNpc = m; }
                         }
                     });
-
-                    if (!bestNpc) { 
-                        window.autoSellState.active = false; 
-                        return; 
-                    }
-
+                    if (!bestNpc) { window.autoSellState.active = false; return; }
                     if (Engine.map.d.name !== bestNpc.map_name) {
                         if (!window.isRushingToShop) {
                             window.isRushingToShop = true;
@@ -7465,7 +7375,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             }
                         } else if (!window.isRushingToShop) {
                             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-                            if (!isMoving) { Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); window.autoSellState.nextActionTime = Date.now() + 1000; } 
+                            if (!isMoving) { Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); window.autoSellState.nextActionTime = Date.now() + 1000; }
                             else { window.autoSellState.nextActionTime = Date.now() + 300; }
                         }
                     }
@@ -7486,7 +7396,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             });
                             if (shopOpt) {
                                 let humanDelay = Math.floor(Math.random() * 401) + 400;
-                                window.autoSellState.nextActionTime = Date.now() + humanDelay + 500; 
+                                window.autoSellState.nextActionTime = Date.now() + humanDelay + 500;
                                 setTimeout(() => {
                                     if (window.jQuery) jQuery(shopOpt).trigger("click");
                                     if (typeof shopOpt.click === 'function') shopOpt.click();
@@ -7520,38 +7430,38 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (window.logHero) window.logHero(msg, "#4caf50");
                             if (window.logExp) window.logExp(msg, "#4caf50");
                         }
-                        
                         window.autoSellState.active = false;
                         window.isExpSuspended = false;
                         window.isRushing = false;
                         window.isRushingToShop = false;
-                        
                         if (typeof Engine.shop.close === 'function') Engine.shop.close();
                         let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                         if (closeBtn) closeBtn.click();
-                        
-                        window.lastExpMap = null; 
+                        window.lastExpMap = null;
                     }
                 }
             }
         }, 300);
     }
- // --- DAEMON: DETEKCJA ZAPADKI (CELOWANA STREFA ALERTÓW) ---
+
+    // --- DAEMON: DETEKCJA ZAPADKI (CELOWANA STREFA ALERTÓW) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.captchaAlertTriggered = false;
 
         setInterval(() => {
-            // Sprawdzamy, czy gracz w ogóle zaznaczył checkbox w zaawansowanych
-            if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
+            // Sprawdzamy, czy gracz zaznaczył checkbox w zaawansowanych
+            if (!botSettings.exp || !botSettings.exp.captchaAlert) {
+                window.captchaAlertTriggered = false; // Reset by uniknąć pętli
+                return;
+            }
 
-            // 1. Sprawdzenie po znanych, sztywnych klasach okien Zapadki (Na wypadek gdyby serwer ich używał)
+            // 1. Sprawdzenie po znanych, sztywnych klasach okien Zapadki
             let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
             
             // 2. Skanowanie tekstowe strefy pod złotem i okien dialogowych
             let textMatch = false;
             if (!hasWindow) {
-                // Skanujemy TYLKO miejsca, gdzie mogą pojawić się alerty i dialogi (pomijamy czat, mapę i bota!)
                 let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
                 
                 for (let el of containers) {
@@ -7570,20 +7480,16 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (isCaptchaActive && !window.captchaAlertTriggered) {
                 window.captchaAlertTriggered = true;
                 
-                // Twardy Hamulec
                 if (typeof stopPatrol === 'function') stopPatrol(true);
 
-                // Syrena Alarmowa
                 try {
                     let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
                     audio.play();
                     setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
                 } catch(e) {}
 
-                // Skupienie uwagi na przeglądarce
                 window.focus();
                 
-                // Natywne Powiadomienie Windows/Mac (Pojawi się na wierzchu wszystkiego)
                 if (Notification.permission === "granted") {
                     new Notification("🚨 ALARM: ZAPADKA!", {
                         body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!",
@@ -7595,9 +7501,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
                 
             } else if (!isCaptchaActive && window.captchaAlertTriggered) {
-                // Zdejmujemy flagę alarmu, gdy gracz rozwiąże zagadkę i okienko zniknie
                 window.captchaAlertTriggered = false;
             }
-        }, 800); // Skanowanie co niecałą sekundę (bardzo lekkie dla CPU)
+        }, 800); 
     }
 })(); // Koniec kodu
