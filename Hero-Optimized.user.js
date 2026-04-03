@@ -7536,102 +7536,68 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 300);
     }
-  // --- DAEMON: DETEKCJA ZAPADKI (CAPTCHA / UI WATCH) ---
+ // --- DAEMON: DETEKCJA ZAPADKI (CELOWANA STREFA ALERTÓW) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.captchaAlertTriggered = false;
 
-        const uiWatch = {
-            observer: null,
-            lastCount: 0,
-            start() {
-                const root = document.body;
-                if (!root) return console.log("Brak body");
+        setInterval(() => {
+            // Sprawdzamy, czy gracz w ogóle zaznaczył checkbox w zaawansowanych
+            if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
 
-                const countOverlays = () =>
-                    [...document.querySelectorAll("div, section, aside")].filter(el => {
-                        // IGNORUJEMY BEZPIECZNE OKNA (żeby nie było fałszywych alarmów):
-                        // 1. Interfejs naszego bota i jego tooltipy
-                        if (el.closest('.hero-window') || el.closest('#customMargoTooltip') || el.closest('#radarDualTooltip')) return false;
-                        // 2. Standardowy interfejs Margonem (panele boczne, dolny pasek)
-                        if (el.closest('.main-buttons-container') || el.closest('.chat-wrapper') || el.closest('.bottom-panel')) return false;
-                        // 3. Typowe, bezpieczne okna (plecak, statystyki), z pominięciem zapadki
-                        if (el.closest('.margo-window') && !el.closest('[data-wnd="zapadka"]') && !el.closest('.zapadka-window')) return false;
-
-                        const s = window.getComputedStyle(el);
-                        return (
-                            el.offsetParent &&
-                            (s.position === "fixed" || s.position === "absolute") &&
-                            parseInt(s.zIndex || "0", 10) >= 50 // Wystarczająco wysoko, by zignorować cienie, ale złapać popupy
-                        );
-                    }).length;
-
-                this.lastCount = countOverlays();
-
-                this.observer = new MutationObserver(() => {
-                    // Sprawdzamy, czy gracz włączył funkcję alarmu w GUI bota
-                    if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
-
-                    const now = countOverlays();
+            // 1. Sprawdzenie po znanych, sztywnych klasach okien Zapadki (Na wypadek gdyby serwer ich używał)
+            let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
+            
+            // 2. Skanowanie tekstowe strefy pod złotem i okien dialogowych
+            let textMatch = false;
+            if (!hasWindow) {
+                // Skanujemy TYLKO miejsca, gdzie mogą pojawić się alerty i dialogi (pomijamy czat, mapę i bota!)
+                let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
+                
+                for (let el of containers) {
+                    if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
                     
-                    // Równolegle zostawiamy klasyczny skan tekstu na wypadek, gdyby popup miał mały zIndex
-                    let textMatch = Array.from(document.querySelectorAll('div')).some(el => {
-                        let t = el.innerText || "";
-                        return t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy");
-                    });
-
-                    if (now > this.lastCount || textMatch) {
-                        if (!window.captchaAlertTriggered) {
-                            window.captchaAlertTriggered = true;
-                            console.log("[UI WATCH] Wykryto nowe okno / Zapadkę — zatrzymuję skrypt!");
-                            
-                            // TWARDY HAMULEC BOTA
-                            if (typeof stopPatrol === 'function') stopPatrol(true);
-
-                            // Odtworzenie syreny alarmowej
-                            try {
-                                let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
-                                audio.play();
-                                setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
-                            } catch(e) {}
-
-                            // Podświetlenie karty w przeglądarce
-                            window.focus();
-                            
-                            // Powiadomienie Windows/Mac (Natywne)
-                            if (Notification.permission === "granted") {
-                                new Notification("🚨 ALARM: ZAPADKA / NOWE OKNO!", {
-                                    body: "Wykryto niezidentyfikowaną nakładkę ekranową. Szybko, wracaj do gry!",
-                                    requireInteraction: true
-                                });
-                            }
-
-                            if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                            if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                        }
-                    } else if (now <= this.lastCount && !textMatch) {
-                        // Resetujemy flagę, gdy gracz zamknie okno/zapadkę
-                        window.captchaAlertTriggered = false;
+                    let t = el.innerText || "";
+                    if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
+                        textMatch = true;
+                        break;
                     }
-                    this.lastCount = now;
-                });
-
-                this.observer.observe(root, {
-                    childList: true,
-                    subtree: true,
-                    attributes: true
-                });
-
-                console.log("[UI WATCH] Aktywny (Zintegrowany z Alarmem Bota)");
-            },
-            stop() {
-                this.observer?.disconnect();
-                this.observer = null;
-                console.log("[UI WATCH] Zatrzymany");
+                }
             }
-        };
 
-        // Odpalamy obserwatora
-        uiWatch.start();
+            let isCaptchaActive = hasWindow || textMatch;
+
+            if (isCaptchaActive && !window.captchaAlertTriggered) {
+                window.captchaAlertTriggered = true;
+                
+                // Twardy Hamulec
+                if (typeof stopPatrol === 'function') stopPatrol(true);
+
+                // Syrena Alarmowa
+                try {
+                    let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
+                    audio.play();
+                    setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
+                } catch(e) {}
+
+                // Skupienie uwagi na przeglądarce
+                window.focus();
+                
+                // Natywne Powiadomienie Windows/Mac (Pojawi się na wierzchu wszystkiego)
+                if (Notification.permission === "granted") {
+                    new Notification("🚨 ALARM: ZAPADKA!", {
+                        body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!",
+                        requireInteraction: true
+                    });
+                }
+
+                if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                
+            } else if (!isCaptchaActive && window.captchaAlertTriggered) {
+                // Zdejmujemy flagę alarmu, gdy gracz rozwiąże zagadkę i okienko zniknie
+                window.captchaAlertTriggered = false;
+            }
+        }, 800); // Skanowanie co niecałą sekundę (bardzo lekkie dla CPU)
     }
 })(); // Koniec kodu
