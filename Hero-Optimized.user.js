@@ -7741,12 +7741,15 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         }, 500);
 
-       // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar) ---
+     // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar) ---
         window.alertedPlayersList = window.alertedPlayersList || new Set();
 
         setInterval(() => {
-            // Funkcja działa TYLKO gdy włączony jest tryb EXP i Alarm
-            if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
+            // Bezpieczne sprawdzenie: bot musi fizycznie coś robić (Exp LUB Patrol)
+            let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
+            
+            // Funkcja działa TYLKO gdy włączony jest tryb EXP i Alarm, oraz Bot jest URUCHOMIONY
+            if (botSettings.exp && botSettings.exp.playerAlert && isBotActive) {
                 if (typeof Engine === 'undefined' || !Engine.others || !Engine.hero) return;
 
                 let others = typeof Engine.others.check === 'function' ? Engine.others.check() : Engine.others.d;
@@ -7754,7 +7757,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
                 let myNick = (Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "";
 
-                // Twój filtr wjeżdża tutaj:
                 const players = Object.values(others)
                     .filter(o => o?.isPlayer && o?.d?.nick && o.d.nick !== myNick)
                     .map(o => ({
@@ -7782,28 +7784,30 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         // 1. Log w panelu
                         if (window.logExp) window.logExp(`👁️ Wykryto gracza: ${p.nick} (${p.lvl} lvl) [${p.x}, ${p.y}]`, "#ffb300");
 
-                        // 2. Dźwięk
-                        try { 
-                            let audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg'); 
-                            audio.play(); 
-                        } catch(e) {}
-
-                        // 3. Powiadomienie w przeglądarce
+                        // 2. Powiadomienie w przeglądarce (Tylko dymek, bez dźwięku!)
                         if (Notification.permission === "granted") {
                             new Notification(msgTitle, { body: msgBody });
                         }
 
-                        // 4. Opcjonalne zatrzymanie bota (zgodnie z ustawieniem w zębatce)
+                        // 3. Zatrzymanie bota (zgodnie z ustawieniem w zębatce)
                         if (botSettings.exp.playerAlertStopBot) {
-                            if (typeof stopPatrol === 'function') stopPatrol(true);
+                            if (typeof stopPatrol === 'function') stopPatrol(true); // Twarde hamowanie
+                            
+                            // Wyłączenie trybu EXP
                             if (window.isExping) {
                                 let btn = document.getElementById('btnStartExp');
                                 if (btn) btn.click();
                             }
-                            if (window.logExp) window.logExp(`🛑 Zatrzymano auto-exp, ponieważ wykryto gracza!`, "#f44336");
+                            
+                            if (window.logExp) window.logExp(`🛑 Zatrzymano bota, ponieważ wykryto gracza!`, "#f44336");
                         }
                     }
                 });
+            } else if (!isBotActive) {
+                // Jeśli wyłączymy bota ręcznie, czyścimy pamięć radarów.
+                // Dzięki temu po ponownym kliknięciu START, bot od razu poinformuje
+                // nas o graczu, jeśli ten wciąż tam stoi.
+                window.alertedPlayersList.clear();
             }
         }, 1000);
     }
