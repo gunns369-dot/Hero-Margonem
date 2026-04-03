@@ -6481,73 +6481,101 @@ window.toggleTeleportLock = function(city, isChecked) {
                 `;
             }
             
-            window.renderEqItems = function(filterVal = "Wszystkie") {
-                let content = document.getElementById('eqListContent');
-                if (!content) return;
-                let items = window.DatabaseModule.getRecommendedEq();
-                
-                let html = '';
-                let count = 0;
-                
-                items.forEach((item, index) => {
-                    let typeMatch = item.stats ? item.stats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)/) : null;
-                    let displayType = typeMatch ? typeMatch[1].trim() : (item.type && item.type !== 'null' ? item.type : "Inne");
-                    
-                    if (filterVal !== "Wszystkie" && !displayType.toLowerCase().includes(filterVal.toLowerCase())) return;
-                    
-                    count++;
-                    let profColor = item.prof.length === 0 ? "#777" : "#00acc1";
-                    let profText = item.prof.length > 0 ? item.prof.join(', ') : 'Zwykły';
-                    
-                    let cmp = window.EquipmentScorer.compareWithEquipped(item, displayType);
-                    let badgeHtml = '';
-                    
-                    if (cmp.val !== null) {
-                        if (cmp.val > 0 && cmp.val !== 999) {
-                            badgeHtml = `<span style="color:#00e676; font-size:10px; font-weight:bold; margin-left:6px; background:#003300; padding:1px 4px; border-radius:3px; border:1px solid #00e676; box-shadow: 0 0 3px #00e676;">+${cmp.val}% EXP</span>`;
-                        } else if (cmp.val === 999) {
-                            badgeHtml = `<span style="color:#00e5ff; font-size:10px; font-weight:bold; margin-left:6px;">UPGRADE!</span>`;
-                        } else if (cmp.val < 0) {
-                            badgeHtml = `<span style="color:#e53935; font-size:9px; font-weight:bold; margin-left:6px;">${cmp.val}% exp</span>`;
-                        } else {
-                            badgeHtml = `<span style="color:#9e9e9e; font-size:9px; font-weight:bold; margin-left:6px;">== exp</span>`;
-                        }
-                    } else if (cmp.reason === 'no_eq') {
-                        badgeHtml = `<span style="color:#00e5ff; font-size:9px; font-weight:bold; margin-left:6px;">[PUSTY SLOT]</span>`;
-                    }
+          window.renderEqItems = function(filterType = 'Wszystkie') {
+        let container = document.getElementById('eqSuitableContainer');
+        if (!container) return;
 
-                    let dbHtml = window.EquipmentScorer.formatItemHTML(item, displayType, true);
-                    let cl = window.EquipmentScorer.getClFromDbItem(item, displayType);
-                    let eqItem = window.EquipmentScorer.getEquippedItemByCl(cl);
-                    let eqHtml = window.EquipmentScorer.formatItemHTML(eqItem, displayType, false);
-                    
-                    let encDb = encodeURIComponent(dbHtml);
-                    let encEq = encodeURIComponent(eqHtml);
+        if (typeof window.DatabaseModule === 'undefined' || !window.DatabaseModule.itemy) {
+            container.innerHTML = '<div style="padding:10px; text-align:center; color:#ff5252;">Brak bazy danych sprzętu.</div>';
+            return;
+        }
 
-                    html += `
-                        <div class="list-item" style="display:flex; flex-direction:column; padding:4px; border-left:3px solid #d4af37; background:#1a1a1a;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                                <div style="display:flex; align-items:center;">
-                                    <span class="toggle-seller-btn" 
-                                          onmouseenter="window.showDualTooltip(event, '${encDb}', '${encEq}')"
-                                          onmousemove="window.moveDualTooltip(event)"
-                                          onmouseleave="window.hideDualTooltip()"
-                                          data-name="${item.name.replace(/"/g, '&quot;')}" data-index="eq_${index}" style="color:#d4af37; font-weight:bold; font-size:11px; cursor:help; text-decoration:underline;">${item.name}</span>
-                                    ${badgeHtml}
-                                </div>
-                                <span style="color:#4caf50; font-weight:bold; font-size:10px;">Lvl: ${item.level}</span>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; width:100%; margin-top:2px;">
-                                <span style="color:#a99a75; font-size:9px;">Typ: <b style="color:#fff">${displayType}</b></span>
-                                <span style="color:${profColor}; font-size:9px;">${profText}</span>
-                            </div>
-                            <div id="seller_info_eq_${index}" style="display:none; width:100%; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
-                        </div>`;
-                });
+        let currentLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d.lvl : 1;
+        let currentProf = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d.prof : 'w';
+        
+        let profMap = { 'w': 'Wojownik', 'm': 'Mag', 'p': 'Paladyn', 'h': 'Łowca', 't': 'Tropiciel', 'b': 'Tancerz Ostrzy' };
+        let profName = profMap[currentProf] || 'Wszystkie';
+
+        let filtered = window.DatabaseModule.itemy.filter(item => {
+            // Dopasowanie poziomu (-5 do obecnego poziomu gracza)
+            let lvlMatch = item.lvl <= currentLvl && item.lvl >= currentLvl - 5;
+            // Dopasowanie profesji
+            let profMatch = !item.reqp || item.reqp.toLowerCase().includes(profName.toLowerCase());
+            // Dopasowanie typu
+            let typeMatch = filterType.includes('Wszystkie') || item.type === filterType;
+            
+            return lvlMatch && profMatch && typeMatch;
+        });
+
+        // Sortowanie malejąco po levelu
+        filtered.sort((a, b) => b.lvl - a.lvl);
+
+        let html = '';
+        filtered.forEach(item => {
+            // --- BUDOWANIE DYNAMICZNEGO TOOLTIPA ---
+            let tooltipHtml = `<div style="text-align:center; margin-bottom:4px; color:#ffb300; font-weight:bold;">[Ze Sklepu / Bazy]<br><span style="color:#fff;">${item.name}</span></div>`;
+            tooltipHtml += `<div style="color:#aaa; font-size:11px; margin-bottom:6px; text-align:center;">Typ: ${item.type}</div>`;
+            
+            let statsHtml = '';
+            // Ignorujemy klucze systemowe, interesują nas tylko statystyki bojowe
+            let skipKeys = ['id', 'name', 'type', 'lvl', 'reqp', 'price', 'icon', 'loc', 'stat', 'cl', 'prc', 'st'];
+            
+            for (let key in item) {
+                if (skipKeys.includes(key)) continue;
+                let val = item[key];
+                if (val === undefined || val === null || val === '') continue;
+
+                // Słownik tłumaczeń z bazy na j. polski
+                let keyName = key;
+                if (key === 'dmg') keyName = 'Obrażenia';
+                else if (key === 'ac') keyName = 'Pancerz';
+                else if (key === 'str') keyName = 'Siła';
+                else if (key === 'dex') keyName = 'Zręczność';
+                else if (key === 'int') keyName = 'Intelekt';
+                else if (key === 'sa') keyName = 'Szybkość ataku';
+                else if (key === 'crit') keyName = 'Cios krytyczny';
+                else if (key === 'resfire') keyName = '<span style="color:#ff5252;">Od ognia</span>';
+                else if (key === 'reslight') keyName = '<span style="color:#e040fb;">Od błyskawic</span>';
+                else if (key === 'rescold') keyName = '<span style="color:#4fc3f7;">Od zimna</span>';
+                else if (key === 'respoison') keyName = '<span style="color:#69f0ae;">Od trucizny</span>';
+                else if (key === 'hp') keyName = 'Życie';
+                else if (key === 'mana') keyName = 'Mana';
+                else if (key === 'evade') keyName = 'Unik';
+                else if (key === 'block') keyName = 'Blok';
+                else if (key === 'pierce') keyName = 'Przebicie pancerza';
+                else if (key === 'heal') keyName = 'Leczenie turowe';
+                else if (key === 'absorb') keyName = 'Absorpcja fizyczna';
+                else if (key === 'absorb_m') keyName = 'Absorpcja magiczna';
+
+                // Ładne formatowanie (dodawanie plusów przed wartościami dodatnimi)
+                let displayVal = val;
+                if (typeof val === 'number' && val > 0 && !['dmg', 'resfire', 'reslight', 'rescold', 'respoison'].includes(key)) displayVal = '+' + val;
                 
-                if(count === 0) html = `<span style="color:#777; font-size:10px; text-align:center; padding:10px; display:block;">Brak sprzętu w tej kategorii.</span>`;
-                content.innerHTML = html;
-            };
+                statsHtml += `<div><b>${keyName}:</b> ${displayVal}</div>`;
+            }
+
+            tooltipHtml += `<div style="color:#fff; font-size:11px;">${statsHtml}</div>`;
+            tooltipHtml += `<div style="margin-top:8px; font-size:10px; color:#888;">Profesja: ${item.reqp || 'Wszystkie'}<br>Poziom: ${item.lvl}</div>`;
+            
+            let safeTooltip = tooltipHtml.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+            // --- CZYSTY INTERFEJS KAFELKA (Bez zbędnych procentów i pustych slotów) ---
+            html += `
+                <div class="margo-tooltip-trigger" data-tooltip="${safeTooltip}" style="background:#1a1a1a; padding:6px; margin-bottom:4px; border:1px solid #333; border-left:3px solid #ffb300; cursor:help;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="color:#ffb300; font-weight:bold; font-size:12px; text-decoration:underline;">${item.name}</div>
+                        <div style="color:#aaa; font-size:11px;">Lvl: <b style="color:#fff;">${item.lvl}</b></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                        <div style="color:#888; font-size:11px;">Typ: ${item.type}</div>
+                        <div style="color:#00acc1; font-size:10px;">${item.reqp || 'Wszystkie'}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
+    };
             
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
@@ -7037,65 +7065,57 @@ window.toggleTeleportLock = function(city, isChecked) {
         }, 800);
     }
 
-    // --- DAEMON: AUTOHEAL ---
+   // --- DAEMON: AUTOHEAL ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
+        window.lastHealTime = 0; // Twardy hamulec przed zjedzeniem całej paczki!
+
         setInterval(() => {
-            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
-            if (Engine.battle && (Engine.battle.show || Engine.battle.d)) return;
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.heroEquipment) return;
+            if (Engine.battle && Engine.battle.show) return;
 
-            if (botSettings.autoheal && botSettings.autoheal.enabled) {
-                let hp = Engine.hero.d.hp;
-                let maxhp = Engine.hero.d.maxhp;
+            let hp = Engine.hero.d.hp;
+            let maxhp = Engine.hero.d.maxhp;
+            if (!maxhp) return;
+            
+            // Pobieramy suwak, domyślnie 80%
+            let threshold = botSettings.autoheal ? parseInt(botSettings.autoheal.threshold) || 80 : 80;
+            let hpPercent = (hp / maxhp) * 100;
+
+            // Sprawdzamy czy HP poniżej progu I CZY minęła sekunda od ostatniego leczenia
+            if (hpPercent < threshold && Date.now() > window.lastHealTime) {
+                let items = Object.values(Engine.heroEquipment.getHItems?.() || {});
+                let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null);
                 
-                if (hp > 0 && maxhp > 0 && (hp / maxhp * 100) < botSettings.autoheal.threshold) {
-                    if (window.isHealingRightNow) return;
-
-                    let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
-                    let bagItems = Object.values(hItems);
-                    
-                    let ignored = (botSettings.autoheal.ignoreItems || "").split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
-                    let unids = (botSettings.autoheal.unidItems || "").split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
-                    
-                    let potions = bagItems.filter(i => {
-                        let inBag = Number(i.st) === 0 || i.loc === "g" || Number(i.st) > 8 || Number(i.slot) > 29;
-                        if (!inBag) return false;
-
-                        let stat = i._cachedStats?.stat || i.stat || "";
-                        if (!stat.includes("leczy=") && !stat.includes("fullheal=")) return false;
-
-                        let name = (i._cachedStats?.name || i.name || "").toLowerCase();
-                        if (ignored.includes(name) || unids.includes(name)) return false;
-
-                        return true;
+                if (potions.length > 0) {
+                    let missingHp = maxhp - hp;
+                    potions.sort((a, b) => {
+                        let healA = a.getLeczyStat() || 0;
+                        let healB = b.getLeczyStat() || 0;
+                        return Math.abs(healA - missingHp) - Math.abs(healB - missingHp);
                     });
 
-                    if (potions.length > 0) {
-                        window.isHealingRightNow = true;
-                        let potion = potions[0];
+                    let bestPot = potions[0];
+                    if (typeof Engine.heroEquipment.useItem === 'function') {
+                        Engine.heroEquipment.useItem(bestPot.id);
+                    } else {
+                        window._g(`moveitem&st=1&id=${bestPot.id}`);
+                    }
+
+                    // MAGIA: Blokujemy kolejne użycie mikstury na 1.2 sekundy, dając serwerowi czas na odświeżenie HP!
+                    window.lastHealTime = Date.now() + 1200;
+
+                    if (window.lastHealLog !== bestPot.id || Date.now() - (window._lastHealLogTime || 0) > 3000) {
+                        let msg = `💚 Leczę się: ${bestPot._cachedStats?.name || bestPot.name}`;
+                        if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
+                        else if (window.logHero) window.logHero(msg, "#4caf50");
                         
-                      if (window.lastHealLog !== potion.id) {
-                            let msg = `💚 Leczę się: ${potion._cachedStats?.name || potion.name}`;
-                            // Inteligentne logowanie: jeśli expi, wrzuca do zakładki EXP. Jeśli nie - do Herosów.
-                            if (window.isExping && window.logExp) {
-                                window.logExp(msg, "#4caf50");
-                            } else if (window.logHero) {
-                                window.logHero(msg, "#4caf50");
-                            }
-                            window.lastHealLog = potion.id;
-                        }
-                        
-                        if (typeof Engine.heroEquipment.sendUseRequest === 'function') {
-                            Engine.heroEquipment.sendUseRequest(potion);
-                        } else if (typeof window._g === 'function') {
-                            window._g(`moveitem&id=${potion.id}&st=1`); 
-                        }
-                        
-                        setTimeout(() => { window.isHealingRightNow = false; }, 800);
+                        window.lastHealLog = bestPot.id;
+                        window._lastHealLogTime = Date.now();
                     }
                 }
             }
-        }, 1000); 
+        }, 300);
     }
  // --- DAEMON: AUTO-POTY (Kupowanie mikstur z humanizacją) ---
     if (!window.autoPotDaemonInstalled) {
@@ -7108,7 +7128,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             
             if (window.autoSellState && window.autoSellState.active) return; // Priorytety (Sprzedaż ważniejsza)
 
-            // 1. Sprawdzanie mikstur
+          // 1. Sprawdzanie mikstur
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {})
                   .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
@@ -7118,7 +7138,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                     if (typeof stopPatrol === 'function') stopPatrol(true);
                     window.autoPotState.active = true;
                     
-                    // --- WYŁĄCZENIE BERSERKA NA CZAS PODRÓŻY ---
                     window.autoPotState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                     if (window.autoPotState.wasBerserkOn) {
                         botSettings.berserk.enabled = false;
@@ -7127,14 +7146,20 @@ window.toggleTeleportLock = function(city, isChecked) {
                         if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
                         if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do miasta.", "#ff9800");
                     }
-                    // -------------------------------------------
                     
                     let maxhp = Engine.hero.d.maxhp || 1000;
                     let targetHeal = maxhp * 0.45; 
                     let bestNpc = null; let bestItemName = null; let bestDiff = Infinity;
+                    let currMap = Engine.map.d.name;
 
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
                     healers.forEach(k => {
+                        // SPRAWDZANIE DOSTĘPNOŚCI TRASY! Ignorujemy uzdrowicieli, do których nie mamy ścieżki.
+                        if (k.map_name !== currMap) {
+                            let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name) : null;
+                            if (!path || path.length < 2) return; // Przejdź do następnego uzdrowiciela!
+                        }
+
                         if (k.items) {
                             k.items.forEach(i => {
                                 let fullStats = i.tooltip_text || i.raw_detected_text || i.name;
@@ -7160,7 +7185,8 @@ window.toggleTeleportLock = function(city, isChecked) {
                         if (window.logExp) window.logExp(msg, "#e91e63");
                     } else {
                         window.autoPotState.active = false;
-                        if (window.logHero) window.logHero(`🚨 Brak mikstur, ale nie znaleziono uzdrowiciela!`, "#e53935");
+                        if (window.logHero) window.logHero(`🚨 Brak mikstur! Nie znaleziono żadnego uzdrowiciela do którego znam drogę!`, "#e53935");
+                        if (window.logExp) window.logExp(`🚨 Brak mikstur! Nie znaleziono żadnego uzdrowiciela do którego znam drogę!`, "#e53935");
                     }
                 }
             }
