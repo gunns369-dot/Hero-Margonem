@@ -2682,9 +2682,6 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Odtwarza dźwięk i zatrzymuje bota z losowym opóźnieniem 3-5s">
     <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
 </label>
-<label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Automatycznie klika okienko i rozwiązuje zagadkę z gwiazdką po zatrzymaniu bota">
-    <input type="checkbox" id="autoSolveCaptcha" ${botSettings.exp.autoSolveCaptcha ? 'checked' : ''}> 🤖 Rozwiązuj automatycznie
-</label>
                             <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy pojawi się gracz lub ktoś napisze do Ciebie">
                                 <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy / Nick
                             </label>
@@ -3115,13 +3112,6 @@ if (btnExp) {
                 Notification.requestPermission();
             }
         });
-
-        if (botSettings.exp.autoSolveCaptcha === undefined) { botSettings.exp.autoSolveCaptcha = false; saveSettings(); }
-
-bindChange('autoSolveCaptcha', (e) => {
-    botSettings.exp.autoSolveCaptcha = e.target.checked;
-    saveSettings();
-});
         
         if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
 
@@ -7581,46 +7571,21 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 300);
     }
 
-// --- DAEMON: DETEKCJA ZAPADKI I GRACZY (MULTI-ALARM) + AUTO-SOLVER PRO+ ---
+// --- DAEMON: DETEKCJA ZAPADKI (ALARM + HUMAN STOP) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.playerAlertTriggered = false;
         window.lastChatLength = 0;
 
-        // Zmienne stanu (State Machine)
+        // Zmienne stanu
         window.__captchaPhase = "none"; 
         window.__captchaLock = false; 
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
 
-       // --- FUNKCJE HUMANIZUJĄCE ---
+        // --- FUNKCJE HUMANIZUJĄCE ---
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-        
-        // Prawdziwa symulacja myszki z włamaniem do React Fiber (Gwarancja kliknięcia w NI)
-        async function humanClick(el) {
-            if (!el) return;
-            let target = el.closest('.button') || el;
-            let label = target.querySelector('.label') || target;
-            
-            // 1. Hack na silnik React (Margonem NI) - bezpośrednie wywołanie zdarzeń z pamięci UI
-            let reactPropsKey = Object.keys(target).find(k => k.startsWith('__reactProps'));
-            if (reactPropsKey && target[reactPropsKey]) {
-                let props = target[reactPropsKey];
-                if (props.onPointerDown) props.onPointerDown({ preventDefault: () => {}, stopPropagation: () => {}, button: 0 });
-                await sleep(randomDelay(50, 100)); // Naturalny czas wciśnięcia
-                if (props.onPointerUp) props.onPointerUp({ preventDefault: () => {}, stopPropagation: () => {}, button: 0 });
-                if (props.onClick) props.onClick({ preventDefault: () => {}, stopPropagation: () => {}, button: 0 });
-            } else {
-                // 2. Klasyczny fallback na głębokie zdarzenia
-                let evOpts = { bubbles: true, cancelable: true, view: window, buttons: 1 };
-                ['pointerdown', 'mousedown'].forEach(evt => label.dispatchEvent(new MouseEvent(evt, evOpts)));
-                await sleep(randomDelay(50, 100));
-                ['pointerup', 'mouseup', 'click'].forEach(evt => label.dispatchEvent(new MouseEvent(evt, evOpts)));
-            }
-            if (typeof target.click === 'function') target.click();
-            if (window.jQuery) window.jQuery(target).trigger("click");
-        }
 
         // --- DETEKCJA OKIEN ---
         function getPreCaptcha() {
@@ -7628,8 +7593,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (preEl && preEl.offsetParent !== null) {
                 const text = (preEl.innerText || preEl.textContent || "").trim();
                 if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) {
-                    const btn = preEl.querySelector('.button, .btn');
-                    return btn || preEl; 
+                    return preEl; 
                 }
             }
             return null;
@@ -7646,67 +7610,15 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             return null;
         }
 
-        // --- GŁÓWNA ASYNCHRONICZNA LOGIKA KLIKANIA (SOLVER) ---
-        async function solveFullCaptchaAsync(winEl) {
-            if (window.logExp) window.logExp("🤖 [Auto-Solver] Czytam zagadkę...", "#ff9800");
-            await sleep(randomDelay(2000, 3500));
-
-            let buttonsWrapper = winEl.querySelector('.captcha__buttons');
-            let confirmWrapper = winEl.querySelector('.captcha__confirm');
-            
-            let targetAnswers = [];
-            let confirmBtn = null;
-
-            if (buttonsWrapper) {
-                let answers = buttonsWrapper.querySelectorAll('.button');
-                answers.forEach(btn => { if (btn.innerText.includes('*')) targetAnswers.push(btn); });
-            } else {
-                const allElements = winEl.querySelectorAll('*');
-                for (const el of allElements) {
-                    const text = (el.innerText || "").trim();
-                    if (text.includes('*') && text.length < 15 && el.children.length === 0) targetAnswers.push(el);
-                }
-            }
-
-            if (confirmWrapper) {
-                confirmBtn = confirmWrapper.querySelector('.button');
-            } else {
-                let fallbackBtns = winEl.querySelectorAll('.button');
-                fallbackBtns.forEach(btn => { if (btn.innerText.includes('Potwierdzam')) confirmBtn = btn; });
-            }
-
-            if (targetAnswers.length > 0) {
-                if (window.logExp) window.logExp(`🎯 Wykryto ${targetAnswers.length} odpowiedz(i). Zaczynam klikać...`, "#00e5ff");
-                
-                for (const btn of targetAnswers) {
-                    await sleep(randomDelay(600, 1200));
-                    await humanClick(btn);
-                    if (window.logExp) window.logExp(`🖱️ Zaznaczono opcję: "${btn.innerText.trim()}"`, "#4caf50");
-                }
-                
-                await sleep(randomDelay(1000, 1800));
-                
-                if (confirmBtn) {
-                    if (window.logExp) window.logExp("🖱️ Klikam [Potwierdzam]!", "#4caf50");
-                    await humanClick(confirmBtn);
-                }
-                // Czekamy aż okno faktycznie zniknie po potwierdzeniu
-                await sleep(randomDelay(2500, 3500));
-            } else {
-                if (window.logExp) window.logExp("❌ Brak opcji z gwiazdką. Zrób to ręcznie!", "#e53935");
-                window.__captchaPhase = "manual"; 
-            }
-        }
-
         // --- ZSYNCHRONIZOWANA PĘTLA STRAŻNIKA ---
         setInterval(async () => {
-            if (!botSettings.exp || (!botSettings.exp.captchaAlert && !botSettings.exp.autoSolveCaptcha)) return;
+            if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
             if (window.__captchaLock) return;
 
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // Sytuacja 1: Zapadki brak (Czysto lub została rozwiązana)
+            // Sytuacja 1: Zapadki brak (Czysto lub rozwiązałeś ją ręcznie)
             if (!fullWin && !preWin) {
                 if (window.__captchaPhase !== "none") {
                     if (window.logExp) window.logExp("✅ Zapadka zniknęła z ekranu. Wznawiam procesy.", "#4caf50");
@@ -7727,14 +7639,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
             // Sytuacja 2: Zapadka pojawiła się pierwszy raz
             if (window.__captchaPhase === "none") {
-                window.__captchaLock = true; 
-                window.__captchaPhase = "delaying";
+                window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
+                window.__captchaPhase = "manual_waiting";
                 
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling;
 
                 if (botSettings.exp.captchaAlert) {
-                    // Dźwięk skrócony do 2 sekund!
                     try { 
                         let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); 
                         audio.play(); 
@@ -7757,42 +7668,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (btn) btn.click();
                 }
                 if (typeof stopPatrol === 'function') stopPatrol(true);
-                if (window.logExp) window.logExp("🛑 [Zapadka] Akcje zatrzymane.", "#f44336");
-
-                if (botSettings.exp.autoSolveCaptcha) {
-                    window.__captchaPhase = "solving";
-                } else {
-                    if (window.logExp) window.logExp("✋ [Info] Auto-Solver wyłączony. Czekam na ręczne rozwiązanie...", "#ffb300");
-                    window.__captchaPhase = "manual";
-                }
                 
-                window.__captchaLock = false; 
-                return;
-            }
-
-            // Sytuacja 3: Jesteśmy w trybie Auto-Solvera i szukamy co kliknąć
-            if (window.__captchaPhase === "solving") {
+                if (window.logExp) window.logExp("🛑 [Zapadka] Akcje zatrzymane. Czekam aż ręcznie rozwiążesz zagadkę...", "#f44336");
                 
-                if (fullWin) {
-                    window.__captchaLock = true; 
-                    await solveFullCaptchaAsync(fullWin);
-                    window.__captchaLock = false; 
-                    return;
-                }
-
-                if (preWin && !fullWin) {
-                    window.__captchaLock = true; 
-                    if (window.logExp) window.logExp("🤖 [Auto-Solver] Klikam 'Rozwiąż teraz'...", "#00e5ff");
-                    await humanClick(preWin);
-                    await sleep(randomDelay(1000, 2000));
-                    window.__captchaLock = false; 
-                    return;
-                }
+                window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
             }
 
         }, 500);
-
-
 
         // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
         setInterval(() => {
