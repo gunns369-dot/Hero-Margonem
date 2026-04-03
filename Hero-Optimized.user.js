@@ -2659,26 +2659,29 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             </div>
                         </div>
                     </div>
-
-                    <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
+<label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                     <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
                         <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
                         <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
                     </div>
-                   <div style="margin-bottom:4px; text-align:center; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px; display:flex; flex-direction:column; gap:4px;">
-                        <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
-                            <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
-                        </label>
-                        <div style="border-top:1px solid #333; width:80%; margin:0 auto;"></div>
-                        <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Zatrzymuje bota i wywołuje alarm na pulpicie!">
-                            <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha (Zapadka)
-                        </label>
-                    </div>
-                    <input type="hidden" id="expRange" value="999">
                     <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px;">
                         <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
                         <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                     </div>
+                    <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-bottom: 0;">
+                        ▼ ZAAWANSOWANE (Trasy / Alarm)
+                    </div>
+                    <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
+                                <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
+                            </label>
+                            <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Zatrzymuje bota i wywołuje alarm na pulpicie!">
+                                <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
+                            </label>
+                        </div>
+                    </div>
+                    <input type="hidden" id="expRange" value="999">
                     <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map (Smart-Roam): <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
                     <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
                     
@@ -2767,8 +2770,13 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 
 
 
-        window.toggleSettingsAcc = function(id) { let h = document.getElementById(id); let c = document.getElementById(id+'Content'); let isHidden = c.style.display === 'none'; c.style.display = isHidden ? 'block' : 'none'; h.innerHTML = (isHidden ? '▼' : '▶') + h.innerHTML.substring(1); };
-
+      window.toggleSettingsAcc = function(id) { 
+            let h = document.getElementById(id); 
+            let c = document.getElementById(id+'Content'); 
+            let isHidden = c.style.display === 'none'; 
+            c.style.display = isHidden ? 'block' : 'none'; 
+            h.innerText = (isHidden ? '▼ ' : '▶ ') + h.innerText.replace(/^[▼▶]\s*/, '').trim(); 
+        };
 
 
         const gatewaysGui = document.createElement('div'); gatewaysGui.id = 'heroGatewaysGUI'; gatewaysGui.className = 'hero-window'; gatewaysGui.style.display = 'none';
@@ -5042,75 +5050,76 @@ if (hx !== expLastX || hy !== expLastY) {
     }
 
 
-    // --- SKANOWANIE POTWORÓW ---
-
+  // --- SKANOWANIE POTWORÓW ---
     const arr = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
-
     let rawMobs = [];
-
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
-
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-
-
+    // 1. Zbudowanie mapy "Stref Zagrożenia"
+    // Szukamy wszystkich E2 i Herosów, których UŻYTKOWNIK NIE CHCE bić
+    let dangerousSpots = [];
     arr.forEach(npcObj => {
-
         let n = npcObj?.d || npcObj;
+        if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+        
+        let wt = parseInt(n.wt, 10);
+        let ranga = "normal";
+        if (n.type === 2) {
+            if (wt === 11 || wt === 1) ranga = "elite1";
+            else if (wt === 12 || wt === 2) ranga = "elite2";
+            else if (wt >= 13 || wt >= 3) ranga = "hero";
+        }
+        
+        // Jeśli to E2, a nie mamy zaznaczonego bicia E2 (albo Heros) - oznaczamy to pole jako lawę!
+        if ((ranga === "elite2" && !bE2) || (ranga === "hero" && !bHero)) {
+            dangerousSpots.push({x: n.x, y: n.y});
+        }
+    });
 
+    // 2. Filtrowanie potworów do ataku
+    arr.forEach(npcObj => {
+        let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
 
-        
-
-        // 🚨 IGNOROWANIE ZABLOKOWANYCH
-
+        // 🚨 IGNOROWANIE ZABLOKOWANYCH (Ominiętych anty-lagiem)
         if (window.expUnreachableMobs.has(n.id)) return;
 
-
-
         let lvl = parseInt(n.lvl, 10);
-
         if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
 
-
-
         let wt = parseInt(n.wt, 10);
-
-        let ranga = "normal"; 
-
+        let ranga = "normal";
         if (n.type === 2) {
-
-            if (wt === 11 || wt === 1) ranga = "elite1"; 
-
+            if (wt === 11 || wt === 1) ranga = "elite1";
             else if (wt === 12 || wt === 2) ranga = "elite2";
-
             else if (wt >= 13 || wt >= 3) ranga = "hero";
-
         }
 
         if (ranga === "normal" && !wantNormal) return;
-
         if (ranga === "elite1" && !wantElite) return;
-
         if (ranga === "elite2" && !bE2) return;
-
         if (ranga === "hero" && !bHero) return;
 
+        // 🚨 NOWOŚĆ: Ignorowanie "obstawy"
+        // Sprawdzamy, czy ten potwór nie stoi przypadkiem w strefie zagrożenia (promień 2 kratek) od odznaczonego bossa!
+        let isSafeToAttack = true;
+        for (let spot of dangerousSpots) {
+            // Obliczamy tzw. dystans Czebyszewa (jeśli potwór stoi w prostokącie 5x5 wokół bossa)
+            if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
+                isSafeToAttack = false;
+                break;
+            }
+        }
+        
+        if (!isSafeToAttack) return; // Jeśli stoi przy bossie - ignorujemy go całkowicie!
 
-
-        rawMobs.push({ 
-
+        rawMobs.push({
             id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
-
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
-
-            dist: Math.abs(hx - n.x) + Math.abs(hy - n.y) // Obliczamy dystans (Manhattan)
-
+            dist: Math.abs(hx - n.x) + Math.abs(hy - n.y) 
         });
-
     });
-
-
 
     // --- ZAAWANSOWANE SORTOWANIE (ELITY -> TWARDY LOCK -> DYSTANS) ---
     rawMobs.sort((a, b) => {
