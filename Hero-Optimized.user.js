@@ -6542,11 +6542,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     let safeType = String(item.type || 'Inne');
                     let safeLvl = item.level || 1;
                     let safeReqp = (item.prof && item.prof.length > 0) ? item.prof.join(', ') : 'Wszystkie';
-                    let safeStats = String(item.stats || "").replace(/"/g, '&quot;');
+                    
+                    // ROZWIĄZANIE PROBLEMU: Bezpieczne formatowanie wyrzucone POZA blok HTML
+                    let safeStatsEscaped = String(item.stats || "").replace(/"/g, '&quot;');
+                    let safeNameEscaped = safeName.replace(/"/g, '&quot;');
 
                     html += `
                         <div class="list-item" style="flex-direction:column; align-items:stretch; border-left:3px solid #ffb300; padding:6px; background:#1a1a1a;">
-                            <div class="margo-tooltip-trigger toggle-seller-btn" data-name="${safeName.replace(/"/g, '&quot;')}" data-stats="${safeStats}" data-index="eq_${index}" style="cursor:pointer;">
+                            <div class="margo-tooltip-trigger toggle-seller-btn" data-name="${safeNameEscaped}" data-stats="${safeStatsEscaped}" data-index="eq_${index}" style="cursor:pointer;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; pointer-events:none;">
                                     <div style="color:#ffb300; font-weight:bold; font-size:11px; text-decoration:underline;">${safeName}</div>
                                     <div style="color:#aaa; font-size:10px;">Lvl: <b style="color:#fff;">${safeLvl}</b></div>
