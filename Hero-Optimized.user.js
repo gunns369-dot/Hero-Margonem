@@ -2717,6 +2717,15 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 <div id="playerAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #ffb300; border-radius:3px; margin-bottom:4px; margin-top:4px;">
     <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;">
         <input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu
+    <div style="display:flex; align-items:center; gap:5px; margin-top:6px;">
+    <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Powiadomienie o wiadomościach prywatnych">
+        <input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat
+    </label>
+    <span id="btnChatAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu czatu">⚙️</span>
+</div>
+<div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
+    <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;">
+        <input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości
     </label>
 </div>
                         </div>
@@ -3169,6 +3178,25 @@ if (btnExp) {
             let p = document.getElementById('playerAlertSettingsPanel');
             p.style.display = p.style.display === 'none' ? 'block' : 'none';
         });
+if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
+        if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
+
+        bindChange('chatAlert', (e) => {
+            botSettings.exp.chatAlert = e.target.checked;
+            saveSettings();
+            if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission();
+        });
+
+        bindChange('chatAlertStopBot', (e) => {
+            botSettings.exp.chatAlertStopBot = e.target.checked;
+            saveSettings();
+        });
+
+        bindClick('btnChatAlertSettings', () => {
+            let p = document.getElementById('chatAlertSettingsPanel');
+            p.style.display = p.style.display === 'none' ? 'block' : 'none';
+        });
+        
 
         bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
         bindChange('autopotEnabled', (e) => { botSettings.autopot.enabled = e.target.checked; saveSettings(); });
@@ -7816,4 +7844,149 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 1000);
     }
+    // --- CZĘŚĆ 3: OBSERWATOR CZATU PRYWATNEGO (MutationObserver) ---
+        window.__chatDomObserver?.disconnect?.();
+        window.__seenPrivs = window.__seenPrivs || new Set();
+
+        function getPrivateChatLines() {
+            return [...document.querySelectorAll("div, span, p")]
+                .map(el => (el.innerText || "").trim())
+                .filter(t => {
+                    if (!t || !t.includes("[Prywatny]") || !t.includes("->") || !t.includes(":")) return false;
+                    if (t.length >= 200) return false;
+                    const parts = t.split(":");
+                    return parts.slice(1).join(":").trim().length > 0;
+                });
+        }
+
+        function getMyNick() {
+            return (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d.nick : null;
+        }
+
+        // Zainicjuj listę widzianych wiadomości przy starcie, aby nie spamować starymi privami
+        for (const line of getPrivateChatLines()) {
+            window.__seenPrivs.add(line);
+        }
+
+        window.__chatDomObserver = new MutationObserver(() => {
+            // Działa tylko gdy bot pracuje (Exp lub Patrol) i opcja jest ON
+            let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
+            if (!botSettings.exp.chatAlert || !isBotActive) return;
+
+            const myNick = getMyNick();
+            if (!myNick) return;
+
+            for (const line of getPrivateChatLines()) {
+                if (window.__seenPrivs.has(line)) continue;
+                window.__seenPrivs.add(line);
+
+                // Sprawdzamy czy wiadomość jest DO NAS (nadawca -> Ja:)
+                if (line.includes(`-> ${myNick}:`)) {
+                    // Wyciąganie nadawcy i treści
+                    // Format: [Prywatny] Nadawca -> Ja: Treść wiadomości
+                    const senderMatch = line.match(/\[Prywatny\]\s+(.*?)\s+->/);
+                    const sender = senderMatch ? senderMatch[1] : "Ktoś";
+                    const message = line.split(`${myNick}:`)[1]?.trim() || "...";
+
+                    // 1. Log w konsoli bota
+                    if (window.logExp) window.logExp(`📩 PRIV od ${sender}: ${message}`, "#e040fb");
+
+                    // 2. Powiadomienie systemowe (Brak dźwięku)
+                    if (Notification.permission === "granted") {
+                        new Notification(`📩 Nowa wiadomość (Margo)`, {
+                            body: `${sender}: ${message}`,
+                            icon: 'https://www.margonem.pl/favicon.ico'
+                        });
+                    }
+
+                    // 3. Opcjonalne zatrzymanie bota
+                    if (botSettings.exp.chatAlertStopBot) {
+                        if (typeof stopPatrol === 'function') stopPatrol(true);
+                        if (window.isExping) {
+                            let btn = document.getElementById('btnStartExp');
+                            if (btn) btn.click();
+                        }
+                        if (window.logExp) window.logExp(`🛑 Zatrzymano bota z powodu wiadomości prywatnej!`, "#f44336");
+                    }
+                }
+            }
+        });
+
+        // Podpięcie pod okno czatu
+        const chatContainer = document.querySelector(".new-chat-window") || document.querySelector(".chat-layer") || document.body;
+        window.__chatDomObserver.observe(chatContainer, { childList: true, subtree: true });
+
+        // Czyść listę widzianych wiadomości przy wyłączaniu bota, żeby przy starcie znów był świeży
+        setInterval(() => {
+            let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
+            if (!isBotActive) window.__seenPrivs.clear();
+        }, 5000);
+    // --- DAEMON: ANTI-STUCK (Odwieszacz bota na bramach i zacinkach) ---
+        if (!window.antiStuckDaemonInstalled) {
+            window.antiStuckDaemonInstalled = true;
+            window.lastStuckCheckPos = { x: -1, y: -1, map: "" };
+            window.stuckIdleCount = 0;
+
+            setInterval(() => {
+                // Sprawdzamy czy bot w ogóle powinien teraz pracować
+                let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling) || window.isRushing;
+                if (!isBotActive) {
+                    window.stuckIdleCount = 0;
+                    return;
+                }
+
+                // Podstawowe zabezpieczenia przed błędnymi interwencjami
+                if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+                if (Engine.battle && Engine.battle.show) return; // Nie przeszkadzamy w walce
+                if (Engine.dead || Engine.hero.d.dead) return; // Nie przeszkadzamy jak leżymy
+                if (window.isHealLocked || window.isRegeneratingToFull) return; // Nie przerywamy leczenia
+                if (window.__captchaPhase && window.__captchaPhase !== "none") return; // Zapadka to priorytet
+
+                let currentMap = Engine.map.d.name;
+                let currentX = Engine.hero.d.x;
+                let currentY = Engine.hero.d.y;
+                let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+
+                // Jeśli postać fizycznie stoi w miejscu
+                if (!isMoving) {
+                    if (window.lastStuckCheckPos.x === currentX && 
+                        window.lastStuckCheckPos.y === currentY && 
+                        window.lastStuckCheckPos.map === currentMap) {
+                        
+                        window.stuckIdleCount++;
+                        
+                        // Jeśli stoi bezczynnie przez około 4 sekundy
+                        if (window.stuckIdleCount >= 4) {
+                            if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Ponawiam komendę ruchu...", "#00e5ff");
+                            if (window.logExp) window.logExp("🔄 [Anti-Stuck] Wykryto zacięcie! Ponawiam komendę ruchu...", "#00e5ff");
+                            
+                            // 1. Twarda komenda serwerowa na interakcję z drzwiami (jeśli stoi na kordach przejścia)
+                            window._g('walk');
+                            
+                            // 2. Wznowienie pętli decyzyjnych bota w zależności od trybu
+                            if (typeof isPatrolling !== 'undefined' && isPatrolling && typeof window.executePatrolStep === 'function') {
+                                window.executePatrolStep();
+                            } else if (window.isRushing && typeof window.executeRushStep === 'function') {
+                                window.executeRushStep();
+                            } else if (window.isExping && typeof window.expMainLoop === 'function') {
+                                window.expMainLoop();
+                            } else {
+                                // Zapasowe "szturchnięcie" (minimalny ruch w miejsce, w którym stoi)
+                                Engine.hero.autoGoTo({x: currentX, y: currentY});
+                            }
+                            
+                            window.stuckIdleCount = 0; // Resetujemy licznik po interwencji
+                        }
+                    } else {
+                        // Zaktualizowanie pozycji
+                        window.stuckIdleCount = 1;
+                        window.lastStuckCheckPos = { x: currentX, y: currentY, map: currentMap };
+                    }
+                } else {
+                    // Postać jest w ruchu, jest bezpiecznie
+                    window.stuckIdleCount = 0;
+                    window.lastStuckCheckPos = { x: currentX, y: currentY, map: currentMap };
+                }
+            }, 1000);
+        }
 })(); // Koniec kodu
