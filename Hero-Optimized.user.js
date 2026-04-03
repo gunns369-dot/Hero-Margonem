@@ -7128,7 +7128,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             
             if (window.autoSellState && window.autoSellState.active) return; // Priorytety (Sprzedaż ważniejsza)
 
-          // 1. Sprawdzanie mikstur
+       // 1. Sprawdzanie mikstur
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {})
                   .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
@@ -7148,49 +7148,76 @@ window.toggleTeleportLock = function(city, isChecked) {
                     }
                     
                     let maxhp = Engine.hero.d.maxhp || 1000;
-                    let targetHeal = maxhp * 0.45; 
-                    let bestNpc = null; let bestItemName = null; let bestDiff = Infinity;
+                    let currentLvl = Engine.hero.d.lvl || 1;
+                    let targetHeal = maxhp * 0.50; // Celujemy w leczenie minimum 50% HP
                     let currMap = Engine.map.d.name;
+                    
+                    let availablePotions = [];
 
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
                     healers.forEach(k => {
-                        // SPRAWDZANIE DOSTĘPNOŚCI TRASY! Ignorujemy uzdrowicieli, do których nie mamy ścieżki.
+                        // SPRAWDZANIE DOSTĘPNOŚCI TRASY
                         if (k.map_name !== currMap) {
                             let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name) : null;
-                            if (!path || path.length < 2) return; // Przejdź do następnego uzdrowiciela!
+                            if (!path || path.length < 2) return; 
                         }
 
                         if (k.items) {
                             k.items.forEach(i => {
-                                let fullStats = i.tooltip_text || i.raw_detected_text || i.name;
+                                let fullStats = i.tooltip_text || i.raw_detected_text || i.name || "";
+                                
+                                // Ochrona przed kupnem potek na wyższy level!
+                                let itemLvl = i.lvl || 1;
+                                let lvlMatch = fullStats.match(/Poziom:\s*(\d+)/i) || fullStats.match(/Wymagany poziom:\s*(\d+)/i);
+                                if (lvlMatch) itemLvl = parseInt(lvlMatch[1]);
+                                if (itemLvl > currentLvl) return; // Zbyt wysoki level, odrzucamy
+
                                 let healMatch = fullStats.match(/Leczy\s+([0-9\s]+)\s+punkt/i);
                                 if (healMatch) {
                                     let healAmount = parseInt(healMatch[1].replace(/\s/g, ''));
-                                    let diff = Math.abs(healAmount - targetHeal);
-                                    if (diff < bestDiff) {
-                                        bestDiff = diff; bestItemName = i.name.split('Typ:')[0].trim(); bestNpc = k;
-                                    }
+                                    availablePotions.push({
+                                        npc: k,
+                                        itemName: i.name.split('Typ:')[0].trim(),
+                                        heal: healAmount
+                                    });
                                 }
                             });
                         }
                     });
 
-                    if (bestNpc && bestItemName) {
-                        window.autoPotState.targetNpc = bestNpc; window.autoPotState.targetItem = bestItemName;
-                        window.autoPotState.step = 1; window.autoPotState.nextActionTime = Date.now() + 500; window.isRushing = true;
+                    if (availablePotions.length > 0) {
+                        // Inteligentne sortowanie:
+                        // 1. Preferuje mikstury leczące >= 50% HP
+                        // 2. Jeśli obie leczą > 50%, wybiera mniejszą (by nie przepłacać za potki leczące 10000 HP)
+                        // 3. Jeśli żadna nie leczy 50%, wybiera po prostu największą dostępną dla tego levelu
+                        availablePotions.sort((a, b) => {
+                            let aSuffices = a.heal >= targetHeal;
+                            let bSuffices = b.heal >= targetHeal;
+                            
+                            if (aSuffices && !bSuffices) return -1;
+                            if (!aSuffices && bSuffices) return 1;
+                            if (aSuffices && bSuffices) return a.heal - b.heal;
+                            return b.heal - a.heal;
+                        });
+
+                        let bestChoice = availablePotions[0];
+                        window.autoPotState.targetNpc = bestChoice.npc; 
+                        window.autoPotState.targetItem = bestChoice.itemName;
+                        window.autoPotState.step = 1; 
+                        window.autoPotState.nextActionTime = Date.now() + 500; 
+                        window.isRushing = true;
                         
                         let stacksToBuy = botSettings.autopot.stacks || 14;
-                        let msg = `🧪 BRAK MIKSTUR! Zatrzymuję wszystko i idę do ${bestNpc.npc_name} po ${stacksToBuy} staków (${stacksToBuy * 15}x) [${bestItemName}].`;
+                        let msg = `🧪 BRAK MIKSTUR! Zatrzymuję wszystko i idę do ${bestChoice.npc.npc_name} po ${stacksToBuy} staków (${stacksToBuy * 15}x) [${bestChoice.itemName}].`;
                         if (window.logHero) window.logHero(msg, "#e91e63");
                         if (window.logExp) window.logExp(msg, "#e91e63");
                     } else {
                         window.autoPotState.active = false;
-                        if (window.logHero) window.logHero(`🚨 Brak mikstur! Nie znaleziono żadnego uzdrowiciela do którego znam drogę!`, "#e53935");
-                        if (window.logExp) window.logExp(`🚨 Brak mikstur! Nie znaleziono żadnego uzdrowiciela do którego znam drogę!`, "#e53935");
+                        if (window.logHero) window.logHero(`🚨 Brak mikstur! Nie znaleziono uzdrowiciela z miksturami na twój level w zasięgu trasy!`, "#e53935");
+                        if (window.logExp) window.logExp(`🚨 Brak mikstur! Nie znaleziono uzdrowiciela z miksturami na twój level w zasięgu trasy!`, "#e53935");
                     }
                 }
             }
-
             // 2. Cykl dotarcia i zakupu
             if (window.autoPotState.active) {
                 if (Date.now() < window.autoPotState.nextActionTime) return;
