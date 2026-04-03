@@ -281,7 +281,7 @@
             }
             this.kupcy = merchants;
         },
-   parseEq: function(rawEq) {
+ parseEq: function(rawEq) {
             let items = [];
             for (let itemUrl in rawEq) {
                 let itemData = rawEq[itemUrl];
@@ -291,13 +291,15 @@
                     
                     // --- INTELIGENTNE ODCZYTYWANIE TYPU Z OPISU (TOOLTIPA) ---
                     let detectedType = itemData.slot_type || "Nieznany";
-                    let typeMatch = fullStats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ\s]+?)(?:<br>|\n|<|$)/i);
                     
+                    // Szukamy słowa po "Typ: " aż do spacji
+                    let typeMatch = fullStats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+(?:\s[A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)?)/i);
                     if (typeMatch && typeMatch[1]) {
-                        detectedType = typeMatch[1].trim();
+                        // Jeśli złapało "Jednoręczne Pospolity", ucinamy rzadkość
+                        detectedType = typeMatch[1].replace(/\s*(Pospolity|Unikat|Heroik|Legendarny)/i, '').trim();
                     }
                     
-                    // Upiększenie: zawsze zaczynamy typ od wielkiej litery (np. "buty" -> "Buty")
+                    // Formatowanie na ładne słowo (np. "buty" -> "Buty")
                     detectedType = detectedType.charAt(0).toUpperCase() + detectedType.slice(1).toLowerCase();
                     
                     items.push({
@@ -312,7 +314,6 @@
             }
             this.ekwipunek = items;
         },
-
 getRecommendedEq: function() {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return [];
             let myLvl = Engine.hero.d.lvl;
@@ -6908,7 +6909,7 @@ window.toggleTeleportLock = function(city, isChecked) {
         document.body.appendChild(tt);
     }
 
-    // Wyświetlanie tooltipa
+   // Wyświetlanie tooltipa
     document.addEventListener('mouseover', (e) => {
         if (e.target && e.target.classList.contains('margo-tooltip-trigger')) {
             let tt = document.getElementById('customMargoTooltip');
@@ -6916,41 +6917,42 @@ window.toggleTeleportLock = function(city, isChecked) {
             let rawStats = e.target.getAttribute('data-stats');
             
             if (tt && rawStats) {
-                // 1. Usunięcie nazwy z początku
+                // Odcięcie nazwy przedmiotu, by się nie dublowała
                 let desc = rawStats.replace(name, '').trim();
                 
-                // 2. Rzadkość przedmiotu (przejście do nowej linii)
-                desc = desc.replace(/(Pospolity|Unikat|Heroik|Legendarny)/g, '<br><span style="color:#b0bec5; font-weight:bold;">$1</span><br>');
-                desc = desc.replace(/Unikat/g, '<span style="color:#fbc02d; font-weight:bold;">Unikat</span>');
-                desc = desc.replace(/Heroik/g, '<span style="color:#29b6f6; font-weight:bold;">Heroik</span>');
-                desc = desc.replace(/Legendarny/g, '<span style="color:#ef5350; font-weight:bold;">Legendarny</span>');
-               // 3. INTELIGENTNE ŁAMANIE LINII PRZED KAŻDĄ STATYSTYKĄ
+                // 1. Ochrona słów: Koloruje tylko SAMODZIELNE słowa rzadkości (nigdy w środku "Unikatowy"!)
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Pospolity)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#b0bec5; font-weight:bold;">$1</span><br>');
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Unikat)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#fbc02d; font-weight:bold;">$1</span><br>');
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Heroik)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#29b6f6; font-weight:bold;">$1</span><br>');
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Legendarny)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#ef5350; font-weight:bold;">$1</span><br>');
+
+                // 2. Wymuszanie nowej linii przed każdą statystyką (ponieważ baza przesyła to jako jeden wielki ciąg)
                 const statKeywords = [
                     "Typ:", "Obrażenia", "Cios krytyczny", "Siła", "Zręczność", "Intelekt", "Energia", "Mana", 
-                    "Pancerz", "Blok", "Unik", "Życie", "Odporność na", "Wiąże", "Spowalnia", "Przebicie", 
+                    "Pancerz", "Blok", "Unik", "Życie", "Odporność na", "Wiąże", "Spowalnia", "Zmniejsza", "Przebicie", 
                     "Pojemność", "Ilość:", "Teleportuje", "Leczy", "Przywraca", "Niszczy", "Szansa na", 
-                    "Podczas ataku", "Dodatkowe obrażenia", "Absorbuje", "Wymagany poziom:", "Wymagana profesja:", 
+                    "Podczas ataku", "Dodatkowe", "Absorbuje", "Wymagany poziom:", "Wymagana profesja:", 
                     "Wartość:", "Zadaje", "Obniża"
                 ];
                 
                 statKeywords.forEach(key => {
-                    // Dodaje nową linię zawsze przed napotkaniem wielkiej litery ze słowa kluczowego
-                    let regex = new RegExp(`\\s*(${key})`, 'g');
+                    // Dodaje nową linię, upewniając się, że jej wcześniej tam nie było
+                    let regex = new RegExp(`(?<!>\\s*)(${key})`, 'g');
                     desc = desc.replace(regex, '<br>$1');
                 });
 
                 // Czystka: usuwanie znaków nowej linii z samego początku tekstu
                 desc = desc.replace(/^(<br>\s*)+/, '');
 
-                // 4. Kolorowanie (Szare nagłówki, zielone wartości na plusie, złote ceny)
+                // 3. Kolorowanie wartości (Szare nagłówki, zielone plusy, żółte monety)
                 desc = desc.replace(/(Wymagany poziom:|Wymagana profesja:|Typ:|Wartość:)/g, '<span style="color:#888;">$1</span>');
-                desc = desc.replace(/(\+[0-9]+%?)/g, '<span style="color:#66bb6a; font-weight:bold;">$1</span>');
+                desc = desc.replace(/(\+[0-9]+(?:.[0-9]+)?%?)/g, '<span style="color:#66bb6a; font-weight:bold;">$1</span>');
                 desc = desc.replace(/(Wartość:\s*<\/span>)([0-9\.\s]+k?)/g, '$1<span style="color:#ffca28;">$2</span>');
                 
-                // 5. Czystka: usuwanie wielokrotnych pustych linii
+                // Czystka: usuwanie wielokrotnych pustych linii
                 desc = desc.replace(/(<br>\s*){2,}/g, '<br>');
 
-                // Budowa finalnego HTML
+                // Zbudowanie pięknego HTML
                 let html = `<div style="color:#ffca28; font-weight:bold; font-size:12px; border-bottom:1px solid #443c2c; padding-bottom:4px; margin-bottom:4px; text-align:center; text-shadow:1px 1px 0 #000;">${name}</div>`;
                 html += `<div style="color:#ddd; font-size:10px; line-height:1.6;">${desc}</div>`;
                 
