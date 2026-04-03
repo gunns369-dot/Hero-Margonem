@@ -7564,34 +7564,31 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
 
-        // --- FUNKCJE HUMANIZUJĄCE ---
+       // --- FUNKCJE HUMANIZUJĄCE ---
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
         
-        // Prawdziwa symulacja fizycznej myszki (Margonem NI tego wymaga)
+        // Prawdziwa symulacja myszki z włamaniem do React Fiber (Gwarancja kliknięcia w NI)
         async function humanClick(el) {
             if (!el) return;
             let target = el.closest('.button') || el;
+            let label = target.querySelector('.label') || target;
             
-            // Pobranie fizycznych koordynatów przycisku na ekranie
-            let rect = target.getBoundingClientRect();
-            let cx = rect.left + rect.width / 2;
-            let cy = rect.top + rect.height / 2;
-            
-            let evOpts = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, buttons: 1 };
-            
-            // Symulacja WCIŚNIĘCIA klawisza myszki
-            target.dispatchEvent(new MouseEvent('mousedown', evOpts));
-            target.dispatchEvent(new PointerEvent('pointerdown', evOpts));
-            
-            // Naturalny czas wciśnięcia przycisku przez człowieka (ok. 50-100ms)
-            await sleep(randomDelay(50, 100));
-            
-            // Symulacja PUSZCZENIA klawisza myszki i kliknięcia
-            target.dispatchEvent(new MouseEvent('mouseup', evOpts));
-            target.dispatchEvent(new PointerEvent('pointerup', evOpts));
-            target.dispatchEvent(new MouseEvent('click', evOpts));
-            
+            // 1. Hack na silnik React (Margonem NI) - bezpośrednie wywołanie zdarzeń z pamięci UI
+            let reactPropsKey = Object.keys(target).find(k => k.startsWith('__reactProps'));
+            if (reactPropsKey && target[reactPropsKey]) {
+                let props = target[reactPropsKey];
+                if (props.onPointerDown) props.onPointerDown({ preventDefault: () => {}, stopPropagation: () => {}, button: 0 });
+                await sleep(randomDelay(50, 100)); // Naturalny czas wciśnięcia
+                if (props.onPointerUp) props.onPointerUp({ preventDefault: () => {}, stopPropagation: () => {}, button: 0 });
+                if (props.onClick) props.onClick({ preventDefault: () => {}, stopPropagation: () => {}, button: 0 });
+            } else {
+                // 2. Klasyczny fallback na głębokie zdarzenia
+                let evOpts = { bubbles: true, cancelable: true, view: window, buttons: 1 };
+                ['pointerdown', 'mousedown'].forEach(evt => label.dispatchEvent(new MouseEvent(evt, evOpts)));
+                await sleep(randomDelay(50, 100));
+                ['pointerup', 'mouseup', 'click'].forEach(evt => label.dispatchEvent(new MouseEvent(evt, evOpts)));
+            }
             if (typeof target.click === 'function') target.click();
             if (window.jQuery) window.jQuery(target).trigger("click");
         }
