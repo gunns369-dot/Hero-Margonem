@@ -4154,12 +4154,16 @@ function optimizeRoute() {
 
 
 
-function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
+function stopPatrol(hardStop = true) { 
         let wasMoving = isPatrolling || isRushing;
         isPatrolling = false;
         isRushing = false;
+        window.isRushing = false;
         window.isRushingToShop = false;
+        window.resumePatrolAfterRush = false; // KRYTYCZNA POPRAWKA: Blokuje auto-wznawianie po ręcznym zatrzymaniu!
+        
         clearTimeout(rushInterval);
+        clearTimeout(smoothPatrolInterval);
 
         let btn = document.getElementById('btnStartStop');
         if (btn) {
@@ -4167,11 +4171,11 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
             btn.style.color = "#4caf50";
             btn.style.borderColor = "#4caf50";
         }
-        checkedPoints.clear();
-        clearTimeout(smoothPatrolInterval);
+        
+        // Nie czyścimy checkedPoints tutaj, żeby bot pamiętał co sprawdził, jeśli wznowisz patrol!
         renderCordsList(-1);
 
-        if (wasMoving && window.logHero) window.logHero("Zatrzymano ruch.", "#f44336");
+        if (wasMoving && window.logHero) window.logHero("🛑 Zatrzymano patrol ręcznie.", "#f44336");
 
         // TWARDE HAMOWANIE POSTACI W GRZE
         if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
@@ -4290,15 +4294,15 @@ function executePatrolStep() {
         smoothPatrolInterval = setTimeout(checkSmoothArrival, pingDelay);
     }
 
-    function checkSmoothArrival() {
-        if (!isPatrolling || !Engine || !Engine.hero || !Engine.hero.d) return;
+   function checkSmoothArrival() {
+        if (!isPatrolling || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
         checkVisionRange();
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
 
         if (checkedPoints.has(patrolIndex)) {
             clearTimeout(smoothPatrolInterval);
-            window.logHero(`Kord zaliczony z zasięgu wzroku.`, "#8bc34a");
+            if (window.logHero) window.logHero(`Kord zaliczony z zasięgu wzroku.`, "#8bc34a");
             executePatrolStep();
             return;
         }
@@ -4309,19 +4313,33 @@ function executePatrolStep() {
         if (dist <= 1) {
             clearTimeout(smoothPatrolInterval);
             checkedPoints.add(patrolIndex);
-            window.logHero(`Dotarłem do [${target[0]}, ${target[1]}]. Punkt czysty.`, "#8bc34a");
+            if (window.logHero) window.logHero(`Dotarłem do [${target[0]}, ${target[1]}]. Punkt czysty.`, "#8bc34a");
 
             let waitDelay = Math.floor(Math.random() * (botSettings.waitMax - botSettings.waitMin + 1)) + botSettings.waitMin;
             setTimeout(executePatrolStep, waitDelay);
         } else {
-            if (cx === lastX && cy === lastY) {
-                stuckCount++;
-                if (stuckCount > 8) {
-                    clearTimeout(smoothPatrolInterval);
-                    checkedPoints.add(patrolIndex);
-                    window.logHero(`Zaciąłem się! Uznaję punkt [${target[0]}, ${target[1]}] za odwiedzony.`, "#ff9800");
-                    executePatrolStep();
-                    return;
+            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+            
+            if (!isMoving) {
+                if (cx === lastX && cy === lastY) {
+                    stuckCount++;
+                    
+                    // Po ~1.5 sekundy stania w miejscu ponawiamy próbę kliknięcia (BEZ LOSOWOŚCI)
+                    if (stuckCount === 6) {
+                        if (window.logHero) window.logHero(`Ponawiam próbę dojścia do [${target[0]}, ${target[1]}]...`, "#ffb300");
+                        safeGoTo(target[0], target[1], false); // false = omija losowe kratki, idzie dokładnie w punkt!
+                    }
+                    
+                    // Dopiero po ~4.5 sekundach (15 tyknięć) uznaje, że fizycznie się nie da wejść
+                    if (stuckCount > 15) {
+                        clearTimeout(smoothPatrolInterval);
+                        checkedPoints.add(patrolIndex);
+                        if (window.logHero) window.logHero(`Zaciąłem się! Punkt [${target[0]}, ${target[1]}] jest nieosiągalny. Omijam.`, "#e53935");
+                        executePatrolStep();
+                        return;
+                    }
+                } else {
+                    stuckCount = 0;
                 }
             } else {
                 stuckCount = 0;
@@ -4332,7 +4350,6 @@ function executePatrolStep() {
         }
         lastX = cx; lastY = cy;
     }
-
 // ==========================================
 
 
