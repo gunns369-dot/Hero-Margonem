@@ -7125,15 +7125,27 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 800);
     }
 
-  // --- DAEMON: AUTOHEAL (Działa zawsze, gdy zaznaczony w menu) ---
+ // --- DAEMON: AUTOHEAL (Gwarancja leczenia w każdym trybie) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
         window.lastHealTime = 0;
         window.isHealLocked = false;
+
+        // Ekstraktor wartości leczenia (odporny na różnice w opisie potek)
+        function extractHeal(item) {
+            if (typeof item.getLeczyStat === 'function') {
+                let v = item.getLeczyStat();
+                if (v) return v;
+            }
+            let statStr = (item.stat || (item._cachedStats && item._cachedStats.stat) || "").toLowerCase();
+            let match = statStr.match(/leczy[=:](\d+)/) || statStr.match(/leczy\s+([0-9\s]+)\s+punkt/);
+            return match ? parseInt(match[1].replace(/\s/g, '')) : 0;
+        }
+
         setInterval(() => {
-            // Sprawdzanie podstawowe: czy silnik żyje, czy nie jesteśmy w walce i czy opcja jest WŁĄCZONA w menu
+            // Sprawdzanie podstawowe: silnik, status menu i blokada antyspamowa
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || window.isHealLocked) return;
-            if (!botSettings.autoheal || !botSettings.autoheal.enabled) return; // <-- TO SPRAWIA ŻE LECZY ZAWSZE GDY OPCJA JEST ON
+            if (!botSettings.autoheal || !botSettings.autoheal.enabled) return;
             
             if (Engine.battle && Engine.battle.show) return;
             if (Engine.dead || Engine.hero.d.dead) return;
@@ -7146,26 +7158,49 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let threshold = parseInt(botSettings.autoheal.threshold) || 80;
             let hpPercent = (hp / maxhp) * 100;
             
-            // Jeśli życie spadnie poniżej progu, szukaj potki w torbie
             if (hpPercent < threshold && Date.now() > window.lastHealTime) {
-                let items = Object.values(Engine.heroEquipment.getHItems?.() || {});
-                let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null);
+                let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : (Engine.items && Engine.items.d ? Engine.items.d : {});
+                let items = Object.values(hItems);
                 
-                if (potions.length > 0) {
+                // Szukamy potek (cl: 16 to klasa przedmiotów konsumpcyjnych w Margo)
+                let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16);
+                
+                let validPotions = [];
+                potions.forEach(p => {
+                    let heal = extractHeal(p);
+                    if (heal > 0) validPotions.push({ pot: p, heal: heal });
+                });
+                
+                if (validPotions.length > 0) {
                     window.isHealLocked = true;
                     let missingHp = maxhp - hp;
                     
-                    // Sortowanie: znajdź potkę najbliższą brakującemu HP
-                    potions.sort((a, b) => Math.abs((a.getLeczyStat()||0) - missingHp) - Math.abs((b.getLeczyStat()||0) - missingHp));
+                    // Sortowanie: wybieramy potkę, która wyleczy nas najbliżej maksa bez marnowania
+                    validPotions.sort((a, b) => Math.abs(a.heal - missingHp) - Math.abs(b.heal - missingHp));
                     
-                    let bestPot = potions[0];
-                    if (typeof Engine.heroEquipment.useItem === 'function') Engine.heroEquipment.useItem(bestPot.id);
+                    let bestPot = validPotions[0].pot;
+                    let healVal = validPotions[0].heal;
+                    let potName = bestPot._cachedStats?.name || bestPot.name || "Mikstura";
                     
-                    window.lastHealTime = Date.now() + 1200; // Anty-spam 1.2s
-                    setTimeout(() => { window.isHealLocked = false; }, 1000);
+                    // Niezawodne wywoływanie użycia przedmiotu (Potrójny Fallback)
+                    if (typeof Engine.items !== 'undefined' && typeof Engine.items.useItem === 'function') {
+                        Engine.items.useItem(bestPot.id);
+                    } else if (typeof Engine.heroEquipment.sendUseRequest === 'function') {
+                        Engine.heroEquipment.sendUseRequest(bestPot);
+                    } else {
+                        window._g(`moveitem&st=1&id=${bestPot.id}`);
+                    }
                     
-                    let msg = `💚 [Auto-Heal] Uleczono postacią poza trybem pracy.`;
-                    if (window.logHero) window.logHero(msg, "#4caf50");
+                    // Symulacja wyleczenia w pamięci, by bot od razu wiedział, że ma wyższe HP i powrócił do walki
+                    if (Engine.hero.d.hp) Engine.hero.d.hp = Math.min(maxhp, hp + healVal);
+                    if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + healVal);
+                    
+                    window.lastHealTime = Date.now() + 1500; // Antyspam - czekamy 1.5s przed użyciem kolejnej potki
+                    setTimeout(() => { window.isHealLocked = false; }, 1200);
+                    
+                    let msg = `💚 Leczę się: ${potName} (+${healVal} HP)`;
+                    if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
+                    else if (window.logHero) window.logHero(msg, "#4caf50");
                 }
             }
         }, 350);
