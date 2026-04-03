@@ -3118,6 +3118,17 @@ if (btnExp) {
                 Notification.requestPermission();
             }
         });
+        if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
+
+        bindChange('playerAlert', (e) => { 
+            botSettings.exp.playerAlert = e.target.checked; 
+            saveSettings(); 
+            // Ostrzeżenie i wymuszenie zgody na powiadomienia
+            if (e.target.checked) {
+                if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
+                if (window.logExp) window.logExp("👁️ Włączono monitoring graczy i czatu.", "#ffb300");
+            }
+        });
 
         bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
         bindChange('autopotEnabled', (e) => { botSettings.autopot.enabled = e.target.checked; saveSettings(); });
@@ -7466,65 +7477,110 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 300);
     }
 
-    // --- DAEMON: DETEKCJA ZAPADKI (CELOWANA STREFA ALERTÓW) ---
+   // --- DAEMON: DETEKCJA ZAPADKI I GRACZY (MULTI-ALARM) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.captchaAlertTriggered = false;
+        window.playerAlertTriggered = false;
+        window.lastChatLength = 0; // Pamięć czatu dla nowości
 
         setInterval(() => {
-            // Sprawdzamy, czy gracz zaznaczył checkbox w zaawansowanych
-            if (!botSettings.exp || !botSettings.exp.captchaAlert) {
-                window.captchaAlertTriggered = false; // Reset by uniknąć pętli
-                return;
-            }
-
-            // 1. Sprawdzenie po znanych, sztywnych klasach okien Zapadki
-            let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
-
-            // 2. Skanowanie tekstowe strefy pod złotem i okien dialogowych
-            let textMatch = false;
-            if (!hasWindow) {
-                let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
-
-                for (let el of containers) {
-                    if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
-
-                    let t = el.innerText || "";
-                    if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
-                        textMatch = true;
-                        break;
+            // --- CZĘŚĆ 1: DETEKCJA ZAPADKI ---
+            if (botSettings.exp && botSettings.exp.captchaAlert) {
+                let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
+                let textMatch = false;
+                
+                if (!hasWindow) {
+                    let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
+                    for (let el of containers) {
+                        if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
+                        let t = el.innerText || "";
+                        if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
+                            textMatch = true;
+                            break;
+                        }
                     }
                 }
+
+                let isCaptchaActive = hasWindow || textMatch;
+
+                if (isCaptchaActive && !window.captchaAlertTriggered) {
+                    window.captchaAlertTriggered = true;
+                    if (typeof stopPatrol === 'function') stopPatrol(true);
+                    
+                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
+                    window.focus();
+                    
+                    if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!", requireInteraction: true });
+                    if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                    if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                } else if (!isCaptchaActive && window.captchaAlertTriggered) {
+                    window.captchaAlertTriggered = false;
+                }
             }
 
-            let isCaptchaActive = hasWindow || textMatch;
+            // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
+            if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
+                let playerFound = false;
+                let chatMessageFound = false;
+                let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : null;
 
-            if (isCaptchaActive && !window.captchaAlertTriggered) {
-                window.captchaAlertTriggered = true;
-
-                if (typeof stopPatrol === 'function') stopPatrol(true);
-
-                try {
-                    let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
-                    audio.play();
-                    setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
-                } catch(e) {}
-
-                window.focus();
-
-                if (Notification.permission === "granted") {
-                    new Notification("🚨 ALARM: ZAPADKA!", {
-                        body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!",
-                        requireInteraction: true
-                    });
+                // A) Skanowanie pola widzenia na obecność innych graczy (typ 0 lub 1 = gracz)
+                if (typeof Engine !== 'undefined' && Engine.others && myNick) {
+                    let others = typeof Engine.others.check === 'function' ? Engine.others.check() : Engine.others.d;
+                    if (others) {
+                        for (let id in others) {
+                            let p = others[id].d || others[id];
+                            // Upewniamy się, że to nie jest martwy gracz, i że ma typ gracza
+                            if (p && !p.dead && !p.del && (p.type === 0 || p.type === 1)) {
+                                // Ignoruj jeśli skaner wykrył samego siebie (Zabezpieczenie Margo)
+                                if (p.nick !== myNick) {
+                                    playerFound = p.nick;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
 
-                if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                // B) Skanowanie Czatu Głównego na obecność własnego Nicku
+                if (myNick) {
+                    let chatLines = document.querySelectorAll('#chattxt .chat-message, .chat-message-container');
+                    let currentLength = chatLines.length;
 
-            } else if (!isCaptchaActive && window.captchaAlertTriggered) {
-                window.captchaAlertTriggered = false;
+                    // Sprawdzamy tylko nowe wiadomości
+                    if (currentLength > window.lastChatLength) {
+                        for (let i = window.lastChatLength; i < currentLength; i++) {
+                            let line = chatLines[i].innerText || chatLines[i].textContent || "";
+                            // Pomijamy komunikaty systemowe i wiadomości wysłane przez nas samych
+                            if (line.includes(`[System]`) || line.startsWith(`${myNick}:`)) continue;
+                            
+                            if (line.toLowerCase().includes(myNick.toLowerCase())) {
+                                chatMessageFound = true;
+                                break;
+                            }
+                        }
+                    }
+                    window.lastChatLength = currentLength; // Zapisujemy stan na następny cykl
+                }
+
+                let dangerDetected = playerFound || chatMessageFound;
+
+                if (dangerDetected && !window.playerAlertTriggered) {
+                    window.playerAlertTriggered = true;
+                    if (typeof stopPatrol === 'function') stopPatrol(true); // Twarde zatrzymanie Bota
+                    
+                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
+                    window.focus();
+                    
+                    let alertReason = playerFound ? `Wykryto gracza: ${playerFound}!` : `Ktoś wspomniał Twój nick na czacie!`;
+                    if (Notification.permission === "granted") new Notification("👁️ OSTRZEŻENIE (EXP)!", { body: alertReason + " Zatrzymano bota.", requireInteraction: true });
+                    if (window.logExp) window.logExp(`👁️ ${alertReason} Zatrzymano auto-exp!`, "#ffb300");
+
+                } else if (!dangerDetected && window.playerAlertTriggered) {
+                    window.playerAlertTriggered = false;
+                }
             }
-        }, 800);
+        }, 800); 
     }
 })(); // Koniec kodu
