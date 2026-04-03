@@ -7536,54 +7536,102 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 300);
     }
-    // --- DAEMON: DETEKCJA ZAPADKI (CAPTCHA) ---
+  // --- DAEMON: DETEKCJA ZAPADKI (CAPTCHA / UI WATCH) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.captchaAlertTriggered = false;
 
-        setInterval(() => {
-            if (botSettings.exp && botSettings.exp.captchaAlert) {
-                // Skanowanie po słowach kluczowych Zapadki w wyskakujących oknach
-                let captchaNodes = Array.from(document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, div')).filter(el => {
-                    let t = el.innerText || "";
-                    return t.includes("Zapadka") && (t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Miłego dnia"));
+        const uiWatch = {
+            observer: null,
+            lastCount: 0,
+            start() {
+                const root = document.body;
+                if (!root) return console.log("Brak body");
+
+                const countOverlays = () =>
+                    [...document.querySelectorAll("div, section, aside")].filter(el => {
+                        // IGNORUJEMY BEZPIECZNE OKNA (żeby nie było fałszywych alarmów):
+                        // 1. Interfejs naszego bota i jego tooltipy
+                        if (el.closest('.hero-window') || el.closest('#customMargoTooltip') || el.closest('#radarDualTooltip')) return false;
+                        // 2. Standardowy interfejs Margonem (panele boczne, dolny pasek)
+                        if (el.closest('.main-buttons-container') || el.closest('.chat-wrapper') || el.closest('.bottom-panel')) return false;
+                        // 3. Typowe, bezpieczne okna (plecak, statystyki), z pominięciem zapadki
+                        if (el.closest('.margo-window') && !el.closest('[data-wnd="zapadka"]') && !el.closest('.zapadka-window')) return false;
+
+                        const s = window.getComputedStyle(el);
+                        return (
+                            el.offsetParent &&
+                            (s.position === "fixed" || s.position === "absolute") &&
+                            parseInt(s.zIndex || "0", 10) >= 50 // Wystarczająco wysoko, by zignorować cienie, ale złapać popupy
+                        );
+                    }).length;
+
+                this.lastCount = countOverlays();
+
+                this.observer = new MutationObserver(() => {
+                    // Sprawdzamy, czy gracz włączył funkcję alarmu w GUI bota
+                    if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
+
+                    const now = countOverlays();
+                    
+                    // Równolegle zostawiamy klasyczny skan tekstu na wypadek, gdyby popup miał mały zIndex
+                    let textMatch = Array.from(document.querySelectorAll('div')).some(el => {
+                        let t = el.innerText || "";
+                        return t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy");
+                    });
+
+                    if (now > this.lastCount || textMatch) {
+                        if (!window.captchaAlertTriggered) {
+                            window.captchaAlertTriggered = true;
+                            console.log("[UI WATCH] Wykryto nowe okno / Zapadkę — zatrzymuję skrypt!");
+                            
+                            // TWARDY HAMULEC BOTA
+                            if (typeof stopPatrol === 'function') stopPatrol(true);
+
+                            // Odtworzenie syreny alarmowej
+                            try {
+                                let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
+                                audio.play();
+                                setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
+                            } catch(e) {}
+
+                            // Podświetlenie karty w przeglądarce
+                            window.focus();
+                            
+                            // Powiadomienie Windows/Mac (Natywne)
+                            if (Notification.permission === "granted") {
+                                new Notification("🚨 ALARM: ZAPADKA / NOWE OKNO!", {
+                                    body: "Wykryto niezidentyfikowaną nakładkę ekranową. Szybko, wracaj do gry!",
+                                    requireInteraction: true
+                                });
+                            }
+
+                            if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                            if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                        }
+                    } else if (now <= this.lastCount && !textMatch) {
+                        // Resetujemy flagę, gdy gracz zamknie okno/zapadkę
+                        window.captchaAlertTriggered = false;
+                    }
+                    this.lastCount = now;
                 });
 
-                // Szukanie okna systemowego
-                let isCaptchaActive = captchaNodes.length > 0 || document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"]') !== null;
+                this.observer.observe(root, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true
+                });
 
-                if (isCaptchaActive && !window.captchaAlertTriggered) {
-                    window.captchaAlertTriggered = true;
-                    
-                    // Zatrzymujemy bota
-                    if (typeof stopPatrol === 'function') stopPatrol(true);
-
-                    // Odtwarzamy dźwięk alarmu
-                    try {
-                        let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
-                        audio.play();
-                        setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
-                    } catch(e) {}
-
-                    // Wymuszamy skupienie na karcie przeglądarki (Mruganie ikony na pasku zadań)
-                    window.focus();
-                    
-                    // Wyrzucamy natywne powiadomienie systemu (Windows/Mac) - wyświetla się NA WIERZCHU innych okien
-                    if (Notification.permission === "granted") {
-                        new Notification("🚨 ZAPADKA W MARGONEM!", {
-                            body: "Szybko! Wróć do gry i rozwiąż zagadkę, zanim administrator się zorientuje!",
-                            requireInteraction: true // Powiadomienie nie zniknie samo, dopóki w nie nie klikniesz
-                        });
-                    }
-
-                    if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                    if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                    
-                } else if (!isCaptchaActive && window.captchaAlertTriggered) {
-                    // Reset flagi, kiedy gracz rozwiąże zagadkę i zniknie ona z ekranu
-                    window.captchaAlertTriggered = false;
-                }
+                console.log("[UI WATCH] Aktywny (Zintegrowany z Alarmem Bota)");
+            },
+            stop() {
+                this.observer?.disconnect();
+                this.observer = null;
+                console.log("[UI WATCH] Zatrzymany");
             }
-        }, 1000);
+        };
+
+        // Odpalamy obserwatora
+        uiWatch.start();
     }
 })(); // Koniec kodu
