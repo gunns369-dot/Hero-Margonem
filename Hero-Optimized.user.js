@@ -281,25 +281,23 @@
             }
             this.kupcy = merchants;
         },
- parseEq: function(rawEq) {
+parseEq: function(rawEq) {
             let items = [];
             for (let itemUrl in rawEq) {
                 let itemData = rawEq[itemUrl];
                 if (itemData.required_level) {
-                    let cleanName = itemData.name.split(" Typ:")[0].split(" Pospolity")[0].trim();
+                    let cleanName = itemData.name.split(" Typ:")[0].split(" Pospolity")[0].split(" Unikat")[0].split(" Heroik")[0].split(" Legendarny")[0].trim();
                     let fullStats = itemData.tooltip_text || itemData.raw_detected_text || itemData.name || "";
                     
                     // --- INTELIGENTNE ODCZYTYWANIE TYPU Z OPISU (TOOLTIPA) ---
                     let detectedType = itemData.slot_type || "Nieznany";
                     
-                    // Szukamy słowa po "Typ: " aż do spacji
                     let typeMatch = fullStats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+(?:\s[A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)?)/i);
                     if (typeMatch && typeMatch[1]) {
-                        // Jeśli złapało "Jednoręczne Pospolity", ucinamy rzadkość
-                        detectedType = typeMatch[1].replace(/\s*(Pospolity|Unikat|Heroik|Legendarny)/i, '').trim();
+                        // Ucinamy wszystkie formy rzadkości (Unikat, Unikatowy itp.)
+                        detectedType = typeMatch[1].replace(/\s*(Pospolity|Unikatowy|Unikat|Heroiczny|Heroik|Legendarny)/gi, '').trim();
                     }
                     
-                    // Formatowanie na ładne słowo (np. "buty" -> "Buty")
                     detectedType = detectedType.charAt(0).toUpperCase() + detectedType.slice(1).toLowerCase();
                     
                     items.push({
@@ -6491,9 +6489,8 @@ window.toggleTeleportLock = function(city, isChecked) {
                 `;
             }
             
-       window.renderEqItems = function(filterType = 'Wszystkie') {
+window.renderEqItems = function(filterType = 'Wszystkie') {
             try {
-                // PANCERNY KONTENER I BAZA
                 let container = document.getElementById('eqListContent');
                 if (!container) return;
 
@@ -6502,7 +6499,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                     return;
                 }
 
-                // Odczyt postaci
                 let currentLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? parseInt(Engine.hero.d.lvl) : 1;
                 let currentProf = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.prof) ? Engine.hero.d.prof : 'w';
                 
@@ -6510,22 +6506,18 @@ window.toggleTeleportLock = function(city, isChecked) {
                 let profName = profMap[currentProf] || 'wszystkie';
                 let safeFilterType = String(filterType || 'Wszystkie').toLowerCase();
 
-                // Inteligentne filtrowanie sprzętu
                 let filtered = window.DatabaseModule.ekwipunek.filter(item => {
                     if (!item) return false;
                     
-                    // Poziom: od (Lvl - 5) do Lvl obecnego
                     let itemLvl = parseInt(item.level) || 1;
                     let lvlMatch = itemLvl <= currentLvl && itemLvl >= (currentLvl - 5);
                     
-                    // Profesja
                     let profMatch = true;
                     if (item.prof && Array.isArray(item.prof) && item.prof.length > 0) {
                         let profArray = item.prof.map(p => String(p).toLowerCase());
                         profMatch = profArray.some(p => p.includes(profName) || p.includes('wszystkie') || p.includes('każda'));
                     }
                     
-                    // Typ sprzętu (Zabezpieczone przed rozbieżnościami nazw w bazie)
                     let itemTypeLower = String(item.type).toLowerCase();
                     let typeMatch = false;
                     
@@ -6541,6 +6533,45 @@ window.toggleTeleportLock = function(city, isChecked) {
                     
                     return lvlMatch && profMatch && typeMatch;
                 });
+
+                filtered.sort((a, b) => (parseInt(b.level) || 0) - (parseInt(a.level) || 0));
+
+                let html = '';
+                filtered.forEach((item, index) => {
+                    let safeName = String(item.name || 'Nieznany przedmiot');
+                    let safeType = String(item.type || 'Inne');
+                    let safeLvl = item.level || 1;
+                    let safeReqp = (item.prof && item.prof.length > 0) ? item.prof.join(', ') : 'Wszystkie';
+                    let safeStats = String(item.stats || "").replace(/"/g, '&quot;');
+
+                    html += `
+                        <div class="list-item" style="flex-direction:column; align-items:stretch; border-left:3px solid #ffb300; padding:6px; background:#1a1a1a;">
+                            <div class="margo-tooltip-trigger toggle-seller-btn" data-name="${safeName.replace(/"/g, '&quot;')}" data-stats="${safeStats}" data-index="eq_${index}" style="cursor:pointer;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; pointer-events:none;">
+                                    <div style="color:#ffb300; font-weight:bold; font-size:11px; text-decoration:underline;">${safeName}</div>
+                                    <div style="color:#aaa; font-size:10px;">Lvl: <b style="color:#fff;">${safeLvl}</b></div>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; pointer-events:none;">
+                                    <div style="color:#888; font-size:9px;">Typ: ${safeType}</div>
+                                    <div style="color:#00acc1; font-size:9px;">${safeReqp}</div>
+                                </div>
+                            </div>
+                            <div id="seller_info_eq_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px;"></div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
+            } catch (e) {
+                console.error("Błąd rysowania Ekwipunku (Radar):", e);
+                let container = document.getElementById('eqListContent');
+                if (container) container.innerHTML = '<div style="padding:10px; color:#ff5252; text-align:center;">Wystąpił błąd ładowania przedmiotów. Zerknij do konsoli (F12).</div>';
+            }
+        };
+
+        if (document.getElementById('eqTypeFilter')) {
+            window.renderEqItems(document.getElementById('eqTypeFilter').value);
+        }
 
                 // Sortowanie malejąco po levelu (od najwyższego na górze)
                 filtered.sort((a, b) => (parseInt(b.level) || 0) - (parseInt(a.level) || 0));
@@ -6909,7 +6940,7 @@ window.toggleTeleportLock = function(city, isChecked) {
         document.body.appendChild(tt);
     }
 
-   // Wyświetlanie tooltipa
+ // Wyświetlanie tooltipa
     document.addEventListener('mouseover', (e) => {
         if (e.target && e.target.classList.contains('margo-tooltip-trigger')) {
             let tt = document.getElementById('customMargoTooltip');
@@ -6917,42 +6948,33 @@ window.toggleTeleportLock = function(city, isChecked) {
             let rawStats = e.target.getAttribute('data-stats');
             
             if (tt && rawStats) {
-                // Odcięcie nazwy przedmiotu, by się nie dublowała
                 let desc = rawStats.replace(name, '').trim();
                 
-                // 1. Ochrona słów: Koloruje tylko SAMODZIELNE słowa rzadkości (nigdy w środku "Unikatowy"!)
-                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Pospolity)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#b0bec5; font-weight:bold;">$1</span><br>');
-                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Unikat)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#fbc02d; font-weight:bold;">$1</span><br>');
-                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Heroik)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#29b6f6; font-weight:bold;">$1</span><br>');
-                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Legendarny)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/g, '<br><span style="color:#ef5350; font-weight:bold;">$1</span><br>');
+                // Rzadkości w różnych odmianach (od teraz podświetli i "Unikat", i "Unikatowy")
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Pospolity)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/gi, '<br><span style="color:#b0bec5; font-weight:bold;">$1</span><br>');
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Unikat|Unikatowy)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/gi, '<br><span style="color:#fbc02d; font-weight:bold;">$1</span><br>');
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Heroik|Heroiczny)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/gi, '<br><span style="color:#29b6f6; font-weight:bold;">$1</span><br>');
+                desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Legendarny)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/gi, '<br><span style="color:#ef5350; font-weight:bold;">$1</span><br>');
 
-                // 2. Wymuszanie nowej linii przed każdą statystyką (ponieważ baza przesyła to jako jeden wielki ciąg)
                 const statKeywords = [
                     "Typ:", "Obrażenia", "Cios krytyczny", "Siła", "Zręczność", "Intelekt", "Energia", "Mana", 
                     "Pancerz", "Blok", "Unik", "Życie", "Odporność na", "Wiąże", "Spowalnia", "Zmniejsza", "Przebicie", 
                     "Pojemność", "Ilość:", "Teleportuje", "Leczy", "Przywraca", "Niszczy", "Szansa na", 
                     "Podczas ataku", "Dodatkowe", "Absorbuje", "Wymagany poziom:", "Wymagana profesja:", 
-                    "Wartość:", "Zadaje", "Obniża"
+                    "Wartość:", "Zadaje", "Obniża", "Związany"
                 ];
                 
                 statKeywords.forEach(key => {
-                    // Dodaje nową linię, upewniając się, że jej wcześniej tam nie było
                     let regex = new RegExp(`(?<!>\\s*)(${key})`, 'g');
                     desc = desc.replace(regex, '<br>$1');
                 });
 
-                // Czystka: usuwanie znaków nowej linii z samego początku tekstu
                 desc = desc.replace(/^(<br>\s*)+/, '');
-
-                // 3. Kolorowanie wartości (Szare nagłówki, zielone plusy, żółte monety)
                 desc = desc.replace(/(Wymagany poziom:|Wymagana profesja:|Typ:|Wartość:)/g, '<span style="color:#888;">$1</span>');
                 desc = desc.replace(/(\+[0-9]+(?:.[0-9]+)?%?)/g, '<span style="color:#66bb6a; font-weight:bold;">$1</span>');
                 desc = desc.replace(/(Wartość:\s*<\/span>)([0-9\.\s]+k?)/g, '$1<span style="color:#ffca28;">$2</span>');
-                
-                // Czystka: usuwanie wielokrotnych pustych linii
                 desc = desc.replace(/(<br>\s*){2,}/g, '<br>');
 
-                // Zbudowanie pięknego HTML
                 let html = `<div style="color:#ffca28; font-weight:bold; font-size:12px; border-bottom:1px solid #443c2c; padding-bottom:4px; margin-bottom:4px; text-align:center; text-shadow:1px 1px 0 #000;">${name}</div>`;
                 html += `<div style="color:#ddd; font-size:10px; line-height:1.6;">${desc}</div>`;
                 
