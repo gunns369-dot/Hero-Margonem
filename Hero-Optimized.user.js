@@ -7128,7 +7128,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             
             if (window.autoSellState && window.autoSellState.active) return; // Priorytety (Sprzedaż ważniejsza)
 
-       // 1. Sprawdzanie mikstur
+      // 1. Sprawdzanie mikstur
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {})
                   .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
@@ -7149,7 +7149,10 @@ window.toggleTeleportLock = function(city, isChecked) {
                     
                     let maxhp = Engine.hero.d.maxhp || 1000;
                     let currentLvl = Engine.hero.d.lvl || 1;
-                    let targetHeal = Math.floor(maxhp * 0.50); // Szuka potki leczącej min. 50% max HP
+                    
+                    // ZMIANA ZGODNIE Z TWOJĄ LOGIKĄ: Szukamy potki, która na JEDNO użycie leczy ~30% HP 
+                    // (np. dla 7200 HP, cel to ~2160 HP. Jedna paczka uleczy ponad 10 000 HP!)
+                    let targetHeal = Math.floor(maxhp * 0.30); 
                     let currMap = Engine.map.d.name;
                     
                     let availablePotions = [];
@@ -7164,16 +7167,15 @@ window.toggleTeleportLock = function(city, isChecked) {
 
                         if (k.items) {
                             k.items.forEach(i => {
-                                // ODCZYT SUROWYCH DANYCH Z SILNIKA GRY (i.stat)
                                 let statString = (i.stat || i.stats || i.tooltip_text || i.raw_detected_text || i.name || "").toLowerCase();
                                 
-                                // Weryfikacja levelu
+                                // Weryfikacja levelu (nie kupi niczego, czego nie możesz założyć)
                                 let itemLvl = i.lvl || 1;
                                 let lvlMatch = statString.match(/reqlvl[=:](\d+)/) || statString.match(/poziom:\s*(\d+)/);
                                 if (lvlMatch) itemLvl = parseInt(lvlMatch[1]);
-                                if (itemLvl > currentLvl) return; // Zbyt wysoki level
+                                if (itemLvl > currentLvl) return;
 
-                                // Odczyt punktów leczenia (czyta "leczy=500" oraz "leczy 500 punktów")
+                                // Odczyt punktów leczenia na pojedyncze użycie
                                 let healAmount = 0;
                                 let healMatch = statString.match(/leczy[=:](\d+)/) || statString.match(/leczy\s+([0-9\s]+)\s+punkt/);
                                 if (healMatch) healAmount = parseInt(healMatch[1].replace(/\s/g, ''));
@@ -7190,15 +7192,9 @@ window.toggleTeleportLock = function(city, isChecked) {
                     });
 
                     if (availablePotions.length > 0) {
+                        // INTELIGENTNE SORTOWANIE: Znajduje potkę, której leczenie jest najbliższe wartości 30% max HP
                         availablePotions.sort((a, b) => {
-                            let aSuffices = a.heal >= targetHeal;
-                            let bSuffices = b.heal >= targetHeal;
-                            
-                            // Najpierw te, co leczą co najmniej 50% HP. Potem najmniejsze z nich.
-                            if (aSuffices && !bSuffices) return -1;
-                            if (!aSuffices && bSuffices) return 1;
-                            if (aSuffices && bSuffices) return a.heal - b.heal; 
-                            return b.heal - a.heal; // Jeśli żadna nie leczy 50%, weź po prostu największą dostępną
+                            return Math.abs(a.heal - targetHeal) - Math.abs(b.heal - targetHeal);
                         });
 
                         let bestChoice = availablePotions[0];
@@ -7209,7 +7205,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                         window.isRushing = true;
                         
                         let stacksToBuy = botSettings.autopot.stacks || 14;
-                        let msg = `🧪 Analiza... Cel: Min. ${targetHeal} HP. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name}. Kupuję ${stacksToBuy} staków!`;
+                        let msg = `🧪 Analiza... Cel: ~${targetHeal} HP na użycie. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name}. Kupuję ${stacksToBuy} staków!`;
                         if (window.logHero) window.logHero(msg, "#e91e63");
                         if (window.logExp) window.logExp(msg, "#e91e63");
                     } else {
