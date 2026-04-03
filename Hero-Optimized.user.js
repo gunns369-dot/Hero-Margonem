@@ -281,21 +281,30 @@
             }
             this.kupcy = merchants;
         },
-    parseEq: function(rawEq) {
+   parseEq: function(rawEq) {
             let items = [];
             for (let itemUrl in rawEq) {
                 let itemData = rawEq[itemUrl];
                 if (itemData.required_level) {
                     let cleanName = itemData.name.split(" Typ:")[0].split(" Pospolity")[0].trim();
+                    let fullStats = itemData.tooltip_text || itemData.raw_detected_text || itemData.name || "";
                     
-                    // Zapisujemy cały opis statystyk do podglądu (tooltipa)
-                    let fullStats = itemData.tooltip_text || itemData.raw_detected_text || itemData.name;
+                    // --- INTELIGENTNE ODCZYTYWANIE TYPU Z OPISU (TOOLTIPA) ---
+                    let detectedType = itemData.slot_type || "Nieznany";
+                    let typeMatch = fullStats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ\s]+?)(?:<br>|\n|<|$)/i);
+                    
+                    if (typeMatch && typeMatch[1]) {
+                        detectedType = typeMatch[1].trim();
+                    }
+                    
+                    // Upiększenie: zawsze zaczynamy typ od wielkiej litery (np. "buty" -> "Buty")
+                    detectedType = detectedType.charAt(0).toUpperCase() + detectedType.slice(1).toLowerCase();
                     
                     items.push({
                         name: cleanName,
                         level: itemData.required_level,
                         prof: itemData.allowed_professions || [],
-                        type: itemData.slot_type || "nieznany",
+                        type: detectedType,
                         url: itemUrl,
                         stats: fullStats
                     });
