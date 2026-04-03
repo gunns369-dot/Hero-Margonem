@@ -7741,7 +7741,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         }, 500);
 
-    // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar - Zbiorczy) ---
+  // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar - Zbiorczy) ---
         window.alertedPlayersList = window.alertedPlayersList || new Set();
 
         setInterval(() => {
@@ -7771,7 +7771,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (!currentIds.has(id)) window.alertedPlayersList.delete(id);
                 }
 
-                // Zbieramy NOWYCH graczy do tablicy, zamiast wysyłać alert od razu
+                // Zbieramy NOWYCH graczy do tablicy
                 let newPlayers = [];
                 players.forEach(p => {
                     if (!window.alertedPlayersList.has(p.id)) {
@@ -7780,28 +7780,25 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     }
                 });
 
-                // Jeśli znaleziono jakichkolwiek nowych graczy - wysyłamy JEDEN zbiorczy alert
+                // Jeśli znaleziono jakichkolwiek nowych graczy
                 if (newPlayers.length > 0) {
                     let msgTitle = newPlayers.length === 1 ? `👁️ Wykryto Gracza!` : `👁️ Wykryto Graczy (${newPlayers.length})!`;
                     
-                    // Tworzymy listę nicków, np.: "Gracz1 (50lvl), Gracz2 (60lvl)"
-                    let msgBody = newPlayers.map(p => `${p.nick} (${p.lvl}lvl)`).join(', ');
+                    // Formatowanie do powiadomienia w Windows (jeden pod drugim z myślnikiem)
+                    let msgBody = newPlayers.map(p => `- ${p.nick} (${p.lvl} lvl)`).join('\n');
                     
-                    // 1. Log w panelu
-                    if (window.logExp) window.logExp(`👁️ Wykryto obcych: ${msgBody}`, "#ffb300");
+                    // Formatowanie do logów HTML w bocznym panelu bota
+                    let logBody = newPlayers.map(p => `${p.nick} (${p.lvl} lvl)`).join('<br> &nbsp;&nbsp;&nbsp; ↳ ');
+                    
+                    // 1. Log w panelu (bez dźwięku!)
+                    if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
 
-                    // 2. Dźwięk (jedno piknięcie dla całej grupy)
-                    try { 
-                        let audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg'); 
-                        audio.play(); 
-                    } catch(e) {}
-
-                    // 3. Zbiorcze powiadomienie w przeglądarce
+                    // 2. Zbiorcze powiadomienie w przeglądarce
                     if (Notification.permission === "granted") {
                         new Notification(msgTitle, { body: msgBody });
                     }
 
-                    // 4. Zatrzymanie bota (tylko raz dla całej grupy)
+                    // 3. Zatrzymanie bota (tylko raz dla całej grupy)
                     if (botSettings.exp.playerAlertStopBot) {
                         if (typeof stopPatrol === 'function') stopPatrol(true); 
                         
