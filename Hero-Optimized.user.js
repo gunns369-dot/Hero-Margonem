@@ -1977,7 +1977,7 @@ function autoDetectEngineData() {
         }
     };
 
-    window.checkRushArrival = function() {
+   window.checkRushArrival = function() {
         if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
         let currentSysMap = lastMapName;
         if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
@@ -2002,7 +2002,7 @@ function autoDetectEngineData() {
             if (!isMoving) {
                 if (cx === window.rushLastX && cy === window.rushLastY) {
                     stuckCount++;
-                    if (stuckCount > 6) { // Postać zacięła się w połowie drogi na 3 sekundy
+                    if (stuckCount > 6) { // Postać zacięła się w połowie drogi
                         safeGoTo(door.x, door.y, false);
                         stuckCount = 0;
                     }
@@ -2020,7 +2020,6 @@ function autoDetectEngineData() {
             // Jeśli bot stoi tu bezczynnie ponad 5 sekund i gra nie przeładowała mapy
             if (Date.now() - window.rushGatewayArrivalTime > 5000) {
                 if (window.logHero) window.logHero(`🚨 Brama zacięta! Odbiegam, by kliknąć ponownie...`, "#ff9800");
-                if (window.logExp) window.logExp(`🚨 Brama zacięta! Odbiegam, by kliknąć ponownie...`, "#ff9800");
                 
                 // Odbiegamy lekko w bok
                 let stepX = Math.max(0, cx + (Math.random() > 0.5 ? 2 : -2));
@@ -2031,76 +2030,11 @@ function autoDetectEngineData() {
                 stuckCount = -4; // Wymusza odczekanie sekundy zanim bot znów strzeli w bramę
             } else if (Date.now() - window.rushGatewayArrivalTime > 2000) {
                  // Szybkie awaryjne szturchnięcie wejścia serwerowo
-                 window._g('walk');
+                 if(typeof window._g === 'function') window._g('walk');
             }
         }
         
         rushInterval = setTimeout(window.checkRushArrival, 500);
-    };
-
-    window.checkRushArrival = function() {
-        if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
-        let currentSysMap = lastMapName;
-        if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
-
-        let nextMap = window.rushNextMap;
-        if (!nextMap) return;
-
-        let tp = ZAKONNICY[currentSysMap];
-        let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-        if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
-
-        if (!door) return;
-
-        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-        let dist = Math.abs(cx - door.x) + Math.abs(cy - door.y);
-
-        if (dist > 1) {
-            // SPRAWDZAMY CZY POSTAĆ WŁAŚNIE IDZIE
-            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-
-            if (!isMoving) {
-                stuckCount++;
-                // Jeśli stoi w miejscu przez co najmniej 2 sekundy (4x500ms), ponawia kliknięcie
-                if (stuckCount > 3) {
-                    safeGoTo(door.x, door.y, false);
-                    stuckCount = 0;
-                }
-            } else {
-                stuckCount = 0; // Jeśli idzie, zerujemy licznik zacięcia
-            }
-        }
-
-        rushInterval = setTimeout(window.checkRushArrival, 500);
-    };
-
-    window.checkRushArrival = function() {
-        if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
-        let currentSysMap = lastMapName;
-        if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
-
-        let nextMap = window.rushNextMap;
-        if (!nextMap) return;
-
-        let tp = ZAKONNICY[currentSysMap];
-        let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-        if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
-
-        if (!door) return;
-
-        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-        let dist = Math.abs(cx - door.x) + Math.abs(cy - door.y);
-
-        if (dist > 1) {
-            if (cx === lastX && cy === lastY) {
-                stuckCount++;
-                if (stuckCount > 6) { safeGoTo(door.x, door.y, false); stuckCount = 0; }
-            } else { stuckCount = 0; }
-        }
-        lastX = cx; lastY = cy;
-        rushInterval = setTimeout(window.checkRushArrival, 400);
     };
 
    // ==========================================
@@ -4269,10 +4203,10 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
         executePatrolStep();
     }
 
- function executePatrolStep() {
+function executePatrolStep() {
         if (!isPatrolling) return;
 
-        // 1. ZABEZPIECZENIE: Czekamy, aż mapa się w pełni załaduje
+        // 1. ZABEZPIECZENIE: Czekamy, aż mapa się w pełni załaduje po odświeżeniu
         if (typeof Engine === 'undefined' || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) {
             setTimeout(executePatrolStep, 500);
             return;
@@ -4283,7 +4217,7 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
         let hero = document.getElementById('selHero').value;
         let currentSysMap = Engine.map.d.name;
 
-        // 2. Jeśli bot po odświeżeniu/wczytaniu ma pustą listę kordów, a mapa nie jest sprawdzona - próbujemy ją załadować
+        // 2. Jeśli bot po odświeżeniu/wczytaniu ma pustą listę kordów, a mapa nie jest sprawdzona - odzyskujemy ją!
         if (currentCordsList.length === 0 && heroData[hero] && heroData[hero][currentSysMap]) {
              if (!checkedMapsThisSession.has(currentSysMap)) {
                  currentCordsList = [...heroData[hero][currentSysMap]];
@@ -4307,41 +4241,48 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
             if (!checkedMapsThisSession.has(currentSysMap)) { 
                 checkedMapsThisSession.add(currentSysMap); 
                 saveCheckedMaps(); 
-                window.logHero(`Odhaczono wszystkie kordy na: ${currentSysMap}`, "#8bc34a");
+                if (window.logHero) window.logHero(`Odhaczono wszystkie kordy na: ${currentSysMap}`, "#8bc34a");
             }
 
             if(hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0) {
                 let mapList = heroMapOrder[hero];
                 
-                // 3. SPRAWDZENIE CZY TO KONIEC CAŁEJ TRASY (Zamiast kręcić w kółko - ZATRZYMAJ)
-                if (checkedMapsThisSession.size >= mapList.length) {
-                    checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); 
+                // --- ZAKOŃCZENIE PATROLU PO OSTATNIEJ MAPIE ---
+                let nextRouteIndex = currentRouteIndex + 1;
+                
+                if (nextRouteIndex >= mapList.length) {
+                    checkedMapsThisSession.clear(); 
+                    saveCheckedMaps(); 
+                    currentRouteIndex = -1; 
+                    sessionStorage.removeItem('hero_route_index'); 
+                    
                     stopPatrol(true);
-                    window.logHero(`✅ CAŁY PATROL ZAKOŃCZONY (Sprawdzono wszystkie mapy z listy)!`, "#4caf50");
-                    heroAlert("✅ Trasa Herosa sprawdzona w całości! Patrol zatrzymany."); 
+                    if (window.logHero) window.logHero(`✅ CAŁY PATROL ZAKOŃCZONY!`, "#4caf50");
+                    if (typeof heroAlert === 'function') heroAlert("✅ Trasa Herosa sprawdzona w całości! Patrol zatrzymany."); 
                     return;
                 }
 
-                let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
                 let finalDestinationMap = mapList[nextRouteIndex];
-
-                window.logHero(`Zmieniam mapę. Obieram kurs na: [${finalDestinationMap}]`, "#00acc1");
+                if (window.logHero) window.logHero(`Zmieniam mapę. Obieram kurs na: [${finalDestinationMap}]`, "#00acc1");
                 
+                // Używamy niezawodnego silnika Rush do pokonania trasy
                 if (typeof window.rushToMap === 'function') {
                     window.rushToMap(finalDestinationMap, null, null, null, true);
                     return;
                 }
             }
 
-            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true);
-            window.logHero(`✅ Koniec trasy!`, "#4caf50");
-            heroAlert("✅ Koniec Trasy!"); return;
+            // Awaryjny Stop
+            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); 
+            stopPatrol(true);
+            if (window.logHero) window.logHero(`✅ Koniec trasy!`, "#4caf50");
+            return;
         }
 
         renderCordsList(patrolIndex);
         let target = currentCordsList[patrolIndex];
 
-        window.logHero(`Biegnę pod kord: [${target[0]}, ${target[1]}]`, "#d4af37");
+        if (window.logHero) window.logHero(`Biegnę pod kord: [${target[0]}, ${target[1]}]`, "#d4af37");
         safeGoTo(target[0], target[1], true);
         stuckCount = 0; clearTimeout(smoothPatrolInterval);
 
@@ -8046,4 +7987,38 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 };
             }
         }
+    // --- ŁATKA: EGZORCYZMY NA SKLONOWANYCH OKNACH I NAPRAWA PRZYCISKÓW ---
+        setTimeout(() => {
+            // 1. Usuwanie "duchów" - sklonowanych interfejsów, które blokowały przyciski
+            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI', 'heroTeleportsGUI'];
+            windowsToClean.forEach(id => {
+                let copies = document.querySelectorAll('#' + id);
+                if (copies.length > 1) {
+                    // Usuwamy wszystkie OPRÓCZ ostatniego (bo to ostatnie jest widoczne)
+                    for (let i = 0; i < copies.length - 1; i++) {
+                        copies[i].remove();
+                    }
+                }
+            });
+        }, 3000);
+
+        // 2. Kuloodporne podpięcie kliknięć (Nadpisuje stare, zepsute eventy)
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.closest('#btnOpenExpBase')) {
+                e.stopPropagation(); // Blokuje stare zepsute komendy
+                let p = document.getElementById('heroExpBaseGUI');
+                if (p) {
+                    p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+                    if (p.style.display === 'flex' && typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
+                }
+            }
+            if (e.target && e.target.closest('#btnOpenRecommendedExp')) {
+                e.stopPropagation();
+                let p = document.getElementById('heroExpRecGUI');
+                if (p) {
+                    p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+                    if (p.style.display === 'flex' && typeof window.renderRecommendedExp === 'function') window.renderRecommendedExp();
+                }
+            }
+        }, true);
 })(); // Koniec kodu
