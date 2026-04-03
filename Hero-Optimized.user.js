@@ -2668,11 +2668,23 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
                         <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                     </div>
-                    <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-bottom: 0;">
-                        ▼ ZAAWANSOWANE (Trasy / Alarm)
+             <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">
+                        ▼ ZAAWANSOWANE (Trasy / Alarm / Opcje walki)
                     </div>
                     <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
-                        <div style="display:flex; flex-direction:column; gap:6px;">
+                        <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
+                        <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
+                            <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}" style="background:#000;"></label>
+                            <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}" style="background:#000;"></label>
+                        </div>
+                        
+                        <label style="color:#a99a75; font-size:10px; margin-bottom:2px; display:block;">Atakowane potwory:</label>
+                        <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px; margin-bottom:6px;">
+                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
+                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
+                        </div>
+
+                        <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
                             <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
                                 <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
                             </label>
@@ -5323,15 +5335,25 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
     if (uncheckedMaps.length === 0) {
+        // SPRAWDZANIE BEZPIECZEŃSTWA MAPY (PvP)
+        // Engine.map.d.pvp === 2 oznacza czerwoną mapę (bezwarunkowe PvP)
+        if (Engine.map.d.pvp === 2 && mapsPool.length > 1) {
+            window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
+            let nextIdx = (mapsPool.indexOf(currMap) + 1) % mapsPool.length;
+            let safeMap = mapsPool[nextIdx];
+            
+            // Kasujemy z pamięci czas wyczyszczenia następnej mapy, więc bot od razu tam pobiegnie
+            if (safeMap) {
+                delete window.mapClearTimes[safeMap];
+                expMapTransitionCooldown = now + 500; 
+                return;
+            }
+        }
 
-        window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s...", "#ffb300");
-
-        expMapTransitionCooldown = now + 45000;
-
-        window.mapClearTimes = {};
-
+        window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s na resp...", "#ffb300");
+        expMapTransitionCooldown = now + 45000; 
+        window.mapClearTimes = {}; 
         return;
-
     }
 
 
