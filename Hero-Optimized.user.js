@@ -2665,9 +2665,13 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
                         <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
                     </div>
-                    <div style="margin-bottom:4px; text-align:center; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px;">
+                   <div style="margin-bottom:4px; text-align:center; background:#1a1a1a; border:1px solid #333; padding:4px; border-radius:2px; display:flex; flex-direction:column; gap:4px;">
                         <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
                             <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
+                        </label>
+                        <div style="border-top:1px solid #333; width:80%; margin:0 auto;"></div>
+                        <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Zatrzymuje bota i wywołuje alarm na pulpicie!">
+                            <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha (Zapadka)
                         </label>
                     </div>
                     <input type="hidden" id="expRange" value="999">
@@ -3084,6 +3088,17 @@ if (btnExp) {
         if (!botSettings.autopot) { botSettings.autopot = { enabled: false, stacks: 14 }; saveSettings(); }
         if (botSettings.exp.autoChangeRoute === undefined) { botSettings.exp.autoChangeRoute = false; saveSettings(); }
 
+        if (botSettings.exp.captchaAlert === undefined) { botSettings.exp.captchaAlert = true; saveSettings(); }
+
+        bindChange('captchaAlert', (e) => { 
+            botSettings.exp.captchaAlert = e.target.checked; 
+            saveSettings(); 
+            // Prośba o zgodę na powiadomienia Windows, jeśli zaznaczamy opcję pierwszy raz
+            if (e.target.checked && Notification.permission !== "granted" && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        });
+        
         bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
         bindChange('autopotEnabled', (e) => { botSettings.autopot.enabled = e.target.checked; saveSettings(); });
         bindChange('autohealThreshold', (e) => { botSettings.autoheal.threshold = parseInt(e.target.value) || 80; saveSettings(); });
@@ -7511,5 +7526,55 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }
         }, 300);
+    }
+    // --- DAEMON: DETEKCJA ZAPADKI (CAPTCHA) ---
+    if (!window.captchaDaemonInstalled) {
+        window.captchaDaemonInstalled = true;
+        window.captchaAlertTriggered = false;
+
+        setInterval(() => {
+            if (botSettings.exp && botSettings.exp.captchaAlert) {
+                // Skanowanie po słowach kluczowych Zapadki w wyskakujących oknach
+                let captchaNodes = Array.from(document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, div')).filter(el => {
+                    let t = el.innerText || "";
+                    return t.includes("Zapadka") && (t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Miłego dnia"));
+                });
+
+                // Szukanie okna systemowego
+                let isCaptchaActive = captchaNodes.length > 0 || document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"]') !== null;
+
+                if (isCaptchaActive && !window.captchaAlertTriggered) {
+                    window.captchaAlertTriggered = true;
+                    
+                    // Zatrzymujemy bota
+                    if (typeof stopPatrol === 'function') stopPatrol(true);
+
+                    // Odtwarzamy dźwięk alarmu
+                    try {
+                        let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
+                        audio.play();
+                        setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
+                    } catch(e) {}
+
+                    // Wymuszamy skupienie na karcie przeglądarki (Mruganie ikony na pasku zadań)
+                    window.focus();
+                    
+                    // Wyrzucamy natywne powiadomienie systemu (Windows/Mac) - wyświetla się NA WIERZCHU innych okien
+                    if (Notification.permission === "granted") {
+                        new Notification("🚨 ZAPADKA W MARGONEM!", {
+                            body: "Szybko! Wróć do gry i rozwiąż zagadkę, zanim administrator się zorientuje!",
+                            requireInteraction: true // Powiadomienie nie zniknie samo, dopóki w nie nie klikniesz
+                        });
+                    }
+
+                    if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                    if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                    
+                } else if (!isCaptchaActive && window.captchaAlertTriggered) {
+                    // Reset flagi, kiedy gracz rozwiąże zagadkę i zniknie ona z ekranu
+                    window.captchaAlertTriggered = false;
+                }
+            }
+        }, 1000);
     }
 })(); // Koniec kodu
