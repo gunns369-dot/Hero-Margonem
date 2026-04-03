@@ -7196,63 +7196,106 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         window.autoHealDaemonInstalled = true;
         window.lastHealTime = 0;
         window.isHealLocked = false;
-        window.isRegeneratingToFull = false; // Flaga trzymająca sesję leczenia
+        window.isRegeneratingToFull = false;
 
         function extractHeal(item) {
             if (typeof item.getLeczyStat === 'function') {
                 let v = item.getLeczyStat();
                 if (v) return v;
             }
-            let statStr = (item.stat || (item._cachedStats && item._cachedStats.stat) || "").toLowerCase();
-            let match = statStr.match(/leczy[=:](\d+)/) || statStr.match(/leczy\s+([0-9\s]+)\s+punkt/);
-            return match ? parseInt(match[1].replace(/\s/g, '')) : 0;
+            let statStr = (item.stat || (item.d && item.d.stat) || (item._cachedStats && item._cachedStats.stat) || "").toLowerCase();
+            
+            if (statStr.includes('fullheal') || statStr.includes('całe życie') || statStr.includes('całą energię')) return 999999;
+            if (statStr.includes('hot=')) return 0; 
+            
+            let match = statStr.match(/leczy[=:](\d+)/) || statStr.match(/leczy\s+([0-9\s]+)\s+punkt/) || statStr.match(/przywraca\s+([0-9\s]+)\s+punkt/);
+            if (match) return parseInt(match[1].replace(/\s/g, ''));
+            
+            let matchPct = statStr.match(/leczy\s*p[=:](\d+)/);
+            if (matchPct) {
+                let pct = parseInt(matchPct[1]);
+                let maxhp = parseInt(Engine.hero.d.maxhp) || 1000;
+                return Math.floor(maxhp * (pct / 100));
+            }
+            
+            return 0;
         }
 
         setInterval(() => {
-            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || window.isHealLocked) return;
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+
+            // Zabezpieczenie (Failsafe) przed zablokowaniem pętli przy lagu
+            if (window.isHealLocked && Date.now() > window.lastHealTime + 3000) {
+                window.isHealLocked = false;
+            }
+
+            if (window.isHealLocked) return;
             
-            // Jeśli autoheal wyłączony w opcjach, resetujemy sesję i wychodzimy
             if (!botSettings.autoheal || !botSettings.autoheal.enabled) {
                 window.isRegeneratingToFull = false;
                 return;
             }
             
             if (Engine.battle && Engine.battle.show) return;
-            if (Engine.dead || Engine.hero.d.dead) {
+            
+            // --- POGROMCA DUCHÓW (Naprawa błędu Margonem z zapominaniem ożywienia) ---
+            let isDead = Engine.dead || Engine.hero.d.dead === true || Engine.hero.d.dead === 1 || Engine.hero.d.dead === "1";
+            let deathWindowVisible = document.querySelector('.death-window, .dead-window, [data-wnd="dead"], .alert-window') !== null;
+            
+            if (isDead && !deathWindowVisible) {
+                // Jesteśmy "martwi" w kodzie, ale nie ma okna śmierci na ekranie - wymuszamy ożywienie!
+                isDead = false;
+                Engine.dead = false;
+                Engine.hero.d.dead = 0;
+            }
+
+            if (isDead) {
                 window.isRegeneratingToFull = false;
                 return;
             }
 
-            let hp = parseInt(Engine.hero.d.hp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
-            let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
+            // Kuloodporne czytanie HP (Rozwiązuje problem z zerem = false)
+            let hp = Engine.hero.d.hp !== undefined ? parseInt(Engine.hero.d.hp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
+            let maxhp = Engine.hero.d.maxhp !== undefined ? parseInt(Engine.hero.d.maxhp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
             if (!maxhp) return;
 
             let hpPercent = (hp / maxhp) * 100;
             let threshold = parseInt(botSettings.autoheal.threshold) || 80;
 
-            // --- KLUCZOWA LOGIKA SESJI ---
-            
-            // 1. Jeśli HP spadnie poniżej progu (np. 80%) -> Zaczynamy sesję "do pełna"
             if (hpPercent < threshold && !window.isRegeneratingToFull) {
                 window.isRegeneratingToFull = true;
-                if (window.logHero) window.logHero(`🩸 HP poniżej progu (${hpPercent.toFixed(0)}%). Rozpoczynam leczenie do 100%...`, "#ff5252");
+                if (window.logHero) window.logHero(`🩸 Krytyczne HP (${hpPercent.toFixed(0)}%). Leczę do pełna...`, "#ff5252");
             }
 
-            // 2. Jeśli jesteśmy w sesji leczenia, ale dobiliśmy do 99-100% -> Kończymy sesję
             if (window.isRegeneratingToFull && hpPercent >= 99) {
                 window.isRegeneratingToFull = false;
-                if (window.logHero) window.logHero(`💚 Osiągnięto pełne HP. Sesja leczenia zakończona.`, "#4caf50");
+                if (window.logHero) window.logHero(`💚 Zregenerowano siły. Wracam do akcji.`, "#4caf50");
                 return;
             }
 
-            // 3. Właściwe leczenie (tylko jeśli flaga sesji jest aktywna)
             if (window.isRegeneratingToFull && Date.now() > window.lastHealTime) {
-                let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : (Engine.items && Engine.items.d ? Engine.items.d : {});
+                let hItems = typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : (Engine.items && Engine.items.d ? Engine.items.d : {});
                 let items = Object.values(hItems);
-                let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16);
                 
+                let potions = items.filter(i => {
+                    let cl = Number(i?.cl || i?.d?.cl);
+                    let st = Number(i?.st || i?.d?.st);
+                    return st === 0 && cl === 16;
+                });
+                
+                let ignoreList = (botSettings.autoheal.ignoreItems || "").toLowerCase().split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                let unidList = (botSettings.autoheal.unidItems || "").toLowerCase().split('\n').map(s => s.trim()).filter(s => s.length > 0);
+
                 let validPotions = [];
                 potions.forEach(p => {
+                    let potName = (p._cachedStats?.name || p.name || p.d?.name || "").toLowerCase();
+                    
+                    if (ignoreList.some(ig => potName.includes(ig))) return;
+                    if (unidList.some(un => potName.includes(un))) return;
+
+                    let statStr = (p.stat || (p.d && p.d.stat) || (p._cachedStats && p._cachedStats.stat) || "").toLowerCase();
+                    if (statStr.includes('unid')) return; 
+
                     let heal = extractHeal(p);
                     if (heal > 0) validPotions.push({ pot: p, heal: heal });
                 });
@@ -7261,32 +7304,28 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.isHealLocked = true;
                     let missingHp = maxhp - hp;
                     
-                    // Wybieramy potkę najbliższą brakującemu życiu
                     validPotions.sort((a, b) => Math.abs(a.heal - missingHp) - Math.abs(b.heal - missingHp));
                     
                     let bestPot = validPotions[0].pot;
                     let healVal = validPotions[0].heal;
-                    let potName = bestPot._cachedStats?.name || bestPot.name || "Mikstura";
+                    let potId = bestPot.id || bestPot.d?.id;
                     
-                    // Użycie mikstury
-                    if (typeof Engine.items !== 'undefined' && typeof Engine.items.useItem === 'function') {
-                        Engine.items.useItem(bestPot.id);
-                    } else if (typeof Engine.heroEquipment.sendUseRequest === 'function') {
+                    if (typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.sendUseRequest === 'function') {
                         Engine.heroEquipment.sendUseRequest(bestPot);
+                    } else if (typeof Engine.items !== 'undefined' && typeof Engine.items.useItem === 'function') {
+                        Engine.items.useItem(potId);
                     } else {
-                        window._g(`moveitem&st=1&id=${bestPot.id}`);
+                        window._g(`moveitem&st=1&id=${potId}`);
                     }
                     
-                    // Aktualizacja HP w pamięci bota dla płynności
                     if (Engine.hero.d.hp !== undefined) Engine.hero.d.hp = Math.min(maxhp, hp + healVal);
                     if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + healVal);
                     
-                    window.lastHealTime = Date.now() + 1100; // Krótki cooldown między potkami
-                    setTimeout(() => { window.isHealLocked = false; }, 900);
+                    window.lastHealTime = Date.now() + 600; 
+                    setTimeout(() => { window.isHealLocked = false; }, 500);
                 } else {
-                    // Jeśli podczas sesji skończą się potki, wyłączamy flagę, by nie blokować bota
                     window.isRegeneratingToFull = false;
-                    if (window.logHero) window.logHero(`⚠️ Skończyły się mikstury! Nie mogę dobić do 100% HP.`, "#ffb300");
+                    if (window.logHero) window.logHero(`⚠️ Skończyło Ci się jedzenie w plecaku! (Sprawdź też listę ignorowanych)`, "#ffb300");
                 }
             }
         }, 350);
