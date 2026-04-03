@@ -7560,7 +7560,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         // Zmienne stanu (State Machine)
         window.__captchaPhase = "none"; 
-        window.__captchaLock = false; // Twarda blokada asynchroniczna
+        window.__captchaLock = false; 
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
 
@@ -7568,13 +7568,32 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
         
-        function humanClick(el) {
+        // Prawdziwa symulacja fizycznej myszki (Margonem NI tego wymaga)
+        async function humanClick(el) {
             if (!el) return;
             let target = el.closest('.button') || el;
+            
+            // Pobranie fizycznych koordynatów przycisku na ekranie
+            let rect = target.getBoundingClientRect();
+            let cx = rect.left + rect.width / 2;
+            let cy = rect.top + rect.height / 2;
+            
+            let evOpts = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, buttons: 1 };
+            
+            // Symulacja WCIŚNIĘCIA klawisza myszki
+            target.dispatchEvent(new MouseEvent('mousedown', evOpts));
+            target.dispatchEvent(new PointerEvent('pointerdown', evOpts));
+            
+            // Naturalny czas wciśnięcia przycisku przez człowieka (ok. 50-100ms)
+            await sleep(randomDelay(50, 100));
+            
+            // Symulacja PUSZCZENIA klawisza myszki i kliknięcia
+            target.dispatchEvent(new MouseEvent('mouseup', evOpts));
+            target.dispatchEvent(new PointerEvent('pointerup', evOpts));
+            target.dispatchEvent(new MouseEvent('click', evOpts));
+            
+            if (typeof target.click === 'function') target.click();
             if (window.jQuery) window.jQuery(target).trigger("click");
-            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
-                target.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window, buttons: 1 }));
-            });
         }
 
         // --- DETEKCJA OKIEN ---
@@ -7635,7 +7654,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 
                 for (const btn of targetAnswers) {
                     await sleep(randomDelay(600, 1200));
-                    humanClick(btn);
+                    await humanClick(btn);
                     if (window.logExp) window.logExp(`🖱️ Zaznaczono opcję: "${btn.innerText.trim()}"`, "#4caf50");
                 }
                 
@@ -7643,19 +7662,18 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 
                 if (confirmBtn) {
                     if (window.logExp) window.logExp("🖱️ Klikam [Potwierdzam]!", "#4caf50");
-                    humanClick(confirmBtn);
+                    await humanClick(confirmBtn);
                 }
                 // Czekamy aż okno faktycznie zniknie po potwierdzeniu
-                await sleep(randomDelay(1500, 2500));
+                await sleep(randomDelay(2500, 3500));
             } else {
                 if (window.logExp) window.logExp("❌ Brak opcji z gwiazdką. Zrób to ręcznie!", "#e53935");
-                window.__captchaPhase = "manual"; // Jeśli nie ma gwiazdek, zrzucamy odpowiedzialność na Ciebie
+                window.__captchaPhase = "manual"; 
             }
         }
 
         // --- ZSYNCHRONIZOWANA PĘTLA STRAŻNIKA ---
         setInterval(async () => {
-            // Pętla nie robi nic, jeśli brak opcji lub gdy zablokowana przez trwające zdarzenie asynchroniczne
             if (!botSettings.exp || (!botSettings.exp.captchaAlert && !botSettings.exp.autoSolveCaptcha)) return;
             if (window.__captchaLock) return;
 
@@ -7667,7 +7685,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (window.__captchaPhase !== "none") {
                     if (window.logExp) window.logExp("✅ Zapadka zniknęła z ekranu. Wznawiam procesy.", "#4caf50");
                     
-                    // Wznawianie
                     if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                         let btn = document.getElementById('btnStartExp');
                         if (btn) btn.click();
@@ -7684,14 +7701,20 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
             // Sytuacja 2: Zapadka pojawiła się pierwszy raz
             if (window.__captchaPhase === "none") {
-                window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
+                window.__captchaLock = true; 
                 window.__captchaPhase = "delaying";
                 
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling;
 
                 if (botSettings.exp.captchaAlert) {
-                    try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
+                    // Dźwięk skrócony do 2 sekund!
+                    try { 
+                        let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); 
+                        audio.play(); 
+                        setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 2000); 
+                    } catch(e) {}
+                    
                     window.focus();
                     if (Notification.permission === "granted") {
                         let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
@@ -7700,7 +7723,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
                 }
 
-                // Bezpieczne, nieprzerywane czekanie
                 if (window.logExp) window.logExp("⏳ [Humanizacja] Odczekuję losowo 3-5 sekund przed zatrzymaniem postaci...", "#ff9800");
                 await sleep(randomDelay(3000, 5000));
 
@@ -7718,34 +7740,32 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.__captchaPhase = "manual";
                 }
                 
-                window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
+                window.__captchaLock = false; 
                 return;
             }
 
             // Sytuacja 3: Jesteśmy w trybie Auto-Solvera i szukamy co kliknąć
             if (window.__captchaPhase === "solving") {
                 
-                // Priorytet 1: Pełne okno
                 if (fullWin) {
-                    window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
+                    window.__captchaLock = true; 
                     await solveFullCaptchaAsync(fullWin);
-                    window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
+                    window.__captchaLock = false; 
                     return;
                 }
 
-                // Priorytet 2: Tylko powiadomienie (Klikamy by otworzyć)
                 if (preWin && !fullWin) {
-                    window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
+                    window.__captchaLock = true; 
                     if (window.logExp) window.logExp("🤖 [Auto-Solver] Klikam 'Rozwiąż teraz'...", "#00e5ff");
-                    humanClick(preWin);
-                    // Czekamy krótką chwilę, aż po kliknięciu rozwinie się pełne okno
+                    await humanClick(preWin);
                     await sleep(randomDelay(1000, 2000));
-                    window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
+                    window.__captchaLock = false; 
                     return;
                 }
             }
 
         }, 500);
+
 
 
         // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
