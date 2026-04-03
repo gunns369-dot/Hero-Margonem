@@ -4874,70 +4874,62 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
 function runExpLogic() {
 
+  function runExpLogic() {
     if (!window.isExping) return;
-
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
 
-// --- 0. PRIORYTET: AUTO-SPRZEDAŻ I AUTO-POTY ---
-            // Jeśli plecak jest pełny lub brak potów, ta flaga zamraża całkowicie chodzenie na expa!
-            if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) {
-                return; // Bot stoi w miejscu, oddając kontrolę systemom miejskim
-            }
+    // --- 0. PRIORYTET: AUTO-SPRZEDAŻ I AUTO-POTY ---
+    if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) {
+        return; // Bot stoi w miejscu, oddając kontrolę systemom miejskim
+    }
 
-        // --- 1. ZABEZPIECZENIE PRZED ZACIĘCIEM W DRZWIACH (MAP COOLDOWN) ---
-            if (window.lastExpMap !== Engine.map.d.name) {
-                window.lastExpMap = Engine.map.d.name;
-                window.mapCooldown = Date.now() + 1500; // 1.5 sekundy przerwy po zmianie mapy
-                window.isRushing = false; // Bezwzględny reset stanu biegu
-                return; // Dajemy grze odetchnąć i załadować tekstury bez robienia spamu w logach
-            }
-            if (window.mapCooldown && Date.now() < window.mapCooldown) {
-                return; // Trwa blokada, czekamy
-            }
+    // --- 1. ZABEZPIECZENIE PRZED ZACIĘCIEM W DRZWIACH (MAP COOLDOWN) ---
+    if (window.lastExpMap !== Engine.map.d.name) {
+        window.lastExpMap = Engine.map.d.name;
+        window.mapCooldown = Date.now() + 1500; // 1.5 sekundy przerwy po zmianie mapy
+        window.isRushing = false; // Bezwzględny reset stanu biegu
+        return; // Dajemy grze odetchnąć i załadować tekstury bez robienia spamu w logach
+    }
+    if (window.mapCooldown && Date.now() < window.mapCooldown) {
+        return; // Trwa blokada, czekamy
+    }
 
-   // --- KONTROLA BERSERKA (Musi być sprawdzona PRZED komendą biegu) ---
-            const currMap = Engine.map.d.name;
-            const isExpMap = isMapInSelectedExpowisko(currMap);
-            setExpBerserkState(isExpMap);
-
-    // --- 2. RUCH NA EXPOWISKO ---
-            let mapOrder = botSettings.exp.mapOrder || [];
-            let targetExpMap = currMap;
-
-            if (mapOrder.length > 0) {
-                if (mapOrder.includes(currMap)) {
-                    targetExpMap = currMap;
-                } else {
-                    let closestObj = typeof getClosestExpMapPath === 'function' ? getClosestExpMapPath(currMap) : null;
-                    if (closestObj && closestObj.targetMap) {
-                        targetExpMap = closestObj.targetMap;
-                    } else {
-                        targetExpMap = mapOrder[0];
-                    }
-                }
-            }
-
-            if (currMap !== targetExpMap) {
-                let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
-                if (!currentlyRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
-                    if (typeof window.rushToMap === 'function') {
-                        window.rushToMap(targetExpMap);
-                    }
-                }
-                return; // Przerywa wykonywanie reszty skryptu podczas biegu (Dlatego przełącznik musi być wyżej!)
-            }
-
-            const now = Date.now();
-            const hero = Engine.hero.d;
-            const hx = hero.x;
-            const hy = hero.y;
-
-
+    // --- KONTROLA BERSERKA (Musi być sprawdzona PRZED komendą biegu) ---
+    const currMap = Engine.map.d.name;
     const isExpMap = isMapInSelectedExpowisko(currMap);
-
     setExpBerserkState(isExpMap);
 
+    // --- 2. RUCH NA EXPOWISKO ---
+    let mapOrder = botSettings.exp.mapOrder || [];
+    let targetExpMap = currMap;
 
+    if (mapOrder.length > 0) {
+        if (mapOrder.includes(currMap)) {
+            targetExpMap = currMap;
+        } else {
+            let closestObj = typeof getClosestExpMapPath === 'function' ? getClosestExpMapPath(currMap) : null;
+            if (closestObj && closestObj.targetMap) {
+                targetExpMap = closestObj.targetMap;
+            } else {
+                targetExpMap = mapOrder[0];
+            }
+        }
+    }
+
+    if (currMap !== targetExpMap) {
+        let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
+        if (!currentlyRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
+            if (typeof window.rushToMap === 'function') {
+                window.rushToMap(targetExpMap);
+            }
+        }
+        return; // Przerywa wykonywanie reszty skryptu podczas biegu (Dlatego przełącznik musi być wyżej!)
+    }
+
+    const now = Date.now();
+    const hero = Engine.hero.d;
+    const hx = hero.x;
+    const hy = hero.y;
 
     if (now < expLastActionTime) return;
 
