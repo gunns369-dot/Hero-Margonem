@@ -2659,25 +2659,16 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             </div>
                         </div>
                     </div>
-<label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
-                    <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
-                        <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
-                        <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
-                    </div>
-                    <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px;">
-                        <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
-                        <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
-                    </div>
              <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">
                         ▼ ZAAWANSOWANE (Trasy / Alarm / Opcje walki)
                     </div>
-                    <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
+               <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
                         <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                         <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
                             <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}" style="background:#000;"></label>
                             <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}" style="background:#000;"></label>
                         </div>
-                        
+
                         <label style="color:#a99a75; font-size:10px; margin-bottom:2px; display:block;">Atakowane potwory:</label>
                         <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px; margin-bottom:6px;">
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
@@ -2686,10 +2677,13 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 
                         <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
                             <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
-                                <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
+                                <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska
                             </label>
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Zatrzymuje bota i wywołuje alarm na pulpicie!">
                                 <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
+                            </label>
+                            <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy pojawi się gracz lub ktoś napisze do Ciebie">
+                                <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy / Nick
                             </label>
                         </div>
                     </div>
@@ -3120,9 +3114,9 @@ if (btnExp) {
         });
         if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
 
-        bindChange('playerAlert', (e) => { 
-            botSettings.exp.playerAlert = e.target.checked; 
-            saveSettings(); 
+        bindChange('playerAlert', (e) => {
+            botSettings.exp.playerAlert = e.target.checked;
+            saveSettings();
             // Ostrzeżenie i wymuszenie zgody na powiadomienia
             if (e.target.checked) {
                 if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
@@ -5352,18 +5346,18 @@ if (hx !== expLastX || hy !== expLastY) {
             window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
             let nextIdx = (mapsPool.indexOf(currMap) + 1) % mapsPool.length;
             let safeMap = mapsPool[nextIdx];
-            
+
             // Kasujemy z pamięci czas wyczyszczenia następnej mapy, więc bot od razu tam pobiegnie
             if (safeMap) {
                 delete window.mapClearTimes[safeMap];
-                expMapTransitionCooldown = now + 500; 
+                expMapTransitionCooldown = now + 500;
                 return;
             }
         }
 
         window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s na resp...", "#ffb300");
-        expMapTransitionCooldown = now + 45000; 
-        window.mapClearTimes = {}; 
+        expMapTransitionCooldown = now + 45000;
+        window.mapClearTimes = {};
         return;
     }
 
@@ -7489,7 +7483,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (botSettings.exp && botSettings.exp.captchaAlert) {
                 let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
                 let textMatch = false;
-                
+
                 if (!hasWindow) {
                     let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
                     for (let el of containers) {
@@ -7507,10 +7501,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (isCaptchaActive && !window.captchaAlertTriggered) {
                     window.captchaAlertTriggered = true;
                     if (typeof stopPatrol === 'function') stopPatrol(true);
-                    
+
                     try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
                     window.focus();
-                    
+
                     if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!", requireInteraction: true });
                     if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
                     if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
@@ -7554,7 +7548,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             let line = chatLines[i].innerText || chatLines[i].textContent || "";
                             // Pomijamy komunikaty systemowe i wiadomości wysłane przez nas samych
                             if (line.includes(`[System]`) || line.startsWith(`${myNick}:`)) continue;
-                            
+
                             if (line.toLowerCase().includes(myNick.toLowerCase())) {
                                 chatMessageFound = true;
                                 break;
@@ -7569,10 +7563,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (dangerDetected && !window.playerAlertTriggered) {
                     window.playerAlertTriggered = true;
                     if (typeof stopPatrol === 'function') stopPatrol(true); // Twarde zatrzymanie Bota
-                    
+
                     try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
                     window.focus();
-                    
+
                     let alertReason = playerFound ? `Wykryto gracza: ${playerFound}!` : `Ktoś wspomniał Twój nick na czacie!`;
                     if (Notification.permission === "granted") new Notification("👁️ OSTRZEŻENIE (EXP)!", { body: alertReason + " Zatrzymano bota.", requireInteraction: true });
                     if (window.logExp) window.logExp(`👁️ ${alertReason} Zatrzymano auto-exp!`, "#ffb300");
@@ -7581,6 +7575,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.playerAlertTriggered = false;
                 }
             }
-        }, 800); 
+        }, 800);
     }
 })(); // Koniec kodu
