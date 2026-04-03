@@ -3103,7 +3103,7 @@ if (btnExp) {
             p.style.display = p.style.display === 'none' ? 'block' : 'none'; 
         });
         
-    // Pętla milczącego ładownia profili (dla Auto-Expowiska)
+// Pętla milczącego ładownia profili (dla Auto-Expowiska)
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
             if(p) {
@@ -3124,13 +3124,12 @@ if (btnExp) {
                 saveSettings();
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
                 
-                setTimeout(() => {
-                    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
-                }, 100);
+                // Bezwarunkowe narysowanie zaktualizowanej trasy
+                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }
         };
 
-// Algorytm sztucznej inteligencji: Zmienia expowisko na najlepsze możliwe
+        // Algorytm sztucznej inteligencji: Zmienia expowisko na najlepsze możliwe
         window.checkAndLoadBestExpProfile = function(forceLoad = false) {
             if (!botSettings.exp.autoChangeRoute || !botSettings.expProfiles) return;
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.hero.d.lvl) return;
@@ -3151,8 +3150,7 @@ if (btnExp) {
             });
 
             if (bestProfile) {
-                let currentProfileName = botSettings.exp.activeProfileName || "";
-                if (forceLoad || currentProfileName !== bestProfile.name || !botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
+                if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || !botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
                     
                     let logMsg = `🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`;
                     if (window._lastExpLog !== logMsg || Date.now() - (window._lastExpLogTime || 0) > 2000) {
@@ -3163,9 +3161,6 @@ if (btnExp) {
                     
                     if (typeof stopPatrol === 'function') stopPatrol(true); 
                     window.autoLoadExpProfile(profIdx);
-                    
-                    // Wymusza narysowanie map natychmiast po załadowaniu!
-                    setTimeout(() => { if (typeof window.renderExpMaps === 'function') window.renderExpMaps(); }, 150);
                 }
             }
         };
@@ -3173,9 +3168,14 @@ if (btnExp) {
         // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
         let chkAutoChange = document.getElementById('autoChangeExpRoute');
         if (chkAutoChange) {
-            chkAutoChange.onchange = function(e) {
+            // Sklonowanie przycisku kasuje wszystkie stare eventy, by nie było podwójnych logów!
+            let newChk = chkAutoChange.cloneNode(true);
+            chkAutoChange.parentNode.replaceChild(newChk, chkAutoChange);
+            
+            newChk.addEventListener('change', function(e) {
                 botSettings.exp.autoChangeRoute = e.target.checked; 
                 saveSettings(); 
+                
                 if (e.target.checked) {
                     window.checkAndLoadBestExpProfile(true); 
                 } else {
@@ -3189,10 +3189,9 @@ if (btnExp) {
                     }
                 }
                 
-                setTimeout(() => {
-                    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
-                }, 150);
-            };
+                // Wymuszone odświeżenie okna od razu po akcji
+                if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+            });
         }
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry
         window.updateServerBerserk = function() {
