@@ -7558,8 +7558,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         window.playerAlertTriggered = false;
         window.lastChatLength = 0;
 
+       // Zmienne Auto-Solvera
         window.__captchaPhase = "none"; 
         window.__wasExpingBeforeCaptcha = false;
+        window.__wasPatrollingBeforeCaptcha = false; // <--- DODANA PAMIĘĆ PATROLU
 
         // --- FUNKCJE HUMANIZUJĄCE ---
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -7603,7 +7605,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (window.__captchaPhase !== "none") return;
             window.__captchaPhase = "handling_delay";
             
+            // Bot zapisuje sobie na karteczce, co dokładnie robił
             window.__wasExpingBeforeCaptcha = window.isExping;
+            window.__wasPatrollingBeforeCaptcha = window.isPatrolling; // <--- ZAPIS PATROLU
 
             // 1. NATYCHMIASTOWY ALARM I KLIKALNE POWIADOMIENIE PUSH
             if (botSettings.exp.captchaAlert) {
@@ -7718,11 +7722,22 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (!fullWin && !preWin) {
                 if (window.__captchaPhase === "full_handling" || window.__captchaPhase === "waiting_for_full" || window.__captchaPhase === "manual_waiting") {
                     if (window.logExp) window.logExp("✅ Zapadka zniknęła z ekranu. Bezpiecznie.", "#4caf50");
+                    if (window.logHero) window.logHero("✅ Zapadka zniknęła z ekranu. Bezpiecznie.", "#4caf50");
                     
+                    // A) Wznowienie EXPA
                     if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                         let btn = document.getElementById('btnStartExp');
                         if (btn) {
                             if (window.logExp) window.logExp("🚀 Wznawiam expienie...", "#4caf50");
+                            btn.click();
+                        }
+                    }
+                    
+                    // B) Wznowienie SZUKANIA HEROSÓW / ELIT (Patrol)
+                    if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
+                        let btn = document.getElementById('btnStartStop');
+                        if (btn) {
+                            if (window.logHero) window.logHero("🚀 Wznawiam patrol po zapadce...", "#4caf50");
                             btn.click();
                         }
                     }
