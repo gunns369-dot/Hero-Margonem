@@ -6481,120 +6481,95 @@ window.toggleTeleportLock = function(city, isChecked) {
                 `;
             }
             
-         window.renderEqItems = function(filterType = 'Wszystkie') {
-        try {
-            let container = document.getElementById('eqSuitableContainer');
-            if (!container) return;
+       window.renderEqItems = function(filterType = 'Wszystkie') {
+            try {
+                // PANCERNY KONTENER I BAZA
+                let container = document.getElementById('eqListContent');
+                if (!container) return;
 
-            if (typeof window.DatabaseModule === 'undefined' || !window.DatabaseModule.itemy || !Array.isArray(window.DatabaseModule.itemy)) {
-                container.innerHTML = '<div style="padding:10px; text-align:center; color:#ff5252;">Brak bazy danych sprzętu. Upewnij się, że Skrypt załadował bazę z serwera.</div>';
-                return;
-            }
-
-            // Bezpieczne pobranie danych postaci
-            let currentLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? parseInt(Engine.hero.d.lvl) : 1;
-            let currentProf = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.prof) ? Engine.hero.d.prof : 'w';
-            
-            let profMap = { 'w': 'Wojownik', 'm': 'Mag', 'p': 'Paladyn', 'h': 'Łowca', 't': 'Tropiciel', 'b': 'Tancerz Ostrzy' };
-            let profName = profMap[currentProf] || 'Wszystkie';
-            let safeFilterType = String(filterType || 'Wszystkie');
-
-            let filtered = window.DatabaseModule.itemy.filter(item => {
-                if (!item) return false;
-                
-                // Dopasowanie poziomu (-5 do obecnego poziomu gracza)
-                let itemLvl = parseInt(item.lvl) || 1;
-                let lvlMatch = itemLvl <= currentLvl && itemLvl >= (currentLvl - 5);
-                
-                // Dopasowanie profesji (Zabezpieczone przed błędami w bazie)
-                let profMatch = true;
-                if (item.reqp) {
-                    let reqpStr = String(item.reqp).toLowerCase();
-                    profMatch = reqpStr.includes(profName.toLowerCase()) || reqpStr.includes('wszystkie') || reqpStr === '';
+                if (typeof window.DatabaseModule === 'undefined' || !window.DatabaseModule.ekwipunek || !Array.isArray(window.DatabaseModule.ekwipunek)) {
+                    container.innerHTML = '<div style="padding:10px; text-align:center; color:#ff5252;">Baza danych ekwipunku ładuje się... Odczekaj chwilę.</div>';
+                    return;
                 }
+
+                // Odczyt postaci
+                let currentLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? parseInt(Engine.hero.d.lvl) : 1;
+                let currentProf = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.prof) ? Engine.hero.d.prof : 'w';
                 
-                // Dopasowanie typu
-                let typeMatch = safeFilterType.includes('Wszystkie') || String(item.type) === safeFilterType;
-                
-                return lvlMatch && profMatch && typeMatch;
-            });
+                let profMap = { 'w': 'wojownik', 'm': 'mag', 'p': 'paladyn', 'h': 'łowca', 't': 'tropiciel', 'b': 'tancerz ostrzy' };
+                let profName = profMap[currentProf] || 'wszystkie';
+                let safeFilterType = String(filterType || 'Wszystkie').toLowerCase();
 
-            // Sortowanie malejąco po levelu
-            filtered.sort((a, b) => (parseInt(b.lvl) || 0) - (parseInt(a.lvl) || 0));
-
-            let html = '';
-            filtered.forEach(item => {
-                let safeName = String(item.name || 'Nieznany przedmiot');
-                let safeType = String(item.type || 'Inne');
-                let safeLvl = item.lvl || 1;
-                let safeReqp = item.reqp || 'Wszystkie';
-
-                let tooltipHtml = `<div style="text-align:center; margin-bottom:4px; color:#ffb300; font-weight:bold;">[Ze Sklepu / Bazy]<br><span style="color:#fff;">${safeName}</span></div>`;
-                tooltipHtml += `<div style="color:#aaa; font-size:11px; margin-bottom:6px; text-align:center;">Typ: ${safeType}</div>`;
-                
-                let statsHtml = '';
-                let skipKeys = ['id', 'name', 'type', 'lvl', 'reqp', 'price', 'icon', 'loc', 'stat', 'cl', 'prc', 'st'];
-                
-                for (let key in item) {
-                    if (skipKeys.includes(key)) continue;
-                    let val = item[key];
-                    if (val === undefined || val === null || val === '') continue;
-
-                    let keyName = key;
-                    if (key === 'dmg') keyName = 'Obrażenia';
-                    else if (key === 'ac') keyName = 'Pancerz';
-                    else if (key === 'str') keyName = 'Siła';
-                    else if (key === 'dex') keyName = 'Zręczność';
-                    else if (key === 'int') keyName = 'Intelekt';
-                    else if (key === 'sa') keyName = 'Szybkość ataku';
-                    else if (key === 'crit') keyName = 'Cios krytyczny';
-                    else if (key === 'resfire') keyName = '<span style="color:#ff5252;">Od ognia</span>';
-                    else if (key === 'reslight') keyName = '<span style="color:#e040fb;">Od błyskawic</span>';
-                    else if (key === 'rescold') keyName = '<span style="color:#4fc3f7;">Od zimna</span>';
-                    else if (key === 'respoison') keyName = '<span style="color:#69f0ae;">Od trucizny</span>';
-                    else if (key === 'hp') keyName = 'Życie';
-                    else if (key === 'mana') keyName = 'Mana';
-                    else if (key === 'evade') keyName = 'Unik';
-                    else if (key === 'block') keyName = 'Blok';
-                    else if (key === 'pierce') keyName = 'Przebicie pancerza';
-                    else if (key === 'heal') keyName = 'Leczenie turowe';
-                    else if (key === 'absorb') keyName = 'Absorpcja fizyczna';
-                    else if (key === 'absorb_m') keyName = 'Absorpcja magiczna';
-
-                    let displayVal = val;
-                    if (typeof val === 'number' && val > 0 && !['dmg', 'resfire', 'reslight', 'rescold', 'respoison'].includes(key)) {
-                        displayVal = '+' + val;
+                // Inteligentne filtrowanie sprzętu
+                let filtered = window.DatabaseModule.ekwipunek.filter(item => {
+                    if (!item) return false;
+                    
+                    // Poziom: od (Lvl - 5) do Lvl obecnego
+                    let itemLvl = parseInt(item.level) || 1;
+                    let lvlMatch = itemLvl <= currentLvl && itemLvl >= (currentLvl - 5);
+                    
+                    // Profesja
+                    let profMatch = true;
+                    if (item.prof && Array.isArray(item.prof) && item.prof.length > 0) {
+                        let profArray = item.prof.map(p => String(p).toLowerCase());
+                        profMatch = profArray.some(p => p.includes(profName) || p.includes('wszystkie') || p.includes('każda'));
                     }
-                    statsHtml += `<div><b>${keyName}:</b> ${displayVal}</div>`;
-                }
+                    
+                    // Typ sprzętu (Zabezpieczone przed rozbieżnościami nazw w bazie)
+                    let itemTypeLower = String(item.type).toLowerCase();
+                    let typeMatch = false;
+                    
+                    if (safeFilterType === 'wszystkie') {
+                        typeMatch = true;
+                    } else if (safeFilterType === 'bro') {
+                        typeMatch = itemTypeLower.includes('ręczne') && !itemTypeLower.includes('dystansowe');
+                    } else if (safeFilterType === 'dystansowe') {
+                        typeMatch = itemTypeLower.includes('dystans') || itemTypeLower.includes('łuk');
+                    } else {
+                        typeMatch = itemTypeLower.includes(safeFilterType);
+                    }
+                    
+                    return lvlMatch && profMatch && typeMatch;
+                });
 
-                tooltipHtml += `<div style="color:#fff; font-size:11px;">${statsHtml}</div>`;
-                tooltipHtml += `<div style="margin-top:8px; font-size:10px; color:#888;">Profesja: ${safeReqp}<br>Poziom: ${safeLvl}</div>`;
-                
-                let safeTooltip = tooltipHtml.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                // Sortowanie malejąco po levelu (od najwyższego na górze)
+                filtered.sort((a, b) => (parseInt(b.level) || 0) - (parseInt(a.level) || 0));
 
-                html += `
-                    <div class="margo-tooltip-trigger" data-tooltip="${safeTooltip}" style="background:#1a1a1a; padding:6px; margin-bottom:4px; border:1px solid #333; border-left:3px solid #ffb300; cursor:help;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div style="color:#ffb300; font-weight:bold; font-size:12px; text-decoration:underline;">${safeName}</div>
-                            <div style="color:#aaa; font-size:11px;">Lvl: <b style="color:#fff;">${safeLvl}</b></div>
+                let html = '';
+                filtered.forEach(item => {
+                    let safeName = String(item.name || 'Nieznany przedmiot');
+                    let safeType = String(item.type || 'Inne');
+                    let safeLvl = item.level || 1;
+                    let safeReqp = (item.prof && item.prof.length > 0) ? item.prof.join(', ') : 'Wszystkie';
+                    let safeStats = String(item.stats || "").replace(/"/g, '&quot;');
+
+                    // Czysty, schludny Kafelek (Po najechaniu odpala się systemowy Tooltip)
+                    html += `
+                        <div class="list-item margo-tooltip-trigger" data-name="${safeName.replace(/"/g, '&quot;')}" data-stats="${safeStats}" style="flex-direction:column; align-items:stretch; cursor:help; border-left:3px solid #ffb300; padding:6px; background:#1a1a1a;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; pointer-events:none;">
+                                <div style="color:#ffb300; font-weight:bold; font-size:11px; text-decoration:underline;">${safeName}</div>
+                                <div style="color:#aaa; font-size:10px;">Lvl: <b style="color:#fff;">${safeLvl}</b></div>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; pointer-events:none;">
+                                <div style="color:#888; font-size:9px;">Typ: ${safeType}</div>
+                                <div style="color:#00acc1; font-size:9px;">${safeReqp}</div>
+                            </div>
                         </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
-                            <div style="color:#888; font-size:11px;">Typ: ${safeType}</div>
-                            <div style="color:#00acc1; font-size:10px;">${safeReqp}</div>
-                        </div>
-                    </div>
-                `;
-            });
+                    `;
+                });
 
-            container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
-        } catch (e) {
-            console.error("Błąd rysowania Ekwipunku (Radar):", e);
-            let container = document.getElementById('eqSuitableContainer');
-            if (container) container.innerHTML = '<div style="padding:10px; color:#ff5252; text-align:center;">Wystąpił błąd ładowania przedmiotów. Zerknij do konsoli (F12).</div>';
+                container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
+            } catch (e) {
+                console.error("Błąd rysowania Ekwipunku (Radar):", e);
+                let container = document.getElementById('eqListContent');
+                if (container) container.innerHTML = '<div style="padding:10px; color:#ff5252; text-align:center;">Wystąpił błąd ładowania przedmiotów. Zerknij do konsoli (F12).</div>';
+            }
+        };
+
+        // WYMUSZENIE NARYSOWANIA LISTY OD RAZU PO OTWARCIU ZAKŁADKI!
+        if (document.getElementById('eqTypeFilter')) {
+            window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
-    };
-
 // Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
         window.getBagInfo = function() {
             if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { free: 0, occupied: 0, total: 42 };
