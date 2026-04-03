@@ -7927,12 +7927,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     
                     window.stuckIdleCount++;
                     
-                    // Zwiększono czas cierpliwości bota do aż 8 sekund!
-                    if (window.stuckIdleCount >= 8) {
-                        if (window.logHero) window.logHero("🔄 [Anti-Stuck] Lekkie szturchnięcie po zacięciu...", "#00e5ff");
+                    // ZMNIEJSZONY CZAS: Interweniuje po 5 sekundach zamiast 8!
+                    if (window.stuckIdleCount >= 5) {
+                        if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Lekko odskakuję...", "#00e5ff");
                         
-                        // ZAPASOWE "SZTURCHNIĘCIE" (Zamiast wciskania bram z automatu)
-                        Engine.hero.autoGoTo({x: currentX, y: currentY});
+                        // ZAMIAST klikać pod siebie (co nic nie daje w drzwiach), robi realny krok w bok
+                        let stepX = Math.max(0, currentX + (Math.random() > 0.5 ? 1 : -1));
+                        let stepY = Math.max(0, currentY + (Math.random() > 0.5 ? 1 : -1));
+                        Engine.hero.autoGoTo({x: stepX, y: stepY});
 
                         if (typeof isPatrolling !== 'undefined' && isPatrolling && typeof window.executePatrolStep === 'function') {
                             setTimeout(() => window.executePatrolStep(), 1500);
