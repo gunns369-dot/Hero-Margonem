@@ -6481,99 +6481,120 @@ window.toggleTeleportLock = function(city, isChecked) {
                 `;
             }
             
-          window.renderEqItems = function(filterType = 'Wszystkie') {
-        let container = document.getElementById('eqSuitableContainer');
-        if (!container) return;
+         window.renderEqItems = function(filterType = 'Wszystkie') {
+        try {
+            let container = document.getElementById('eqSuitableContainer');
+            if (!container) return;
 
-        if (typeof window.DatabaseModule === 'undefined' || !window.DatabaseModule.itemy) {
-            container.innerHTML = '<div style="padding:10px; text-align:center; color:#ff5252;">Brak bazy danych sprzętu.</div>';
-            return;
-        }
-
-        let currentLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d.lvl : 1;
-        let currentProf = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d.prof : 'w';
-        
-        let profMap = { 'w': 'Wojownik', 'm': 'Mag', 'p': 'Paladyn', 'h': 'Łowca', 't': 'Tropiciel', 'b': 'Tancerz Ostrzy' };
-        let profName = profMap[currentProf] || 'Wszystkie';
-
-        let filtered = window.DatabaseModule.itemy.filter(item => {
-            // Dopasowanie poziomu (-5 do obecnego poziomu gracza)
-            let lvlMatch = item.lvl <= currentLvl && item.lvl >= currentLvl - 5;
-            // Dopasowanie profesji
-            let profMatch = !item.reqp || item.reqp.toLowerCase().includes(profName.toLowerCase());
-            // Dopasowanie typu
-            let typeMatch = filterType.includes('Wszystkie') || item.type === filterType;
-            
-            return lvlMatch && profMatch && typeMatch;
-        });
-
-        // Sortowanie malejąco po levelu
-        filtered.sort((a, b) => b.lvl - a.lvl);
-
-        let html = '';
-        filtered.forEach(item => {
-            // --- BUDOWANIE DYNAMICZNEGO TOOLTIPA ---
-            let tooltipHtml = `<div style="text-align:center; margin-bottom:4px; color:#ffb300; font-weight:bold;">[Ze Sklepu / Bazy]<br><span style="color:#fff;">${item.name}</span></div>`;
-            tooltipHtml += `<div style="color:#aaa; font-size:11px; margin-bottom:6px; text-align:center;">Typ: ${item.type}</div>`;
-            
-            let statsHtml = '';
-            // Ignorujemy klucze systemowe, interesują nas tylko statystyki bojowe
-            let skipKeys = ['id', 'name', 'type', 'lvl', 'reqp', 'price', 'icon', 'loc', 'stat', 'cl', 'prc', 'st'];
-            
-            for (let key in item) {
-                if (skipKeys.includes(key)) continue;
-                let val = item[key];
-                if (val === undefined || val === null || val === '') continue;
-
-                // Słownik tłumaczeń z bazy na j. polski
-                let keyName = key;
-                if (key === 'dmg') keyName = 'Obrażenia';
-                else if (key === 'ac') keyName = 'Pancerz';
-                else if (key === 'str') keyName = 'Siła';
-                else if (key === 'dex') keyName = 'Zręczność';
-                else if (key === 'int') keyName = 'Intelekt';
-                else if (key === 'sa') keyName = 'Szybkość ataku';
-                else if (key === 'crit') keyName = 'Cios krytyczny';
-                else if (key === 'resfire') keyName = '<span style="color:#ff5252;">Od ognia</span>';
-                else if (key === 'reslight') keyName = '<span style="color:#e040fb;">Od błyskawic</span>';
-                else if (key === 'rescold') keyName = '<span style="color:#4fc3f7;">Od zimna</span>';
-                else if (key === 'respoison') keyName = '<span style="color:#69f0ae;">Od trucizny</span>';
-                else if (key === 'hp') keyName = 'Życie';
-                else if (key === 'mana') keyName = 'Mana';
-                else if (key === 'evade') keyName = 'Unik';
-                else if (key === 'block') keyName = 'Blok';
-                else if (key === 'pierce') keyName = 'Przebicie pancerza';
-                else if (key === 'heal') keyName = 'Leczenie turowe';
-                else if (key === 'absorb') keyName = 'Absorpcja fizyczna';
-                else if (key === 'absorb_m') keyName = 'Absorpcja magiczna';
-
-                // Ładne formatowanie (dodawanie plusów przed wartościami dodatnimi)
-                let displayVal = val;
-                if (typeof val === 'number' && val > 0 && !['dmg', 'resfire', 'reslight', 'rescold', 'respoison'].includes(key)) displayVal = '+' + val;
-                
-                statsHtml += `<div><b>${keyName}:</b> ${displayVal}</div>`;
+            if (typeof window.DatabaseModule === 'undefined' || !window.DatabaseModule.itemy || !Array.isArray(window.DatabaseModule.itemy)) {
+                container.innerHTML = '<div style="padding:10px; text-align:center; color:#ff5252;">Brak bazy danych sprzętu. Upewnij się, że Skrypt załadował bazę z serwera.</div>';
+                return;
             }
 
-            tooltipHtml += `<div style="color:#fff; font-size:11px;">${statsHtml}</div>`;
-            tooltipHtml += `<div style="margin-top:8px; font-size:10px; color:#888;">Profesja: ${item.reqp || 'Wszystkie'}<br>Poziom: ${item.lvl}</div>`;
+            // Bezpieczne pobranie danych postaci
+            let currentLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? parseInt(Engine.hero.d.lvl) : 1;
+            let currentProf = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.prof) ? Engine.hero.d.prof : 'w';
             
-            let safeTooltip = tooltipHtml.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+            let profMap = { 'w': 'Wojownik', 'm': 'Mag', 'p': 'Paladyn', 'h': 'Łowca', 't': 'Tropiciel', 'b': 'Tancerz Ostrzy' };
+            let profName = profMap[currentProf] || 'Wszystkie';
+            let safeFilterType = String(filterType || 'Wszystkie');
 
-            // --- CZYSTY INTERFEJS KAFELKA (Bez zbędnych procentów i pustych slotów) ---
-            html += `
-                <div class="margo-tooltip-trigger" data-tooltip="${safeTooltip}" style="background:#1a1a1a; padding:6px; margin-bottom:4px; border:1px solid #333; border-left:3px solid #ffb300; cursor:help;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div style="color:#ffb300; font-weight:bold; font-size:12px; text-decoration:underline;">${item.name}</div>
-                        <div style="color:#aaa; font-size:11px;">Lvl: <b style="color:#fff;">${item.lvl}</b></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
-                        <div style="color:#888; font-size:11px;">Typ: ${item.type}</div>
-                        <div style="color:#00acc1; font-size:10px;">${item.reqp || 'Wszystkie'}</div>
-                    </div>
-                </div>
-            `;
-        });
+            let filtered = window.DatabaseModule.itemy.filter(item => {
+                if (!item) return false;
+                
+                // Dopasowanie poziomu (-5 do obecnego poziomu gracza)
+                let itemLvl = parseInt(item.lvl) || 1;
+                let lvlMatch = itemLvl <= currentLvl && itemLvl >= (currentLvl - 5);
+                
+                // Dopasowanie profesji (Zabezpieczone przed błędami w bazie)
+                let profMatch = true;
+                if (item.reqp) {
+                    let reqpStr = String(item.reqp).toLowerCase();
+                    profMatch = reqpStr.includes(profName.toLowerCase()) || reqpStr.includes('wszystkie') || reqpStr === '';
+                }
+                
+                // Dopasowanie typu
+                let typeMatch = safeFilterType.includes('Wszystkie') || String(item.type) === safeFilterType;
+                
+                return lvlMatch && profMatch && typeMatch;
+            });
 
+            // Sortowanie malejąco po levelu (od najwyższego do najniższego)
+            filtered.sort((a, b) => (parseInt(b.lvl) || 0) - (parseInt(a.lvl) || 0));
+
+            let html = '';
+            filtered.forEach(item => {
+                // Konwersja na String, by zapobiec błędom "undefined"
+                let safeName = String(item.name || 'Nieznany przedmiot');
+                let safeType = String(item.type || 'Inne');
+                let safeLvl = item.lvl || 1;
+                let safeReqp = item.reqp || 'Wszystkie';
+
+                let tooltipHtml = `<div style="text-align:center; margin-bottom:4px; color:#ffb300; font-weight:bold;">[Ze Sklepu / Bazy]<br><span style="color:#fff;">${safeName}</span></div>`;
+                tooltipHtml += `<div style="color:#aaa; font-size:11px; margin-bottom:6px; text-align:center;">Typ: ${safeType}</div>`;
+                
+                let statsHtml = '';
+                let skipKeys = ['id', 'name', 'type', 'lvl', 'reqp', 'price', 'icon', 'loc', 'stat', 'cl', 'prc', 'st'];
+                
+                for (let key in item) {
+                    if (skipKeys.includes(key)) continue;
+                    let val = item[key];
+                    if (val === undefined || val === null || val === '') continue;
+
+                    let keyName = key;
+                    if (key === 'dmg') keyName = 'Obrażenia';
+                    else if (key === 'ac') keyName = 'Pancerz';
+                    else if (key === 'str') keyName = 'Siła';
+                    else if (key === 'dex') keyName = 'Zręczność';
+                    else if (key === 'int') keyName = 'Intelekt';
+                    else if (key === 'sa') keyName = 'Szybkość ataku';
+                    else if (key === 'crit') keyName = 'Cios krytyczny';
+                    else if (key === 'resfire') keyName = '<span style="color:#ff5252;">Od ognia</span>';
+                    else if (key === 'reslight') keyName = '<span style="color:#e040fb;">Od błyskawic</span>';
+                    else if (key === 'rescold') keyName = '<span style="color:#4fc3f7;">Od zimna</span>';
+                    else if (key === 'respoison') keyName = '<span style="color:#69f0ae;">Od trucizny</span>';
+                    else if (key === 'hp') keyName = 'Życie';
+                    else if (key === 'mana') keyName = 'Mana';
+                    else if (key === 'evade') keyName = 'Unik';
+                    else if (key === 'block') keyName = 'Blok';
+                    else if (key === 'pierce') keyName = 'Przebicie pancerza';
+                    else if (key === 'heal') keyName = 'Leczenie turowe';
+                    else if (key === 'absorb') keyName = 'Absorpcja fizyczna';
+                    else if (key === 'absorb_m') keyName = 'Absorpcja magiczna';
+
+                    let displayVal = val;
+                    if (typeof val === 'number' && val > 0 && !['dmg', 'resfire', 'reslight', 'rescold', 'respoison'].includes(key)) {
+                        displayVal = '+' + val;
+                    }
+                    statsHtml += `<div><b>${keyName}:</b> ${displayVal}</div>`;
+                }
+
+                tooltipHtml += `<div style="color:#fff; font-size:11px;">${statsHtml}</div>`;
+                tooltipHtml += `<div style="margin-top:8px; font-size:10px; color:#888;">Profesja: ${safeReqp}<br>Poziom: ${safeLvl}</div>`;
+                
+                let safeTooltip = tooltipHtml.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+                html += `
+                    <div class="margo-tooltip-trigger" data-tooltip="${safeTooltip}" style="background:#1a1a1a; padding:6px; margin-bottom:4px; border:1px solid #333; border-left:3px solid #ffb300; cursor:help;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="color:#ffb300; font-weight:bold; font-size:12px; text-decoration:underline;">${safeName}</div>
+                            <div style="color:#aaa; font-size:11px;">Lvl: <b style="color:#fff;">${safeLvl}</b></div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                            <div style="color:#888; font-size:11px;">Typ: ${safeType}</div>
+                            <div style="color:#00acc1; font-size:10px;">${safeReqp}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
+        } catch (e) {
+            console.error("Błąd rysowania Ekwipunku (Radar):", e);
+            let container = document.getElementById('eqSuitableContainer');
+            if (container) container.innerHTML = '<div style="padding:10px; color:#ff5252; text-align:center;">Wystąpił błąd ładowania przedmiotów. Zerknij do konsoli (F12).</div>';
+        }
+    };
         container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
     };
             
