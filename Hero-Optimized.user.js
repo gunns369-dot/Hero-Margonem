@@ -17,17 +17,17 @@
         scanCurrentMap: function(currentMapName, zakkonicyData) {
             let foundGateways = [];
             let processedCoords = new Set();
-            
+
             // 1. GŁÓWNA METODA DLA NOWEGO INTERFEJSU (Zbudowana na Twoim kodzie)
             if (typeof Engine !== 'undefined' && Engine.map && typeof Engine.map.getGateways === 'function') {
                 try {
                     let list = Engine.map.getGateways().getList();
                     list.forEach(g => {
                         if (!g || !g.d) return;
-                        
+
                         let px = g.rx !== undefined ? g.rx : g.d.x;
                         let py = g.ry !== undefined ? g.ry : g.d.y;
-                        
+
                         if (px === undefined || py === undefined) return;
 
                         // Ignorowanie Zakonników
@@ -35,14 +35,14 @@
                         if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) return;
 
                         let coordKey = px + "_" + py;
-                        if (processedCoords.has(coordKey)) return; 
+                        if (processedCoords.has(coordKey)) return;
                         processedCoords.add(coordKey);
 
                        // Wyciąganie nazwy - ZAAWANSOWANE CZYSZCZENIE (Odcina poziomy i nowe linie)
                         let rawName = (g.tip && g.tip[0]) ? g.tip[0] : (g.d.name || g.d.targetName || "");
                         let cleanName = rawName.toString().replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]*>?/gm, '').split('\n')[0];
                         cleanName = cleanName.replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].split("Przejście dostępne")[0].trim();
-                        
+
                         if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
                             cleanName = `Wejście [${px}, ${py}]`;
                         }
@@ -51,9 +51,9 @@
                             foundGateways.push({ x: px, y: py, targetMap: cleanName });
                         }
                     });
-                    
+
                     // Jeśli znaleźliśmy przejścia Twoją metodą, natychmiast je zwracamy
-                    if (foundGateways.length > 0) return foundGateways; 
+                    if (foundGateways.length > 0) return foundGateways;
                 } catch(e) {
                     console.log("%c[HERO] Skaner NI zawiódł, przechodzę do trybu zapasowego...", "color: orange;");
                 }
@@ -64,8 +64,8 @@
             if (typeof Engine !== 'undefined' && Engine.map) {
                 if (Engine.map.gateways) gwsObj = Engine.map.gateways;
                 else if (Engine.map.d && Engine.map.d.gw) gwsObj = Engine.map.d.gw;
-            } else if (typeof g !== 'undefined' && g.townname) { 
-                gwsObj = g.townname; 
+            } else if (typeof g !== 'undefined' && g.townname) {
+                gwsObj = g.townname;
             }
 
             let gwsList = [];
@@ -86,13 +86,13 @@
                 if (tp && Math.abs(px - tp.x) <= 2 && Math.abs(py - tp.y) <= 2) return;
 
                 let coordKey = px + "_" + py;
-                if (processedCoords.has(coordKey)) return; 
+                if (processedCoords.has(coordKey)) return;
                 processedCoords.add(coordKey);
 
               let rawName = data.name || data.targetName || data.title || data.tooltip || "";
                 let cleanName = rawName.toString().replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]*>?/gm, '').split('\n')[0];
                 cleanName = cleanName.replace("Przejście do:", "").replace("Przejście do ", "").split(" .")[0].split("Przejście dostępne")[0].trim();
-                
+
                 if (!cleanName || cleanName.length < 2 || cleanName === "Wyjście") {
                     cleanName = `Wejście [${px}, ${py}]`;
                 }
@@ -101,7 +101,7 @@
                     foundGateways.push({ x: px, y: py, targetMap: cleanName });
                 }
             });
-            
+
             return foundGateways;
         }
     };
@@ -246,7 +246,7 @@
                 let shopsInCategory = rawShops[category];
                 for (let shopUrl in shopsInCategory) {
                     let shopData = shopsInCategory[shopUrl];
-                    
+
                     let itemsList = [];
                     for (let key in shopData) {
                         if (Array.isArray(shopData[key]) && shopData[key].length > 0 && shopData[key][0].name) {
@@ -288,18 +288,18 @@ parseEq: function(rawEq) {
                 if (itemData.required_level) {
                     let cleanName = itemData.name.split(" Typ:")[0].split(" Pospolity")[0].split(" Unikat")[0].split(" Heroik")[0].split(" Legendarny")[0].trim();
                     let fullStats = itemData.tooltip_text || itemData.raw_detected_text || itemData.name || "";
-                    
+
                     // --- INTELIGENTNE ODCZYTYWANIE TYPU Z OPISU (TOOLTIPA) ---
                     let detectedType = itemData.slot_type || "Nieznany";
-                    
+
                     let typeMatch = fullStats.match(/Typ:\s*([A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+(?:\s[A-Za-zżźćńółęąśŻŹĆŃÓŁĘĄŚ]+)?)/i);
                     if (typeMatch && typeMatch[1]) {
                         // Ucinamy wszystkie formy rzadkości (Unikat, Unikatowy itp.)
                         detectedType = typeMatch[1].replace(/\s*(Pospolity|Unikatowy|Unikat|Heroiczny|Heroik|Legendarny)/gi, '').trim();
                     }
-                    
+
                     detectedType = detectedType.charAt(0).toUpperCase() + detectedType.slice(1).toLowerCase();
-                    
+
                     items.push({
                         name: cleanName,
                         level: itemData.required_level,
@@ -315,19 +315,19 @@ parseEq: function(rawEq) {
 getRecommendedEq: function() {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return [];
             let myLvl = Engine.hero.d.lvl;
-            let myProfLetter = Engine.hero.d.prof; 
-            
+            let myProfLetter = Engine.hero.d.prof;
+
             const profMap = { "w": "wojownik", "m": "mag", "t": "tropiciel", "p": "paladyn", "b": "tancerz ostrzy", "h": "łowca" };
             let fullProf = profMap[myProfLetter];
 
             return this.ekwipunek.filter(item => {
                 // TUTA ZMIANA: Pokazuje tylko przedmioty od (Twój lvl - 5) do Twojego aktualnego poziomu!
                 let isLevelOk = (item.level >= myLvl - 5) && (item.level <= myLvl);
-                
+
                 let profArray = item.prof.map(p => p.toLowerCase());
                 let isProfOk = false;
                 if (profArray.length === 0) {
-                    isProfOk = true; 
+                    isProfOk = true;
                 } else {
                     isProfOk = profArray.some(p => p.includes(fullProf));
                 }
@@ -801,14 +801,14 @@ let opacityValue = 0.95;
     window.renderRecommendedExp = function() {
         let c = document.getElementById('expRecList');
         if(!c) return;
-        
+
         let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
         // ROZSZERZONY ZAKRES: Od -10 do +25 leveli!
         let minTarget = playerLvl - 10;
         let maxTarget = playerLvl + 25;
 
         let html = '';
-        
+
         // Wyeliminowanie ReferenceError, sięgamy wprost do botSettings lub zabezpieczenia
         let profilesToRender = (botSettings && botSettings.expProfiles) ? botSettings.expProfiles : window.defaultExpProfiles;
 
@@ -1049,7 +1049,7 @@ function loadData() {
             }
             botSettings = {...botSettings, ...parsed};
         }
-        
+
         let s2 = localStorage.getItem('hero_global_gateways_v20'); if (s2) globalGateways = JSON.parse(s2);
         let s3 = localStorage.getItem('hero_map_order_v20'); if (s3) heroMapOrder = JSON.parse(s3);
     }
@@ -1094,7 +1094,7 @@ function loadData() {
             let stats = window.getBagStats();
             let display = document.getElementById('autosellCapacityDisplay');
             display.innerText = stats.freeSlots;
-            if (stats.freeSlots <= 0) display.style.color = "#e53935"; 
+            if (stats.freeSlots <= 0) display.style.color = "#e53935";
             else display.style.color = "#4caf50";
         }
         // ------------------------------------------
@@ -1139,7 +1139,7 @@ function cleanOldGateways() {
             for (let target in globalGateways[src]) {
                 let gw = globalGateways[src][target];
                 let tp = ZAKONNICY[src];
-                
+
                 // AUTOMATYCZNE USUWANIE ZAKONNIKÓW Z BAZY BRAM
                 if (tp && gw && Math.abs(gw.x - tp.x) <= 2 && Math.abs(gw.y - tp.y) <= 2) {
                     delete globalGateways[src][target];
@@ -1704,7 +1704,7 @@ function autoDetectEngineData() {
         if (window.lastLoadedNick !== Engine.hero.d.nick) {
             window.lastLoadedNick = Engine.hero.d.nick;
             let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
-            
+
             if (allTps[window.lastLoadedNick]) {
                 botSettings.unlockedTeleports = allTps[window.lastLoadedNick];
             } else {
@@ -1727,15 +1727,15 @@ function autoDetectEngineData() {
                 }
             }
             window.lastHeroExpLevel = currentLvl;
-            
+
             let minOff = Math.abs(botSettings.berserk.minLvlOffset || 20);
             let maxOff = parseInt(botSettings.berserk.maxLvlOffset || 100);
             botSettings.exp.minLvl = Math.max(1, currentLvl - minOff);
             botSettings.exp.maxLvl = currentLvl + maxOff;
-            
+
             let elMin = document.getElementById('expMinL'); let elMax = document.getElementById('expMaxL');
             if (elMin) elMin.value = botSettings.exp.minLvl; if (elMax) elMax.value = botSettings.exp.maxLvl;
-            
+
             saveSettings();
             if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
             if (botSettings.exp.useAggro && typeof window.toggleNativeAggroVisuals === 'function') window.toggleNativeAggroVisuals(true);
@@ -1878,7 +1878,7 @@ function autoDetectEngineData() {
             window._lastRushTargetLog = msg;
         }
 
-        window.executeRushStep(); 
+        window.executeRushStep();
     };
 
     window.executeRushStep = function() {
@@ -1892,7 +1892,7 @@ function autoDetectEngineData() {
             window._lastRushTargetLog = null;
             let btn = document.getElementById('btnStartStop');
             if (btn) { btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>'; btn.style.color = "#4caf50"; btn.style.borderColor = "#4caf50"; }
-            
+
             if (rushTargetX !== null && rushTargetY !== null) {
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
             }
@@ -1903,7 +1903,7 @@ function autoDetectEngineData() {
         let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
 
         if (path && path.length > 1) {
-            nextMap = path[1]; 
+            nextMap = path[1];
         } else if (window.rushFullPath && window.rushFullPath.length > 0) {
             let idx = window.rushFullPath.indexOf(currentSysMap);
             if (idx !== -1 && idx < window.rushFullPath.length - 1) {
@@ -1922,7 +1922,7 @@ function autoDetectEngineData() {
             let msg = `🚨 BŁĄD TRASY! Bot nie wie jak dojść z [${currentSysMap}] do [${rushTarget}].`;
             if (window.logHero) window.logHero(msg, "#e53935");
             if (window.logExp) window.logExp(msg, "#e53935");
-            if (window.isExping) document.getElementById('btnStartExp')?.click(); 
+            if (window.isExping) document.getElementById('btnStartExp')?.click();
             return;
         }
 
@@ -1944,18 +1944,18 @@ function autoDetectEngineData() {
                 if (window.logExp) window.logExp(`🚪 Biegnę do przejścia na: ${nextMap}`, "#ba68c8");
                 window._lastRushNextMap = nextMap;
             }
-            
+
             let targetX = door.x; let targetY = door.y;
             if (door.allCoords && door.allCoords.length > 0) {
                 let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
                 targetX = rnd[0]; targetY = rnd[1];
             }
-            
+
             window.rushLastX = Engine.hero.d.x;
             window.rushLastY = Engine.hero.d.y;
-            stuckCount = 0; 
-            
-            safeGoTo(targetX, targetY, false); 
+            stuckCount = 0;
+
+            safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
             rushInterval = setTimeout(window.checkRushArrival, 500);
         }
@@ -1968,7 +1968,7 @@ function autoDetectEngineData() {
 
         let nextMap = window.rushNextMap;
         if (!nextMap) return;
-        
+
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         if (!door) return;
 
@@ -1984,13 +1984,13 @@ function autoDetectEngineData() {
             } else {
                 stuckCount++;
                 // Jeśli stoi w miejscu totalnie nieruchomo przez 2 sekundy (4x500ms), ponawia kliknięcie
-                if (stuckCount >= 4) { 
-                    safeGoTo(door.x, door.y, false); 
-                    stuckCount = 0; 
+                if (stuckCount >= 4) {
+                    safeGoTo(door.x, door.y, false);
+                    stuckCount = 0;
                 }
             }
         }
-        
+
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
@@ -2001,12 +2001,12 @@ function autoDetectEngineData() {
 
         let nextMap = window.rushNextMap;
         if (!nextMap) return;
-        
+
         let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
         if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
-        
+
         if (!door) return;
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
@@ -2015,19 +2015,19 @@ function autoDetectEngineData() {
         if (dist > 1) {
             // SPRAWDZAMY CZY POSTAĆ WŁAŚNIE IDZIE
             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-            
+
             if (!isMoving) {
                 stuckCount++;
                 // Jeśli stoi w miejscu przez co najmniej 2 sekundy (4x500ms), ponawia kliknięcie
-                if (stuckCount > 3) { 
-                    safeGoTo(door.x, door.y, false); 
-                    stuckCount = 0; 
+                if (stuckCount > 3) {
+                    safeGoTo(door.x, door.y, false);
+                    stuckCount = 0;
                 }
             } else {
                 stuckCount = 0; // Jeśli idzie, zerujemy licznik zacięcia
             }
         }
-        
+
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
@@ -2038,12 +2038,12 @@ function autoDetectEngineData() {
 
         let nextMap = window.rushNextMap;
         if (!nextMap) return;
-        
+
         let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
         if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
-        
+
         if (!door) return;
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
@@ -2631,10 +2631,10 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                                 Od ilu %: <input type="number" id="autohealThreshold" value="${botSettings.autoheal?.threshold ?? 80}" min="1" max="99" style="width:35px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
                             </label>
                         </div>
-                        
+
                         <div id="autopotSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e91e63; border-radius:3px; margin-bottom:8px;">
                             <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; justify-content:space-between; margin:0;">
-                                Ilość staków do kupienia (1 stak = 15 szt): 
+                                Ilość staków do kupienia (1 stak = 15 szt):
                                 <input type="number" id="autopotStacks" value="${botSettings.autopot?.stacks ?? 14}" min="1" max="50" style="width:40px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
                             </label>
                         </div>
@@ -2659,55 +2659,32 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             </div>
                         </div>
                     </div>
-<div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">
-                        ▼ ZAAWANSOWANE (Trasy / Alarm / Opcje walki)
+<label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
+                    <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
+                        <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}"></label>
+                        <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}"></label>
+                    </div>
+                    <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px;">
+                        <label style="margin:0;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
+                        <label style="margin:0;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
+                    </div>
+                    <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-bottom: 0;">
+                        ▼ ZAAWANSOWANE (Trasy / Alarm)
                     </div>
                     <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
-                        <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
-                        <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
-                            <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}" style="background:#000;"></label>
-                            <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}" style="background:#000;"></label>
-                        </div>
-                        
-                        <label style="color:#a99a75; font-size:10px; margin-bottom:2px; display:block;">Atakowane potwory:</label>
-                        <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px; margin-bottom:6px;">
-                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
-                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
-                        </div>
-
-                        <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
+                        <div style="display:flex; flex-direction:column; gap:6px;">
                             <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
                                 <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
                             </label>
-                            <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
-                        <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
-                        <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
-                            <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}" style="background:#000;"></label>
-                            <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}" style="background:#000;"></label>
-                        </div>
-                        
-                        <label style="color:#a99a75; font-size:10px; margin-bottom:2px; display:block;">Atakowane potwory:</label>
-                        <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px; margin-bottom:6px;">
-                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
-                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
-                        </div>
-
-                        <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
-                            <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
-                                <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska
-                            </label>
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Zatrzymuje bota i wywołuje alarm na pulpicie!">
                                 <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
-                            </label>
-                            <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy pojawi się gracz lub ktoś napisze do Ciebie">
-                                <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy / Nick
                             </label>
                         </div>
                     </div>
                     <input type="hidden" id="expRange" value="999">
                     <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map (Smart-Roam): <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
                     <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
-                    
+
                     <div style="display:flex; gap:4px; margin-top:2px;">
                         <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
                         <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
@@ -2721,11 +2698,11 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     <button id="btnShowPotions" class="btn-sepia" style="padding:6px; background:#d81b60; color:white; font-weight:bold;">🧪 MIKSTURY I LECZENIE</button>
                     <button id="btnToggleShops" class="btn-sepia" style="padding:6px; background:#e65100; font-weight:bold;">🛒 WYSZUKIWARKA SKLEPÓW</button>
                     <button id="btnStopWalk" class="btn-sepia" style="display:none; padding:6px; background:#d32f2f; color:white; font-weight:bold; border-color:#b71c1c;">🛑 ZATRZYMAJ RUCH</button>
-                    
+
                     <div id="heroTeleportsGUI" style="display:none; flex-direction:column; flex:1; overflow-y:auto; background:#141414; border:1px solid #3a3020; padding:4px;"></div>
                     <div id="recommendedEqList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;"></div>
                     <div id="potionsList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;"></div>
-                    
+
                     <div id="shopsSearchWrapper" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;">
                         <input type="text" id="shopSearchInput" placeholder="Szukaj NPC, mapy lub przedmiotu..." style="width:100%; padding:5px; background:#000; color:#d4af37; border:1px solid #333; margin-bottom:5px; box-sizing:border-box;">
                         <div id="shopsListOutput" style="flex:1; overflow-y:auto;">
@@ -2793,12 +2770,12 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 
 
 
-      window.toggleSettingsAcc = function(id) { 
-            let h = document.getElementById(id); 
-            let c = document.getElementById(id+'Content'); 
-            let isHidden = c.style.display === 'none'; 
-            c.style.display = isHidden ? 'block' : 'none'; 
-            h.innerText = (isHidden ? '▼ ' : '▶ ') + h.innerText.replace(/^[▼▶]\s*/, '').trim(); 
+      window.toggleSettingsAcc = function(id) {
+            let h = document.getElementById(id);
+            let c = document.getElementById(id+'Content');
+            let isHidden = c.style.display === 'none';
+            c.style.display = isHidden ? 'block' : 'none';
+            h.innerText = (isHidden ? '▼ ' : '▶ ') + h.innerText.replace(/^[▼▶]\s*/, '').trim();
         };
 
 
@@ -2837,14 +2814,14 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                </div>
 
             </div>`;
-const goToGui = document.createElement('div'); 
-        goToGui.id = 'heroGoToGUI'; 
-        goToGui.className = 'hero-window'; 
+const goToGui = document.createElement('div');
+        goToGui.id = 'heroGoToGUI';
+        goToGui.className = 'hero-window';
         goToGui.style.display = 'none';
-        goToGui.style.top = '60px'; 
-        goToGui.style.left = '400px'; 
-        goToGui.style.width = '320px'; 
-        goToGui.style.maxHeight = '560px'; 
+        goToGui.style.top = '60px';
+        goToGui.style.left = '400px';
+        goToGui.style.width = '320px';
+        goToGui.style.maxHeight = '560px';
         goToGui.style.resize = 'both';
 
         goToGui.innerHTML = `
@@ -2861,9 +2838,9 @@ const expBaseGui = document.createElement('div');
         expBaseGui.id = 'heroExpBaseGUI';
         expBaseGui.className = 'hero-window';
         expBaseGui.style.display = 'none';
-        expBaseGui.style.top = '60px'; 
-        expBaseGui.style.left = '400px'; 
-        expBaseGui.style.width = '320px'; 
+        expBaseGui.style.top = '60px';
+        expBaseGui.style.left = '400px';
+        expBaseGui.style.width = '320px';
         expBaseGui.style.maxHeight = '560px';
         expBaseGui.innerHTML = `
             <div class="gui-header">🔖 Baza Expowisk <button class="btn-close" onclick="document.getElementById('heroExpBaseGUI').style.display='none'">✖</button></div>
@@ -2877,9 +2854,9 @@ const expBaseGui = document.createElement('div');
         expRecGui.id = 'heroExpRecGUI';
         expRecGui.className = 'hero-window';
         expRecGui.style.display = 'none';
-        expRecGui.style.top = '60px'; 
-        expRecGui.style.left = '400px'; 
-        expRecGui.style.width = '320px'; 
+        expRecGui.style.top = '60px';
+        expRecGui.style.left = '400px';
+        expRecGui.style.width = '320px';
         expRecGui.style.maxHeight = '560px';
         expRecGui.innerHTML = `
             <div class="gui-header">⭐ Polecane Expowiska <button class="btn-close" onclick="document.getElementById('heroExpRecGUI').style.display='none'">✖</button></div>
@@ -2894,9 +2871,9 @@ const teleportsGui = document.createElement('div');
         teleportsGui.id = 'heroTeleportsGUI';
         teleportsGui.className = 'hero-window';
         teleportsGui.style.display = 'none';
-        teleportsGui.style.top = '60px'; 
-        teleportsGui.style.left = '400px'; 
-        teleportsGui.style.width = '320px'; 
+        teleportsGui.style.top = '60px';
+        teleportsGui.style.left = '400px';
+        teleportsGui.style.width = '320px';
         teleportsGui.style.maxHeight = '560px';
     teleportsGui.innerHTML = `
             <div class="gui-header">🚀 Teleporty <button class="btn-close" onclick="document.getElementById('heroTeleportsGUI').style.display='none'">✖</button></div>
@@ -3026,14 +3003,14 @@ function setOnChange(id, handler) {
                toggle.addEventListener('click', function() {
                    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active-tab'));
                    this.classList.add('active-tab');
-                   
+
                    // Bezpieczne sprawdzanie czy kontener istnieje przed jego pokazaniem
                    let heroC = document.getElementById('heroContainer'); if(heroC) heroC.style.display = tab === 'hero' ? 'flex' : 'none';
                    let e2C = document.getElementById('e2Container'); if(e2C) e2C.style.display = tab === 'e2' ? 'flex' : 'none';
                    let kolosyC = document.getElementById('kolosyContainer'); if(kolosyC) kolosyC.style.display = tab === 'kolosy' ? 'flex' : 'none';
                    let expC = document.getElementById('expContainer'); if(expC) expC.style.display = tab === 'exp' ? 'flex' : 'none';
                    let tpC = document.getElementById('teleportsContainer'); if(tpC) tpC.style.display = tab === 'teleports' ? 'flex' : 'none';
-                   
+
                    // Radar widoczny TYLKO w zakładce Herosi
                    let radarW = document.getElementById('radarControlsWrapper'); if(radarW) radarW.style.display = (tab === 'hero') ? 'block' : 'none';
 
@@ -3074,20 +3051,20 @@ if (btnExp) {
             expCurrentMapOrderIndex = -1;
             window.expGlobalTargetMap = null;
             if (typeof window.logExp === 'function') window.logExp("🚀 Uruchomiono tryb automatyczny!", "#4caf50");
-            
+
             if (botSettings.berserk) { botSettings.berserk.userEnabled = true; if (chk) chk.checked = true; saveSettings(); }
         } else {
             this.innerHTML = "▶ START";
             this.style.borderColor = "#4caf50";
             this.style.color = "#4caf50";
-            
+
             // TWARDE ZATRZYMANIE BOTA I POSTACI
             window.isRushing = false;
             if (window.rushInterval) clearTimeout(window.rushInterval);
             if (typeof stopPatrol === 'function') stopPatrol(true); // Wciska fizyczny hamulec na mapie
-            
+
             if (typeof window.logExp === 'function') window.logExp("🛑 Zatrzymano tryb automatyczny.", "#f44336");
-            
+
             if (botSettings.berserk) { botSettings.berserk.userEnabled = false; botSettings.berserk.enabled = false; if (chk) chk.checked = false; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); }
         }
     });
@@ -3121,61 +3098,50 @@ if (btnExp) {
 
         if (botSettings.exp.captchaAlert === undefined) { botSettings.exp.captchaAlert = true; saveSettings(); }
 
-        bindChange('captchaAlert', (e) => { 
-            botSettings.exp.captchaAlert = e.target.checked; 
-            saveSettings(); 
+        bindChange('captchaAlert', (e) => {
+            botSettings.exp.captchaAlert = e.target.checked;
+            saveSettings();
             // Prośba o zgodę na powiadomienia Windows, jeśli zaznaczamy opcję pierwszy raz
             if (e.target.checked && Notification.permission !== "granted" && Notification.permission !== "denied") {
                 Notification.requestPermission();
             }
         });
-        if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
 
-        bindChange('playerAlert', (e) => { 
-            botSettings.exp.playerAlert = e.target.checked; 
-            saveSettings(); 
-            // Ostrzeżenie i wymuszenie zgody na powiadomienia
-            if (e.target.checked) {
-                if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
-                if (window.logExp) window.logExp("👁️ Włączono monitoring graczy i czatu.", "#ffb300");
-            }
-        });
-        
         bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
         bindChange('autopotEnabled', (e) => { botSettings.autopot.enabled = e.target.checked; saveSettings(); });
         bindChange('autohealThreshold', (e) => { botSettings.autoheal.threshold = parseInt(e.target.value) || 80; saveSettings(); });
         bindChange('autopotStacks', (e) => { botSettings.autopot.stacks = parseInt(e.target.value) || 14; saveSettings(); });
        // Natychmiastowa reakcja po kliknięciu "Automatyczna zmiana Expowiska"
-        bindChange('autoChangeExpRoute', (e) => { 
-            botSettings.exp.autoChangeRoute = e.target.checked; 
-            saveSettings(); 
+        bindChange('autoChangeExpRoute', (e) => {
+            botSettings.exp.autoChangeRoute = e.target.checked;
+            saveSettings();
             if (e.target.checked) {
-                if (typeof window.checkAndLoadBestExpProfile === 'function') window.checkAndLoadBestExpProfile(true); 
+                if (typeof window.checkAndLoadBestExpProfile === 'function') window.checkAndLoadBestExpProfile(true);
             } else {
                 // Jeśli odznaczamy - czyścimy trasę z automatu
                 if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
                 if (window.logExp) window.logExp("🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.", "#e53935");
             }
-            
+
             // Wymuszone odświeżenie UI natychmiast po kliknięciu!
             setTimeout(() => {
                 if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }, 100);
         });
-        
-        bindClick('btnAutoPotSettings', () => { 
-            let p = document.getElementById('autopotSettingsPanel'); 
-            p.style.display = p.style.display === 'none' ? 'block' : 'none'; 
+
+        bindClick('btnAutoPotSettings', () => {
+            let p = document.getElementById('autopotSettingsPanel');
+            p.style.display = p.style.display === 'none' ? 'block' : 'none';
         });
-        
+
 // Pętla milczącego ładownia profili (dla Auto-Expowiska)
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
             if(p) {
-                botSettings.exp.activeProfileName = p.name; 
+                botSettings.exp.activeProfileName = p.name;
                 botSettings.exp.mapOrder = [...p.maps];
                 localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-                
+
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
                 if(lvlMatch && lvlMatch[1]) {
                     let baseLvl = parseInt(lvlMatch[1]);
@@ -3184,11 +3150,11 @@ if (btnExp) {
                     let mIn = document.getElementById('expMinL'); let mAx = document.getElementById('expMaxL');
                     if (mIn) mIn.value = botSettings.exp.minLvl; if (mAx) mAx.value = botSettings.exp.maxLvl;
                 }
-                
+
                 window.mapClearTimes = {}; expCurrentTargetId = null; expMapTransitionCooldown = 0; expLastActionTime = 0; expAntiLagTime = 0;
                 saveSettings();
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
-                
+
                 // Bezwarunkowe narysowanie zaktualizowanej trasy
                 if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             }
@@ -3198,12 +3164,12 @@ if (btnExp) {
         window.checkAndLoadBestExpProfile = function(forceLoad = false) {
             if (!botSettings.exp.autoChangeRoute || !botSettings.expProfiles) return;
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.hero.d.lvl) return;
-            
+
             let currentLvl = Engine.hero.d.lvl;
-            let bestProfile = null; 
-            let highestValidLvl = -1; 
+            let bestProfile = null;
+            let highestValidLvl = -1;
             let profIdx = -1;
-            
+
             botSettings.expProfiles.forEach((p, idx) => {
                 let match = p.name.match(/\((\d+)\s*lvl\)/i);
                 if (match) {
@@ -3216,15 +3182,15 @@ if (btnExp) {
 
             if (bestProfile) {
                 if (forceLoad || botSettings.exp.activeProfileName !== bestProfile.name || !botSettings.exp.mapOrder || botSettings.exp.mapOrder.length === 0) {
-                    
+
                     let logMsg = `🗺️ Ustawiam najlepsze expowisko dla ${currentLvl} lvl: ${bestProfile.name}!`;
                     if (window._lastExpLog !== logMsg || Date.now() - (window._lastExpLogTime || 0) > 2000) {
                         if (window.logExp) window.logExp(logMsg, "#00e5ff");
                         window._lastExpLog = logMsg;
                         window._lastExpLogTime = Date.now();
                     }
-                    
-                    if (typeof stopPatrol === 'function') stopPatrol(true); 
+
+                    if (typeof stopPatrol === 'function') stopPatrol(true);
                     window.autoLoadExpProfile(profIdx);
                 }
             }
@@ -3236,16 +3202,16 @@ if (btnExp) {
             // Sklonowanie przycisku kasuje wszystkie stare eventy, by nie było podwójnych logów!
             let newChk = chkAutoChange.cloneNode(true);
             chkAutoChange.parentNode.replaceChild(newChk, chkAutoChange);
-            
+
             newChk.addEventListener('change', function(e) {
-                botSettings.exp.autoChangeRoute = e.target.checked; 
-                saveSettings(); 
-                
+                botSettings.exp.autoChangeRoute = e.target.checked;
+                saveSettings();
+
                 if (e.target.checked) {
-                    window.checkAndLoadBestExpProfile(true); 
+                    window.checkAndLoadBestExpProfile(true);
                 } else {
                     if (typeof window.clearExpMaps === 'function') window.clearExpMaps();
-                    
+
                     let logMsg = "🗑️ Wyłączono auto-zmianę. Trasa została wyczyszczona.";
                     if (window._lastExpLog !== logMsg || Date.now() - (window._lastExpLogTime || 0) > 2000) {
                         if (window.logExp) window.logExp(logMsg, "#e53935");
@@ -3253,7 +3219,7 @@ if (btnExp) {
                         window._lastExpLogTime = Date.now();
                     }
                 }
-                
+
                 // Wymuszone odświeżenie okna od razu po akcji
                 if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             });
@@ -3262,7 +3228,7 @@ if (btnExp) {
         window.updateServerBerserk = function() {
             if (typeof window._g !== 'function') return;
             let b = botSettings.berserk;
-            
+
             [34, 35].forEach(id => {
                 window._g(`settings&action=update&id=${id}&v=${b.enabled ? 1 : 0}`);
                 if (b.enabled) {
@@ -3273,7 +3239,7 @@ if (btnExp) {
                     window._g(`settings&action=update&id=${id}&key=lvlmax&v=${b.maxLvlOffset}`);
                 }
             });
-            
+
             if (window._lastBerserkLogState !== b.enabled) {
                 window._lastBerserkLogState = b.enabled;
                 if (b.enabled && typeof window.logExp === 'function') window.logExp("⚔️ Aktywowano serwerowego Kieszonkowego Berserka!", "#ff9800");
@@ -3281,13 +3247,13 @@ if (btnExp) {
             }
 
             if (!botSettings.autosell) { botSettings.autosell = { enabled: false, maxCapacity: 42 }; saveSettings(); }
-            
+
             try {
                 if (typeof Engine !== 'undefined' && Engine.settings && Engine.settings.d) {
                     Engine.settings.d.fight_auto_solo = b.enabled ? 1 : 0;
                     Engine.settings.d.fight_auto_elites = b.e1 ? 1 : 0;
                     Engine.settings.d.fight_auto_elites2 = (b.e2 || b.hero) ? 1 : 0;
-                    
+
                     let npcs = Engine.npcs.check ? Engine.npcs.check() : Engine.npcs.d;
                     for(let id in npcs) {
                         let npc = npcs[id];
@@ -3307,7 +3273,7 @@ if (btnExp) {
         bindChange('berserkHero', (e) => { botSettings.berserk.hero = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
         bindChange('berserkMaxLvl', (e) => { botSettings.berserk.maxLvlOffset = parseInt(e.target.value, 10) || 100; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
         bindChange('berserkMinLvl', (e) => { botSettings.berserk.minLvlOffset = -(parseInt(e.target.value, 10) || 20); saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
-       
+
 // ZAPISYWANIE USTAWIEŃ EXP
 setOnChange('expMinL', (e) => {
     botSettings.exp.minLvl = parseInt(e.target.value, 10) || 1;
@@ -3447,7 +3413,7 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('chkAutoAttack').addEventListener('change', (e) => { botSettings.autoAttack = e.target.checked; saveSettings(); });
 
-      
+
 
 
         document.getElementById('btnSaveSettings').addEventListener('click', () => {
@@ -3717,7 +3683,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
 
                 if(addedCount > 0) {
                     localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-                    
+
                     if(minL !== 9999) {
                         botSettings.exp.minLvl = Math.min(botSettings.exp.minLvl, minL);
                         botSettings.exp.maxLvl = Math.max(botSettings.exp.maxLvl, maxL);
@@ -3796,7 +3762,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
             let savedInfo = `<span style="color:#777; font-size:9px;">[Brak Kordów]</span>`;
             let targetX = null;
             let targetY = null;
-            
+
             // 1. Priorytet: Nowa Baza (właściwość "resp" z pliku bossy.json)
             if (boss.resp && boss.resp[finalMap] && boss.resp[finalMap].length > 0) {
                 targetX = boss.resp[finalMap][0][0];
@@ -3807,7 +3773,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
             else if (bossSavedCoords[boss.name]) {
                 targetX = bossSavedCoords[boss.name].x;
                 targetY = bossSavedCoords[boss.name].y;
-                finalMap = bossSavedCoords[boss.name].map; 
+                finalMap = bossSavedCoords[boss.name].map;
                 savedInfo = `<span style="color:#ffb300; font-size:9px;">[Zapisano: ${finalMap} - X:${targetX}, Y:${targetY}]</span>`;
             }
 
@@ -3995,7 +3961,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
 function scanCurrentMapForGateways() {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.map.d) return heroAlert("Błąd: Silnik gry nie jest gotowy.");
         let currentMap = Engine.map.d.name;
-        
+
         let gatewaysFound = HeroScannerModule.scanCurrentMap(currentMap, ZAKONNICY);
         let container = document.getElementById('gatewaysListContainer');
         if (!container) return;
@@ -4040,7 +4006,7 @@ function scanCurrentMapForGateways() {
             `;
             container.insertBefore(row, header.nextSibling);
         }
-        
+
         heroAlert(`Sukces!\nZeskanowano i pogrupowano wejścia.\nDodano do bazy: ${uniqueCount} kierunków (łącznie ${gatewaysFound.length} kratek wejścia do wylosowania przez bota).`);
     }
 
@@ -4184,7 +4150,7 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
         checkedPoints.clear();
         clearTimeout(smoothPatrolInterval);
         renderCordsList(-1);
-        
+
         if (wasMoving && window.logHero) window.logHero("Zatrzymano ruch.", "#f44336");
 
         // TWARDE HAMOWANIE POSTACI W GRZE
@@ -4198,21 +4164,21 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
     }
 
     function startPatrol() {
-        let hero = document.getElementById('selHero').value; 
+        let hero = document.getElementById('selHero').value;
         let mapList = heroMapOrder[hero];
         if (!hero) { window.logHero("Błąd: Nie wybrano herosa z listy!", "#e53935"); return; }
 
         if (hero && mapList) {
             let currentSysMap = lastMapName;
-            if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) { 
-                currentRouteIndex = mapList.indexOf(currentSysMap); 
-                sessionStorage.setItem('hero_route_index', currentRouteIndex); 
-                updateUI(); 
+            if (currentRouteIndex === -1 || mapList[currentRouteIndex] !== currentSysMap) {
+                currentRouteIndex = mapList.indexOf(currentSysMap);
+                sessionStorage.setItem('hero_route_index', currentRouteIndex);
+                updateUI();
             }
         }
         isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
-        let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; 
-        
+        let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336";
+
         window.logHero(`Rozpoczęto patrol (Heros: ${hero}).`, "#4caf50");
         executePatrolStep();
     }
@@ -4276,14 +4242,14 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
                 return;
             }
 
-            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true); 
+            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true);
             window.logHero(`✅ Pętla ukończona!`, "#4caf50");
             heroAlert("✅ Trasa zrobiona!"); return;
         }
 
         renderCordsList(patrolIndex);
         let target = currentCordsList[patrolIndex];
-        
+
         window.logHero(`Biegnę pod kord: [${target[0]}, ${target[1]}]`, "#d4af37");
         safeGoTo(target[0], target[1], true);
         stuckCount = 0; clearTimeout(smoothPatrolInterval);
@@ -4319,10 +4285,10 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
             if (cx === lastX && cy === lastY) {
                 stuckCount++;
                 if (stuckCount > 8) {
-                    clearTimeout(smoothPatrolInterval); 
-                    checkedPoints.add(patrolIndex); 
+                    clearTimeout(smoothPatrolInterval);
+                    checkedPoints.add(patrolIndex);
                     window.logHero(`Zaciąłem się! Uznaję punkt [${target[0]}, ${target[1]}] za odwiedzony.`, "#ff9800");
-                    executePatrolStep(); 
+                    executePatrolStep();
                     return;
                 }
             } else {
@@ -4757,7 +4723,7 @@ function getAntiLagDelay() {
 
     return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
 
-}   
+}
 
     function getExpNpcList() {
 
@@ -4991,16 +4957,16 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
             expCurrentTargetId = null;
-            expLastTargetSwitchAt = 0; 
+            expLastTargetSwitchAt = 0;
             expEmptyScans = 0;
-            expAttackLockUntil = 0; 
+            expAttackLockUntil = 0;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1;
             window.expWasInBattle = true; // Oznaczamy trwającą walkę
             return;
         } else if (window.expWasInBattle) {
             // Walka właśnie się skończyła - dajemy serwerowi twarde 1.5 sekundy na oddech!
             window.expWasInBattle = false;
-            expLastActionTime = now + 1500; 
+            expLastActionTime = now + 1500;
             return;
         }
     } catch (e) {}
@@ -5017,7 +4983,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
     const displayTarget = document.getElementById('expTargetDisplay');
 
-    
+
 
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
 
@@ -5025,7 +4991,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
 // --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
     if (expLastMapName !== currMap) {
-        window.expLastVisitedMap = expLastMapName; 
+        window.expLastVisitedMap = expLastMapName;
         expLastMapName = currMap;
         expMapEnteredAt = now;
         expEmptyScans = 0;
@@ -5033,8 +4999,8 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         expAttackLockUntil = 0;
         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
-        window.expUnreachableMobs.clear(); 
-        
+        window.expUnreachableMobs.clear();
+
         // Zabezpieczenie stoperów bram (czyszczenie po ekranie ładowania)
         window.expGatewayStandTime = 0;
         window.expGatewayArrivalTime = 0;
@@ -5084,77 +5050,72 @@ if (hx !== expLastX || hy !== expLastY) {
     }
 
 
-// --- SKANOWANIE POTWORÓW (Z ABSOLUTNĄ BLOKADĄ OBSTAWY BOSSÓW) ---
+  // --- SKANOWANIE POTWORÓW ---
     const arr = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
     let rawMobs = [];
-    
-    // Pobieramy flagi bicia z ustawień (z uwzględnieniem Twoich nowych nazw w GUI)
-    const bE2 = botSettings.berserk?.e2 || false;
-    const bHero = botSettings.berserk?.hero || false;
-    const wantNormal = botSettings.exp?.normal ?? true;
-    const wantElite = botSettings.exp?.elite ?? true;
+    const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
+    const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    // 1. KROK: Namierzanie "Lustra Śmierci" (Bossowie, których unikamy)
-    let forbiddenBosses = [];
+    // 1. Zbudowanie mapy "Stref Zagrożenia"
+    // Szukamy wszystkich E2 i Herosów, których UŻYTKOWNIK NIE CHCE bić
+    let dangerousSpots = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
-        if (!n || n.dead || n.del || n.type === 4) return;
-        
+        if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+
         let wt = parseInt(n.wt, 10);
         let ranga = "normal";
-        // Rozszerzona detekcja rangi (wt=11/1: E1, wt=12/2: E2, wt>=13/3: Heros+)
-        if (wt === 1 || wt === 11) ranga = "elite1";
-        else if (wt === 2 || wt === 12) ranga = "elite2";
-        else if (wt >= 3 || wt >= 13) ranga = "hero";
+        if (n.type === 2) {
+            if (wt === 11 || wt === 1) ranga = "elite1";
+            else if (wt === 12 || wt === 2) ranga = "elite2";
+            else if (wt >= 13 || wt >= 3) ranga = "hero";
+        }
 
-        // Jeśli to E2 lub Heros, a mamy go ODZNACZONEGO - dodajemy do czarnej listy
+        // Jeśli to E2, a nie mamy zaznaczonego bicia E2 (albo Heros) - oznaczamy to pole jako lawę!
         if ((ranga === "elite2" && !bE2) || (ranga === "hero" && !bHero)) {
-            forbiddenBosses.push({ x: n.x, y: n.y, nick: n.nick || n.name });
+            dangerousSpots.push({x: n.x, y: n.y});
         }
     });
 
-    // 2. KROK: Filtrowanie mobów z uwzględnieniem bezpiecznego dystansu
+    // 2. Filtrowanie potworów do ataku
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
-        if (!n || n.dead || n.del || n.type !== 2) return; // Bijemy tylko potwory (type=2)
+        if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
 
+        // 🚨 IGNOROWANIE ZABLOKOWANYCH (Ominiętych anty-lagiem)
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
-        if (isNaN(lvl) || lvl < minL || lvl > maxL) return;
+        if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
 
         let wt = parseInt(n.wt, 10);
         let ranga = "normal";
-        if (wt === 1 || wt === 11) ranga = "elite1";
-        else if (wt === 2 || wt === 12) ranga = "elite2";
-        else if (wt >= 3 || wt >= 13) ranga = "hero";
+        if (n.type === 2) {
+            if (wt === 11 || wt === 1) ranga = "elite1";
+            else if (wt === 12 || wt === 2) ranga = "elite2";
+            else if (wt >= 13 || wt >= 3) ranga = "hero";
+        }
 
-        // Czy ten konkretny mob jest na naszej liście do bicia?
-        let isTypeAllowed = false;
-        if (ranga === "normal" && wantNormal) isTypeAllowed = true;
-        else if (ranga === "elite1" && wantElite) isTypeAllowed = true;
-        else if (ranga === "elite2" && bE2) isTypeAllowed = true;
-        else if (ranga === "hero" && bHero) isTypeAllowed = true;
+        if (ranga === "normal" && !wantNormal) return;
+        if (ranga === "elite1" && !wantElite) return;
+        if (ranga === "elite2" && !bE2) return;
+        if (ranga === "hero" && !bHero) return;
 
-        if (!isTypeAllowed) return;
-
-        // --- KLUCZOWA BLOKADA OBSTAWY ---
-        // Sprawdzamy, czy ten dopuszczony mob nie stoi za blisko ZAKAZANEGO bossa
-        let tooCloseToBoss = false;
-        for (let boss of forbiddenBosses) {
-            let dx = Math.abs(n.x - boss.x);
-            let dy = Math.abs(n.y - boss.y);
-            // Promień 3 kratek (Margonem łączy w grupy w zasięgu 1-2 kratek, 3 to bezpieczny margines)
-            if (dx <= 3 && dy <= 3) {
-                tooCloseToBoss = true;
+        // 🚨 NOWOŚĆ: Ignorowanie "obstawy"
+        // Sprawdzamy, czy ten potwór nie stoi przypadkiem w strefie zagrożenia (promień 2 kratek) od odznaczonego bossa!
+        let isSafeToAttack = true;
+        for (let spot of dangerousSpots) {
+            // Obliczamy tzw. dystans Czebyszewa (jeśli potwór stoi w prostokącie 5x5 wokół bossa)
+            if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
+                isSafeToAttack = false;
                 break;
             }
         }
 
-        if (tooCloseToBoss) return; // Ten mob to obstawa - ignorujemy go!
+        if (!isSafeToAttack) return; // Jeśli stoi przy bossie - ignorujemy go całkowicie!
 
         rawMobs.push({
-            id: n.id, x: n.x, y: n.y, ranga: ranga,
+            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
             dist: Math.abs(hx - n.x) + Math.abs(hy - n.y)
         });
@@ -5165,11 +5126,11 @@ if (hx !== expLastX || hy !== expLastY) {
         let aElite = (a.ranga !== "normal") ? 1 : 0;
         let bElite = (b.ranga !== "normal") ? 1 : 0;
         if (aElite !== bElite) return bElite - aElite;
-        
+
         // TWARDA BLOKADA NA 8 SEKUND
         let isALocked = (a.id === expCurrentTargetId && now < (window.expTargetLockTime || 0));
         let isBLocked = (b.id === expCurrentTargetId && now < (window.expTargetLockTime || 0));
-        
+
         if (isALocked && !isBLocked) return -1;
         if (isBLocked && !isALocked) return 1;
 
@@ -5203,7 +5164,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
         if (targetDist > 1) {
 
-            expAttackLockUntil = 0; 
+            expAttackLockUntil = 0;
 
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
@@ -5220,13 +5181,13 @@ if (hx !== expLastX || hy !== expLastY) {
                     window.expTargetLockTime = now + 4000; // 4 SEKUNDy TWARDEJ BLOKADY!
                 }
 
-                
+
 
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
 
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
 
-                
+
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
 
@@ -5234,7 +5195,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
                 window.expTargetPursuitStart = now;
 
-                window.expMoveLockUntil = now + 1000; 
+                window.expMoveLockUntil = now + 1000;
 
             } else {
 
@@ -5246,15 +5207,15 @@ if (hx !== expLastX || hy !== expLastY) {
 
                     if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
 
-                        window.expPursuitLastX = hx; 
+                        window.expPursuitLastX = hx;
 
                         window.expPursuitLastY = hy;
 
-                        window.expTargetPursuitStart = now; 
+                        window.expTargetPursuitStart = now;
 
                     }
 
-                    
+
 
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
@@ -5322,7 +5283,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
 
-                expAttackLockUntil = now + 2500; expLastActionTime = now + 800; 
+                expAttackLockUntil = now + 2500; expLastActionTime = now + 800;
 
                 return;
 
@@ -5362,25 +5323,15 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
     if (uncheckedMaps.length === 0) {
-        // SPRAWDZANIE BEZPIECZEŃSTWA MAPY (PvP)
-        // Engine.map.d.pvp === 2 oznacza czerwoną mapę (bezwarunkowe PvP)
-        if (Engine.map.d.pvp === 2 && mapsPool.length > 1) {
-            window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
-            let nextIdx = (mapsPool.indexOf(currMap) + 1) % mapsPool.length;
-            let safeMap = mapsPool[nextIdx];
-            
-            // Kasujemy z pamięci czas wyczyszczenia następnej mapy, więc bot od razu tam pobiegnie
-            if (safeMap) {
-                delete window.mapClearTimes[safeMap];
-                expMapTransitionCooldown = now + 500; 
-                return;
-            }
-        }
 
-        window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s na resp...", "#ffb300");
-        expMapTransitionCooldown = now + 45000; 
-        window.mapClearTimes = {}; 
+        window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s...", "#ffb300");
+
+        expMapTransitionCooldown = now + 45000;
+
+        window.mapClearTimes = {};
+
         return;
+
     }
 
 
@@ -5393,7 +5344,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
     let targetGateway = null;
 
-    
+
 
     let bestGraphPathLen = Infinity;
 
@@ -5437,7 +5388,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
                 let path = getShortestPath(targetMap, unvisitedMap);
 
-                if (path) { 
+                if (path) {
 
                     let dist = Math.abs(gw.x - hx) + Math.abs(gw.y - hy);
 
@@ -5525,7 +5476,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
             if (displayTarget) displayTarget.innerText = `Przejście do: ${nextStepMap}`;
 
-            
+
 
             let isNewDoorDest = (window.expLastMoveTx !== dx || window.expLastMoveTy !== dy);
 
@@ -5535,7 +5486,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
                 Engine.hero.autoGoTo({ x: dx, y: dy });
 
-                
+
 
                 window.expLastMoveTx = dx; window.expLastMoveTy = dy;
 
@@ -5547,7 +5498,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
             } else if (now > window.expMoveLockUntil) {
 
-                
+
 
                 // Taka sama ochrona fizyczna przed zacięciem jak w przypadku mobów
 
@@ -5559,18 +5510,18 @@ if (hx !== expLastX || hy !== expLastY) {
 
                 }
 
-                
+
 
                 let timeStandingStill = now - window.expTargetPursuitStart;
 
-                
+
 
            if (timeStandingStill > 2500) {
                     window.logExp(`🚨 Brama na [${dx}, ${dy}] (do ${nextStepMap}) jest zablokowana! Pomijam tę mapę.`, "#ff5252");
-                    
+
                     // Magia: Tymczasowo oznaczamy niedostępną mapę jako "wyczyszczoną", aby algorytm od razu poszedł do następnej!
-                    window.mapClearTimes[nextStepMap] = now; 
-                    
+                    window.mapClearTimes[nextStepMap] = now;
+
                     expMapTransitionCooldown = now + 500; // Szybki reset, bot od razu przelicza nową trasę
                     window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                     return;
@@ -5578,7 +5529,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
 
-                if (timeStandingStill > 1500 && (now % 1500 < 150)) Engine.hero.autoGoTo({ x: dx, y: dy }); 
+                if (timeStandingStill > 1500 && (now % 1500 < 150)) Engine.hero.autoGoTo({ x: dx, y: dy });
 
             }
 
@@ -5593,15 +5544,15 @@ if (hx !== expLastX || hy !== expLastY) {
 // Wejście w bramę
         if (hx === dx && hy === dy) {
             if (!window.expGatewayArrivalTime) {
-                window.expGatewayArrivalTime = now; 
+                window.expGatewayArrivalTime = now;
             } else if (now - window.expGatewayArrivalTime > 12000) {
                 window.logExp(`🚨 Brama nie reaguje przez 12s! Odbiegam by ponowić...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
-                
-                window.expLastMoveTx = -1; window.expLastMoveTy = -1; 
-                window.expGatewayArrivalTime = 0; 
+
+                window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                window.expGatewayArrivalTime = 0;
                 expGatewayLockUntil = now + 2000;
             }
             expLastActionTime = now + 200; // Czekamy w spokoju na czarny ekran ładowania
@@ -6061,10 +6012,10 @@ window.clearExpMaps = () => {
    window.renderExpMaps = () => {
         let c = document.getElementById('expMapList'); if (!c) return;
         let currentMap = lastMapName;
-        
+
         c.innerHTML = botSettings.exp.mapOrder.map((mapName, index) => {
-            let safeMapName = mapName.replace(/'/g, "\\'"); 
-            
+            let safeMapName = mapName.replace(/'/g, "\\'");
+
             if (editingGatewayFor === mapName) {
                 let defaultX = "", defaultY = ""; let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
                 if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
@@ -6079,7 +6030,7 @@ window.clearExpMaps = () => {
 window.toggleTeleportLock = function(city, isChecked) {
         if (!botSettings.unlockedTeleports) botSettings.unlockedTeleports = {};
         botSettings.unlockedTeleports[city] = isChecked;
-        
+
         // Zapisujemy przypisując do nicku
         if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) {
             let nick = Engine.hero.d.nick;
@@ -6087,7 +6038,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             allTps[nick] = botSettings.unlockedTeleports;
             localStorage.setItem('hero_teleports_by_nick_v64', JSON.stringify(allTps));
         }
-        
+
         if (typeof window.renderTeleportOptions === 'function') window.renderTeleportOptions();
     };
 
@@ -6109,14 +6060,14 @@ window.toggleTeleportLock = function(city, isChecked) {
     window.renderRecommendedExp = function() {
         let c = document.getElementById('expRecList');
         if(!c) return;
-        
+
         let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
         // Rozszerzony zakres dla lepszej widoczności bazy (-10 do +25 lvl)
         let minTarget = playerLvl - 10;
         let maxTarget = playerLvl + 25;
 
         let html = '';
-        
+
         // Zabezpieczenie: korzystamy bezpośrednio z odświeżonych botSettings
         let safeProfiles = (botSettings && botSettings.expProfiles) ? botSettings.expProfiles : window.defaultExpProfiles;
 
@@ -6161,17 +6112,17 @@ window.toggleTeleportLock = function(city, isChecked) {
     window.renderTeleportList = function() {
         let container = document.getElementById('heroTeleportsGUI');
         if (!container) return;
-        
+
         let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : [
-            "Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", 
-            "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", 
-            "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", 
+            "Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer",
+            "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal",
+            "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy",
             "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"
         ];
-        
+
         let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
         let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div>`;
-        
+
         tpList.forEach(map => {
             let isChecked = (botSettings.unlockedTeleports && botSettings.unlockedTeleports[map]) ? 'checked' : '';
             html += `
@@ -6181,7 +6132,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                 </label>
             `;
         });
-        
+
         html += `<button id="btnSaveTeleportsManual" class="btn btn-go-sepia" style="margin-top:6px; color:#4caf50; font-weight:bold; border-color:#4caf50; width:100%; padding:6px;">💾 ZAPISZ TELEPORTY</button>`;
         container.innerHTML = html;
     };
@@ -6215,7 +6166,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                 let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
                 allTps[nick] = botSettings.unlockedTeleports;
                 localStorage.setItem('hero_teleports_by_nick_v64', JSON.stringify(allTps));
-                saveSettings(); 
+                saveSettings();
                 if (window.logHero) window.logHero(`✅ Zapisano ustawienia teleportów dla: ${nick}!`, "#4caf50");
                 e.target.innerText = "✅ ZAPISANO!";
                 setTimeout(() => { if(e.target) e.target.innerText = "💾 ZAPISZ TELEPORTY"; }, 1500);
@@ -6229,17 +6180,17 @@ window.toggleTeleportLock = function(city, isChecked) {
 // WYMUSZENIE RĘCZNEJ SPRZEDAŻY
         if (e.target && e.target.closest('#btnForceSell')) {
             if (!window.autoSellState) window.autoSellState = { active: false };
-            
+
             if (window.autoSellState.active) {
                 if (window.logHero) window.logHero("⚠️ Zlecenie sprzedaży jest już w toku!", "#ffb300");
                 if (window.logExp) window.logExp("⚠️ Zlecenie sprzedaży jest już w toku!", "#ffb300");
                 return;
             }
             if (typeof stopPatrol === 'function') stopPatrol(true); // Zatrzymuje szukanie herosów i ruch expa
-            
+
             if (window.logHero) window.logHero("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
             if (window.logExp) window.logExp("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
-            
+
             window.autoSellState.active = true;
             window.autoSellState.step = 1;
             window.autoSellState.nextActionTime = 0;
@@ -6250,7 +6201,7 @@ window.toggleTeleportLock = function(city, isChecked) {
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
-            
+
             // --- INICJALIZACJA PODWÓJNEGO TOOLTIPA ---
             if (!document.getElementById('radarDualTooltip')) {
                 let tt = document.createElement('div');
@@ -6261,7 +6212,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                     <div id="rdt-right" style="background:rgba(15,15,15,0.95); border:1px solid #4caf50; border-radius:3px; padding:8px; color:#e0d8c0; font-size:11px; min-width:180px; max-width:260px; box-shadow:2px 2px 8px rgba(0,0,0,0.8); line-height: 1.4;"></div>
                 `;
                 document.body.appendChild(tt);
-                
+
                 window.showDualTooltip = function(e, dbStats, eqStatsRaw) {
                     let tt = document.getElementById('radarDualTooltip');
                     tt.style.display = 'flex';
@@ -6298,7 +6249,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                     parseStats: function(itemData) {
                         const out = {};
                         let rawStat = itemData.stat || itemData.rawStat || itemData.stats;
-                        
+
                         // 1. ODCZYT RAW (Założone EQ lub NI Sklep) - Naprawa błędu sa=19 zamiast 0.19!
                         if (rawStat && typeof rawStat === "string" && rawStat.includes("=")) {
                             rawStat.split(";").forEach(part => {
@@ -6308,7 +6259,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                                     let val = v ?? true;
                                     // Margonem zapisuje szybkość ataku i spowolnienie bez przecinka w statach!
                                     if (key === 'sa' || key === 'slow') {
-                                        if (val) val = (Number(val) / 100).toString(); 
+                                        if (val) val = (Number(val) / 100).toString();
                                     }
                                     out[key] = val;
                                 }
@@ -6318,8 +6269,8 @@ window.toggleTeleportLock = function(city, isChecked) {
 
                         // 2. ODCZYT HTML (Baza / Czysty tekst) - Zamiana polskiego tekstu na zmienne matematyczne
                         let htmlStr = itemData.stats || itemData.tooltip_text || itemData.name || "";
-                        let str = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase(); 
-                        
+                        let str = htmlStr.replace(/<[^>]*>?/gm, ' ').toLowerCase();
+
                         // Unikalne tokeny (zabezpieczają przed nakładaniem się słów)
                         str = str.replace(/obniża szybkość ataku przeciwnika o/g, "slow_val");
                         str = str.replace(/szybkość ataku/g, "sa_val");
@@ -6427,7 +6378,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                         if (item.cl) return Number(item.cl);
                         let parsed = this.parseStats(item);
                         if (parsed.cl) return Number(parsed.cl);
-                        
+
                         let type = displayType.toLowerCase();
                         if (type.includes("bro") || type.includes("dystans") || type.includes("łuk")) return 4;
                         if (type.includes("zbro") || type.includes("kaftan") || type.includes("szat")) return 8;
@@ -6461,24 +6412,24 @@ window.toggleTeleportLock = function(city, isChecked) {
 
                         if (eqScore <= 0 && dbScore > 0) return { val: 999, reason: 'ok' };
                         if (eqScore <= 0) return { val: null, reason: 'zero_score' };
-                        
+
                         let percent = ((dbScore / eqScore) - 1) * 100;
                         return { val: Number(percent.toFixed(2)), reason: 'ok' };
                     },
 
                     formatItemHTML: function(itemObj, displayType, isDb) {
                         if (!itemObj && !isDb) return `<div style="text-align:center; padding:10px;"><span style="color:#00e5ff; font-weight:bold; font-size:12px;">[PUSTY SLOT]</span><br><br><span style="color:#aaa;">Brak założonego przedmiotu<br>w tym miejscu.</span></div>`;
-                        
+
                         let stats = this.parseStats(isDb ? itemObj : { stat: itemObj.stat || itemObj._cachedStats?.stat });
                         let name = isDb ? itemObj.name : (itemObj._cachedStats?.name || itemObj.name || "Nieznany");
-                        
+
                         let lvl = isDb ? itemObj.level : "";
                         let prof = isDb ? (itemObj.prof && itemObj.prof.length > 0 ? itemObj.prof.join(', ') : "Zwykły") : "";
-                        
+
                         if (!isDb && itemObj) {
                             let sStr = itemObj.stat || itemObj._cachedStats?.stat || "";
                             let mLvl = sStr.match(/lvl=(\d+)/); if (mLvl) lvl = mLvl[1];
-                            let mReqp = sStr.match(/reqp=([a-z]+)/); 
+                            let mReqp = sStr.match(/reqp=([a-z]+)/);
                             if (mReqp) {
                                 let pMap = {"w":"Wojownik", "m":"Mag", "t":"Tropiciel", "p":"Paladyn", "h":"Łowca", "b":"Tancerz ostrzy"};
                                 prof = mReqp[1].split('').map(x => pMap[x] || x).join(', ');
@@ -6487,9 +6438,9 @@ window.toggleTeleportLock = function(city, isChecked) {
 
                         let titleColor = isDb ? "#ffb300" : "#4caf50";
                         let titleText = isDb ? "[Ze Sklepu / Bazy]" : "[Obecnie Założony]";
-                        
+
                         let html = `<div style="text-align:center; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:6px;"><b style="color:${titleColor}; font-size:12px;">${titleText}</b><br><b style="color:#d4af37; font-size:12px;">${name}</b><br><span style="color:#aaa; font-size:9px;">Typ: ${displayType}</span></div>`;
-                        
+
                         // Lista WSZYSTKICH statystyk (Pancerze, Cechy, Resy, Kryty itd.)
                         const statOrder = [
                             {k:'dmg', l:'Obrażenia', c:'#fff'}, {k:'pdmg', l:'Obrażenia fizyczne', c:'#fff'}, {k:'acdmg', l:'Obrażenia dystansowe', c:'#fff'}, {k:'mdmg', l:'Obrażenia magiczne', c:'#fff'},
@@ -6503,7 +6454,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                             {k:'pierce', l:'Przebicie pancerza', c:'#fff', p:true}, {k:'dz', l:'Niszczenie pancerza', c:'#fff', p:true}, {k:'slow', l:'Obniża SA przeciwnika', c:'#fff'},
                             {k:'absorb', l:'Absorbuje fizyczne', c:'#fff'}, {k:'absorbm', l:'Absorbuje magiczne', c:'#fff'}, {k:'heal', l:'Leczenie turowe', c:'#4caf50', p:true}
                         ];
-                        
+
                         statOrder.forEach(st => {
                             let val = stats[st.k];
                             if (val) {
@@ -6513,12 +6464,12 @@ window.toggleTeleportLock = function(city, isChecked) {
                                 html += `<span style="color:${st.c}">${st.l}: <b>${pre}${String(val).replace(',', ' - ')}${post}</b></span><br>`;
                             }
                         });
-                        
+
                         html += `<div style="margin-top:6px; padding-top:4px; border-top:1px solid #333; font-size:9px; color:#888;">`;
                         if (prof) html += `Profesja: <span style="color:#aaa">${prof}</span><br>`;
                         if (lvl) html += `Poziom: <span style="color:#aaa">${lvl}</span>`;
                         html += `</div>`;
-                        
+
                         return html;
                     }
                 };
@@ -6545,7 +6496,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                     <div id="eqListContent" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:3px;"></div>
                 `;
             }
-            
+
 window.renderEqItems = function(filterType = 'Wszystkie') {
             try {
                 let container = document.getElementById('eqListContent');
@@ -6558,26 +6509,26 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
                 let currentLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? parseInt(Engine.hero.d.lvl) : 1;
                 let currentProf = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.prof) ? Engine.hero.d.prof : 'w';
-                
+
                 let profMap = { 'w': 'wojownik', 'm': 'mag', 'p': 'paladyn', 'h': 'łowca', 't': 'tropiciel', 'b': 'tancerz ostrzy' };
                 let profName = profMap[currentProf] || 'wszystkie';
                 let safeFilterType = String(filterType || 'Wszystkie').toLowerCase();
 
                 let filtered = window.DatabaseModule.ekwipunek.filter(item => {
                     if (!item) return false;
-                    
+
                     let itemLvl = parseInt(item.level) || 1;
                     let lvlMatch = itemLvl <= currentLvl && itemLvl >= (currentLvl - 5);
-                    
+
                     let profMatch = true;
                     if (item.prof && Array.isArray(item.prof) && item.prof.length > 0) {
                         let profArray = item.prof.map(p => String(p).toLowerCase());
                         profMatch = profArray.some(p => p.includes(profName) || p.includes('wszystkie') || p.includes('każda'));
                     }
-                    
+
                     let itemTypeLower = String(item.type).toLowerCase();
                     let typeMatch = false;
-                    
+
                     if (safeFilterType === 'wszystkie') {
                         typeMatch = true;
                     } else if (safeFilterType === 'bro') {
@@ -6587,7 +6538,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     } else {
                         typeMatch = itemTypeLower.includes(safeFilterType);
                     }
-                    
+
                     return lvlMatch && profMatch && typeMatch;
                 });
 
@@ -6599,7 +6550,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     let safeType = String(item.type || 'Inne');
                     let safeLvl = item.level || 1;
                     let safeReqp = (item.prof && item.prof.length > 0) ? item.prof.join(', ') : 'Wszystkie';
-                    
+
                     let safeStatsEscaped = String(item.stats || "").replace(/"/g, '&quot;');
                     let safeNameEscaped = safeName.replace(/"/g, '&quot;');
 
@@ -6635,24 +6586,24 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         // Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
         window.getBagInfo = function() {
             if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { free: 0, occupied: 0, total: 42 };
-            
+
             let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
             let itemsArr = Object.values(hItems).filter(i => i);
-            
+
             // 1. Ręczne zliczanie pojemności (Baza 42 kratek + założone torby cl=24)
             let total = 42;
             itemsArr.forEach(i => {
-                if (Number(i.st) > 0 && Number(i.cl) === 24) { 
+                if (Number(i.st) > 0 && Number(i.cl) === 24) {
                     let statStr = i._cachedStats?.stat || i.stat || "";
                     let match = statStr.match(/pojemnosc=(\d+)/) || statStr.match(/capacity=(\d+)/);
                     if (match) total += parseInt(match[1]);
                 }
             });
-            
+
             // 2. Liczenie zajętych kratek (st === 0 to przedmioty w plecaku)
             let occupied = itemsArr.filter(i => Number(i.st) === 0).length;
             let free = Math.max(0, total - occupied);
-            
+
             return { free, occupied, total };
         };
     }
@@ -6663,27 +6614,27 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
      // 4. MIKSTURY I LECZENIE (Lista Uzdrowicieli ze wskaźnikiem leczenia)
         if (e.target && e.target.closest('#btnShowPotions')) {
             hideAllTabs(); if (potList) potList.style.display = 'flex';
-            if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) { 
-                potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; 
+            if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) {
+                potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return;
             }
 
             let healers = window.DatabaseModule.kupcy.filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
-            
+
             let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Uzdrowiciele (${healers.length} postaci):</div>`;
-            
+
             healers.forEach((k, index) => {
                 let itemCount = k.items ? k.items.length : 0;
                 let itemsHtml = '';
-                
+
                 if (itemCount > 0) {
                     itemsHtml = k.items.map((i, sIdx) => {
                         let cleanName = i.name.split('Typ:')[0].trim();
                         let price = i.price_or_value ? `${(i.price_or_value).toLocaleString()} zł` : '?';
                         let fullStats = i.tooltip_text || i.raw_detected_text || i.name;
-                        
+
                         let healMatch = fullStats.match(/Leczy\s+([0-9\s]+)\s+punkt/i);
                         let healAmount = healMatch ? healMatch[1].trim() : "??";
-                        
+
                         return `
                             <div style="display:flex; justify-content:space-between; align-items:center; color:#d4af37; font-size:9px; margin-bottom:4px; border-bottom:1px solid #222; padding-bottom:2px;">
                                 <div style="width:60%; padding-right:5px;">
@@ -6692,14 +6643,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                                 </div>
                                 <div style="display:flex; align-items:center;">
                                     <input type="number" id="buy_amt_heal_${index}_${sIdx}" value="10" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center; margin-right:4px;">
-                                    <button class="btn-go-npc" 
+                                    <button class="btn-go-npc"
                                         data-mode="potion"
-                                        data-buy-input="buy_amt_heal_${index}_${sIdx}" 
-                                        data-item="${cleanName}" 
-                                        data-npc="${k.npc_name}" 
-                                        data-map="${k.map_name}" 
-                                        data-x="${k.x}" 
-                                        data-y="${k.y}" 
+                                        data-buy-input="buy_amt_heal_${index}_${sIdx}"
+                                        data-item="${cleanName}"
+                                        data-npc="${k.npc_name}"
+                                        data-map="${k.map_name}"
+                                        data-x="${k.x}"
+                                        data-y="${k.y}"
                                         style="background:#d81b60; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">
                                         🏃 KUP
                                     </button>
@@ -6719,11 +6670,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             <span>🌍 ${k.map_name} [${k.x}, ${k.y}]</span>
                             <button class="btn-go-npc" data-map="${k.map_name}" data-x="${k.x}" data-y="${k.y}" style="background:#4caf50; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">🏃 IDŹ DO NPC</button>
                         </div>
-                        
+
                         <div class="toggle-items-btn" data-index="heal_${index}" style="color:#00acc1; font-size:9px; margin-top:4px; cursor:pointer; font-weight:bold; background:#222; padding:2px 4px; text-align:center; border-radius:2px;">
                             Pokaż asortyment (${itemCount} szt.) ▼
                         </div>
-                        
+
                         <div id="shop_items_heal_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px; background:#0a0a0a; padding-left:4px;">
                             ${itemsHtml}
                         </div>
@@ -6741,7 +6692,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (sellerDiv) {
                 if (sellerDiv.style.display === 'block') { sellerDiv.style.display = 'none'; return; }
                 let sellers = window.DatabaseModule.kupcy.filter(k => k.items && k.items.some(i => i.name && i.name.includes(itemName)));
-                
+
                if (sellers.length > 0) {
                     let sHtml = '';
                     sellers.forEach((s, sIdx) => {
@@ -6750,23 +6701,23 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             <div style="background:#0a0a0a; padding:4px; margin-bottom:4px; border-left:2px solid ${isPotion ? '#d81b60' : '#4caf50'};">
                                 <b style="color:#e65100; font-size:10px;">${s.npc_name}</b><br>
                                 <span style="color:#888; font-size:9px;">🌍 ${s.map_name} [${s.x}, ${s.y}]</span>
-                                
+
                                 <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px; gap:6px;">
-                                    ${isPotion ? 
-                                        `<input type="number" id="buy_amt_${index}_${sIdx}" value="10" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center;">` 
-                                        : 
+                                    ${isPotion ?
+                                        `<input type="number" id="buy_amt_${index}_${sIdx}" value="10" min="1" max="1000" style="width:35px; height:16px; font-size:10px; background:#000; color:#fff; border:1px solid #444; text-align:center;">`
+                                        :
                                         `<label style="color:#aaa; font-size:9px; cursor:pointer; display:flex; align-items:center; gap:2px;">
                                             <input type="checkbox" id="buy_eq_chk_${index}_${sIdx}" style="margin:0; width:12px; height:12px;"> kup
                                          </label>`
                                     }
-                                    <button class="btn-go-npc" 
+                                    <button class="btn-go-npc"
                                         data-mode="${isPotion ? 'potion' : 'eq'}"
-                                        data-buy-input="${isPotion ? `buy_amt_${index}_${sIdx}` : `buy_eq_chk_${index}_${sIdx}`}" 
-                                        data-item="${itemName}" 
-                                        data-npc="${s.npc_name}" 
-                                        data-map="${s.map_name}" 
-                                        data-x="${s.x}" 
-                                        data-y="${s.y}" 
+                                        data-buy-input="${isPotion ? `buy_amt_${index}_${sIdx}` : `buy_eq_chk_${index}_${sIdx}`}"
+                                        data-item="${itemName}"
+                                        data-npc="${s.npc_name}"
+                                        data-map="${s.map_name}"
+                                        data-x="${s.x}"
+                                        data-y="${s.y}"
                                         style="background:${isPotion ? '#d81b60' : '#4caf50'}; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">
                                         🏃 IDŹ
                                     </button>
@@ -6796,7 +6747,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let mapName = e.target.getAttribute('data-map');
             let targetX = parseInt(e.target.getAttribute('data-x'));
             let targetY = parseInt(e.target.getAttribute('data-y'));
-            
+
             let mode = e.target.getAttribute('data-mode');
             let inputId = e.target.getAttribute('data-buy-input');
             let buyAmount = 0;
@@ -6819,7 +6770,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
 
             if (btnStop) btnStop.style.display = 'block';
-            
+
             // Używamy zintegrowanego silnika Rush, który sam teleportuje się Zakonnikami!
             if (typeof window.rushToMap === 'function') {
                 window.rushToMap(mapName, targetX, targetY);
@@ -6829,7 +6780,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
 
             if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
-            
+
             // Lekki nasłuchiwacz czekający aż bot zakończy bieg w innym mieście
             window.npcWalkInterval = setInterval(() => {
                 if (!window.autoBuyTask) {
@@ -6837,7 +6788,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (btnStop) btnStop.style.display = 'none';
                     return;
                 }
-                
+
                 if (typeof Engine !== 'undefined' && Engine.map && Engine.hero) {
                     if (Engine.map.d.name === mapName) {
                         let dist = Math.abs(Engine.hero.d.x - targetX) + Math.abs(Engine.hero.d.y - targetY);
@@ -6846,7 +6797,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (window.logHero) window.logHero(`💬 Zaczepiam NPC ${window.autoBuyTask.npc}...`, "#ffeb3b");
                             clearInterval(window.npcWalkInterval);
                             if (btnStop) btnStop.style.display = 'none';
-                            
+
                             let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
                             for (let i in npcs) {
                                 let n = npcs[i];
@@ -6886,16 +6837,16 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         if (e.target && e.target.id === 'shopSearchInput') {
             let term = e.target.value.toLowerCase();
             let container = document.getElementById('shopsListOutput');
-            
+
             if (!window.DatabaseModule || window.DatabaseModule.kupcy.length === 0) return;
             if (term.length < 2) { container.innerHTML = `<span style="color:#777; font-size:10px;">Wpisz minimum 2 znaki...</span>`; return; }
 
-            let filtered = window.DatabaseModule.kupcy.filter(k => 
+            let filtered = window.DatabaseModule.kupcy.filter(k =>
                 (k.npc_name && k.npc_name.toLowerCase().includes(term)) ||
                 (k.map_name && k.map_name.toLowerCase().includes(term)) ||
                 (k.category && k.category.toLowerCase().includes(term)) ||
                 (k.items && k.items.some(i => i.name && i.name.toLowerCase().includes(term)))
-            ).slice(0, 30); 
+            ).slice(0, 30);
 
             if (filtered.length === 0) { container.innerHTML = `<span style="color:#777; font-size:10px;">Brak wyników dla: "${term}".</span>`; return; }
 
@@ -6903,7 +6854,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             filtered.forEach((k, index) => {
                 let itemCount = k.items ? k.items.length : 0;
                 let itemsHtml = '';
-                
+
                if (itemCount > 0) {
                     itemsHtml = k.items.map(i => {
                         let cleanName = i.name.split('Typ:')[0].trim();
@@ -6939,11 +6890,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             <span>🌍 ${k.map_name} [${k.x}, ${k.y}]</span>
                             <button class="btn-go-npc" data-map="${k.map_name}" data-x="${k.x}" data-y="${k.y}" style="background:#4caf50; color:white; border:none; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:9px; font-weight:bold;">🏃 IDŹ</button>
                         </div>
-                        
+
                         <div class="toggle-items-btn" data-index="${index}" style="color:#00acc1; font-size:9px; margin-top:4px; cursor:pointer; font-weight:bold;">
                             Pokaż asortyment (${itemCount} szt.) ▼
                         </div>
-                        
+
                         <div id="shop_items_${index}" style="display:none; margin-top:5px; border-top:1px solid #333; padding-top:4px; background:#0a0a0a; padding-left:4px;">
                             ${itemsHtml}
                         </div>
@@ -6953,7 +6904,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }
     });
  // --- SILNIK GRAFICZNY CUSTOMOWYCH TOOLTIPÓW (Styl Margonem) ---
-    
+
     if (!document.getElementById('customMargoTooltip')) {
         let tt = document.createElement('div');
         tt.id = 'customMargoTooltip';
@@ -6967,10 +6918,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let tt = document.getElementById('customMargoTooltip');
             let name = e.target.getAttribute('data-name');
             let rawStats = e.target.getAttribute('data-stats');
-            
+
             if (tt && rawStats) {
                 let desc = rawStats.replace(name, '').trim();
-                
+
                 // Rzadkości w różnych odmianach (od teraz podświetli i "Unikat", i "Unikatowy")
                 desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Pospolity)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/gi, '<br><span style="color:#b0bec5; font-weight:bold;">$1</span><br>');
                 desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Unikat|Unikatowy)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/gi, '<br><span style="color:#fbc02d; font-weight:bold;">$1</span><br>');
@@ -6978,13 +6929,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 desc = desc.replace(/(?<![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(Legendarny)(?![a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])/gi, '<br><span style="color:#ef5350; font-weight:bold;">$1</span><br>');
 
                 const statKeywords = [
-                    "Typ:", "Obrażenia", "Cios krytyczny", "Siła", "Zręczność", "Intelekt", "Energia", "Mana", 
-                    "Pancerz", "Blok", "Unik", "Życie", "Odporność na", "Wiąże", "Spowalnia", "Zmniejsza", "Przebicie", 
-                    "Pojemność", "Ilość:", "Teleportuje", "Leczy", "Przywraca", "Niszczy", "Szansa na", 
-                    "Podczas ataku", "Dodatkowe", "Absorbuje", "Wymagany poziom:", "Wymagana profesja:", 
+                    "Typ:", "Obrażenia", "Cios krytyczny", "Siła", "Zręczność", "Intelekt", "Energia", "Mana",
+                    "Pancerz", "Blok", "Unik", "Życie", "Odporność na", "Wiąże", "Spowalnia", "Zmniejsza", "Przebicie",
+                    "Pojemność", "Ilość:", "Teleportuje", "Leczy", "Przywraca", "Niszczy", "Szansa na",
+                    "Podczas ataku", "Dodatkowe", "Absorbuje", "Wymagany poziom:", "Wymagana profesja:",
                     "Wartość:", "Zadaje", "Obniża", "Związany"
                 ];
-                
+
                 statKeywords.forEach(key => {
                     let regex = new RegExp(`(?<!>\\s*)(${key})`, 'g');
                     desc = desc.replace(regex, '<br>$1');
@@ -6998,7 +6949,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
                 let html = `<div style="color:#ffca28; font-weight:bold; font-size:12px; border-bottom:1px solid #443c2c; padding-bottom:4px; margin-bottom:4px; text-align:center; text-shadow:1px 1px 0 #000;">${name}</div>`;
                 html += `<div style="color:#ddd; font-size:10px; line-height:1.6;">${desc}</div>`;
-                
+
                 tt.innerHTML = html;
                 tt.style.display = 'block';
             }
@@ -7493,110 +7444,65 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 300);
     }
 
-  // --- DAEMON: DETEKCJA ZAPADKI I GRACZY (MULTI-ALARM) ---
+    // --- DAEMON: DETEKCJA ZAPADKI (CELOWANA STREFA ALERTÓW) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.captchaAlertTriggered = false;
-        window.playerAlertTriggered = false;
-        window.lastChatLength = 0; // Pamięć czatu dla nowości
 
         setInterval(() => {
-            // --- CZĘŚĆ 1: DETEKCJA ZAPADKI ---
-            if (botSettings.exp && botSettings.exp.captchaAlert) {
-                let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
-                let textMatch = false;
-                
-                if (!hasWindow) {
-                    let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
-                    for (let el of containers) {
-                        if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
-                        let t = el.innerText || "";
-                        if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
-                            textMatch = true;
-                            break;
-                        }
+            // Sprawdzamy, czy gracz zaznaczył checkbox w zaawansowanych
+            if (!botSettings.exp || !botSettings.exp.captchaAlert) {
+                window.captchaAlertTriggered = false; // Reset by uniknąć pętli
+                return;
+            }
+
+            // 1. Sprawdzenie po znanych, sztywnych klasach okien Zapadki
+            let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
+
+            // 2. Skanowanie tekstowe strefy pod złotem i okien dialogowych
+            let textMatch = false;
+            if (!hasWindow) {
+                let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
+
+                for (let el of containers) {
+                    if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
+
+                    let t = el.innerText || "";
+                    if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
+                        textMatch = true;
+                        break;
                     }
-                }
-
-                let isCaptchaActive = hasWindow || textMatch;
-
-                if (isCaptchaActive && !window.captchaAlertTriggered) {
-                    window.captchaAlertTriggered = true;
-                    if (typeof stopPatrol === 'function') stopPatrol(true);
-                    
-                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
-                    window.focus();
-                    
-                    if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!", requireInteraction: true });
-                    if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                    if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                } else if (!isCaptchaActive && window.captchaAlertTriggered) {
-                    window.captchaAlertTriggered = false;
                 }
             }
 
-            // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
-            if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
-                let playerFound = false;
-                let chatMessageFound = false;
-                let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : null;
+            let isCaptchaActive = hasWindow || textMatch;
 
-                // A) Skanowanie pola widzenia na obecność innych graczy (typ 0 lub 1 = gracz)
-                if (typeof Engine !== 'undefined' && Engine.others && myNick) {
-                    let others = typeof Engine.others.check === 'function' ? Engine.others.check() : Engine.others.d;
-                    if (others) {
-                        for (let id in others) {
-                            let p = others[id].d || others[id];
-                            // Upewniamy się, że to nie jest martwy gracz, i że ma typ gracza
-                            if (p && !p.dead && !p.del && (p.type === 0 || p.type === 1)) {
-                                // Ignoruj jeśli skaner wykrył samego siebie (Zabezpieczenie Margo)
-                                if (p.nick !== myNick) {
-                                    playerFound = p.nick;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+            if (isCaptchaActive && !window.captchaAlertTriggered) {
+                window.captchaAlertTriggered = true;
+
+                if (typeof stopPatrol === 'function') stopPatrol(true);
+
+                try {
+                    let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
+                    audio.play();
+                    setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
+                } catch(e) {}
+
+                window.focus();
+
+                if (Notification.permission === "granted") {
+                    new Notification("🚨 ALARM: ZAPADKA!", {
+                        body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!",
+                        requireInteraction: true
+                    });
                 }
 
-                // B) Skanowanie Czatu Głównego na obecność własnego Nicku
-                if (myNick) {
-                    let chatLines = document.querySelectorAll('#chattxt .chat-message, .chat-message-container');
-                    let currentLength = chatLines.length;
+                if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
 
-                    // Sprawdzamy tylko nowe wiadomości
-                    if (currentLength > window.lastChatLength) {
-                        for (let i = window.lastChatLength; i < currentLength; i++) {
-                            let line = chatLines[i].innerText || chatLines[i].textContent || "";
-                            // Pomijamy komunikaty systemowe i wiadomości wysłane przez nas samych
-                            if (line.includes(`[System]`) || line.startsWith(`${myNick}:`)) continue;
-                            
-                            if (line.toLowerCase().includes(myNick.toLowerCase())) {
-                                chatMessageFound = true;
-                                break;
-                            }
-                        }
-                    }
-                    window.lastChatLength = currentLength; // Zapisujemy stan na następny cykl
-                }
-
-                let dangerDetected = playerFound || chatMessageFound;
-
-                if (dangerDetected && !window.playerAlertTriggered) {
-                    window.playerAlertTriggered = true;
-                    if (typeof stopPatrol === 'function') stopPatrol(true); // Twarde zatrzymanie Bota
-                    
-                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
-                    window.focus();
-                    
-                    let alertReason = playerFound ? `Wykryto gracza: ${playerFound}!` : `Ktoś wspomniał Twój nick na czacie!`;
-                    if (Notification.permission === "granted") new Notification("👁️ OSTRZEŻENIE (EXP)!", { body: alertReason + " Zatrzymano bota.", requireInteraction: true });
-                    if (window.logExp) window.logExp(`👁️ ${alertReason} Zatrzymano auto-exp!`, "#ffb300");
-
-                } else if (!dangerDetected && window.playerAlertTriggered) {
-                    window.playerAlertTriggered = false;
-                }
+            } else if (!isCaptchaActive && window.captchaAlertTriggered) {
+                window.captchaAlertTriggered = false;
             }
-        }, 800); 
+        }, 800);
     }
 })(); // Koniec kodu
