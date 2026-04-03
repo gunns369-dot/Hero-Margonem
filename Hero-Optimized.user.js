@@ -7125,67 +7125,51 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 800);
     }
 
-   // --- DAEMON: AUTOHEAL (Wersja V2 - Anty-Spam) ---
+  // --- DAEMON: AUTOHEAL (Działa zawsze, gdy zaznaczony w menu) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
         window.lastHealTime = 0;
         window.isHealLocked = false;
         setInterval(() => {
-            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.heroEquipment || window.isHealLocked) return;
-            if (Engine.battle && Engine.battle.show) return;
+            // Sprawdzanie podstawowe: czy silnik żyje, czy nie jesteśmy w walce i czy opcja jest WŁĄCZONA w menu
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || window.isHealLocked) return;
+            if (!botSettings.autoheal || !botSettings.autoheal.enabled) return; // <-- TO SPRAWIA ŻE LECZY ZAWSZE GDY OPCJA JEST ON
             
-            // ZABEZPIECZENIE: Nie próbujemy leczyć martwej postaci!
+            if (Engine.battle && Engine.battle.show) return;
             if (Engine.dead || Engine.hero.d.dead) return;
 
             let hp = parseInt(Engine.hero.d.hp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
             let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
-            if (!maxhp) {
-                let hpEl = document.querySelector('.health-val') || document.querySelector('.hp-values');
-                if (hpEl && hpEl.innerText) {
-                    let match = hpEl.innerText.match(/^(\d+)\s*\/\s*(\d+)/);
-                    if (match) { hp = parseInt(match[1]); maxhp = parseInt(match[2]); }
-                }
-            }
+            
             if (!maxhp) return;
             
-            let threshold = botSettings.autoheal ? parseInt(botSettings.autoheal.threshold) || 80 : 80;
+            let threshold = parseInt(botSettings.autoheal.threshold) || 80;
             let hpPercent = (hp / maxhp) * 100;
             
+            // Jeśli życie spadnie poniżej progu, szukaj potki w torbie
             if (hpPercent < threshold && Date.now() > window.lastHealTime) {
                 let items = Object.values(Engine.heroEquipment.getHItems?.() || {});
                 let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null);
+                
                 if (potions.length > 0) {
                     window.isHealLocked = true;
                     let missingHp = maxhp - hp;
-                    potions.sort((a, b) => {
-                        let healA = a.getLeczyStat() || 0;
-                        let healB = b.getLeczyStat() || 0;
-                        return Math.abs(healA - missingHp) - Math.abs(healB - missingHp);
-                    });
+                    
+                    // Sortowanie: znajdź potkę najbliższą brakującemu HP
+                    potions.sort((a, b) => Math.abs((a.getLeczyStat()||0) - missingHp) - Math.abs((b.getLeczyStat()||0) - missingHp));
                     
                     let bestPot = potions[0];
-                    let healValue = bestPot.getLeczyStat() || 0;
-                    
                     if (typeof Engine.heroEquipment.useItem === 'function') Engine.heroEquipment.useItem(bestPot.id);
-                    else window._g(`moveitem&st=1&id=${bestPot.id}`);
                     
-                    if (Engine.hero.d.hp) Engine.hero.d.hp = Math.min(maxhp, hp + healValue);
+                    window.lastHealTime = Date.now() + 1200; // Anty-spam 1.2s
+                    setTimeout(() => { window.isHealLocked = false; }, 1000);
                     
-                    window.lastHealTime = Date.now() + 1500;
-                    setTimeout(() => { window.isHealLocked = false; }, 1200);
-                    
-                    if (window.lastHealLog !== bestPot.id || Date.now() - (window._lastHealLogTime || 0) > 3000) {
-                        let msg = `💚 Leczę się: ${bestPot._cachedStats?.name || bestPot.name} (+${healValue} HP)`;
-                        if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
-                        else if (window.logHero) window.logHero(msg, "#4caf50");
-                        window.lastHealLog = bestPot.id;
-                        window._lastHealLogTime = Date.now();
-                    }
+                    let msg = `💚 [Auto-Heal] Uleczono postacią poza trybem pracy.`;
+                    if (window.logHero) window.logHero(msg, "#4caf50");
                 }
             }
-        }, 300);
+        }, 350);
     }
-
 // --- DAEMON: AUTO-POTY (Kupowanie mikstur z humanizacją) ---
     if (!window.autoPotDaemonInstalled) {
         window.autoPotDaemonInstalled = true;
