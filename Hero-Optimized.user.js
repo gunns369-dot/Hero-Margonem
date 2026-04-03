@@ -4871,9 +4871,6 @@ window.expMoveLockUntil = 0;
 window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
 
-
-function runExpLogic() {
-
   function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
