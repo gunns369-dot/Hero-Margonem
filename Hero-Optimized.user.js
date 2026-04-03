@@ -2679,9 +2679,12 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
                                 <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska
                             </label>
-                            <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Zatrzymuje bota i wywołuje alarm na pulpicie!">
-                                <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
-                            </label>
+                            <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Odtwarza dźwięk i zatrzymuje bota z losowym opóźnieniem 3-5s">
+    <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
+</label>
+<label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Automatycznie klika okienko i rozwiązuje zagadkę z gwiazdką po zatrzymaniu bota">
+    <input type="checkbox" id="autoSolveCaptcha" ${botSettings.exp.autoSolveCaptcha ? 'checked' : ''}> 🤖 Rozwiązuj automatycznie
+</label>
                             <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy pojawi się gracz lub ktoś napisze do Ciebie">
                                 <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy / Nick
                             </label>
@@ -3112,6 +3115,14 @@ if (btnExp) {
                 Notification.requestPermission();
             }
         });
+
+        if (botSettings.exp.autoSolveCaptcha === undefined) { botSettings.exp.autoSolveCaptcha = false; saveSettings(); }
+
+bindChange('autoSolveCaptcha', (e) => {
+    botSettings.exp.autoSolveCaptcha = e.target.checked;
+    saveSettings();
+});
+        
         if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
 
         bindChange('playerAlert', (e) => {
@@ -7519,38 +7530,28 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.playerAlertTriggered = false;
-        window.lastChatLength = 0; // Pamięć czatu dla nowości
+        window.lastChatLength = 0;
 
-        // Zmienne Auto-Solvera
         window.__captchaPhase = "none"; 
         window.__wasExpingBeforeCaptcha = false;
 
-        // --- FUNKCJE HUMANIZUJĄCE I SYMULUJĄCE MYSZ ---
+        // --- FUNKCJE HUMANIZUJĄCE ---
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
         
         function humanClick(el) {
             if (!el) return;
-            
-            // Celujemy w sam kontener przycisku, a nie w sam tekst (Margonem tak wymaga)
             let target = el.closest('.button') || el;
-            
             if (window.jQuery) window.jQuery(target).trigger("click");
-            
-            // Margonem na Nowym Interfejsie rygorystycznie wymaga PointerEvents
             ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
                 target.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window, buttons: 1 }));
             });
         }
 
-// --- DETEKCJA OKIEN ---
+        // --- DETEKCJA OKIEN ---
         function getPreCaptcha() {
-            // Szukamy diva powiadomienia na ekranie gry
             const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
-            
             if (preEl && preEl.offsetParent !== null) {
-                // Rygorystyczny filtr: Kontener MUSI zawierać tekst potwierdzający, że to zapadka,
-                // albo klasę 'show', żebyśmy nie klikali w ukryte, puste "duchy" interfejsu.
                 const text = (preEl.innerText || preEl.textContent || "").trim();
                 if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) {
                     const btn = preEl.querySelector('.button, .btn');
@@ -7561,12 +7562,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }
 
         function getCaptchaWindow() {
-            // Bezpośrednia klasa głównego okna zagadki
             const win = document.querySelector('.captcha, .c-window.border-window.captcha-window, .margo-window[data-wnd="zapadka"]');
-            
             if (win && win.offsetParent !== null) {
                 const text = (win.innerText || win.textContent || "").trim();
-                // Upewniamy się, że to faktycznie okno zagadki, a nie inny element UI
                 if (text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("pozostałych prób")) {
                     return win;
                 }
@@ -7574,61 +7572,66 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             return null;
         }
 
-        // --- OBSŁUGA POWIADOMIENIA (PRE-CAPTCHA) ---
-        async function handlePreCaptcha(preBtn) {
+        // --- OBSŁUGA POJAWIENIA SIĘ ZAGADKI (ALARM + OPÓŹNIONY STOP) ---
+        async function handleCaptchaDetection(preEl, fullEl) {
             if (window.__captchaPhase !== "none") return;
-            window.__captchaPhase = "pre_handling";
+            window.__captchaPhase = "handling_delay";
             
-            // Zapamiętujemy stan bota expiącego
             window.__wasExpingBeforeCaptcha = window.isExping;
-            
-            if (window.logExp) window.logExp("🚨 [Zapadka] Pojawiło się powiadomienie. Odczekuję 2-4 sekundy...", "#ff9800");
-            
-            // 1. ZŁOTA ZASADA HUMANIZACJI: Opóźnienie przed zatrzymaniem bota (2-4 sekundy)
-            await sleep(randomDelay(2000, 4000));
-            
-            // 2. Alarm i bezpieczne wyłączenie bota
-            try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
-            
+
+            // 1. NATYCHMIASTOWY ALARM
+            if (botSettings.exp.captchaAlert) {
+                try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
+                if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Rozwiąż zagadkę na ekranie!", requireInteraction: true });
+                if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
+            }
+
+            // 2. LUDZKIE ZATRZYMANIE BOTA Z OPÓŹNIENIEM (3 - 5 sekund)
+            if (window.logExp) window.logExp("⏳ [Humanizacja] Odczekuję losowo 3-5 sekund przed zatrzymaniem postaci...", "#ff9800");
+            await sleep(randomDelay(3000, 5000));
+
+            // Zatrzymanie procesów bota
             if (window.isExping) {
                 let btn = document.getElementById('btnStartExp');
                 if (btn) btn.click();
             }
             if (typeof stopPatrol === 'function') stopPatrol(true);
-            
-            if (window.logExp) window.logExp("🖱️ [Humanizacja] Klikam 'Rozwiąż teraz'...", "#ff9800");
-            
-            // 3. Kliknięcie "Rozwiąż teraz" by rozwinąć duże okno
-            humanClick(preBtn);
-            
-            window.__captchaPhase = "waiting_for_full";
+            if (window.logExp) window.logExp("🛑 [Zapadka] Akcje zatrzymane.", "#f44336");
+
+            // 3. DECYZJA: AUTO-SOLVER CZY CZEKAMY NA UŻYTKOWNIKA?
+            if (botSettings.exp.autoSolveCaptcha) {
+                if (preEl && !fullEl) {
+                    if (window.logExp) window.logExp("🤖 [Auto-Solver] Klikam 'Rozwiąż teraz'...", "#00e5ff");
+                    humanClick(preEl);
+                    window.__captchaPhase = "waiting_for_full";
+                } else if (fullEl) {
+                    window.__captchaPhase = "full_handling";
+                    handleFullCaptcha(fullEl);
+                }
+            } else {
+                if (window.logExp) window.logExp("✋ [Info] Automatyczne rozwiązywanie jest wyłączone. Czekam aż zrobisz to ręcznie...", "#ffb300");
+                window.__captchaPhase = "manual_waiting";
+            }
         }
 
-        // --- OBSŁUGA GŁÓWNEGO OKNA ZAGADKI ---
+        // --- LOGIKA KLIKANIA ODPOWIEDZI ---
         async function handleFullCaptcha(winEl) {
             if (window.__captchaPhase === "full_handling") return;
             window.__captchaPhase = "full_handling";
             
-            if (window.logExp) window.logExp("🤖 [Humanizacja] Czytam zagadkę...", "#ff9800");
-
-            // Czas na przeczytanie opcji
+            if (window.logExp) window.logExp("🤖 [Auto-Solver] Czytam zagadkę...", "#ff9800");
             await sleep(randomDelay(2000, 3500));
 
-            // Elementy z Twojego screena z DevTools
             let buttonsWrapper = winEl.querySelector('.captcha__buttons');
             let confirmWrapper = winEl.querySelector('.captcha__confirm');
             
             let targetAnswers = [];
             let confirmBtn = null;
 
-            // Szukanie odpowiedzi z gwiazdką (*)
             if (buttonsWrapper) {
                 let answers = buttonsWrapper.querySelectorAll('.button');
-                answers.forEach(btn => {
-                    if (btn.innerText.includes('*')) targetAnswers.push(btn);
-                });
+                answers.forEach(btn => { if (btn.innerText.includes('*')) targetAnswers.push(btn); });
             } else {
-                // Fallback (awaryjne)
                 const allElements = winEl.querySelectorAll('*');
                 for (const el of allElements) {
                     const text = (el.innerText || "").trim();
@@ -7636,37 +7639,28 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }
 
-            // Szukanie guzika "Potwierdzam"
             if (confirmWrapper) {
                 confirmBtn = confirmWrapper.querySelector('.button');
             } else {
                 let fallbackBtns = winEl.querySelectorAll('.button');
-                fallbackBtns.forEach(btn => {
-                    if (btn.innerText.includes('Potwierdzam')) confirmBtn = btn;
-                });
+                fallbackBtns.forEach(btn => { if (btn.innerText.includes('Potwierdzam')) confirmBtn = btn; });
             }
 
-            // Przeklikanie znalezionych opcji
             if (targetAnswers.length > 0) {
                 if (window.logExp) window.logExp(`🎯 Wykryto ${targetAnswers.length} odpowiedz(i). Zaczynam klikać...`, "#00e5ff");
                 
                 for (const btn of targetAnswers) {
-                    await sleep(randomDelay(600, 1200)); // Czas na ruch myszki
+                    await sleep(randomDelay(600, 1200));
                     humanClick(btn);
-                    if (window.logExp) window.logExp(`🖱️ Kliknięto opcję: "${btn.innerText.trim()}"`, "#4caf50");
+                    if (window.logExp) window.logExp(`🖱️ Zaznaczono opcję: "${btn.innerText.trim()}"`, "#4caf50");
                 }
                 
-                // Zawahanie przed ostatecznym potwierdzeniem
                 await sleep(randomDelay(1000, 1800));
                 
                 if (confirmBtn) {
                     if (window.logExp) window.logExp("🖱️ Klikam [Potwierdzam]!", "#4caf50");
                     humanClick(confirmBtn);
-                } else {
-                    if (window.logExp) window.logExp("❌ Nie znaleziono przycisku Potwierdzam!", "#e53935");
                 }
-
-                // Czekamy na przetworzenie przez serwer
                 await sleep(randomDelay(1500, 2500));
             } else {
                 if (window.logExp) window.logExp("❌ Brak opcji z gwiazdką. Zrób to ręcznie!", "#e53935");
@@ -7675,17 +7669,17 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         // --- GŁÓWNA PĘTLA STRAŻNIKA ---
         setInterval(() => {
-            if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
+            // Skrypt działa tylko jeśli włączony jest alarm LUB auto-rozwiązywanie
+            if (!botSettings.exp || (!botSettings.exp.captchaAlert && !botSettings.exp.autoSolveCaptcha)) return;
 
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // 1. Czysto
+            // 1. ZNIKNIĘCIE CAPTCHY (Koniec alarmu, wznawiamy)
             if (!fullWin && !preWin) {
-                if (window.__captchaPhase === "full_handling" || window.__captchaPhase === "waiting_for_full") {
-                    if (window.logExp) window.logExp("✅ Zagadka zniknęła z ekranu.", "#4caf50");
+                if (window.__captchaPhase === "full_handling" || window.__captchaPhase === "waiting_for_full" || window.__captchaPhase === "manual_waiting") {
+                    if (window.logExp) window.logExp("✅ Zapadka zniknęła z ekranu. Bezpiecznie.", "#4caf50");
                     
-                    // Wznowienie expienia
                     if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                         let btn = document.getElementById('btnStartExp');
                         if (btn) {
@@ -7698,24 +7692,15 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 return;
             }
 
-            // 2. Mamy pełne okno (jeśli jakimś cudem wyskoczyło bez paska u góry)
-            if (fullWin) {
-                if (window.__captchaPhase === "none") {
-                    window.__wasExpingBeforeCaptcha = window.isExping;
-                    if (window.isExping) {
-                        let btn = document.getElementById('btnStartExp');
-                        if (btn) btn.click();
-                    }
-                    if (typeof stopPatrol === 'function') stopPatrol(true);
-                    try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
-                }
-                handleFullCaptcha(fullWin);
+            // 2. NOWA CAPTCHA
+            if (window.__captchaPhase === "none") {
+                handleCaptchaDetection(preWin, fullWin);
                 return;
             }
 
-            // 3. Mamy tylko pasek u góry
-            if (preWin && window.__captchaPhase === "none") {
-                handlePreCaptcha(preWin);
+            // 3. PRZEJŚCIE Z POWIADOMIENIA W GŁÓWNE OKNO (Dla Auto-Solvera)
+            if (fullWin && window.__captchaPhase === "waiting_for_full" && botSettings.exp.autoSolveCaptcha) {
+                handleFullCaptcha(fullWin);
             }
 
         }, 500);
