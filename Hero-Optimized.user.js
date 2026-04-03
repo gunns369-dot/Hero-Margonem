@@ -8001,4 +8001,46 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }, 1000);
         }
+    // --- DAEMON: ZABEZPIECZENIE PRZED WYBIEGNIĘCIEM POZA LISTĘ (UNDEFINED FIX) ---
+        if (!window.undefinedMapFixInstalled) {
+            window.undefinedMapFixInstalled = true;
+            
+            // Zapisujemy w pamięci oryginalną funkcję biegania
+            const originalRushToMap = window.rushToMap;
+            
+            if (typeof originalRushToMap === 'function') {
+                // Nadpisujemy ją naszą mądrzejszą wersją
+                window.rushToMap = function(targetMap, tgtX, tgtY) {
+                    
+                    // Jeśli bot zgłupieje i spróbuje wziąć cel spoza listy
+                    if (!targetMap || String(targetMap).trim() === 'undefined' || String(targetMap).trim() === 'null') {
+                        
+                        if (window.logHero) window.logHero("🔄 Zakończono pętlę. Wracam na pierwszą mapę z trasy!", "#00e5ff");
+                        
+                        // Awaryjne resetowanie liczników, niezależnie jakiej zmiennej używa reszta skryptu
+                        if (typeof window.patrolIndex !== 'undefined') window.patrolIndex = 0;
+                        if (typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex = 0;
+                        if (typeof window.rushIndex !== 'undefined') window.rushIndex = 0;
+                        
+                        // Pobranie pierwszej mapy z pamięci bota
+                        let firstMap = null;
+                        if (window.rushFullPath && window.rushFullPath.length > 0) firstMap = window.rushFullPath[0];
+                        else if (window.patrolPath && window.patrolPath.length > 0) firstMap = window.patrolPath[0];
+                        else if (window.patrolMaps && window.patrolMaps.length > 0) firstMap = window.patrolMaps[0];
+                        
+                        if (firstMap) {
+                            targetMap = firstMap; // Zastępujemy 'undefined' poprawną mapą!
+                        } else {
+                            // Twardy stop, jeśli tablice są całkowicie puste
+                            if (window.logHero) window.logHero("❌ Brak map do patrolowania! Zatrzymuję bota.", "#f44336");
+                            if (typeof stopPatrol === 'function') stopPatrol(true);
+                            return; 
+                        }
+                    }
+                    
+                    // Odpalamy prawdziwy bieg z już NAPRAWIONYM celem
+                    return originalRushToMap(targetMap, tgtX, tgtY);
+                };
+            }
+        }
 })(); // Koniec kodu
