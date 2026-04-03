@@ -7695,6 +7695,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
             // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
+        setInterval(() => { // <--- DODAJ TĘ JEDNĄ LINIJKĘ TUTAJ
             if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
                 let playerFound = false;
                 let chatMessageFound = false;
