@@ -7104,7 +7104,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             
             if (window.autoSellState && window.autoSellState.active) return; // Priorytety (Sprzedaż ważniejsza)
 
-            // 1. Sprawdzanie mikstur przy użyciu optymalnego reduce()
+            // 1. Sprawdzanie mikstur
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {})
                   .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
@@ -7114,8 +7114,19 @@ window.toggleTeleportLock = function(city, isChecked) {
                     if (typeof stopPatrol === 'function') stopPatrol(true);
                     window.autoPotState.active = true;
                     
+                    // --- WYŁĄCZENIE BERSERKA NA CZAS PODRÓŻY ---
+                    window.autoPotState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+                    if (window.autoPotState.wasBerserkOn) {
+                        botSettings.berserk.enabled = false;
+                        let chkBerserk = document.getElementById('berserkEnabled');
+                        if (chkBerserk) chkBerserk.checked = false;
+                        if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                        if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do miasta.", "#ff9800");
+                    }
+                    // -------------------------------------------
+                    
                     let maxhp = Engine.hero.d.maxhp || 1000;
-                    let targetHeal = maxhp * 0.45; // Szuka potek leczących 45% hp
+                    let targetHeal = maxhp * 0.45; 
                     let bestNpc = null; let bestItemName = null; let bestDiff = Infinity;
 
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
@@ -7216,7 +7227,7 @@ window.toggleTeleportLock = function(city, isChecked) {
 
                     if (itemToBuy && typeof Engine.shop.basket?.buyItem === 'function') {
                         let stacksToBuy = botSettings.autopot.stacks || 14;
-                        let clicksNeeded = stacksToBuy * 3; // 1 kliknięcie w NI = 5 sztuk. 3 kliknięcia = 15 sztuk (1 pełny stak).
+                        let clicksNeeded = stacksToBuy * 3; 
                         
                         let msg = `🛒 Wrzucam ${stacksToBuy} staków do koszyka...`;
                         if (window.logHero) window.logHero(msg, "#8bc34a");
@@ -7225,7 +7236,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                         for (let i = 0; i < clicksNeeded; i++) Engine.shop.basket.buyItem(itemToBuy);
 
                         window.autoPotState.step = 4;
-                        window.autoPotState.nextActionTime = Date.now() + Math.floor(Math.random() * 300) + 500; // Human delay before accept
+                        window.autoPotState.nextActionTime = Date.now() + Math.floor(Math.random() * 300) + 500;
                     } else {
                         window.autoPotState.active = false;
                         window.isExpSuspended = false;
@@ -7233,7 +7244,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                         window.lastExpMap = null;
                     }
                 } else if (window.autoPotState.step === 4) {
-                    // Natywny zakup (jak z Auto-sprzedaży)
                     const root = Engine.shop?.wnd?.$?.[0] || document;
                     if (typeof Engine.shop.basket?.finalize === 'function') {
                         Engine.shop.basket.finalize();
@@ -7245,6 +7255,8 @@ window.toggleTeleportLock = function(city, isChecked) {
                         acceptBtn.click();
                         acceptBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
                     }
+
+        
 
                     let msg = `✅ Otrzymano mikstury. Zamykam i wracam do pracy.`;
                     if (window.logHero) window.logHero(msg, "#4caf50");
@@ -7259,7 +7271,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                     let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                     if (closeBtn) closeBtn.click();
                     
-                    window.lastExpMap = null; // Powrót na spot!
+                    window.lastExpMap = null; 
                 }
             }
         }, 500);
@@ -7269,40 +7281,28 @@ window.toggleTeleportLock = function(city, isChecked) {
         window.autoSellDaemonInstalled = true;
         window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0 };
         
-        // Ostateczna funkcja: Klika torbę + używa silnika z mikstur do akceptacji koszyka!
         window.runSuperSellerBagAndAccept = function(bagNo, delay = 250) {
             const root = typeof Engine !== 'undefined' && Engine.shop && Engine.shop.wnd && Engine.shop.wnd.$ ? Engine.shop.wnd.$[0] : document;
             const btn = root.querySelector(`.btn-num.grab-bag-${bagNo}`);
 
-            if (!btn) {
-                console.log("Nie znaleziono przycisku torby:", bagNo);
-                return false;
-            }
+            if (!btn) return false;
 
-            // 1. Fizyczne kliknięcie torby (Wrzuca przedmioty do koszyka sprzedaży)
             if (window.jQuery) jQuery(btn).trigger("click");
             btn.click();
             btn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
             btn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
             btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
 
-            // 2. Akceptacja sprzedaży (Klon niezawodnej logiki z kupowania mikstur)
             setTimeout(() => {
-                // METODA A: Natywna akceptacja silnika (działa na 100% dla kupna i sprzedaży)
                 if (typeof Engine !== 'undefined' && Engine.shop && Engine.shop.basket && typeof Engine.shop.basket.finalize === 'function') {
                     Engine.shop.basket.finalize();
                 }
-
-                // METODA B: Fizyczne kliknięcie jako zapasowe zabezpieczenie
-                const acceptBtn = [...root.querySelectorAll("button, div, a, span")]
-                    .find(el => /akceptuj|sprzedaj/i.test((el.textContent || "").trim()) && el.offsetParent);
-
+                const acceptBtn = [...root.querySelectorAll("button, div, a, span")].find(el => /akceptuj|sprzedaj/i.test((el.textContent || "").trim()) && el.offsetParent);
                 if (acceptBtn) {
                     if (window.jQuery) jQuery(acceptBtn).trigger("click");
                     acceptBtn.click();
                     acceptBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
                 }
-
                 if (window.logHero) window.logHero(`✅ Zaakceptowano sprzedaż torby ${bagNo}.`, "#8bc34a");
                 if (window.logExp) window.logExp(`✅ Zaakceptowano sprzedaż torby ${bagNo}.`, "#8bc34a");
             }, delay);
@@ -7314,7 +7314,6 @@ window.toggleTeleportLock = function(city, isChecked) {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
 
-            // 1. Sprawdzanie czy torba jest pełna z automatu
             if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
                 const s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
                 if (s.freeSlots <= 0 && s.totalCapacity > 0) {
@@ -7325,13 +7324,23 @@ window.toggleTeleportLock = function(city, isChecked) {
                     window.isRushingToShop = false;
                     window.isRushing = true;
                     
+                    // --- WYŁĄCZENIE BERSERKA NA CZAS PODRÓŻY ---
+                    window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+                    if (window.autoSellState.wasBerserkOn) {
+                        botSettings.berserk.enabled = false;
+                        let chkBerserk = document.getElementById('berserkEnabled');
+                        if (chkBerserk) chkBerserk.checked = false;
+                        if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                        if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
+                    }
+                    // -------------------------------------------
+                    
                     let msg = `🎒 TORBA PEŁNA → przerywam inne akcje i idę sprzedać!`;
                     if (window.logHero) window.logHero(msg, "#ffb300");
                     if (window.logExp) window.logExp(msg, "#ffb300");
                 }
             }
 
-            // 2. Cykl obsługi sprzedaży
             if (window.autoSellState.active) {
                 if (Date.now() < window.autoSellState.nextActionTime) return; 
                 window.isExpSuspended = true; 
@@ -7348,22 +7357,14 @@ window.toggleTeleportLock = function(city, isChecked) {
                     let bestDist = Infinity;
 
                     validMerchants.forEach(m => {
-                        if (m.map_name === currMap) {
-                            bestDist = 0;
-                            bestNpc = m;
-                        } else if (bestDist > 0) {
+                        if (m.map_name === currMap) { bestDist = 0; bestNpc = m; } 
+                        else if (bestDist > 0) {
                             let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, m.map_name) : null;
-                            if (path && path.length < bestDist) {
-                                bestDist = path.length;
-                                bestNpc = m;
-                            }
+                            if (path && path.length < bestDist) { bestDist = path.length; bestNpc = m; }
                         }
                     });
 
                     if (!bestNpc) { 
-                        let msg = "🚨 Błąd! Bot nie zna drogi do żadnego sprzedawcy. Nagraj trasę (🎥)!";
-                        if (window.logHero) window.logHero(msg, "#ff5252");
-                        if (window.logExp) window.logExp(msg, "#ff5252");
                         window.autoSellState.active = false; 
                         return; 
                     }
@@ -7371,9 +7372,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                     if (Engine.map.d.name !== bestNpc.map_name) {
                         if (!window.isRushingToShop) {
                             window.isRushingToShop = true;
-                            let msg = `🏃 Idę do najbliższego kupca: ${bestNpc.map_name} (${bestNpc.npc_name})`;
-                            if (window.logHero) window.logHero(msg, "#00e5ff");
-                            if (window.logExp) window.logExp(msg, "#00e5ff");
                             if (typeof window.rushToMap === 'function') window.rushToMap(bestNpc.map_name, bestNpc.x, bestNpc.y);
                         }
                     } else {
@@ -7384,13 +7382,8 @@ window.toggleTeleportLock = function(city, isChecked) {
                             for (let i in npcs) {
                                 let n = npcs[i].d || npcs[i];
                                 if (n.nick === bestNpc.npc_name) {
-                                    let msg = `💬 Otwieram sklep u: ${n.nick}...`;
-                                    if (window.logHero) window.logHero(msg, "#4caf50");
-                                    if (window.logExp) window.logExp(msg, "#4caf50");
-                                    
                                     if (Engine.npcs.interact) Engine.npcs.interact(n.id);
                                     else window._g(`talk&id=${n.id}`);
-                                    
                                     window.autoSellState.step = 2;
                                     window.autoSellState.nextActionTime = Date.now() + 800;
                                     break;
@@ -7398,17 +7391,12 @@ window.toggleTeleportLock = function(city, isChecked) {
                             }
                         } else if (!window.isRushingToShop) {
                             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-                            if (!isMoving) {
-                                Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y});
-                                window.autoSellState.nextActionTime = Date.now() + 1000;
-                            } else {
-                                window.autoSellState.nextActionTime = Date.now() + 300;
-                            }
+                            if (!isMoving) { Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); window.autoSellState.nextActionTime = Date.now() + 1000; } 
+                            else { window.autoSellState.nextActionTime = Date.now() + 300; }
                         }
                     }
                 } else if (window.autoSellState.step === 2) {
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window, .shop-container');
-                    
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
                         window.autoSellState.step = 3;
                         window.autoSellState.oldGold = Engine.hero.d.gold;
@@ -7422,11 +7410,9 @@ window.toggleTeleportLock = function(city, isChecked) {
                                 let txt = (el.innerText || el.textContent).toLowerCase();
                                 return txt.includes('sklep') || txt.includes('handl') || txt.includes('sprzedaj') || txt.includes('pokaż') || txt.includes('towar') || txt.includes('kup');
                             });
-                            
                             if (shopOpt) {
                                 let humanDelay = Math.floor(Math.random() * 401) + 400;
                                 window.autoSellState.nextActionTime = Date.now() + humanDelay + 500; 
-
                                 setTimeout(() => {
                                     if (window.jQuery) jQuery(shopOpt).trigger("click");
                                     if (typeof shopOpt.click === 'function') shopOpt.click();
@@ -7438,48 +7424,30 @@ window.toggleTeleportLock = function(city, isChecked) {
                     }
                 } else if (window.autoSellState.step === 3) {
                     let s = typeof window.getBagStats === 'function' ? window.getBagStats() : { bagsCount: 4 };
-                    
                     if (window.autoSellState.bagToSell <= s.bagsCount) {
-                        let bagNo = window.autoSellState.bagToSell;
-                        let msg = `💰 Dodaję torbę ${bagNo} do koszyka...`;
-                        if (window.logHero) window.logHero(msg, "#ffb300");
-                        if (window.logExp) window.logExp(msg, "#ffb300");
-                        
-                        // Uruchamia Twoją funkcję! Wrzuca przedmioty, daje serwerowi 300ms na przetworzenie i puszcza finalize()
-                        window.runSuperSellerBagAndAccept(bagNo, 300);
-                        
+                        window.runSuperSellerBagAndAccept(window.autoSellState.bagToSell, 300);
                         window.autoSellState.bagToSell++;
-                        window.autoSellState.nextActionTime = Date.now() + 1500; // Solidna przerwa dla serwera przed przejściem do następnej torby
+                        window.autoSellState.nextActionTime = Date.now() + 1500;
                     } else {
                         window.autoSellState.step = 4;
                         window.autoSellState.nextActionTime = Date.now() + 1000;
                     }
                 } else if (window.autoSellState.step === 4) {
                     let stats = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99 };
-                    
-                    // PĘTLA: Jeśli ilość miejsca się powiększyła, bot sprawdza torby od nowa (odblokowane sloty ze staków)
                     if (stats.freeSlots > window.autoSellState.lastFreeSlots) {
-                        let msg = `♻️ Miejsce rośnie (${window.autoSellState.lastFreeSlots} -> ${stats.freeSlots}). Sprzedaję dalej!`;
-                        if (window.logHero) window.logHero(msg, "#00e5ff");
-                        if (window.logExp) window.logExp(msg, "#00e5ff");
-                        
                         window.autoSellState.lastFreeSlots = stats.freeSlots;
                         window.autoSellState.bagToSell = 1;
                         window.autoSellState.step = 3;
                         window.autoSellState.nextActionTime = Date.now() + 500;
                     } else {
-                        // Wolne miejsce przestało rosnąć - koniec czyszczenia
                         let profit = Engine.hero.d.gold - window.autoSellState.oldGold;
                         if (profit > 0) {
                             let msg = `✅ Opróżnianie zakończone! Zarobek: ${profit.toLocaleString()} zł. Wracam do pracy.`;
                             if (window.logHero) window.logHero(msg, "#4caf50");
                             if (window.logExp) window.logExp(msg, "#4caf50");
-                        } else {
-                            let msg = "⚠️ Sprzedaż zakończona. W plecaku zostały przedmioty niesprzedawalne.";
-                            if (window.logHero) window.logHero(msg, "#e53935");
-                            if (window.logExp) window.logExp(msg, "#e53935");
                         }
-                        
+            
+
                         window.autoSellState.active = false;
                         window.isExpSuspended = false;
                         window.isRushing = false;
