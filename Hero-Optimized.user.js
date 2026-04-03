@@ -7945,7 +7945,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }, 1000);
         }
-    // --- DAEMON: ZABEZPIECZENIE PRZED WYBIEGNIĘCIEM POZA LISTĘ (UNDEFINED FIX) ---
+  // --- DAEMON: ZABEZPIECZENIE PRZED WYBIEGNIĘCIEM POZA LISTĘ (UNDEFINED FIX) ---
         if (!window.undefinedMapFixInstalled) {
             window.undefinedMapFixInstalled = true;
             
@@ -7953,8 +7953,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             const originalRushToMap = window.rushToMap;
             
             if (typeof originalRushToMap === 'function') {
-                // Nadpisujemy ją naszą mądrzejszą wersją
-                window.rushToMap = function(targetMap, tgtX, tgtY) {
+                // Nadpisujemy ją naszą mądrzejszą wersją - TERAZ PRZYJMUJE WSZYSTKIE ARGUMENTY
+                window.rushToMap = function(targetMap, tgtX, tgtY, fullPath, resumePatrol) {
                     
                     // Jeśli bot zgłupieje i spróbuje wziąć cel spoza listy
                     if (!targetMap || String(targetMap).trim() === 'undefined' || String(targetMap).trim() === 'null') {
@@ -7982,8 +7982,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         }
                     }
                     
-                    // Odpalamy prawdziwy bieg z już NAPRAWIONYM celem
-                    return originalRushToMap(targetMap, tgtX, tgtY);
+                    // KLUCZOWE: Odpalamy prawdziwy bieg z już NAPRAWIONYM celem i PRZEKAZUJEMY FLAGĘ WZNOWIENIA PATROLU!
+                    return originalRushToMap(targetMap, tgtX, tgtY, fullPath, resumePatrol);
                 };
             }
         }
