@@ -3451,19 +3451,31 @@ selHero.addEventListener('change', (e) => {
         document.getElementById('chkRadar').addEventListener('change', (e) => { botSettings.radarEnabled = e.target.checked; saveSettings(); });
 
         document.getElementById('chkAutoAttack').addEventListener('change', (e) => { botSettings.autoAttack = e.target.checked; saveSettings(); });
+// --- NAPRAWA PRZEZROCZYSTOŚCI (NOWA METODA RGBA - CZYTELNY TEKST) ---
+        function updateWindowsBackground(opacityValue) {
+            document.querySelectorAll('.hero-window').forEach(w => {
+                // Usuwamy starą metodę (na wszelki wypadek)
+                w.style.opacity = '1'; 
+                // Wymuszamy pełną czytelność tekstu
+                w.style.color = '#ffffff'; 
+                
+                // Ustawiamy przezroczystość TYLKO dla tła (używamy rgba)
+                // Zakładamy podstawowy kolor okna jako ciemnoszary: #202020 (czyli 32, 32, 32 w RGB)
+                w.style.backgroundColor = `rgba(32, 32, 32, ${opacityValue})`;
+            });
+        }
 
-        // --- NAPRAWA SUWAKA PRZEZROCZYSTOŚCI ---
         let opacitySlider = document.getElementById('sliderOpacity');
         if (opacitySlider) {
-            // Wczytanie z pamięci przy starcie
+            // Wczytanie z pamięci przy starcie (domyślnie 0.95, czyli prawie pełne)
             let savedOpacity = localStorage.getItem('hero_opacity_v64') || 0.95;
             opacitySlider.value = savedOpacity;
-            document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = savedOpacity);
+            updateWindowsBackground(savedOpacity);
             
             // Reagowanie na poruszanie suwakiem w czasie rzeczywistym
             opacitySlider.addEventListener('input', (e) => {
                 let val = e.target.value;
-                document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = val);
+                updateWindowsBackground(val);
                 localStorage.setItem('hero_opacity_v64', val);
             });
         }
