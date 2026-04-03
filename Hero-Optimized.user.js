@@ -2708,9 +2708,17 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Odtwarza dźwięk i zatrzymuje bota z losowym opóźnieniem 3-5s">
     <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
 </label>
-                            <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy pojawi się gracz lub ktoś napisze do Ciebie">
-                                <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy / Nick
-                            </label>
+                            <div style="display:flex; align-items:center; gap:5px;">
+    <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy na mapie pojawi się inny gracz (tylko w trybie EXP)">
+        <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy
+    </label>
+    <span id="btnPlayerAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu na graczy">⚙️</span>
+</div>
+<div id="playerAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #ffb300; border-radius:3px; margin-bottom:4px; margin-top:4px;">
+    <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;">
+        <input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu
+    </label>
+</div>
                         </div>
                     </div>
                     <input type="hidden" id="expRange" value="999">
@@ -3149,6 +3157,17 @@ if (btnExp) {
                 if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
                 if (window.logExp) window.logExp("👁️ Włączono monitoring graczy i czatu.", "#ffb300");
             }
+        });
+        if (botSettings.exp.playerAlertStopBot === undefined) { botSettings.exp.playerAlertStopBot = false; saveSettings(); }
+
+        bindChange('playerAlertStopBot', (e) => {
+            botSettings.exp.playerAlertStopBot = e.target.checked;
+            saveSettings();
+        });
+
+        bindClick('btnPlayerAlertSettings', () => {
+            let p = document.getElementById('playerAlertSettingsPanel');
+            p.style.display = p.style.display === 'none' ? 'block' : 'none';
         });
 
         bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
@@ -7722,69 +7741,70 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         }, 500);
 
-        // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
+       // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar) ---
+        window.alertedPlayersList = window.alertedPlayersList || new Set();
+
         setInterval(() => {
+            // Funkcja działa TYLKO gdy włączony jest tryb EXP i Alarm
             if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
-                let playerFound = false;
-                let chatMessageFound = false;
-                let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : null;
+                if (typeof Engine === 'undefined' || !Engine.others || !Engine.hero) return;
 
-                // A) Skanowanie pola widzenia na obecność innych graczy (typ 0 lub 1 = gracz)
-                if (typeof Engine !== 'undefined' && Engine.others && myNick) {
-                    let others = typeof Engine.others.check === 'function' ? Engine.others.check() : Engine.others.d;
-                    if (others) {
-                        for (let id in others) {
-                            let p = others[id].d || others[id];
-                            // Upewniamy się, że to nie jest martwy gracz, i że ma typ gracza
-                            if (p && !p.dead && !p.del && (p.type === 0 || p.type === 1)) {
-                                // Ignoruj jeśli skaner wykrył samego siebie (Zabezpieczenie Margo)
-                                if (p.nick !== myNick) {
-                                    playerFound = p.nick;
-                                    break;
-                                }
+                let others = typeof Engine.others.check === 'function' ? Engine.others.check() : Engine.others.d;
+                if (!others) return;
+
+                let myNick = (Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "";
+
+                // Twój filtr wjeżdża tutaj:
+                const players = Object.values(others)
+                    .filter(o => o?.isPlayer && o?.d?.nick && o.d.nick !== myNick)
+                    .map(o => ({
+                        id: o.d.id || o.id,
+                        nick: o.d.nick,
+                        lvl: o.d.lvl,
+                        x: o.d.x,
+                        y: o.d.y
+                    }));
+
+                // Sprzątanie pamięci: usuwamy graczy, którzy zniknęli z mapy
+                let currentIds = new Set(players.map(p => p.id));
+                for (let id of window.alertedPlayersList) {
+                    if (!currentIds.has(id)) window.alertedPlayersList.delete(id);
+                }
+
+                // Sprawdzamy nowo wykrytych graczy
+                players.forEach(p => {
+                    if (!window.alertedPlayersList.has(p.id)) {
+                        window.alertedPlayersList.add(p.id);
+
+                        let msgTitle = `👁️ Wykryto Gracza!`;
+                        let msgBody = `${p.nick} (${p.lvl} lvl) na kordach [${p.x}, ${p.y}]`;
+                        
+                        // 1. Log w panelu
+                        if (window.logExp) window.logExp(`👁️ Wykryto gracza: ${p.nick} (${p.lvl} lvl) [${p.x}, ${p.y}]`, "#ffb300");
+
+                        // 2. Dźwięk
+                        try { 
+                            let audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg'); 
+                            audio.play(); 
+                        } catch(e) {}
+
+                        // 3. Powiadomienie w przeglądarce
+                        if (Notification.permission === "granted") {
+                            new Notification(msgTitle, { body: msgBody });
+                        }
+
+                        // 4. Opcjonalne zatrzymanie bota (zgodnie z ustawieniem w zębatce)
+                        if (botSettings.exp.playerAlertStopBot) {
+                            if (typeof stopPatrol === 'function') stopPatrol(true);
+                            if (window.isExping) {
+                                let btn = document.getElementById('btnStartExp');
+                                if (btn) btn.click();
                             }
+                            if (window.logExp) window.logExp(`🛑 Zatrzymano auto-exp, ponieważ wykryto gracza!`, "#f44336");
                         }
                     }
-                }
-
-                // B) Skanowanie Czatu Głównego na obecność własnego Nicku
-                if (myNick) {
-                    let chatLines = document.querySelectorAll('#chattxt .chat-message, .chat-message-container');
-                    let currentLength = chatLines.length;
-
-                    // Sprawdzamy tylko nowe wiadomości
-                    if (currentLength > window.lastChatLength) {
-                        for (let i = window.lastChatLength; i < currentLength; i++) {
-                            let line = chatLines[i].innerText || chatLines[i].textContent || "";
-                            // Pomijamy komunikaty systemowe i wiadomości wysłane przez nas samych
-                            if (line.includes(`[System]`) || line.startsWith(`${myNick}:`)) continue;
-
-                            if (line.toLowerCase().includes(myNick.toLowerCase())) {
-                                chatMessageFound = true;
-                                break;
-                            }
-                        }
-                    }
-                    window.lastChatLength = currentLength; // Zapisujemy stan na następny cykl
-                }
-
-                let dangerDetected = playerFound || chatMessageFound;
-
-                if (dangerDetected && !window.playerAlertTriggered) {
-                    window.playerAlertTriggered = true;
-                    if (typeof stopPatrol === 'function') stopPatrol(true); // Twarde zatrzymanie Bota
-
-                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
-                    window.focus();
-
-                    let alertReason = playerFound ? `Wykryto gracza: ${playerFound}!` : `Ktoś wspomniał Twój nick na czacie!`;
-                    if (Notification.permission === "granted") new Notification("👁️ OSTRZEŻENIE (EXP)!", { body: alertReason + " Zatrzymano bota.", requireInteraction: true });
-                    if (window.logExp) window.logExp(`👁️ ${alertReason} Zatrzymano auto-exp!`, "#ffb300");
-
-                } else if (!dangerDetected && window.playerAlertTriggered) {
-                    window.playerAlertTriggered = false;
-                }
+                });
             }
-        }, 800);
+        }, 1000);
     }
 })(); // Koniec kodu
