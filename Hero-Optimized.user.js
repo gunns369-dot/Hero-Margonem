@@ -7515,48 +7515,139 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 300);
     }
 
-   // --- DAEMON: DETEKCJA ZAPADKI I GRACZY (MULTI-ALARM) ---
+ // --- DAEMON: DETEKCJA ZAPADKI I GRACZY (MULTI-ALARM) + AUTO-SOLVER PRO+ ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
-        window.captchaAlertTriggered = false;
         window.playerAlertTriggered = false;
         window.lastChatLength = 0; // Pamięć czatu dla nowości
 
-        setInterval(() => {
-            // --- CZĘŚĆ 1: DETEKCJA ZAPADKI ---
-            if (botSettings.exp && botSettings.exp.captchaAlert) {
-                let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
-                let textMatch = false;
+        // Zmienne Auto-Solvera
+        window.__captchaState = "none";
+        window.__isSolving = false;
+        window.__wasExpingBeforeCaptcha = false; // Pamięta, czy bot expił
 
-                if (!hasWindow) {
-                    let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
-                    for (let el of containers) {
-                        if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
-                        let t = el.innerText || "";
-                        if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
-                            textMatch = true;
-                            break;
-                        }
-                    }
-                }
+        // --- FUNKCJE HUMANIZUJĄCE ---
+        function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+        function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-                let isCaptchaActive = hasWindow || textMatch;
+        // --- DETEKCJA CAPTCHY ---
+        function detectPreCaptcha() {
+            const el = document.querySelector('.pre-captcha.show');
+            if (!el) return false;
+            return (el.offsetParent !== null && el.offsetWidth > 20 && el.offsetHeight > 20 && (el.innerText || "").includes("Zagadka"));
+        }
 
-                if (isCaptchaActive && !window.captchaAlertTriggered) {
-                    window.captchaAlertTriggered = true;
-                    if (typeof stopPatrol === 'function') stopPatrol(true);
+        function detectCaptchaWindow() {
+            const win = document.querySelector('.c-window.border-window.captcha-window');
+            if (!win) return false;
+            if (win.offsetParent === null) return false;
+            const text = win.innerText || "";
+            return text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("Liczba pozostałych prób");
+        }
 
-                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
-                    window.focus();
+        function getCaptchaState() {
+            if (detectCaptchaWindow()) return "full";
+            if (detectPreCaptcha()) return "pre";
+            return "none";
+        }
 
-                    if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!", requireInteraction: true });
-                    if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                    if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                } else if (!isCaptchaActive && window.captchaAlertTriggered) {
-                    window.captchaAlertTriggered = false;
+        // --- MODUŁ ROZWIĄZUJĄCY ---
+        async function solveCaptcha() {
+            if (window.__isSolving) return;
+            window.__isSolving = true;
+
+            if (window.logExp) window.logExp("🤖 [Humanizacja] Analizuję okno zagadki...", "#ff9800");
+
+            // Czas na "przeczytanie"
+            await sleep(randomDelay(1500, 3000));
+
+            const win = document.querySelector('.c-window.border-window.captcha-window');
+            if (!win) { window.__isSolving = false; return; }
+
+            const allElements = win.querySelectorAll('*');
+            let targetAnswer = null;
+
+            for (const el of allElements) {
+                if (el.innerText && el.innerText.includes('*') && el.children.length === 0) {
+                    targetAnswer = el;
+                    break;
                 }
             }
 
+            if (targetAnswer) {
+                if (window.logExp) window.logExp(`🎯 Znaleziono odpowiedź: "${targetAnswer.innerText}". Namierzam...`, "#00e5ff");
+                
+                // Czas na "ruch myszką" przed kliknięciem
+                await sleep(randomDelay(600, 1500));
+                
+                targetAnswer.click();
+                if (window.logExp) window.logExp("🖱️ [Humanizacja] Kliknięto w odpowiedź!", "#4caf50");
+
+                // Krótka pauza na przeładowanie serwera
+                await sleep(randomDelay(1000, 2000));
+            } else {
+                if (window.logExp) window.logExp("❌ Nie znaleziono odpowiedzi z gwiazdką (*). Zrób to ręcznie!", "#e53935");
+            }
+
+            window.__isSolving = false;
+        }
+
+        setInterval(() => {
+            // --- CZĘŚĆ 1: DETEKCJA ZAPADKI I AUTO-SOLVER ---
+            if (botSettings.exp && botSettings.exp.captchaAlert) {
+                const state = getCaptchaState();
+
+                // 🔴 POJAWIENIE SIĘ CAPTCHY
+                if (state !== "none" && window.__captchaState === "none") {
+                    window.__captchaState = state;
+                    
+                    // Zapisujemy, czy exp był włączony, by go potem ładnie wznowić
+                    window.__wasExpingBeforeCaptcha = window.isExping;
+
+                    // Twarde zatrzymanie silnika (Oszukujemy kliknięcie przycisku na interfejsie)
+                    if (window.isExping) {
+                        let btn = document.getElementById('btnStartExp');
+                        if (btn) btn.click(); // Zmienia stan bota i czyści wewn. cooldowny
+                    }
+                    if (typeof stopPatrol === 'function') stopPatrol(true);
+
+                    // Alarm
+                    try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
+                    if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Zatrzymano bota. Auto-Solver próbuje rozwiązać...", requireInteraction: true });
+                    
+                    if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano silnik gry.", "#ff5252");
+                    if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano silnik gry.", "#ff5252");
+                }
+
+                // 🔄 PRZEJŚCIE Z OSTRZEŻENIA DO PEŁNEGO OKNA
+                if (state === "full" && window.__captchaState === "pre") {
+                    window.__captchaState = "full";
+                }
+
+                // 🤖 URUCHOMIENIE ROZWIĄZYWANIA
+                if (state === "full" && !window.__isSolving) {
+                    solveCaptcha();
+                }
+
+                // ✅ ZNIKNĘŁA CAPTCHA -> WZNOWIENIE BOTA
+                if (state === "none" && window.__captchaState !== "none") {
+                    window.__captchaState = "none";
+                    window.__isSolving = false;
+
+                    if (window.logHero) window.logHero("✅ Zapadka zniknęła. Droga wolna.", "#4caf50");
+                    if (window.logExp) window.logExp("✅ Zapadka zniknęła. Droga wolna.", "#4caf50");
+
+                    // Automatyczne wznowienie TYLKO jeśli expił przed pojawieniem się captchy
+                    if (window.__wasExpingBeforeCaptcha && !window.isExping) {
+                        let btn = document.getElementById('btnStartExp');
+                        if (btn) {
+                            if (window.logExp) window.logExp("🚀 Wznawiam przerwany auto-exp...", "#4caf50");
+                            btn.click(); // Odpala bota z powrotem
+                        }
+                    }
+                    window.__wasExpingBeforeCaptcha = false;
+                }
+            }
             // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
             if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
                 let playerFound = false;
