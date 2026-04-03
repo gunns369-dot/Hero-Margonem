@@ -7061,37 +7061,34 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 800);
     }
 
-  // --- DAEMON: AUTOHEAL ---
+ // --- DAEMON: AUTOHEAL (Wersja V2 - Anty-Spam) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
         window.lastHealTime = 0;
+        window.isHealLocked = false; // Twarda blokada przed wielokrotnym wywołaniem
 
         setInterval(() => {
-            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.heroEquipment) return;
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.heroEquipment || window.isHealLocked) return;
             if (Engine.battle && Engine.battle.show) return;
 
-            // PANCERNE ODCZYTYWANIE HP (Z silnika lub bezpośrednio z czerwonej kuli na ekranie)
+            // Pancerne odczytywanie HP
             let hp = parseInt(Engine.hero.d.hp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
             let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
             
-            if (!maxhp) {
-                let hpEl = document.querySelector('.health-val') || document.querySelector('.hp-values');
-                if (hpEl && hpEl.innerText) {
-                    let match = hpEl.innerText.match(/^(\d+)\s*\/\s*(\d+)/);
-                    if (match) { hp = parseInt(match[1]); maxhp = parseInt(match[2]); }
-                }
-            }
-            
-            if (!maxhp) return; // Jeśli gra jest w trakcie mocnego ładowania, po prostu czekamy ułamek sekundy
+            if (!maxhp) return;
             
             let threshold = botSettings.autoheal ? parseInt(botSettings.autoheal.threshold) || 80 : 80;
             let hpPercent = (hp / maxhp) * 100;
 
+            // Sprawdzamy próg HP i cooldown czasowy
             if (hpPercent < threshold && Date.now() > window.lastHealTime) {
                 let items = Object.values(Engine.heroEquipment.getHItems?.() || {});
                 let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null);
                 
                 if (potions.length > 0) {
+                    // Blokujemy proces, aby nie wywołać go w następnym ticku (300ms)
+                    window.isHealLocked = true;
+
                     let missingHp = maxhp - hp;
                     potions.sort((a, b) => {
                         let healA = a.getLeczyStat() || 0;
@@ -7100,16 +7097,27 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     });
 
                     let bestPot = potions[0];
+                    let healValue = bestPot.getLeczyStat() || 0;
+
+                    // Logika leczenia
                     if (typeof Engine.heroEquipment.useItem === 'function') {
                         Engine.heroEquipment.useItem(bestPot.id);
                     } else {
                         window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
 
-                    window.lastHealTime = Date.now() + 1200; // Twarda blokada przed zjedzeniem całej paczki na raz
+                    // --- PREDKYCJA HP (Klucz do rozwiązania problemu) ---
+                    // Dodajemy wartość leczenia do lokalnej zmiennej, by bot "myślał", że już jest uleczony
+                    if (Engine.hero.d.hp) Engine.hero.d.hp = Math.min(maxhp, hp + healValue);
+                    
+                    // Ustawiamy cooldown na 1.5 sekundy (bezpieczny czas dla serwera)
+                    window.lastHealTime = Date.now() + 1500;
+
+                    // Odblokowujemy możliwość ponownego sprawdzania po 1.2s
+                    setTimeout(() => { window.isHealLocked = false; }, 1200);
 
                     if (window.lastHealLog !== bestPot.id || Date.now() - (window._lastHealLogTime || 0) > 3000) {
-                        let msg = `💚 Leczę się: ${bestPot._cachedStats?.name || bestPot.name}`;
+                        let msg = `💚 Leczę się: ${bestPot._cachedStats?.name || bestPot.name} (+${healValue} HP)`;
                         if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
                         else if (window.logHero) window.logHero(msg, "#4caf50");
                         
