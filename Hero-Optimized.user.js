@@ -4895,17 +4895,20 @@ function runExpLogic() {
                 return; // Trwa blokada, czekamy
             }
 
+   // --- KONTROLA BERSERKA (Musi być sprawdzona PRZED komendą biegu) ---
+            const currMap = Engine.map.d.name;
+            const isExpMap = isMapInSelectedExpowisko(currMap);
+            setExpBerserkState(isExpMap);
+
     // --- 2. RUCH NA EXPOWISKO ---
             let mapOrder = botSettings.exp.mapOrder || [];
-            let targetExpMap = Engine.map.d.name; // Domyślnie stoi i bije w miejscu
-            
+            let targetExpMap = currMap;
+
             if (mapOrder.length > 0) {
-                if (mapOrder.includes(Engine.map.d.name)) {
-                    // Jesteśmy już na jednej z map expowiska - expi i szuka potworów
-                    targetExpMap = Engine.map.d.name;
+                if (mapOrder.includes(currMap)) {
+                    targetExpMap = currMap;
                 } else {
-                    // Inteligentny algorytm BFS: Szuka najbliższej mapy z całej trasy
-                    let closestObj = typeof getClosestExpMapPath === 'function' ? getClosestExpMapPath(Engine.map.d.name) : null;
+                    let closestObj = typeof getClosestExpMapPath === 'function' ? getClosestExpMapPath(currMap) : null;
                     if (closestObj && closestObj.targetMap) {
                         targetExpMap = closestObj.targetMap;
                     } else {
@@ -4913,29 +4916,21 @@ function runExpLogic() {
                     }
                 }
             }
-            
-            if (Engine.map.d.name !== targetExpMap) {
-                // NAPRAWA: Ochrona przed spamem - sprawdzamy obie zmienne ruchu!
+
+            if (currMap !== targetExpMap) {
                 let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
-                
                 if (!currentlyRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
                     if (typeof window.rushToMap === 'function') {
                         window.rushToMap(targetExpMap);
                     }
                 }
-                return; // Przerywa wykonywanie reszty skryptu podczas biegu
+                return; // Przerywa wykonywanie reszty skryptu podczas biegu (Dlatego przełącznik musi być wyżej!)
             }
 
-    const now = Date.now();
-
-    const hero = Engine.hero.d;
-
-    const currMap = Engine.map.d.name;
-
-    const hx = hero.x;
-
-    const hy = hero.y;
-
+            const now = Date.now();
+            const hero = Engine.hero.d;
+            const hx = hero.x;
+            const hy = hero.y;
 
 
     const isExpMap = isMapInSelectedExpowisko(currMap);
