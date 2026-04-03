@@ -7408,7 +7408,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                     window.isRushingToShop = false;
                     window.isRushing = true;
                     
-                    // --- WYŁĄCZENIE BERSERKA NA CZAS PODRÓŻY ---
                     window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                     if (window.autoSellState.wasBerserkOn) {
                         botSettings.berserk.enabled = false;
@@ -7417,7 +7416,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                         if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
                         if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
                     }
-                    // -------------------------------------------
                     
                     let msg = `🎒 TORBA PEŁNA → przerywam inne akcje i idę sprzedać!`;
                     if (window.logHero) window.logHero(msg, "#ffb300");
@@ -7530,8 +7528,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                             if (window.logHero) window.logHero(msg, "#4caf50");
                             if (window.logExp) window.logExp(msg, "#4caf50");
                         }
-            
-
+                        
                         window.autoSellState.active = false;
                         window.isExpSuspended = false;
                         window.isRushing = false;
