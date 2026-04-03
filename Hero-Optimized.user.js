@@ -1977,7 +1977,7 @@ function autoDetectEngineData() {
         }
     };
 
-   window.checkRushArrival = function() {
+  window.checkRushArrival = function() {
         if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
         let currentSysMap = lastMapName;
         if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
@@ -2017,19 +2017,18 @@ function autoDetectEngineData() {
             // --- FIZYCZNIE STOIMY NA BRAMIE LUB OBOK NIEJ ---
             if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
             
-            // Jeśli bot stoi tu bezczynnie ponad 8 sekund (dajemy grze dużo czasu na załadowanie nowej mapy)
-            if (Date.now() - window.rushGatewayArrivalTime > 8000) {
-                if (window.logHero) window.logHero(`🚨 Brama długo ładuje. Odbiegam...`, "#ff9800");
+            // SKRÓCONY CZAS: Reaguje błyskawicznie po 3.5 sekundach!
+            if (Date.now() - window.rushGatewayArrivalTime > 3500) {
+                if (window.logHero) window.logHero(`🚨 Brama zacięta. Robię krok w tył...`, "#ff9800");
                 
-                // Odbiegamy lekko w bok, bez twardych komend serwerowych!
-                let stepX = Math.max(0, cx + (Math.random() > 0.5 ? 2 : -2));
-                let stepY = Math.max(0, cy + (Math.random() > 0.5 ? 2 : -2));
+                // Odbiegamy dokładnie o 1 kratkę, żeby wywołać ruch serwerowy
+                let stepX = Math.max(0, cx + (Math.random() > 0.5 ? 1 : -1));
+                let stepY = Math.max(0, cy + (Math.random() > 0.5 ? 1 : -1));
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
                 
                 window.rushGatewayArrivalTime = 0;
-                stuckCount = -4; 
+                stuckCount = -4; // Dajemy grze 2 sekundy zanim bot ponowi atak na drzwi
             }
-            // USUNIĘTO twardą komendę `_g('walk')`, która psuła grę i cofała postać!
         }
         
         rushInterval = setTimeout(window.checkRushArrival, 500);
