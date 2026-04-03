@@ -7531,54 +7531,68 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         
         function humanClick(el) {
             if (!el) return;
-            if (window.jQuery) jQuery(el).trigger("click");
-            if (typeof el.click === 'function') el.click();
-            el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+            
+            // Celujemy w sam kontener przycisku, a nie w sam tekst (Margonem tak wymaga)
+            let target = el.closest('.button') || el;
+            
+            if (window.jQuery) window.jQuery(target).trigger("click");
+            
+            // Margonem na Nowym Interfejsie rygorystycznie wymaga PointerEvents
+            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
+                target.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window, buttons: 1 }));
+            });
         }
 
         // --- DETEKCJA OKIEN ---
         function getPreCaptcha() {
-            // Szuka małego powiadomienia/przycisku wywołującego zagadkę
-            const el = document.querySelector('.pre-captcha.show, .zapadka-icon, #captcha-alert');
-            if (!el) return null;
-            return (el.offsetParent !== null) ? el : null;
+            // Szukamy diva powiadomienia na ekranie gry
+            const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert');
+            if (preEl && preEl.offsetParent !== null) {
+                // Szukamy samego przycisku "Rozwiąż teraz" wewnątrz
+                const btn = preEl.querySelector('.button');
+                return btn || preEl; 
+            }
+            return null;
         }
 
         function getCaptchaWindow() {
-            const win = document.querySelector('.c-window.border-window.captcha-window, .margo-window[data-wnd="zapadka"], .zapadka-window');
-            if (!win || win.offsetParent === null) return null;
-            const text = win.innerText || "";
-            if (text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("Liczba pozostałych prób")) return win;
+            // Bezpośrednia klasa głównego okna zagadki z Twojego screena
+            const win = document.querySelector('.captcha');
+            if (win && win.offsetParent !== null) return win;
+            
+            // Fallback na wypadek starego UI
+            const oldWin = document.querySelector('.c-window.border-window.captcha-window, .margo-window[data-wnd="zapadka"]');
+            if (oldWin && oldWin.offsetParent !== null && (oldWin.innerText || "").includes("Zagadka")) return oldWin;
+            
             return null;
         }
 
         // --- OBSŁUGA POWIADOMIENIA (PRE-CAPTCHA) ---
-        async function handlePreCaptcha(preEl) {
+        async function handlePreCaptcha(preBtn) {
             if (window.__captchaPhase !== "none") return;
             window.__captchaPhase = "pre_handling";
             
-            // Zapisujemy, czy exp był włączony, by wiedzieć czy wznawiać
+            // Zapamiętujemy stan bota expiącego
             window.__wasExpingBeforeCaptcha = window.isExping;
             
-            if (window.logExp) window.logExp("🚨 [Zapadka] Wykryto powiadomienie. Kontynuuję akcję przez 2-4 sekundy...", "#ff9800");
+            if (window.logExp) window.logExp("🚨 [Zapadka] Pojawiło się powiadomienie. Odczekuję 2-4 sekundy...", "#ff9800");
             
             // 1. ZŁOTA ZASADA HUMANIZACJI: Opóźnienie przed zatrzymaniem bota (2-4 sekundy)
             await sleep(randomDelay(2000, 4000));
             
-            // 2. Alarm i zatrzymanie skryptów
+            // 2. Alarm i bezpieczne wyłączenie bota
             try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
             
             if (window.isExping) {
                 let btn = document.getElementById('btnStartExp');
-                if (btn) btn.click(); // Zatrzymuje bota tak samo jak użytkownik
+                if (btn) btn.click();
             }
             if (typeof stopPatrol === 'function') stopPatrol(true);
             
-            if (window.logExp) window.logExp("🖱️ [Humanizacja] Zatrzymano bota. Otwieram okno zagadki...", "#ff9800");
+            if (window.logExp) window.logExp("🖱️ [Humanizacja] Klikam 'Rozwiąż teraz'...", "#ff9800");
             
-            // 3. Kliknięcie powiadomienia, by rozwinąć duże okno
-            humanClick(preEl);
+            // 3. Kliknięcie "Rozwiąż teraz" by rozwinąć duże okno
+            humanClick(preBtn);
             
             window.__captchaPhase = "waiting_for_full";
         }
@@ -7588,60 +7602,67 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (window.__captchaPhase === "full_handling") return;
             window.__captchaPhase = "full_handling";
             
-            if (window.logExp) window.logExp("🤖 [Humanizacja] Czytam treść zagadki...", "#ff9800");
+            if (window.logExp) window.logExp("🤖 [Humanizacja] Czytam zagadkę...", "#ff9800");
 
-            // Czas na przeczytanie opcji przez "człowieka"
+            // Czas na przeczytanie opcji
             await sleep(randomDelay(2000, 3500));
 
-            // Zbieranie wszystkich elementów w oknie
-            const allElements = winEl.querySelectorAll('*');
+            // Elementy z Twojego screena z DevTools
+            let buttonsWrapper = winEl.querySelector('.captcha__buttons');
+            let confirmWrapper = winEl.querySelector('.captcha__confirm');
+            
             let targetAnswers = [];
             let confirmBtn = null;
 
-            for (const el of allElements) {
-                const text = (el.innerText || el.textContent || "").trim();
-                
-                // Ignorujemy kontenery z dużą ilością tekstu (szukamy liści HTML)
-                if (text === "Potwierdzam" && el.children.length === 0) {
-                    confirmBtn = el;
-                } else if (text.includes('*') && text.length < 15 && el.children.length === 0) {
-                    // Jeśli ma gwiazdkę i jest krótkie (np. "*b*"), to to jest nasz przycisk
-                    targetAnswers.push(el);
+            // Szukanie odpowiedzi z gwiazdką (*)
+            if (buttonsWrapper) {
+                let answers = buttonsWrapper.querySelectorAll('.button');
+                answers.forEach(btn => {
+                    if (btn.innerText.includes('*')) targetAnswers.push(btn);
+                });
+            } else {
+                // Fallback (awaryjne)
+                const allElements = winEl.querySelectorAll('*');
+                for (const el of allElements) {
+                    const text = (el.innerText || "").trim();
+                    if (text.includes('*') && text.length < 15 && el.children.length === 0) targetAnswers.push(el);
                 }
             }
 
+            // Szukanie guzika "Potwierdzam"
+            if (confirmWrapper) {
+                confirmBtn = confirmWrapper.querySelector('.button');
+            } else {
+                let fallbackBtns = winEl.querySelectorAll('.button');
+                fallbackBtns.forEach(btn => {
+                    if (btn.innerText.includes('Potwierdzam')) confirmBtn = btn;
+                });
+            }
+
+            // Przeklikanie znalezionych opcji
             if (targetAnswers.length > 0) {
-                if (window.logExp) window.logExp(`🎯 Znaleziono ${targetAnswers.length} odpowiedz(i) z gwiazdką. Zaczynam klikać...`, "#00e5ff");
+                if (window.logExp) window.logExp(`🎯 Wykryto ${targetAnswers.length} odpowiedz(i). Zaczynam klikać...`, "#00e5ff");
                 
-                // Klikanie po kolei we wszystkie gwiazdki
                 for (const btn of targetAnswers) {
-                    await sleep(randomDelay(600, 1200)); // Naturalne przerwy między ruchem do kolejnej opcji
+                    await sleep(randomDelay(600, 1200)); // Czas na ruch myszki
                     humanClick(btn);
-                    if (window.logExp) window.logExp(`🖱️ Zaznaczono opcję: "${btn.innerText}"`, "#4caf50");
+                    if (window.logExp) window.logExp(`🖱️ Kliknięto opcję: "${btn.innerText.trim()}"`, "#4caf50");
                 }
                 
-                // Chwila zawahania przed potwierdzeniem
+                // Zawahanie przed ostatecznym potwierdzeniem
                 await sleep(randomDelay(1000, 1800));
                 
-                // Klikanie "Potwierdzam"
                 if (confirmBtn) {
-                    if (window.logExp) window.logExp("🖱️ Klikam przycisk [Potwierdzam]!", "#4caf50");
+                    if (window.logExp) window.logExp("🖱️ Klikam [Potwierdzam]!", "#4caf50");
                     humanClick(confirmBtn);
                 } else {
-                    // Czasem interfejs ładuje przyciski jako grafiki/divy, robimy szeroki fallback
-                    let fallbackBtn = winEl.querySelector('.button, button, .btn');
-                    if (fallbackBtn) {
-                        if (window.logExp) window.logExp("🖱️ Klikam przycisk akceptacji (Fallback)!", "#4caf50");
-                        humanClick(fallbackBtn);
-                    } else {
-                        if (window.logExp) window.logExp("❌ Nie znalazłem przycisku zatwierdzającego!", "#e53935");
-                    }
+                    if (window.logExp) window.logExp("❌ Nie znaleziono przycisku Potwierdzam!", "#e53935");
                 }
 
-                // Po kliknięciu okno potrzebuje chwili na zamknięcie
+                // Czekamy na przetworzenie przez serwer
                 await sleep(randomDelay(1500, 2500));
             } else {
-                if (window.logExp) window.logExp("❌ Nie znalazłem żadnej opcji z gwiazdką. Rozwiąż ręcznie!", "#e53935");
+                if (window.logExp) window.logExp("❌ Brak opcji z gwiazdką. Zrób to ręcznie!", "#e53935");
             }
         }
 
@@ -7652,16 +7673,16 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // Sytuacja 1: Brak captchy (albo właśnie ją rozwiązaliśmy)
+            // 1. Czysto
             if (!fullWin && !preWin) {
                 if (window.__captchaPhase === "full_handling" || window.__captchaPhase === "waiting_for_full") {
-                    if (window.logExp) window.logExp("✅ Zagadka została zaakceptowana i zniknęła.", "#4caf50");
+                    if (window.logExp) window.logExp("✅ Zagadka zniknęła z ekranu.", "#4caf50");
                     
-                    // Jeśli bot expił, gdy wyskoczyła zagadka - włączamy go z powrotem
+                    // Wznowienie expienia
                     if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                         let btn = document.getElementById('btnStartExp');
                         if (btn) {
-                            if (window.logExp) window.logExp("🚀 Wznawiam zawieszony auto-exp...", "#4caf50");
+                            if (window.logExp) window.logExp("🚀 Wznawiam expienie...", "#4caf50");
                             btn.click();
                         }
                     }
@@ -7670,9 +7691,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 return;
             }
 
-            // Sytuacja 2: Widzimy Pełne Okno
+            // 2. Mamy pełne okno (jeśli jakimś cudem wyskoczyło bez paska u góry)
             if (fullWin) {
-                // Gdyby wyskoczyło nagle, bez pre-captchy (np. natychmiastowo z potwora)
                 if (window.__captchaPhase === "none") {
                     window.__wasExpingBeforeCaptcha = window.isExping;
                     if (window.isExping) {
@@ -7686,7 +7706,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 return;
             }
 
-            // Sytuacja 3: Widzimy powiadomienie (Pre-Captcha) u góry ekranu
+            // 3. Mamy tylko pasek u góry
             if (preWin && window.__captchaPhase === "none") {
                 handlePreCaptcha(preWin);
             }
@@ -7694,8 +7714,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 500);
 
         // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
-            // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
-        setInterval(() => { // <--- DODAJ TĘ JEDNĄ LINIJKĘ TUTAJ
+        setInterval(() => {
             if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
                 let playerFound = false;
                 let chatMessageFound = false;
