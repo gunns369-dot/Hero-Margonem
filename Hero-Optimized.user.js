@@ -2034,70 +2034,92 @@ function autoDetectEngineData() {
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
-   // ==========================================
-    // ALGRORYTMY BFS (Z Wnioskowaniem Odwrotnym)
+  // ==========================================
+    // ALGORYTM DIJKSTRY (ZAAWANSOWANY GPS Z WAGAMI)
     // ==========================================
     function getShortestPath(start, end) {
         if (start === end) return [start];
-        let queue = [[start]]; 
-        let visited = new Set([start]);
         
-        // MAGIA: Tworzenie wirtualnych ścieżek powrotnych
-        // Jeśli bot widział wejście z Mapy A do Mapy B, to automatycznie
-        // zakłada, że z Mapy B da się wyjść do Mapy A (rozwiązuje problem nieodwiedzonych jaskiń).
+        // Tworzenie wirtualnych ścieżek powrotnych (Na wypadek zgubienia się w ślepym zaułku)
         let reverseEdges = {};
         for (let src in globalGateways) {
             for (let tgt in globalGateways[src]) {
                 if (!reverseEdges[tgt]) reverseEdges[tgt] = [];
-                reverseEdges[tgt].push(src);
+                if (!reverseEdges[tgt].includes(src)) reverseEdges[tgt].push(src);
             }
         }
 
+        let distances = {};
+        let previous = {};
+        let queue = [];
+        
+        distances[start] = 0;
+        queue.push({node: start, dist: 0});
+        
+        let visited = new Set();
+
         while (queue.length > 0) {
-            let path = queue.shift(); 
-            let node = path[path.length - 1];
-
-            let neighbors = new Set();
+            // Sortujemy kolejkę, aby zawsze wybierać najtańszą (najkrótszą) drogę
+            queue.sort((a, b) => a.dist - b.dist);
+            let current = queue.shift();
+            let u = current.node;
             
-            // 1. Fizycznie zapisane przejścia (Normalne)
-            if (globalGateways[node]) {
-                for (let neighbor in globalGateways[node]) {
-                    neighbors.add(neighbor);
+            // Jeśli dotarliśmy do celu, odtwarzamy trasę od tyłu
+            if (u === end) {
+                let path = [];
+                let curr = end;
+                while (curr) {
+                    path.unshift(curr);
+                    curr = previous[curr];
+                }
+                return path;
+            }
+            
+            if (visited.has(u)) continue;
+            visited.add(u);
+            
+            // 1. FIZYCZNE BRAMY (Priorytet najwyższy! Koszt: 1)
+            if (globalGateways[u]) {
+                for (let v in globalGateways[u]) {
+                    let alt = distances[u] + 1; // Waga 1 dla normalnych kroków
+                    if (distances[v] === undefined || alt < distances[v]) {
+                        distances[v] = alt;
+                        previous[v] = u;
+                        queue.push({node: v, dist: alt});
+                    }
                 }
             }
             
-            // 2. Przejścia odwrotne ("Skoro wszedłem, to muszę móc wyjść")
-            if (reverseEdges[node]) {
-                for (let neighbor of reverseEdges[node]) {
-                    neighbors.add(neighbor);
-                }
-            }
-
-            for (let neighbor of neighbors) {
-                if (neighbor === node) continue; // Zabezpieczenie przed zapętlaniem
-                if (!visited.has(neighbor)) {
-                    visited.add(neighbor); 
-                    let newPath = [...path, neighbor];
-                    if (neighbor === end) return newPath;
-                    queue.push(newPath);
-                }
-            }
-
-            // 3. Wirtualne ścieżki przez teleporty Zakonników
-            if (botSettings.useTeleports && ZAKONNICY[node]) {
+            // 2. TELEPORTY ZAKONNIKÓW (Priorytet wysoki. Koszt: 1.5)
+            // Używa TP tylko, gdy oszczędza to przynajmniej 2 zwykłe mapy biegania
+            if (botSettings.useTeleports && ZAKONNICY[u]) {
                 for (let tpMap in botSettings.unlockedTeleports) {
-                    if (botSettings.unlockedTeleports[tpMap] && !visited.has(tpMap) && tpMap !== node) {
-                        visited.add(tpMap); 
-                        let newPath = [...path, tpMap];
-                        if (tpMap === end) return newPath;
-                        queue.push(newPath);
+                    if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
+                        let alt = distances[u] + 1.5; 
+                        if (distances[tpMap] === undefined || alt < distances[tpMap]) {
+                            distances[tpMap] = alt;
+                            previous[tpMap] = u;
+                            queue.push({node: tpMap, dist: alt});
+                        }
+                    }
+                }
+            }
+            
+            // 3. ŚCIEŻKI WIRTUALNE/ODWROTNE (Ostatnia deska ratunku! Koszt: 10)
+            // Bot użyje ich tylko wtedy, gdy utknie w jaskini bez zapisanego fizycznego wyjścia
+            if (reverseEdges[u]) {
+                for (let v of reverseEdges[u]) {
+                    let alt = distances[u] + 10; // Potężna kara za chodzenie "pod prąd"
+                    if (distances[v] === undefined || alt < distances[v]) {
+                        distances[v] = alt;
+                        previous[v] = u;
+                        queue.push({node: v, dist: alt});
                     }
                 }
             }
         }
         return null;
     }
-
 
 window.handleTeleportNPC = function(targetMap) {
         if (!isRushing && !isPatrolling && !window.isExping) return;
