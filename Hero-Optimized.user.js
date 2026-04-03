@@ -7558,10 +7558,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         window.playerAlertTriggered = false;
         window.lastChatLength = 0;
 
-       // Zmienne Auto-Solvera
+        // Zmienne stanu (State Machine)
         window.__captchaPhase = "none"; 
+        window.__captchaLock = false; // Twarda blokada asynchroniczna
         window.__wasExpingBeforeCaptcha = false;
-        window.__wasPatrollingBeforeCaptcha = false; // <--- DODANA PAMIĘĆ PATROLU
+        window.__wasPatrollingBeforeCaptcha = false;
 
         // --- FUNKCJE HUMANIZUJĄCE ---
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -7600,68 +7601,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             return null;
         }
 
-// --- OBSŁUGA POJAWIENIA SIĘ ZAGADKI (ALARM + OPÓŹNIONY STOP) ---
-        async function handleCaptchaDetection(preEl, fullEl) {
-            if (window.__captchaPhase !== "none") return;
-            window.__captchaPhase = "handling_delay";
-            
-            // Bot zapisuje sobie na karteczce, co dokładnie robił
-            window.__wasExpingBeforeCaptcha = window.isExping;
-            window.__wasPatrollingBeforeCaptcha = window.isPatrolling; // <--- ZAPIS PATROLU
-
-            // 1. NATYCHMIASTOWY ALARM I KLIKALNE POWIADOMIENIE PUSH
-            if (botSettings.exp.captchaAlert) {
-                try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
-                window.focus(); // Czasem zadziała samoistnie
-                
-                if (Notification.permission === "granted") {
-                    let notif = new Notification("🚨 ALARM: ZAPADKA!", { 
-                        body: "Wykryto zapadkę! KLIKNIJ TUTAJ, aby wyciągnąć okno gry na wierzch.", 
-                        requireInteraction: true 
-                    });
-                    
-                    // To kliknięcie mówi systemowi "skup się na tej karcie i rzuć na wierzch"
-                    notif.onclick = function() {
-                        window.focus();
-                        this.close();
-                    };
-                }
-                if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
-            }
-
-            // 2. LUDZKIE ZATRZYMANIE BOTA Z OPÓŹNIENIEM (3 - 5 sekund)
-            if (window.logExp) window.logExp("⏳ [Humanizacja] Odczekuję losowo 3-5 sekund przed zatrzymaniem postaci...", "#ff9800");
-            await sleep(randomDelay(3000, 5000));
-
-            // Zatrzymanie procesów bota
-            if (window.isExping) {
-                let btn = document.getElementById('btnStartExp');
-                if (btn) btn.click();
-            }
-            if (typeof stopPatrol === 'function') stopPatrol(true);
-            if (window.logExp) window.logExp("🛑 [Zapadka] Akcje zatrzymane.", "#f44336");
-
-            // 3. DECYZJA: AUTO-SOLVER CZY CZEKAMY NA UŻYTKOWNIKA?
-            if (botSettings.exp.autoSolveCaptcha) {
-                if (preEl && !fullEl) {
-                    if (window.logExp) window.logExp("🤖 [Auto-Solver] Klikam 'Rozwiąż teraz'...", "#00e5ff");
-                    humanClick(preEl);
-                    window.__captchaPhase = "waiting_for_full";
-                } else if (fullEl) {
-                    window.__captchaPhase = "full_handling";
-                    handleFullCaptcha(fullEl);
-                }
-            } else {
-                if (window.logExp) window.logExp("✋ [Info] Automatyczne rozwiązywanie jest wyłączone. Czekam aż zrobisz to ręcznie...", "#ffb300");
-                window.__captchaPhase = "manual_waiting";
-            }
-        }
-
-        // --- LOGIKA KLIKANIA ODPOWIEDZI ---
-        async function handleFullCaptcha(winEl) {
-            if (window.__captchaPhase === "full_handling") return;
-            window.__captchaPhase = "full_handling";
-            
+        // --- GŁÓWNA ASYNCHRONICZNA LOGIKA KLIKANIA (SOLVER) ---
+        async function solveFullCaptchaAsync(winEl) {
             if (window.logExp) window.logExp("🤖 [Auto-Solver] Czytam zagadkę...", "#ff9800");
             await sleep(randomDelay(2000, 3500));
 
@@ -7704,60 +7645,108 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (window.logExp) window.logExp("🖱️ Klikam [Potwierdzam]!", "#4caf50");
                     humanClick(confirmBtn);
                 }
+                // Czekamy aż okno faktycznie zniknie po potwierdzeniu
                 await sleep(randomDelay(1500, 2500));
             } else {
                 if (window.logExp) window.logExp("❌ Brak opcji z gwiazdką. Zrób to ręcznie!", "#e53935");
+                window.__captchaPhase = "manual"; // Jeśli nie ma gwiazdek, zrzucamy odpowiedzialność na Ciebie
             }
         }
 
-        // --- GŁÓWNA PĘTLA STRAŻNIKA ---
-        setInterval(() => {
-            // Skrypt działa tylko jeśli włączony jest alarm LUB auto-rozwiązywanie
+        // --- ZSYNCHRONIZOWANA PĘTLA STRAŻNIKA ---
+        setInterval(async () => {
+            // Pętla nie robi nic, jeśli brak opcji lub gdy zablokowana przez trwające zdarzenie asynchroniczne
             if (!botSettings.exp || (!botSettings.exp.captchaAlert && !botSettings.exp.autoSolveCaptcha)) return;
+            if (window.__captchaLock) return;
 
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // 1. ZNIKNIĘCIE CAPTCHY (Koniec alarmu, wznawiamy)
+            // Sytuacja 1: Zapadki brak (Czysto lub została rozwiązana)
             if (!fullWin && !preWin) {
-                if (window.__captchaPhase === "full_handling" || window.__captchaPhase === "waiting_for_full" || window.__captchaPhase === "manual_waiting") {
-                    if (window.logExp) window.logExp("✅ Zapadka zniknęła z ekranu. Bezpiecznie.", "#4caf50");
-                    if (window.logHero) window.logHero("✅ Zapadka zniknęła z ekranu. Bezpiecznie.", "#4caf50");
+                if (window.__captchaPhase !== "none") {
+                    if (window.logExp) window.logExp("✅ Zapadka zniknęła z ekranu. Wznawiam procesy.", "#4caf50");
                     
-                    // A) Wznowienie EXPA
+                    // Wznawianie
                     if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                         let btn = document.getElementById('btnStartExp');
-                        if (btn) {
-                            if (window.logExp) window.logExp("🚀 Wznawiam expienie...", "#4caf50");
-                            btn.click();
-                        }
+                        if (btn) btn.click();
                     }
-                    
-                    // B) Wznowienie SZUKANIA HEROSÓW / ELIT (Patrol)
                     if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
                         let btn = document.getElementById('btnStartStop');
-                        if (btn) {
-                            if (window.logHero) window.logHero("🚀 Wznawiam patrol po zapadce...", "#4caf50");
-                            btn.click();
-                        }
+                        if (btn) btn.click();
                     }
+                    
+                    window.__captchaPhase = "none";
                 }
-                window.__captchaPhase = "none";
                 return;
             }
 
-            // 2. NOWA CAPTCHA
+            // Sytuacja 2: Zapadka pojawiła się pierwszy raz
             if (window.__captchaPhase === "none") {
-                handleCaptchaDetection(preWin, fullWin);
+                window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
+                window.__captchaPhase = "delaying";
+                
+                window.__wasExpingBeforeCaptcha = window.isExping;
+                window.__wasPatrollingBeforeCaptcha = window.isPatrolling;
+
+                if (botSettings.exp.captchaAlert) {
+                    try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
+                    window.focus();
+                    if (Notification.permission === "granted") {
+                        let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
+                        notif.onclick = function() { window.focus(); this.close(); };
+                    }
+                    if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
+                }
+
+                // Bezpieczne, nieprzerywane czekanie
+                if (window.logExp) window.logExp("⏳ [Humanizacja] Odczekuję losowo 3-5 sekund przed zatrzymaniem postaci...", "#ff9800");
+                await sleep(randomDelay(3000, 5000));
+
+                if (window.isExping) {
+                    let btn = document.getElementById('btnStartExp');
+                    if (btn) btn.click();
+                }
+                if (typeof stopPatrol === 'function') stopPatrol(true);
+                if (window.logExp) window.logExp("🛑 [Zapadka] Akcje zatrzymane.", "#f44336");
+
+                if (botSettings.exp.autoSolveCaptcha) {
+                    window.__captchaPhase = "solving";
+                } else {
+                    if (window.logExp) window.logExp("✋ [Info] Auto-Solver wyłączony. Czekam na ręczne rozwiązanie...", "#ffb300");
+                    window.__captchaPhase = "manual";
+                }
+                
+                window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
                 return;
             }
 
-            // 3. PRZEJŚCIE Z POWIADOMIENIA W GŁÓWNE OKNO (Dla Auto-Solvera)
-            if (fullWin && window.__captchaPhase === "waiting_for_full" && botSettings.exp.autoSolveCaptcha) {
-                handleFullCaptcha(fullWin);
+            // Sytuacja 3: Jesteśmy w trybie Auto-Solvera i szukamy co kliknąć
+            if (window.__captchaPhase === "solving") {
+                
+                // Priorytet 1: Pełne okno
+                if (fullWin) {
+                    window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
+                    await solveFullCaptchaAsync(fullWin);
+                    window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
+                    return;
+                }
+
+                // Priorytet 2: Tylko powiadomienie (Klikamy by otworzyć)
+                if (preWin && !fullWin) {
+                    window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
+                    if (window.logExp) window.logExp("🤖 [Auto-Solver] Klikam 'Rozwiąż teraz'...", "#00e5ff");
+                    humanClick(preWin);
+                    // Czekamy krótką chwilę, aż po kliknięciu rozwinie się pełne okno
+                    await sleep(randomDelay(1000, 2000));
+                    window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
+                    return;
+                }
             }
 
         }, 500);
+
 
         // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
         setInterval(() => {
