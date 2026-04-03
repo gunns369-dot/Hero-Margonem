@@ -1901,13 +1901,15 @@ function autoDetectEngineData() {
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
             }
             
-            // WZNOWIENIE PATROLU PO DOTARCIU (Klucz do naprawy Szukania Herosów!)
+        // WZNOWIENIE PATROLU PO DOTARCIU (Klucz do naprawy Szukania Herosów!)
             if (window.resumePatrolAfterRush) {
                 window.resumePatrolAfterRush = false;
                 isPatrolling = true;
                 if (btn) { btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; }
-                if (window.logHero) window.logHero(`✅ Dotarto do celu. Wznawiam szukanie Herosów!`, "#4caf50");
-                setTimeout(() => { if (typeof executePatrolStep === 'function') executePatrolStep(); }, 500);
+                if (window.logHero) window.logHero(`✅ Dotarto na nową mapę. Analizuję teren...`, "#4caf50");
+                
+                // WYDŁUŻONY CZAS (1.5 sekundy), aby gra wczytała koordynaty przed startem patrolu!
+                setTimeout(() => { if (typeof executePatrolStep === 'function') executePatrolStep(); }, 1500);
             }
             return;
         }
@@ -4267,11 +4269,28 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
         executePatrolStep();
     }
 
-  function executePatrolStep() {
+ function executePatrolStep() {
         if (!isPatrolling) return;
+
+        // 1. ZABEZPIECZENIE: Czekamy, aż mapa się w pełni załaduje
+        if (typeof Engine === 'undefined' || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) {
+            setTimeout(executePatrolStep, 500);
+            return;
+        }
+
         checkVisionRange();
 
-        // BEZWZGLĘDNA WERYFIKACJA KOORDYNATÓW (Szuka pierwszego NIEODWIEDZONEGO punktu)
+        let hero = document.getElementById('selHero').value;
+        let currentSysMap = Engine.map.d.name;
+
+        // 2. Jeśli bot po odświeżeniu/wczytaniu ma pustą listę kordów, a mapa nie jest sprawdzona - próbujemy ją załadować
+        if (currentCordsList.length === 0 && heroData[hero] && heroData[hero][currentSysMap]) {
+             if (!checkedMapsThisSession.has(currentSysMap)) {
+                 currentCordsList = [...heroData[hero][currentSysMap]];
+                 if (typeof optimizeRoute === 'function') optimizeRoute();
+             }
+        }
+
         let nextUnvisitedIndex = -1;
         for (let i = 0; i < currentCordsList.length; i++) {
             if (!checkedPoints.has(i)) {
@@ -4281,34 +4300,42 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
         }
         patrolIndex = nextUnvisitedIndex;
 
-        let hero = document.getElementById('selHero').value;
-        let currentSysMap = lastMapName;
-
-        // Jeśli indeks to -1, oznacza to, że ŻADEN punkt na liście nie pozostał do sprawdzenia
+        // Jeśli wszystkie punkty na mapie sprawdzone LUB mapa nie ma w ogóle punktów
         if (patrolIndex === -1 || currentCordsList.length === 0) {
             clearTimeout(smoothPatrolInterval);
-            if (!checkedMapsThisSession.has(currentSysMap)) { checkedMapsThisSession.add(currentSysMap); saveCheckedMaps(); }
-
-            window.logHero(`Odhaczono wszystkie kordy na: ${currentSysMap}`, "#8bc34a");
+            
+            if (!checkedMapsThisSession.has(currentSysMap)) { 
+                checkedMapsThisSession.add(currentSysMap); 
+                saveCheckedMaps(); 
+                window.logHero(`Odhaczono wszystkie kordy na: ${currentSysMap}`, "#8bc34a");
+            }
 
             if(hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0) {
                 let mapList = heroMapOrder[hero];
+                
+                // 3. SPRAWDZENIE CZY TO KONIEC CAŁEJ TRASY (Zamiast kręcić w kółko - ZATRZYMAJ)
+                if (checkedMapsThisSession.size >= mapList.length) {
+                    checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); 
+                    stopPatrol(true);
+                    window.logHero(`✅ CAŁY PATROL ZAKOŃCZONY (Sprawdzono wszystkie mapy z listy)!`, "#4caf50");
+                    heroAlert("✅ Trasa Herosa sprawdzona w całości! Patrol zatrzymany."); 
+                    return;
+                }
+
                 let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
                 let finalDestinationMap = mapList[nextRouteIndex];
 
                 window.logHero(`Zmieniam mapę. Obieram kurs na: [${finalDestinationMap}]`, "#00acc1");
                 
-                // MAGIA: Używamy niezawodnego silnika Rush do pokonania trasy i wyważenia ewentualnych drzwi
                 if (typeof window.rushToMap === 'function') {
-                    // Dodany parametr 'true' mówi silnikowi RUSH: "Jak dotrzesz do celu, wznow patrol Herosa!"
                     window.rushToMap(finalDestinationMap, null, null, null, true);
                     return;
                 }
             }
 
             checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true);
-            window.logHero(`✅ Pętla ukończona!`, "#4caf50");
-            heroAlert("✅ Trasa zrobiona!"); return;
+            window.logHero(`✅ Koniec trasy!`, "#4caf50");
+            heroAlert("✅ Koniec Trasy!"); return;
         }
 
         renderCordsList(patrolIndex);
@@ -6284,6 +6311,22 @@ window.toggleTeleportLock = function(city, isChecked) {
 
         // 1. ZARZĄDZAJ TELEPORTAMI
         if (e.target && e.target.closest('#btnOpenTeleports')) { hideAllTabs(); if (tpGui) { tpGui.style.display = 'flex'; if (typeof renderTeleportList === 'function') renderTeleportList(); } }
+        // --- NAPRAWA PRZYCISKÓW BAZY EXP ---
+        if (e.target && e.target.closest('#btnOpenExpBase')) {
+            let p = document.getElementById('heroExpBaseGUI');
+            if (p) {
+                p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+                if (p.style.display === 'flex' && typeof window.renderExpProfiles === 'function') window.renderExpProfiles();
+            }
+        }
+        if (e.target && e.target.closest('#btnOpenRecommendedExp')) {
+            let p = document.getElementById('heroExpRecGUI');
+            if (p) {
+                p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+                if (p.style.display === 'flex' && typeof window.renderRecommendedExp === 'function') window.renderRecommendedExp();
+            }
+        }
+        // -----------------------------------
 // WYMUSZENIE RĘCZNEJ SPRZEDAŻY
         if (e.target && e.target.closest('#btnForceSell')) {
             if (!window.autoSellState) window.autoSellState = { active: false };
@@ -7933,22 +7976,21 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Ponawiam komendę ruchu...", "#00e5ff");
                             if (window.logExp) window.logExp("🔄 [Anti-Stuck] Wykryto zacięcie! Ponawiam komendę ruchu...", "#00e5ff");
                             
-                            // 1. Twarda komenda serwerowa na interakcję z drzwiami (jeśli stoi na kordach przejścia)
+                          // 1. Twarda komenda serwerowa na interakcję z drzwiami
                             window._g('walk');
                             
-                            // 2. Wznowienie pętli decyzyjnych bota w zależności od trybu
+                            // 2. CZEKAMY 2 SEKUNDY AŻ GRA PRZETRAWI KOMENDĘ, I WZNAWIAMY!
                             if (typeof isPatrolling !== 'undefined' && isPatrolling && typeof window.executePatrolStep === 'function') {
-                                window.executePatrolStep();
+                                setTimeout(() => window.executePatrolStep(), 2000);
                             } else if (window.isRushing && typeof window.executeRushStep === 'function') {
-                                window.executeRushStep();
+                                setTimeout(() => window.executeRushStep(), 2000);
                             } else if (window.isExping && typeof window.expMainLoop === 'function') {
-                                window.expMainLoop();
+                                setTimeout(() => window.expMainLoop(), 2000);
                             } else {
-                                // Zapasowe "szturchnięcie" (minimalny ruch w miejsce, w którym stoi)
-                                Engine.hero.autoGoTo({x: currentX, y: currentY});
+                                setTimeout(() => { Engine.hero.autoGoTo({x: currentX, y: currentY}); }, 2000);
                             }
                             
-                            window.stuckIdleCount = 0; // Resetujemy licznik po interwencji
+                            window.stuckIdleCount = 0; // Resetujemy licznik
                         }
                     } else {
                         // Zaktualizowanie pozycji
