@@ -4876,13 +4876,12 @@ function runExpLogic() {
                 return; // Bot stoi w miejscu, oddając kontrolę systemom miejskim
             }
 
-            // --- 1. ZABEZPIECZENIE PRZED ZACIĘCIEM W DRZWIACH (MAP COOLDOWN) ---
+        // --- 1. ZABEZPIECZENIE PRZED ZACIĘCIEM W DRZWIACH (MAP COOLDOWN) ---
             if (window.lastExpMap !== Engine.map.d.name) {
                 window.lastExpMap = Engine.map.d.name;
                 window.mapCooldown = Date.now() + 1500; // 1.5 sekundy przerwy po zmianie mapy
                 window.isRushing = false; // Bezwzględny reset stanu biegu
-                if (window.logHero) window.logHero(`🌍 Załadowano: ${Engine.map.d.name}. Czekam na serwer...`, "#ff9800");
-                return; // Dajemy grze odetchnąć i załadować tekstury
+                return; // Dajemy grze odetchnąć i załadować tekstury bez robienia spamu w logach
             }
             if (window.mapCooldown && Date.now() < window.mapCooldown) {
                 return; // Trwa blokada, czekamy
@@ -7075,8 +7074,14 @@ window.toggleTeleportLock = function(city, isChecked) {
                         window.isHealingRightNow = true;
                         let potion = potions[0];
                         
-                        if (window.logHero && window.lastHealLog !== potion.id) {
-                            window.logHero(`💚 Leczę się: ${potion._cachedStats?.name || potion.name}`, "#4caf50");
+                      if (window.lastHealLog !== potion.id) {
+                            let msg = `💚 Leczę się: ${potion._cachedStats?.name || potion.name}`;
+                            // Inteligentne logowanie: jeśli expi, wrzuca do zakładki EXP. Jeśli nie - do Herosów.
+                            if (window.isExping && window.logExp) {
+                                window.logExp(msg, "#4caf50");
+                            } else if (window.logHero) {
+                                window.logHero(msg, "#4caf50");
+                            }
                             window.lastHealLog = potion.id;
                         }
                         
