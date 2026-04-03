@@ -1847,11 +1847,14 @@ function autoDetectEngineData() {
 // ==========================================
     // RUSH MODE (PŁYNNY RUCH)
     // ==========================================
-  window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null) {
+    window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null, resumePatrol = false) {
         let currentSysMap = lastMapName;
-
         if (currentSysMap === targetMapName) {
             if (x !== null && y !== null) safeGoTo(x, y, false);
+            if (resumePatrol) {
+                isPatrolling = true;
+                setTimeout(() => { if(typeof executePatrolStep === 'function') executePatrolStep(); }, 500);
+            }
             return;
         }
 
@@ -1862,6 +1865,7 @@ function autoDetectEngineData() {
         rushTargetX = x;
         rushTargetY = y;
         window.rushFullPath = (typeof fullPath === 'string') ? JSON.parse(fullPath) : (fullPath || []);
+        window.resumePatrolAfterRush = resumePatrol; // Flaga wznawiająca szukanie Herosa!
 
         let btn = document.getElementById('btnStartStop');
         if (btn) {
@@ -1888,13 +1892,22 @@ function autoDetectEngineData() {
         if (currentSysMap === rushTarget) {
             isRushing = false;
             window.isRushing = false;
-            window._lastRushNextMap = null; // Reset logów
+            window._lastRushNextMap = null; 
             window._lastRushTargetLog = null;
             let btn = document.getElementById('btnStartStop');
             if (btn) { btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>'; btn.style.color = "#4caf50"; btn.style.borderColor = "#4caf50"; }
 
             if (rushTargetX !== null && rushTargetY !== null) {
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
+            }
+            
+            // WZNOWIENIE PATROLU PO DOTARCIU (Klucz do naprawy Szukania Herosów!)
+            if (window.resumePatrolAfterRush) {
+                window.resumePatrolAfterRush = false;
+                isPatrolling = true;
+                if (btn) { btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; }
+                if (window.logHero) window.logHero(`✅ Dotarto do celu. Wznawiam szukanie Herosów!`, "#4caf50");
+                setTimeout(() => { if (typeof executePatrolStep === 'function') executePatrolStep(); }, 500);
             }
             return;
         }
@@ -1954,6 +1967,7 @@ function autoDetectEngineData() {
             window.rushLastX = Engine.hero.d.x;
             window.rushLastY = Engine.hero.d.y;
             stuckCount = 0;
+            window.rushGatewayArrivalTime = 0; // Reset przy wyznaczeniu nowego celu
 
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
@@ -1969,28 +1983,56 @@ function autoDetectEngineData() {
         let nextMap = window.rushNextMap;
         if (!nextMap) return;
 
+        let tp = ZAKONNICY[currentSysMap];
         let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
+        if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
+
         if (!door) return;
 
         let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
         let dist = Math.abs(cx - door.x) + Math.abs(cy - door.y);
 
         if (dist > 1) {
-            // INTELIGENTNE FIZYCZNE SPRAWDZANIE CZY POSTAĆ IDZIE
-            if (cx !== window.rushLastX || cy !== window.rushLastY) {
-                window.rushLastX = cx;
-                window.rushLastY = cy;
-                stuckCount = 0; // Postać się porusza, więc nie klikamy!
-            } else {
-                stuckCount++;
-                // Jeśli stoi w miejscu totalnie nieruchomo przez 2 sekundy (4x500ms), ponawia kliknięcie
-                if (stuckCount >= 4) {
-                    safeGoTo(door.x, door.y, false);
+            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+            window.rushGatewayArrivalTime = 0; // Zerujemy czas stania na bramie, bo wciąż do niej idziemy
+            
+            if (!isMoving) {
+                if (cx === window.rushLastX && cy === window.rushLastY) {
+                    stuckCount++;
+                    if (stuckCount > 6) { // Postać zacięła się w połowie drogi na 3 sekundy
+                        safeGoTo(door.x, door.y, false);
+                        stuckCount = 0;
+                    }
+                } else {
+                    window.rushLastX = cx; window.rushLastY = cy;
                     stuckCount = 0;
                 }
+            } else {
+                stuckCount = 0;
+            }
+        } else {
+            // --- FIZYCZNIE STOIMY NA BRAMIE LUB OBOK NIEJ ---
+            if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
+            
+            // Jeśli bot stoi tu bezczynnie ponad 5 sekund i gra nie przeładowała mapy
+            if (Date.now() - window.rushGatewayArrivalTime > 5000) {
+                if (window.logHero) window.logHero(`🚨 Brama zacięta! Odbiegam, by kliknąć ponownie...`, "#ff9800");
+                if (window.logExp) window.logExp(`🚨 Brama zacięta! Odbiegam, by kliknąć ponownie...`, "#ff9800");
+                
+                // Odbiegamy lekko w bok
+                let stepX = Math.max(0, cx + (Math.random() > 0.5 ? 2 : -2));
+                let stepY = Math.max(0, cy + (Math.random() > 0.5 ? 2 : -2));
+                Engine.hero.autoGoTo({ x: stepX, y: stepY });
+                
+                window.rushGatewayArrivalTime = 0;
+                stuckCount = -4; // Wymusza odczekanie sekundy zanim bot znów strzeli w bramę
+            } else if (Date.now() - window.rushGatewayArrivalTime > 2000) {
+                 // Szybkie awaryjne szturchnięcie wejścia serwerowo
+                 window._g('walk');
             }
         }
-
+        
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
@@ -2538,7 +2580,7 @@ window.handleTeleportNPC = function(targetMap) {
 
 
 const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
-     mainGui.innerHTML = `
+        mainGui.innerHTML = `
             <div class="gui-header">
                 <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.3</div>
                 <div class="header-buttons">
@@ -2549,7 +2591,6 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                    <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;" onclick="window.toggleMainVisibility()"><span class="btn-icon">✖</span></button>
                 </div>
             </div>
-
            <div class="tabs-wrapper">
                 <div id="heroModeToggle" class="nav-tab active-tab">🐲 HEROSI</div>
                 <div id="e2ModeToggle" class="nav-tab">💀 ELITY II</div>
@@ -2557,13 +2598,11 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                 <div id="expModeToggle" class="nav-tab">⚔️ EXP</div>
                 <div id="teleportsModeToggle" class="nav-tab">🚀 TP/EQ/HP</div>
             </div>
-
             <div class="gui-content" id="mainRoutingPanel">
                 <div class="location-wrapper" style="margin-bottom: 8px;">
                     <span class="location-label">Stoisz na:</span>
                     <span id="currentMapNameDisplay">Ładowanie...</span>
                 </div>
-
                 <div id="heroContainer" style="display:flex; flex-direction:column; flex-grow:1;">
                     <div id="heroConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 150px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:5px;">
                         <span style="color:#777;">[System]</span> Moduł Patrolu w gotowości...
@@ -2576,7 +2615,6 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="color: #4caf50; cursor: pointer; font-size: 11px; font-weight:bold; margin:0;"><input type="checkbox" id="chkAutoAttack" ${botSettings.autoAttack ? 'checked' : ''}> Auto-atak</label>
                         </div>
                     </div>
-
                     <div class="nav-row"><label>Szukany Heros:</label><select id="selHero" style="flex-grow: 1;"><option value="">-- Wybierz --</option></select></div>
                     <div class="nav-row" style="display: flex; flex-direction: column; flex-grow: 1;">
                         <label style="color:#00acc1;">Kolejność Przechodzenia Map:</label>
@@ -2595,7 +2633,6 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
                     <div class="nav-row" style="margin-top: 10px; display: flex; flex-direction: column;"><label style="color:#d4af37;">Koordynaty (Zasięg: 7 kratek):</label><div id="cordsListContainer"></div></div>
                 </div>
-
                 <div id="e2Container" style="display:none; flex-direction:column; flex:1; min-height:0;">
                     <div id="e2SuitableContainer" style="background:rgba(156,39,176,0.1); border:1px solid #9c27b0; padding:6px; margin-bottom:8px; border-radius:2px;"><span style="color:#777; font-size:10px;">Ładowanie podpowiedzi levelowych...</span></div>
                     <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:5px;">
@@ -2604,7 +2641,6 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
                     <div id="e2ListContainer"></div>
                 </div>
-
                 <div id="kolosyContainer" style="display:none; flex-direction:column; flex:1; min-height:0;">
                     <div id="kolosySuitableContainer" style="background:rgba(230,74,25,0.1); border:1px solid #e64a19; padding:6px; margin-bottom:8px; border-radius:2px;"><span style="color:#777; font-size:10px;">Ładowanie podpowiedzi levelowych...</span></div>
                     <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:5px;">
@@ -2613,15 +2649,11 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
                     <div id="kolosyListContainer"></div>
                 </div>
-
-<div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
+                <div id="expContainer" style="display:none; flex-direction:column; flex:1; min-height:0; gap:4px; padding-top:4px;">
                     <div id="expConsole" style="background:#080808; border:1px solid #333; padding:4px; font-size:10px; color:#a99a75; height:55px; min-height: 55px; max-height: 250px; resize: vertical; overflow-y:auto; font-family:monospace; box-shadow:inset 0 1px 3px #000; margin-bottom:2px;">
                         <span style="color:#777;">[System]</span> Włączony moduł Smart-Roam (Dynamiczne czyszczenie)...
                     </div>
-
-                    <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">
-                        ▼ KIESZONKOWY BERSERK
-                    </div>
+                    <div class="accordion-header" id="accBerserk" onclick="toggleSettingsAcc('accBerserk')" style="background: rgba(255, 152, 0, 0.2); border-color: #ff9800; color: #ff9800; margin-bottom: 0;">▼ KIESZONKOWY BERSERK</div>
                     <div id="accBerserkContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #ff9800; border-top: none; margin-bottom: 5px;">
                         <label style="color:#ff9800; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom: 8px; cursor: pointer;">
                             <input type="checkbox" id="berserkEnabled" ${botSettings.berserk?.enabled ? 'checked' : ''}> Aktywuj Berserka
@@ -2637,133 +2669,82 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="color:#a99a75; font-size:10px; flex:1;">Mniejszy od nas o lvl:<br><input type="number" id="berserkMinLvl" value="${Math.abs(botSettings.berserk?.minLvlOffset ?? 20)}" style="width:100%; padding:2px; font-size:10px; text-align:center;"></label>
                         </div>
                     </div>
-<div class="accordion-header" id="accAutoheal" onclick="toggleSettingsAcc('accAutoheal')" style="background: rgba(76, 175, 80, 0.2); border-color: #4caf50; color: #4caf50; margin-bottom: 0;">
-                        ▼ AUTOHEAL I AUTO-SPRZEDAŻ
-                    </div>
+                    <div class="accordion-header" id="accAutoheal" onclick="toggleSettingsAcc('accAutoheal')" style="background: rgba(76, 175, 80, 0.2); border-color: #4caf50; color: #4caf50; margin-bottom: 0;">▼ AUTOHEAL I AUTO-SPRZEDAŻ</div>
                     <div id="accAutohealContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #4caf50; border-top: none; margin-bottom: 5px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <div style="display:flex; gap:10px; align-items:center;">
-                                <label style="color:#4caf50; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
-                                    <input type="checkbox" id="autohealEnabled" ${botSettings.autoheal?.enabled ? 'checked' : ''}> Autoheal
-                                </label>
+                                <label style="color:#4caf50; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;"><input type="checkbox" id="autohealEnabled" ${botSettings.autoheal?.enabled ? 'checked' : ''}> Autoheal</label>
                                 <div style="display:flex; align-items:center; gap:5px;">
-                                    <label style="color:#e91e63; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
-                                        <input type="checkbox" id="autopotEnabled" ${botSettings.autopot?.enabled ? 'checked' : ''}> Auto Poty
-                                    </label>
+                                    <label style="color:#e91e63; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;"><input type="checkbox" id="autopotEnabled" ${botSettings.autopot?.enabled ? 'checked' : ''}> Auto Poty</label>
                                     <span id="btnAutoPotSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia Auto-Potów">⚙️</span>
                                 </div>
                             </div>
-                            <label style="color:#a99a75; font-size:10px; display:flex; align-items:center; gap:5px; margin:0;">
-                                Od ilu %: <input type="number" id="autohealThreshold" value="${botSettings.autoheal?.threshold ?? 80}" min="1" max="99" style="width:35px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
-                            </label>
+                            <label style="color:#a99a75; font-size:10px; display:flex; align-items:center; gap:5px; margin:0;">Od ilu %: <input type="number" id="autohealThreshold" value="${botSettings.autoheal?.threshold ?? 80}" min="1" max="99" style="width:35px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;"></label>
                         </div>
-
                         <div id="autopotSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e91e63; border-radius:3px; margin-bottom:8px;">
-                            <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; justify-content:space-between; margin:0;">
-                                Ilość staków do kupienia (1 stak = 15 szt):
-                                <input type="number" id="autopotStacks" value="${botSettings.autopot?.stacks ?? 14}" min="1" max="50" style="width:40px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;">
-                            </label>
+                            <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; justify-content:space-between; margin:0;">Ilość staków do kupienia (1 stak = 15 szt): <input type="number" id="autopotStacks" value="${botSettings.autopot?.stacks ?? 14}" min="1" max="50" style="width:40px; padding:2px; font-size:10px; text-align:center; background:#000; color:#fff; border:1px solid #444;"></label>
                         </div>
-
                         <div style="display:flex; gap:5px;">
-                            <div style="flex:1;">
-                                <label style="color:#a99a75; font-size:9px; display:block; margin-bottom:2px;">Nigdy nie używaj przedmiotów:</label>
-                                <textarea id="autohealIgnore" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.ignoreItems || ""}</textarea>
-                            </div>
-                            <div style="flex:1;">
-                                <label style="color:#a99a75; font-size:9px; display:block; margin-bottom:2px;">Przedmioty niezidentyfikowane:</label>
-                                <textarea id="autohealUnid" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.unidItems || ""}</textarea>
-                            </div>
+                            <div style="flex:1;"><label style="color:#a99a75; font-size:9px; display:block; margin-bottom:2px;">Nigdy nie używaj przedmiotów:</label><textarea id="autohealIgnore" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.ignoreItems || ""}</textarea></div>
+                            <div style="flex:1;"><label style="color:#a99a75; font-size:9px; display:block; margin-bottom:2px;">Przedmioty niezidentyfikowane:</label><textarea id="autohealUnid" style="width:100%; height:50px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; font-size:9px; resize:none;">${botSettings.autoheal?.unidItems || ""}</textarea></div>
                         </div>
                         <div style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
-                            <label style="color:#ffb300; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;">
-                                <input type="checkbox" id="autosellEnabled" ${botSettings.autosell?.enabled ? 'checked' : ''}> Auto-Sprzedaż
-                            </label>
+                            <label style="color:#ffb300; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;"><input type="checkbox" id="autosellEnabled" ${botSettings.autosell?.enabled ? 'checked' : ''}> Auto-Sprzedaż</label>
                             <div style="display:flex; align-items:center; gap:5px;">
                                 <span style="color:#a99a75; font-size:10px; margin:0;">Wolne miejsce: <b id="autosellCapacityDisplay" style="color:#4caf50;">?</b></span>
                                 <button id="btnForceSell" class="btn-sepia" style="background:#e65100; font-weight:bold; padding:2px 6px; border-color:#bf360c;">🏃 OPRÓŻNIJ TERAZ</button>
                             </div>
                         </div>
                     </div>
-             <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">
-                        ▼ ZAAWANSOWANE (Trasy / Alarm / Opcje walki)
-                    </div>
-               <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
+                    <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Trasy / Alarm / Opcje walki)</div>
+                    <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
                         <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                         <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
                             <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}" style="background:#000;"></label>
                             <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}" style="background:#000;"></label>
                         </div>
-
                         <label style="color:#a99a75; font-size:10px; margin-bottom:2px; display:block;">Atakowane potwory:</label>
                         <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px; margin-bottom:6px;">
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                         </div>
-
                         <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
-                            <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
-                                <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska
-                            </label>
-                            <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Odtwarza dźwięk i zatrzymuje bota z losowym opóźnieniem 3-5s">
-    <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
-</label>
-                            <div style="display:flex; align-items:center; gap:5px;">
-    <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy na mapie pojawi się inny gracz (tylko w trybie EXP)">
-        <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy
-    </label>
-    <span id="btnPlayerAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu na graczy">⚙️</span>
-</div>
-<div id="playerAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #ffb300; border-radius:3px; margin-bottom:4px; margin-top:4px;">
-    <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;">
-        <input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu
-   <div style="display:flex; align-items:center; gap:5px; margin-top:4px;">
-                    <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
-                        <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy
-                    </label>
-                    <span id="btnPlayerAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%);">⚙️</span>
-                </div>
-                <div id="playerAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #ffb300; border-radius:3px; margin-bottom:4px; margin-top:4px;">
-                    <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;">
-                        <input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu
-                    </label>
-                </div>
-
-                <div style="display:flex; align-items:center; gap:5px; margin-top:6px;">
-                    <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Powiadomienie o wiadomościach prywatnych">
-                        <input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat
-                    </label>
-                    <span id="btnChatAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu czatu">⚙️</span>
-                </div>
-                <div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
-                    <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;">
-                        <input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości
-                    </label>
-                </div>
-
-            </div> </div>
+                            <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska</label>
+                            <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha</label>
+                            <div style="display:flex; align-items:center; gap:5px; margin-top:4px;">
+                                <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
+                                <span id="btnPlayerAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%);">⚙️</span>
+                            </div>
+                            <div id="playerAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #ffb300; border-radius:3px; margin-bottom:4px; margin-top:4px;">
+                                <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;"><input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu</label>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:5px; margin-top:6px;">
+                                <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Powiadomienie o wiadomościach prywatnych"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat</label>
+                                <span id="btnChatAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu czatu">⚙️</span>
+                            </div>
+                            <div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
+                                <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
+                            </div>
+                        </div>
+                    </div>
                     <input type="hidden" id="expRange" value="999">
                     <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map (Smart-Roam): <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
                     <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
-
                     <div style="display:flex; gap:4px; margin-top:2px;">
                         <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
                         <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
                     </div>
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
-
-          <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
+                <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
                     <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
                     <button id="btnShowRecommendedEq" class="btn-sepia" style="padding:6px; background:#4caf50; font-weight:bold;">🎒 POLECANY EKWIPUNEK</button>
                     <button id="btnShowPotions" class="btn-sepia" style="padding:6px; background:#d81b60; color:white; font-weight:bold;">🧪 MIKSTURY I LECZENIE</button>
                     <button id="btnToggleShops" class="btn-sepia" style="padding:6px; background:#e65100; font-weight:bold;">🛒 WYSZUKIWARKA SKLEPÓW</button>
                     <button id="btnStopWalk" class="btn-sepia" style="display:none; padding:6px; background:#d32f2f; color:white; font-weight:bold; border-color:#b71c1c;">🛑 ZATRZYMAJ RUCH</button>
-
                     <div id="heroTeleportsGUI" style="display:none; flex-direction:column; flex:1; overflow-y:auto; background:#141414; border:1px solid #3a3020; padding:4px;"></div>
                     <div id="recommendedEqList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;"></div>
                     <div id="potionsList" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;"></div>
-
                     <div id="shopsSearchWrapper" style="display:none; flex-direction:column; flex:1; border:1px solid #3a3020; background:#141414; padding:4px; resize:vertical; overflow-y:auto; min-height:150px;">
                         <input type="text" id="shopSearchInput" placeholder="Szukaj NPC, mapy lub przedmiotu..." style="width:100%; padding:5px; background:#000; color:#d4af37; border:1px solid #333; margin-bottom:5px; box-sizing:border-box;">
                         <div id="shopsListOutput" style="flex:1; overflow-y:auto;">
@@ -2771,8 +2752,8 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         </div>
                     </div>
                 </div>
+            </div>
         `;
-
         document.body.appendChild(mainGui);
 
 
@@ -4286,7 +4267,7 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
         executePatrolStep();
     }
 
-    function executePatrolStep() {
+  function executePatrolStep() {
         if (!isPatrolling) return;
         checkVisionRange();
 
@@ -4315,34 +4296,14 @@ function stopPatrol(hardStop = true) { // Domyślnie używa twardego hamowania
                 let nextRouteIndex = (currentRouteIndex + 1) % mapList.length;
                 let finalDestinationMap = mapList[nextRouteIndex];
 
-                let path = getShortestPath(currentSysMap, finalDestinationMap);
-                if (path && path.length > 1) {
-                    let immediateNextMap = path[1];
-                    let tp = ZAKONNICY[currentSysMap];
-                    let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][immediateNextMap];
-                    let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-                    let isTeleport = tp && (botSettings.unlockedTeleports[immediateNextMap] || isFakeDoor);
-
-                    if (isTeleport) {
-                        window.logHero(`Zmieniam mapę. Teleportacja do: [${immediateNextMap}]...`, "#9c27b0");
-                        clearTimeout(smoothPatrolInterval);
-                        smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(immediateNextMap), 200);
-                        return;
-                    } else if (door) {
-                        let targetX = door.x; let targetY = door.y;
-                        if(door.allCoords && door.allCoords.length > 0) { let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)]; targetX = rnd[0]; targetY = rnd[1]; }
-
-                        window.logHero(`Zmieniam mapę. Przechodzę do: [${immediateNextMap}]`, "#00acc1");
-                        safeGoTo(targetX, targetY, false);
-                        return;
-                    }
+                window.logHero(`Zmieniam mapę. Obieram kurs na: [${finalDestinationMap}]`, "#00acc1");
+                
+                // MAGIA: Używamy niezawodnego silnika Rush do pokonania trasy i wyważenia ewentualnych drzwi
+                if (typeof window.rushToMap === 'function') {
+                    // Dodany parametr 'true' mówi silnikowi RUSH: "Jak dotrzesz do celu, wznow patrol Herosa!"
+                    window.rushToMap(finalDestinationMap, null, null, null, true);
+                    return;
                 }
-
-                stopPatrol(true);
-                let fallbackMissing = path ? path[1] : finalDestinationMap;
-                window.logHero(`❌ BRAK PRZEJŚCIA z [${currentSysMap}] do [${fallbackMissing}]! Wymagany skan.`, "#e53935");
-                heroAlert(`❌ BRAK BRAMY W BAZIE!\n\nJesteś na: [${currentSysMap}]\n\nNie wiem jak stąd wyjść na mapę: [${fallbackMissing}]\n\nUpewnij się, że masz połączone te mapy. Kliknij 🎥 Nagrywam i przejdź tam!`);
-                return;
             }
 
             checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); stopPatrol(true);
