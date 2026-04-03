@@ -6543,7 +6543,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     let safeLvl = item.level || 1;
                     let safeReqp = (item.prof && item.prof.length > 0) ? item.prof.join(', ') : 'Wszystkie';
                     
-                    // ROZWIĄZANIE PROBLEMU: Bezpieczne formatowanie wyrzucone POZA blok HTML
                     let safeStatsEscaped = String(item.stats || "").replace(/"/g, '&quot;');
                     let safeNameEscaped = safeName.replace(/"/g, '&quot;');
 
@@ -6576,45 +6575,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             window.renderEqItems(document.getElementById('eqTypeFilter').value);
         }
 
-                // Sortowanie malejąco po levelu (od najwyższego na górze)
-                filtered.sort((a, b) => (parseInt(b.level) || 0) - (parseInt(a.level) || 0));
-
-                let html = '';
-                filtered.forEach(item => {
-                    let safeName = String(item.name || 'Nieznany przedmiot');
-                    let safeType = String(item.type || 'Inne');
-                    let safeLvl = item.level || 1;
-                    let safeReqp = (item.prof && item.prof.length > 0) ? item.prof.join(', ') : 'Wszystkie';
-                    let safeStats = String(item.stats || "").replace(/"/g, '&quot;');
-
-                    // Czysty, schludny Kafelek (Po najechaniu odpala się systemowy Tooltip)
-                    html += `
-                        <div class="list-item margo-tooltip-trigger" data-name="${safeName.replace(/"/g, '&quot;')}" data-stats="${safeStats}" style="flex-direction:column; align-items:stretch; cursor:help; border-left:3px solid #ffb300; padding:6px; background:#1a1a1a;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; pointer-events:none;">
-                                <div style="color:#ffb300; font-weight:bold; font-size:11px; text-decoration:underline;">${safeName}</div>
-                                <div style="color:#aaa; font-size:10px;">Lvl: <b style="color:#fff;">${safeLvl}</b></div>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; pointer-events:none;">
-                                <div style="color:#888; font-size:9px;">Typ: ${safeType}</div>
-                                <div style="color:#00acc1; font-size:9px;">${safeReqp}</div>
-                            </div>
-                        </div>
-                    `;
-                });
-
-                container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
-            } catch (e) {
-                console.error("Błąd rysowania Ekwipunku (Radar):", e);
-                let container = document.getElementById('eqListContent');
-                if (container) container.innerHTML = '<div style="padding:10px; color:#ff5252; text-align:center;">Wystąpił błąd ładowania przedmiotów. Zerknij do konsoli (F12).</div>';
-            }
-        };
-
-        // WYMUSZENIE NARYSOWANIA LISTY OD RAZU PO OTWARCIU ZAKŁADKI!
-        if (document.getElementById('eqTypeFilter')) {
-            window.renderEqItems(document.getElementById('eqTypeFilter').value);
-        }
-// Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
+        // Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
         window.getBagInfo = function() {
             if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { free: 0, occupied: 0, total: 42 };
             
@@ -6637,7 +6598,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             
             return { free, occupied, total };
         };
-    } // <--- TO TA BRAKUJĄCA KLAMERKA NR 1!
+    }
 
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
