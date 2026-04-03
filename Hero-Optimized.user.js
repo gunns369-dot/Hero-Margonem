@@ -3452,6 +3452,22 @@ selHero.addEventListener('change', (e) => {
 
         document.getElementById('chkAutoAttack').addEventListener('change', (e) => { botSettings.autoAttack = e.target.checked; saveSettings(); });
 
+        // --- NAPRAWA SUWAKA PRZEZROCZYSTOŚCI ---
+        let opacitySlider = document.getElementById('sliderOpacity');
+        if (opacitySlider) {
+            // Wczytanie z pamięci przy starcie
+            let savedOpacity = localStorage.getItem('hero_opacity_v64') || 0.95;
+            opacitySlider.value = savedOpacity;
+            document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = savedOpacity);
+            
+            // Reagowanie na poruszanie suwakiem w czasie rzeczywistym
+            opacitySlider.addEventListener('input', (e) => {
+                let val = e.target.value;
+                document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = val);
+                localStorage.setItem('hero_opacity_v64', val);
+            });
+        }
+
 
 
 
