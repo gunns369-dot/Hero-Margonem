@@ -2679,8 +2679,28 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
                                 <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> Automatyczna zmiana Expowiska
                             </label>
+                            <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
+                        <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
+                        <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
+                            <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}" style="background:#000;"></label>
+                            <label>Max Lvl: <input type="number" id="expMaxL" value="${botSettings.exp.maxLvl}" style="background:#000;"></label>
+                        </div>
+                        
+                        <label style="color:#a99a75; font-size:10px; margin-bottom:2px; display:block;">Atakowane potwory:</label>
+                        <div class="nav-row" style="display:flex; justify-content: space-around; background: #1a1a1a; border: 1px solid #333; padding: 4px; border-radius: 2px; margin-bottom:6px;">
+                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
+                            <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
+                        </div>
+
+                        <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
+                            <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;">
+                                <input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska
+                            </label>
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Zatrzymuje bota i wywołuje alarm na pulpicie!">
                                 <input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha
+                            </label>
+                            <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Alarm, gdy pojawi się gracz lub ktoś napisze do Ciebie">
+                                <input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy / Nick
                             </label>
                         </div>
                     </div>
@@ -3107,6 +3127,17 @@ if (btnExp) {
             // Prośba o zgodę na powiadomienia Windows, jeśli zaznaczamy opcję pierwszy raz
             if (e.target.checked && Notification.permission !== "granted" && Notification.permission !== "denied") {
                 Notification.requestPermission();
+            }
+        });
+        if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
+
+        bindChange('playerAlert', (e) => { 
+            botSettings.exp.playerAlert = e.target.checked; 
+            saveSettings(); 
+            // Ostrzeżenie i wymuszenie zgody na powiadomienia
+            if (e.target.checked) {
+                if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
+                if (window.logExp) window.logExp("👁️ Włączono monitoring graczy i czatu.", "#ffb300");
             }
         });
         
@@ -5053,74 +5084,79 @@ if (hx !== expLastX || hy !== expLastY) {
     }
 
 
-  // --- SKANOWANIE POTWORÓW ---
+// --- SKANOWANIE POTWORÓW (Z ABSOLUTNĄ BLOKADĄ OBSTAWY BOSSÓW) ---
     const arr = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
     let rawMobs = [];
-    const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
-    const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
+    
+    // Pobieramy flagi bicia z ustawień (z uwzględnieniem Twoich nowych nazw w GUI)
+    const bE2 = botSettings.berserk?.e2 || false;
+    const bHero = botSettings.berserk?.hero || false;
+    const wantNormal = botSettings.exp?.normal ?? true;
+    const wantElite = botSettings.exp?.elite ?? true;
 
-    // 1. Zbudowanie mapy "Stref Zagrożenia"
-    // Szukamy wszystkich E2 i Herosów, których UŻYTKOWNIK NIE CHCE bić
-    let dangerousSpots = [];
+    // 1. KROK: Namierzanie "Lustra Śmierci" (Bossowie, których unikamy)
+    let forbiddenBosses = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
-        if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+        if (!n || n.dead || n.del || n.type === 4) return;
         
         let wt = parseInt(n.wt, 10);
         let ranga = "normal";
-        if (n.type === 2) {
-            if (wt === 11 || wt === 1) ranga = "elite1";
-            else if (wt === 12 || wt === 2) ranga = "elite2";
-            else if (wt >= 13 || wt >= 3) ranga = "hero";
-        }
-        
-        // Jeśli to E2, a nie mamy zaznaczonego bicia E2 (albo Heros) - oznaczamy to pole jako lawę!
+        // Rozszerzona detekcja rangi (wt=11/1: E1, wt=12/2: E2, wt>=13/3: Heros+)
+        if (wt === 1 || wt === 11) ranga = "elite1";
+        else if (wt === 2 || wt === 12) ranga = "elite2";
+        else if (wt >= 3 || wt >= 13) ranga = "hero";
+
+        // Jeśli to E2 lub Heros, a mamy go ODZNACZONEGO - dodajemy do czarnej listy
         if ((ranga === "elite2" && !bE2) || (ranga === "hero" && !bHero)) {
-            dangerousSpots.push({x: n.x, y: n.y});
+            forbiddenBosses.push({ x: n.x, y: n.y, nick: n.nick || n.name });
         }
     });
 
-    // 2. Filtrowanie potworów do ataku
+    // 2. KROK: Filtrowanie mobów z uwzględnieniem bezpiecznego dystansu
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
-        if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+        if (!n || n.dead || n.del || n.type !== 2) return; // Bijemy tylko potwory (type=2)
 
-        // 🚨 IGNOROWANIE ZABLOKOWANYCH (Ominiętych anty-lagiem)
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
-        if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
+        if (isNaN(lvl) || lvl < minL || lvl > maxL) return;
 
         let wt = parseInt(n.wt, 10);
         let ranga = "normal";
-        if (n.type === 2) {
-            if (wt === 11 || wt === 1) ranga = "elite1";
-            else if (wt === 12 || wt === 2) ranga = "elite2";
-            else if (wt >= 13 || wt >= 3) ranga = "hero";
-        }
+        if (wt === 1 || wt === 11) ranga = "elite1";
+        else if (wt === 2 || wt === 12) ranga = "elite2";
+        else if (wt >= 3 || wt >= 13) ranga = "hero";
 
-        if (ranga === "normal" && !wantNormal) return;
-        if (ranga === "elite1" && !wantElite) return;
-        if (ranga === "elite2" && !bE2) return;
-        if (ranga === "hero" && !bHero) return;
+        // Czy ten konkretny mob jest na naszej liście do bicia?
+        let isTypeAllowed = false;
+        if (ranga === "normal" && wantNormal) isTypeAllowed = true;
+        else if (ranga === "elite1" && wantElite) isTypeAllowed = true;
+        else if (ranga === "elite2" && bE2) isTypeAllowed = true;
+        else if (ranga === "hero" && bHero) isTypeAllowed = true;
 
-        // 🚨 NOWOŚĆ: Ignorowanie "obstawy"
-        // Sprawdzamy, czy ten potwór nie stoi przypadkiem w strefie zagrożenia (promień 2 kratek) od odznaczonego bossa!
-        let isSafeToAttack = true;
-        for (let spot of dangerousSpots) {
-            // Obliczamy tzw. dystans Czebyszewa (jeśli potwór stoi w prostokącie 5x5 wokół bossa)
-            if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
-                isSafeToAttack = false;
+        if (!isTypeAllowed) return;
+
+        // --- KLUCZOWA BLOKADA OBSTAWY ---
+        // Sprawdzamy, czy ten dopuszczony mob nie stoi za blisko ZAKAZANEGO bossa
+        let tooCloseToBoss = false;
+        for (let boss of forbiddenBosses) {
+            let dx = Math.abs(n.x - boss.x);
+            let dy = Math.abs(n.y - boss.y);
+            // Promień 3 kratek (Margonem łączy w grupy w zasięgu 1-2 kratek, 3 to bezpieczny margines)
+            if (dx <= 3 && dy <= 3) {
+                tooCloseToBoss = true;
                 break;
             }
         }
-        
-        if (!isSafeToAttack) return; // Jeśli stoi przy bossie - ignorujemy go całkowicie!
+
+        if (tooCloseToBoss) return; // Ten mob to obstawa - ignorujemy go!
 
         rawMobs.push({
-            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
+            id: n.id, x: n.x, y: n.y, ranga: ranga,
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
-            dist: Math.abs(hx - n.x) + Math.abs(hy - n.y) 
+            dist: Math.abs(hx - n.x) + Math.abs(hy - n.y)
         });
     });
 
@@ -7457,64 +7493,109 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 300);
     }
 
-    // --- DAEMON: DETEKCJA ZAPADKI (CELOWANA STREFA ALERTÓW) ---
+  // --- DAEMON: DETEKCJA ZAPADKI I GRACZY (MULTI-ALARM) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.captchaAlertTriggered = false;
+        window.playerAlertTriggered = false;
+        window.lastChatLength = 0; // Pamięć czatu dla nowości
 
         setInterval(() => {
-            // Sprawdzamy, czy gracz zaznaczył checkbox w zaawansowanych
-            if (!botSettings.exp || !botSettings.exp.captchaAlert) {
-                window.captchaAlertTriggered = false; // Reset by uniknąć pętli
-                return;
-            }
-
-            // 1. Sprawdzenie po znanych, sztywnych klasach okien Zapadki
-            let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
-            
-            // 2. Skanowanie tekstowe strefy pod złotem i okien dialogowych
-            let textMatch = false;
-            if (!hasWindow) {
-                let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
+            // --- CZĘŚĆ 1: DETEKCJA ZAPADKI ---
+            if (botSettings.exp && botSettings.exp.captchaAlert) {
+                let hasWindow = document.querySelector('.margo-window[data-wnd="zapadka"], .zapadka-window, [data-name="zapadka"], #captcha_window') !== null;
+                let textMatch = false;
                 
-                for (let el of containers) {
-                    if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
-                    
-                    let t = el.innerText || "";
-                    if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
-                        textMatch = true;
-                        break;
+                if (!hasWindow) {
+                    let containers = document.querySelectorAll('.dialog-header, .dialog-content, .zapadka-title, #dialog, #komunikat, .alerts-container, .layer.window');
+                    for (let el of containers) {
+                        if (el.closest('.hero-window') || el.closest('.chat-wrapper') || el.closest('#chat')) continue;
+                        let t = el.innerText || "";
+                        if (t.includes("Zapadka") || t.includes("odpowiedzi z gwiazdką") || t.includes("Mieszkańcy krainy") || t.includes("Wybierz odpowiedź")) {
+                            textMatch = true;
+                            break;
+                        }
                     }
                 }
+
+                let isCaptchaActive = hasWindow || textMatch;
+
+                if (isCaptchaActive && !window.captchaAlertTriggered) {
+                    window.captchaAlertTriggered = true;
+                    if (typeof stopPatrol === 'function') stopPatrol(true);
+                    
+                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
+                    window.focus();
+                    
+                    if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!", requireInteraction: true });
+                    if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                    if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
+                } else if (!isCaptchaActive && window.captchaAlertTriggered) {
+                    window.captchaAlertTriggered = false;
+                }
             }
 
-            let isCaptchaActive = hasWindow || textMatch;
+            // --- CZĘŚĆ 2: DETEKCJA GRACZY I CZATU ---
+            if (botSettings.exp && botSettings.exp.playerAlert && window.isExping) {
+                let playerFound = false;
+                let chatMessageFound = false;
+                let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : null;
 
-            if (isCaptchaActive && !window.captchaAlertTriggered) {
-                window.captchaAlertTriggered = true;
-                
-                if (typeof stopPatrol === 'function') stopPatrol(true);
-
-                try {
-                    let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
-                    audio.play();
-                    setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch(e){} }, 3000);
-                } catch(e) {}
-
-                window.focus();
-                
-                if (Notification.permission === "granted") {
-                    new Notification("🚨 ALARM: ZAPADKA!", {
-                        body: "Wykryto zapadkę pod panelem złota! Wracaj do gry!",
-                        requireInteraction: true
-                    });
+                // A) Skanowanie pola widzenia na obecność innych graczy (typ 0 lub 1 = gracz)
+                if (typeof Engine !== 'undefined' && Engine.others && myNick) {
+                    let others = typeof Engine.others.check === 'function' ? Engine.others.check() : Engine.others.d;
+                    if (others) {
+                        for (let id in others) {
+                            let p = others[id].d || others[id];
+                            // Upewniamy się, że to nie jest martwy gracz, i że ma typ gracza
+                            if (p && !p.dead && !p.del && (p.type === 0 || p.type === 1)) {
+                                // Ignoruj jeśli skaner wykrył samego siebie (Zabezpieczenie Margo)
+                                if (p.nick !== myNick) {
+                                    playerFound = p.nick;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
 
-                if (window.logHero) window.logHero("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                if (window.logExp) window.logExp("🚨 WYKRYTO ZAPADKĘ! Zatrzymano bota.", "#ff5252");
-                
-            } else if (!isCaptchaActive && window.captchaAlertTriggered) {
-                window.captchaAlertTriggered = false;
+                // B) Skanowanie Czatu Głównego na obecność własnego Nicku
+                if (myNick) {
+                    let chatLines = document.querySelectorAll('#chattxt .chat-message, .chat-message-container');
+                    let currentLength = chatLines.length;
+
+                    // Sprawdzamy tylko nowe wiadomości
+                    if (currentLength > window.lastChatLength) {
+                        for (let i = window.lastChatLength; i < currentLength; i++) {
+                            let line = chatLines[i].innerText || chatLines[i].textContent || "";
+                            // Pomijamy komunikaty systemowe i wiadomości wysłane przez nas samych
+                            if (line.includes(`[System]`) || line.startsWith(`${myNick}:`)) continue;
+                            
+                            if (line.toLowerCase().includes(myNick.toLowerCase())) {
+                                chatMessageFound = true;
+                                break;
+                            }
+                        }
+                    }
+                    window.lastChatLength = currentLength; // Zapisujemy stan na następny cykl
+                }
+
+                let dangerDetected = playerFound || chatMessageFound;
+
+                if (dangerDetected && !window.playerAlertTriggered) {
+                    window.playerAlertTriggered = true;
+                    if (typeof stopPatrol === 'function') stopPatrol(true); // Twarde zatrzymanie Bota
+                    
+                    try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 3000); } catch(e) {}
+                    window.focus();
+                    
+                    let alertReason = playerFound ? `Wykryto gracza: ${playerFound}!` : `Ktoś wspomniał Twój nick na czacie!`;
+                    if (Notification.permission === "granted") new Notification("👁️ OSTRZEŻENIE (EXP)!", { body: alertReason + " Zatrzymano bota.", requireInteraction: true });
+                    if (window.logExp) window.logExp(`👁️ ${alertReason} Zatrzymano auto-exp!`, "#ffb300");
+
+                } else if (!dangerDetected && window.playerAlertTriggered) {
+                    window.playerAlertTriggered = false;
+                }
             }
         }, 800); 
     }
