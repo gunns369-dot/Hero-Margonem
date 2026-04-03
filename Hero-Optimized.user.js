@@ -7543,27 +7543,34 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             });
         }
 
-        // --- DETEKCJA OKIEN ---
+// --- DETEKCJA OKIEN ---
         function getPreCaptcha() {
             // Szukamy diva powiadomienia na ekranie gry
-            const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert');
+            const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
+            
             if (preEl && preEl.offsetParent !== null) {
-                // Szukamy samego przycisku "Rozwiąż teraz" wewnątrz
-                const btn = preEl.querySelector('.button');
-                return btn || preEl; 
+                // Rygorystyczny filtr: Kontener MUSI zawierać tekst potwierdzający, że to zapadka,
+                // albo klasę 'show', żebyśmy nie klikali w ukryte, puste "duchy" interfejsu.
+                const text = (preEl.innerText || preEl.textContent || "").trim();
+                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) {
+                    const btn = preEl.querySelector('.button, .btn');
+                    return btn || preEl; 
+                }
             }
             return null;
         }
 
         function getCaptchaWindow() {
-            // Bezpośrednia klasa głównego okna zagadki z Twojego screena
-            const win = document.querySelector('.captcha');
-            if (win && win.offsetParent !== null) return win;
+            // Bezpośrednia klasa głównego okna zagadki
+            const win = document.querySelector('.captcha, .c-window.border-window.captcha-window, .margo-window[data-wnd="zapadka"]');
             
-            // Fallback na wypadek starego UI
-            const oldWin = document.querySelector('.c-window.border-window.captcha-window, .margo-window[data-wnd="zapadka"]');
-            if (oldWin && oldWin.offsetParent !== null && (oldWin.innerText || "").includes("Zagadka")) return oldWin;
-            
+            if (win && win.offsetParent !== null) {
+                const text = (win.innerText || win.textContent || "").trim();
+                // Upewniamy się, że to faktycznie okno zagadki, a nie inny element UI
+                if (text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("pozostałych prób")) {
+                    return win;
+                }
+            }
             return null;
         }
 
