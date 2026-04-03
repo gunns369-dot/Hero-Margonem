@@ -8121,4 +8121,82 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }
         }, true);
+    // --- OSTATECZNA ŁATKA: PRZEZROCZYSTOŚĆ TŁA I NAPRAWA ZAKŁADKI TELEPORTÓW ---
+        setTimeout(() => {
+            // 1. MORDUJEMY LATAJĄCE OKNO TELEPORTÓW (BŁĄD ZDUPLIKOWANEGO KODU)
+            // Okno z klasą 'hero-window' i ID 'heroTeleportsGUI' jest intruzem.
+            document.querySelectorAll('.hero-window#heroTeleportsGUI').forEach(el => el.remove());
+            
+            // Właściwy kontener teleportów znajduje się w zakładce EXP -> TP/EQ/HP. 
+            let properTpContainer = document.querySelector('#teleportsContainer #heroTeleportsGUI');
+            if (properTpContainer) {
+                // Przekierowujemy funkcję renderującą na właściwy kontener
+                window.renderTeleportList = function() {
+                    let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"];
+                    let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
+                    let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div><div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height: 250px;">`;
+                    
+                    tpList.forEach(map => {
+                        let isChecked = (botSettings.unlockedTeleports && botSettings.unlockedTeleports[map]) ? 'checked' : '';
+                        html += `<label style="display:flex; align-items:center; background:#1a1a1a; padding:4px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px; border-left: 2px solid #00838f;"><input type="checkbox" class="chk-teleport" data-map="${map}" ${isChecked} style="margin-right:8px; cursor:pointer;"><b>${map}</b></label>`;
+                    });
+                    html += `</div><button id="btnSaveTeleportsManual" class="btn btn-go-sepia" style="margin-top:6px; color:#4caf50; font-weight:bold; border-color:#4caf50; width:100%; padding:6px;">💾 ZAPISZ TELEPORTY</button>`;
+                    properTpContainer.innerHTML = html;
+                };
+            }
+
+            // 2. NAPRAWA KLIKNIĘCIA "ZARZĄDZAJ TELEPORTAMI"
+            document.body.addEventListener('click', (e) => {
+                if (e.target && e.target.closest('#btnOpenTeleports')) {
+                    e.preventDefault(); e.stopPropagation();
+                    // Ukrywamy pozostałe zakładki wewnątrz (EQ, Poty, Sklepy)
+                    ['recommendedEqList', 'potionsList', 'shopsSearchWrapper'].forEach(id => {
+                        let el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
+                    
+                    if (properTpContainer) {
+                        properTpContainer.style.display = properTpContainer.style.display === 'flex' ? 'none' : 'flex';
+                        if (properTpContainer.style.display === 'flex' && typeof window.renderTeleportList === 'function') window.renderTeleportList();
+                    }
+                }
+            }, true);
+
+            // 3. PRAWDZIWA PRZEZROCZYSTOŚĆ (TYLKO TŁO, CZYTELNY TEKST)
+            function setWindowOpacity(val) {
+                let style = document.getElementById('dynamic-bg-opacity');
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'dynamic-bg-opacity';
+                    document.head.appendChild(style);
+                }
+                
+                // Wymuszenie 100% opacity na oknach, aby tekst NIGDY nie znikał
+                document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = '1');
+
+                // Tworzymy kod CSS nadpisujący tła na format RGBA (gdzie A to nasza przeźroczystość z suwaka)
+                style.innerHTML = `
+                    .hero-window { background: rgba(17, 17, 17, ${val}) !important; }
+                    .gui-header { background: rgba(34, 34, 34, ${val}) !important; }
+                    .gui-content { background: rgba(26, 29, 33, ${val}) !important; }
+                    .tabs-wrapper { background: rgba(34, 34, 34, ${val}) !important; }
+                    .list-item { background: rgba(34, 34, 34, ${val}) !important; }
+                    #cordsListContainer, #heroMapListContainer, #gatewaysListContainer, #e2ListContainer, #kolosyListContainer, #expMapList, #recommendedEqList, #potionsList, #shopsSearchWrapper { background: rgba(20, 20, 20, ${val}) !important; }
+                    .accordion-header { background: rgba(26, 26, 26, ${val}) !important; }
+                `;
+                localStorage.setItem('hero_opacity_v64', val);
+            }
+
+            let opacitySlider = document.getElementById('sliderOpacity');
+            if (opacitySlider) {
+                let savedOpacity = localStorage.getItem('hero_opacity_v64') || 0.95;
+                opacitySlider.value = savedOpacity;
+                setWindowOpacity(savedOpacity); // Ustaw na starcie
+                
+                // Podpięcie pod suwak
+                opacitySlider.addEventListener('input', (e) => {
+                    setWindowOpacity(e.target.value);
+                });
+            }
+        }, 1500);
 })(); // Koniec kodu
