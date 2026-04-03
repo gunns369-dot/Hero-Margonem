@@ -6595,29 +6595,31 @@ window.toggleTeleportLock = function(city, isChecked) {
         }
     };
 
-    // Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
-    window.getBagInfo = function() {
-        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { free: 0, occupied: 0, total: 42 };
-        
-        let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
-        let itemsArr = Object.values(hItems).filter(i => i);
-        
-        // 1. Ręczne zliczanie pojemności (Baza 42 kratek + założone torby cl=24)
-        let total = 42;
-        itemsArr.forEach(i => {
-            if (Number(i.st) > 0 && Number(i.cl) === 24) { 
-                let statStr = i._cachedStats?.stat || i.stat || "";
-                let match = statStr.match(/pojemnosc=(\d+)/) || statStr.match(/capacity=(\d+)/);
-                if (match) total += parseInt(match[1]);
-            }
-        });
-        
-        // 2. Liczenie zajętych kratek (st === 0 to przedmioty w plecaku)
-        let occupied = itemsArr.filter(i => Number(i.st) === 0).length;
-        let free = Math.max(0, total - occupied);
-        
-        return { free, occupied, total };
-    };
+// Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
+        window.getBagInfo = function() {
+            if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { free: 0, occupied: 0, total: 42 };
+            
+            let hItems = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
+            let itemsArr = Object.values(hItems).filter(i => i);
+            
+            // 1. Ręczne zliczanie pojemności (Baza 42 kratek + założone torby cl=24)
+            let total = 42;
+            itemsArr.forEach(i => {
+                if (Number(i.st) > 0 && Number(i.cl) === 24) { 
+                    let statStr = i._cachedStats?.stat || i.stat || "";
+                    let match = statStr.match(/pojemnosc=(\d+)/) || statStr.match(/capacity=(\d+)/);
+                    if (match) total += parseInt(match[1]);
+                }
+            });
+            
+            // 2. Liczenie zajętych kratek (st === 0 to przedmioty w plecaku)
+            let occupied = itemsArr.filter(i => Number(i.st) === 0).length;
+            let free = Math.max(0, total - occupied);
+            
+            return { free, occupied, total };
+        };
+    } // <--- TO TA BRAKUJĄCA KLAMERKA NR 1!
+
         // 3. WYSZUKIWARKA SKLEPÓW
         if (e.target && e.target.closest('#btnToggleShops')) { hideAllTabs(); if (shopsWrap) shopsWrap.style.display = 'flex'; }
 
@@ -6826,6 +6828,8 @@ window.toggleTeleportLock = function(city, isChecked) {
                 }
             }, 500);
         }
+    }); // <--- TO TA BRAKUJĄCA KLAMERKA NR 2!
+
       // 8. ZATRZYMYWANIE RUCHU (Niezależny, bezpieczny blok)
         document.addEventListener('click', (e) => {
             if (e.target && e.target.closest('#btnStopWalk')) {
