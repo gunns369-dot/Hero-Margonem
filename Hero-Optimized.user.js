@@ -1997,12 +1997,12 @@ function autoDetectEngineData() {
 
         if (dist > 1) {
             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-            window.rushGatewayArrivalTime = 0; // Zerujemy czas stania na bramie, bo wciąż do niej idziemy
+            window.rushGatewayArrivalTime = 0; 
             
             if (!isMoving) {
                 if (cx === window.rushLastX && cy === window.rushLastY) {
                     stuckCount++;
-                    if (stuckCount > 6) { // Postać zacięła się w połowie drogi
+                    if (stuckCount > 6) { 
                         safeGoTo(door.x, door.y, false);
                         stuckCount = 0;
                     }
@@ -2017,21 +2017,19 @@ function autoDetectEngineData() {
             // --- FIZYCZNIE STOIMY NA BRAMIE LUB OBOK NIEJ ---
             if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
             
-            // Jeśli bot stoi tu bezczynnie ponad 5 sekund i gra nie przeładowała mapy
-            if (Date.now() - window.rushGatewayArrivalTime > 5000) {
-                if (window.logHero) window.logHero(`🚨 Brama zacięta! Odbiegam, by kliknąć ponownie...`, "#ff9800");
+            // Jeśli bot stoi tu bezczynnie ponad 8 sekund (dajemy grze dużo czasu na załadowanie nowej mapy)
+            if (Date.now() - window.rushGatewayArrivalTime > 8000) {
+                if (window.logHero) window.logHero(`🚨 Brama długo ładuje. Odbiegam...`, "#ff9800");
                 
-                // Odbiegamy lekko w bok
+                // Odbiegamy lekko w bok, bez twardych komend serwerowych!
                 let stepX = Math.max(0, cx + (Math.random() > 0.5 ? 2 : -2));
                 let stepY = Math.max(0, cy + (Math.random() > 0.5 ? 2 : -2));
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
                 
                 window.rushGatewayArrivalTime = 0;
-                stuckCount = -4; // Wymusza odczekanie sekundy zanim bot znów strzeli w bramę
-            } else if (Date.now() - window.rushGatewayArrivalTime > 2000) {
-                 // Szybkie awaryjne szturchnięcie wejścia serwerowo
-                 if(typeof window._g === 'function') window._g('walk');
+                stuckCount = -4; 
             }
+            // USUNIĘTO twardą komendę `_g('walk')`, która psuła grę i cofała postać!
         }
         
         rushInterval = setTimeout(window.checkRushArrival, 500);
@@ -7895,73 +7893,68 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
             if (!isBotActive) window.__seenPrivs.clear();
         }, 5000);
-    // --- DAEMON: ANTI-STUCK (Odwieszacz bota na bramach i zacinkach) ---
-        if (!window.antiStuckDaemonInstalled) {
-            window.antiStuckDaemonInstalled = true;
-            window.lastStuckCheckPos = { x: -1, y: -1, map: "" };
-            window.stuckIdleCount = 0;
+  // --- DAEMON: ANTI-STUCK (Odwieszacz bota na bramach i zacinkach) ---
+    if (!window.antiStuckDaemonInstalled) {
+        window.antiStuckDaemonInstalled = true;
+        window.lastStuckCheckPos = { x: -1, y: -1, map: "" };
+        window.stuckIdleCount = 0;
 
-            setInterval(() => {
-                // Sprawdzamy czy bot w ogóle powinien teraz pracować
-                let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling) || window.isRushing;
-                if (!isBotActive) {
-                    window.stuckIdleCount = 0;
-                    return;
-                }
+        setInterval(() => {
+            let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling) || window.isRushing;
+            if (!isBotActive) {
+                window.stuckIdleCount = 0;
+                return;
+            }
 
-                // Podstawowe zabezpieczenia przed błędnymi interwencjami
-                if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
-                if (Engine.battle && Engine.battle.show) return; // Nie przeszkadzamy w walce
-                if (Engine.dead || Engine.hero.d.dead) return; // Nie przeszkadzamy jak leżymy
-                if (window.isHealLocked || window.isRegeneratingToFull) return; // Nie przerywamy leczenia
-                if (window.__captchaPhase && window.__captchaPhase !== "none") return; // Zapadka to priorytet
+            // Podstawowe zabezpieczenia przed błędnymi interwencjami (Nie przerywa gdy ładuje się mapa!)
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || Engine.map.isLoading) {
+                window.stuckIdleCount = 0;
+                return;
+            }
+            if (Engine.battle && Engine.battle.show) return; 
+            if (Engine.dead || Engine.hero.d.dead) return; 
+            if (window.isHealLocked || window.isRegeneratingToFull) return; 
+            if (window.__captchaPhase && window.__captchaPhase !== "none") return; 
 
-                let currentMap = Engine.map.d.name;
-                let currentX = Engine.hero.d.x;
-                let currentY = Engine.hero.d.y;
-                let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+            let currentMap = Engine.map.d.name;
+            let currentX = Engine.hero.d.x;
+            let currentY = Engine.hero.d.y;
+            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
 
-                // Jeśli postać fizycznie stoi w miejscu
-                if (!isMoving) {
-                    if (window.lastStuckCheckPos.x === currentX && 
-                        window.lastStuckCheckPos.y === currentY && 
-                        window.lastStuckCheckPos.map === currentMap) {
+            if (!isMoving) {
+                if (window.lastStuckCheckPos.x === currentX && 
+                    window.lastStuckCheckPos.y === currentY && 
+                    window.lastStuckCheckPos.map === currentMap) {
+                    
+                    window.stuckIdleCount++;
+                    
+                    // Zwiększono czas cierpliwości bota do aż 8 sekund!
+                    if (window.stuckIdleCount >= 8) {
+                        if (window.logHero) window.logHero("🔄 [Anti-Stuck] Lekkie szturchnięcie po zacięciu...", "#00e5ff");
                         
-                        window.stuckIdleCount++;
-                        
-                        // Jeśli stoi bezczynnie przez około 4 sekundy
-                        if (window.stuckIdleCount >= 4) {
-                            if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Ponawiam komendę ruchu...", "#00e5ff");
-                            if (window.logExp) window.logExp("🔄 [Anti-Stuck] Wykryto zacięcie! Ponawiam komendę ruchu...", "#00e5ff");
-                            
-                          // 1. Twarda komenda serwerowa na interakcję z drzwiami
-                            window._g('walk');
-                            
-                            // 2. CZEKAMY 2 SEKUNDY AŻ GRA PRZETRAWI KOMENDĘ, I WZNAWIAMY!
-                            if (typeof isPatrolling !== 'undefined' && isPatrolling && typeof window.executePatrolStep === 'function') {
-                                setTimeout(() => window.executePatrolStep(), 2000);
-                            } else if (window.isRushing && typeof window.executeRushStep === 'function') {
-                                setTimeout(() => window.executeRushStep(), 2000);
-                            } else if (window.isExping && typeof window.expMainLoop === 'function') {
-                                setTimeout(() => window.expMainLoop(), 2000);
-                            } else {
-                                setTimeout(() => { Engine.hero.autoGoTo({x: currentX, y: currentY}); }, 2000);
-                            }
-                            
-                            window.stuckIdleCount = 0; // Resetujemy licznik
+                        // ZAPASOWE "SZTURCHNIĘCIE" (Zamiast wciskania bram z automatu)
+                        Engine.hero.autoGoTo({x: currentX, y: currentY});
+
+                        if (typeof isPatrolling !== 'undefined' && isPatrolling && typeof window.executePatrolStep === 'function') {
+                            setTimeout(() => window.executePatrolStep(), 1500);
+                        } else if (window.isRushing && typeof window.executeRushStep === 'function') {
+                            setTimeout(() => window.executeRushStep(), 1500);
+                        } else if (window.isExping && typeof window.expMainLoop === 'function') {
+                            setTimeout(() => window.expMainLoop(), 1500);
                         }
-                    } else {
-                        // Zaktualizowanie pozycji
-                        window.stuckIdleCount = 1;
-                        window.lastStuckCheckPos = { x: currentX, y: currentY, map: currentMap };
+                        
+                        window.stuckIdleCount = 0; 
                     }
                 } else {
-                    // Postać jest w ruchu, jest bezpiecznie
-                    window.stuckIdleCount = 0;
+                    window.stuckIdleCount = 1;
                     window.lastStuckCheckPos = { x: currentX, y: currentY, map: currentMap };
                 }
-            }, 1000);
-        }
+            } else {
+                window.stuckIdleCount = 0;
+                window.lastStuckCheckPos = { x: currentX, y: currentY, map: currentMap };
+            }
+        }, 1000);
+    }
   // --- DAEMON: ZABEZPIECZENIE PRZED WYBIEGNIĘCIEM POZA LISTĘ (UNDEFINED FIX) ---
         if (!window.undefinedMapFixInstalled) {
             window.undefinedMapFixInstalled = true;
