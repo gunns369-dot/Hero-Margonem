@@ -2059,34 +2059,61 @@ function autoDetectEngineData() {
         rushInterval = setTimeout(window.checkRushArrival, 400);
     };
 
+   // ==========================================
+    // ALGRORYTMY BFS (Z Wnioskowaniem Odwrotnym)
     // ==========================================
-
-    // ALGRORYTMY BFS
-
-    // ==========================================
-
- function getShortestPath(start, end) {
+    function getShortestPath(start, end) {
         if (start === end) return [start];
-        let queue = [[start]]; let visited = new Set([start]);
-        while (queue.length > 0) {
-            let path = queue.shift(); let node = path[path.length - 1];
+        let queue = [[start]]; 
+        let visited = new Set([start]);
+        
+        // MAGIA: Tworzenie wirtualnych ścieżek powrotnych
+        // Jeśli bot widział wejście z Mapy A do Mapy B, to automatycznie
+        // zakłada, że z Mapy B da się wyjść do Mapy A (rozwiązuje problem nieodwiedzonych jaskiń).
+        let reverseEdges = {};
+        for (let src in globalGateways) {
+            for (let tgt in globalGateways[src]) {
+                if (!reverseEdges[tgt]) reverseEdges[tgt] = [];
+                reverseEdges[tgt].push(src);
+            }
+        }
 
-            // 1. Logika standardowych przejść
+        while (queue.length > 0) {
+            let path = queue.shift(); 
+            let node = path[path.length - 1];
+
+            let neighbors = new Set();
+            
+            // 1. Fizycznie zapisane przejścia (Normalne)
             if (globalGateways[node]) {
                 for (let neighbor in globalGateways[node]) {
-                    if (neighbor === node) continue; // NAPRAWA: Zabezpieczenie przed zapętlaniem tej samej mapy
-                    if (!visited.has(neighbor)) {
-                        visited.add(neighbor); let newPath = [...path, neighbor];
-                        if (neighbor === end) return newPath;
-                        queue.push(newPath);
-                    }
+                    neighbors.add(neighbor);
                 }
             }
-            // 2. Wirtualne ścieżki przez teleporty Zakonników
+            
+            // 2. Przejścia odwrotne ("Skoro wszedłem, to muszę móc wyjść")
+            if (reverseEdges[node]) {
+                for (let neighbor of reverseEdges[node]) {
+                    neighbors.add(neighbor);
+                }
+            }
+
+            for (let neighbor of neighbors) {
+                if (neighbor === node) continue; // Zabezpieczenie przed zapętlaniem
+                if (!visited.has(neighbor)) {
+                    visited.add(neighbor); 
+                    let newPath = [...path, neighbor];
+                    if (neighbor === end) return newPath;
+                    queue.push(newPath);
+                }
+            }
+
+            // 3. Wirtualne ścieżki przez teleporty Zakonników
             if (botSettings.useTeleports && ZAKONNICY[node]) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && !visited.has(tpMap) && tpMap !== node) {
-                        visited.add(tpMap); let newPath = [...path, tpMap];
+                        visited.add(tpMap); 
+                        let newPath = [...path, tpMap];
                         if (tpMap === end) return newPath;
                         queue.push(newPath);
                     }
@@ -2095,7 +2122,6 @@ function autoDetectEngineData() {
         }
         return null;
     }
-
 
 
 window.handleTeleportNPC = function(targetMap) {
