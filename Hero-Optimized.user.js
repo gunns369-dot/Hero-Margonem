@@ -4970,7 +4970,31 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
     if (now < expLastActionTime) return;
 
-     try {
+    // --- ZABEZPIECZENIE PRZED ŚMIERCIĄ I CZEKANIE NA RESPAWN ---
+    if (Engine.dead || hero.dead) {
+        if (window._lastDeadLog !== Math.floor(now / 5000)) {
+            window.logExp("💀 Jesteś nieprzytomny. Czekam na respawn...", "#e53935");
+            window._lastDeadLog = Math.floor(now / 5000);
+        }
+        expLastActionTime = now + 2000;
+        return;
+    }
+
+    // --- ZABEZPIECZENIE PO RESPAWNIE (Czekanie na wyleczenie) ---
+    let hp = parseInt(hero.hp) || (hero.warrior_stats ? parseInt(hero.warrior_stats.hp) : 1);
+    let maxhp = parseInt(hero.maxhp) || (hero.warrior_stats ? parseInt(hero.warrior_stats.maxhp) : 1);
+    
+    // Jeśli HP jest poniżej 50%, zatrzymujemy expa, by dać czas AutoHealowi na wyleczenie do pełna
+    if ((hp / maxhp) * 100 < 50) {
+        if (window._lastLowHpLog !== Math.floor(now / 5000)) {
+            window.logExp(`🩸 Krytyczny poziom HP! Czekam na uleczenie...`, "#e53935");
+            window._lastLowHpLog = Math.floor(now / 5000);
+        }
+        expLastActionTime = now + 1000;
+        return;
+    }
+
+    try {
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
             expCurrentTargetId = null;
@@ -4978,10 +5002,19 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             expEmptyScans = 0;
             expAttackLockUntil = 0;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-            window.expWasInBattle = true; // Oznaczamy trwającą walkę
+            window.expWasInBattle = true; 
+            
+            // --- AUTOMATYCZNE ZAMYKANIE WALKI (ZWŁASZCZA PO ŚMIERCI) ---
+            let quitBtn = Array.from(document.querySelectorAll('button, .button, div')).find(el => el.innerText && el.innerText.includes('Opuść walkę'));
+            if (quitBtn) {
+                quitBtn.click();
+            } else if (Engine.battle.d && Engine.battle.d.winner !== undefined) {
+                if (typeof window._g === 'function') window._g('fight&a=quit');
+            }
+
             return;
         } else if (window.expWasInBattle) {
-            // Walka właśnie się skończyła - dajemy serwerowi twarde 1.5 sekundy na oddech!
+            // Walka właśnie się skończyła
             window.expWasInBattle = false;
             expLastActionTime = now + 1500;
             return;
@@ -7081,7 +7114,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 800);
     }
 
-    // --- DAEMON: AUTOHEAL (Wersja V2 - Anty-Spam) ---
+   // --- DAEMON: AUTOHEAL (Wersja V2 - Anty-Spam) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
         window.lastHealTime = 0;
@@ -7089,6 +7122,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.heroEquipment || window.isHealLocked) return;
             if (Engine.battle && Engine.battle.show) return;
+            
+            // ZABEZPIECZENIE: Nie próbujemy leczyć martwej postaci!
+            if (Engine.dead || Engine.hero.d.dead) return;
+
             let hp = parseInt(Engine.hero.d.hp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
             let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
             if (!maxhp) {
@@ -7099,8 +7136,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }
             if (!maxhp) return;
+            
             let threshold = botSettings.autoheal ? parseInt(botSettings.autoheal.threshold) || 80 : 80;
             let hpPercent = (hp / maxhp) * 100;
+            
             if (hpPercent < threshold && Date.now() > window.lastHealTime) {
                 let items = Object.values(Engine.heroEquipment.getHItems?.() || {});
                 let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null);
@@ -7112,13 +7151,18 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         let healB = b.getLeczyStat() || 0;
                         return Math.abs(healA - missingHp) - Math.abs(healB - missingHp);
                     });
+                    
                     let bestPot = potions[0];
                     let healValue = bestPot.getLeczyStat() || 0;
+                    
                     if (typeof Engine.heroEquipment.useItem === 'function') Engine.heroEquipment.useItem(bestPot.id);
                     else window._g(`moveitem&st=1&id=${bestPot.id}`);
+                    
                     if (Engine.hero.d.hp) Engine.hero.d.hp = Math.min(maxhp, hp + healValue);
+                    
                     window.lastHealTime = Date.now() + 1500;
                     setTimeout(() => { window.isHealLocked = false; }, 1200);
+                    
                     if (window.lastHealLog !== bestPot.id || Date.now() - (window._lastHealLogTime || 0) > 3000) {
                         let msg = `💚 Leczę się: ${bestPot._cachedStats?.name || bestPot.name} (+${healValue} HP)`;
                         if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
