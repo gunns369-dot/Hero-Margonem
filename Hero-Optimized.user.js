@@ -6519,12 +6519,11 @@ window.toggleTeleportLock = function(city, isChecked) {
                 return lvlMatch && profMatch && typeMatch;
             });
 
-            // Sortowanie malejąco po levelu (od najwyższego do najniższego)
+            // Sortowanie malejąco po levelu
             filtered.sort((a, b) => (parseInt(b.lvl) || 0) - (parseInt(a.lvl) || 0));
 
             let html = '';
             filtered.forEach(item => {
-                // Konwersja na String, by zapobiec błędom "undefined"
                 let safeName = String(item.name || 'Nieznany przedmiot');
                 let safeType = String(item.type || 'Inne');
                 let safeLvl = item.lvl || 1;
@@ -6595,12 +6594,8 @@ window.toggleTeleportLock = function(city, isChecked) {
             if (container) container.innerHTML = '<div style="padding:10px; color:#ff5252; text-align:center;">Wystąpił błąd ładowania przedmiotów. Zerknij do konsoli (F12).</div>';
         }
     };
-        container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
-    };
-            
-            window.renderEqItems(document.getElementById('eqTypeFilter').value);
-        }
-       // Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
+
+    // Funkcje pomocnicze dla plecaka (Matematyczny kalkulator)
     window.getBagInfo = function() {
         if (typeof Engine === 'undefined' || !Engine.heroEquipment) return { free: 0, occupied: 0, total: 42 };
         
