@@ -2035,20 +2035,11 @@ function autoDetectEngineData() {
     };
 
   // ==========================================
-    // ALGORYTM DIJKSTRY (ZAAWANSOWANY GPS Z WAGAMI)
+    // ALGORYTM DIJKSTRY (SZTYWNY GPS - TYLKO ZNANE TRASY)
     // ==========================================
     function getShortestPath(start, end) {
         if (start === end) return [start];
         
-        // Tworzenie wirtualnych ścieżek powrotnych (Na wypadek zgubienia się w ślepym zaułku)
-        let reverseEdges = {};
-        for (let src in globalGateways) {
-            for (let tgt in globalGateways[src]) {
-                if (!reverseEdges[tgt]) reverseEdges[tgt] = [];
-                if (!reverseEdges[tgt].includes(src)) reverseEdges[tgt].push(src);
-            }
-        }
-
         let distances = {};
         let previous = {};
         let queue = [];
@@ -2059,7 +2050,7 @@ function autoDetectEngineData() {
         let visited = new Set();
 
         while (queue.length > 0) {
-            // Sortujemy kolejkę, aby zawsze wybierać najtańszą (najkrótszą) drogę
+            // Sortujemy kolejkę, aby zawsze wybierać najkrótszą drogę
             queue.sort((a, b) => a.dist - b.dist);
             let current = queue.shift();
             let u = current.node;
@@ -2078,10 +2069,10 @@ function autoDetectEngineData() {
             if (visited.has(u)) continue;
             visited.add(u);
             
-            // 1. FIZYCZNE BRAMY (Priorytet najwyższy! Koszt: 1)
+            // 1. FIZYCZNE BRAMY (Tylko to, co bot sam widział i zapisał na 100%)
             if (globalGateways[u]) {
                 for (let v in globalGateways[u]) {
-                    let alt = distances[u] + 1; // Waga 1 dla normalnych kroków
+                    let alt = distances[u] + 1; 
                     if (distances[v] === undefined || alt < distances[v]) {
                         distances[v] = alt;
                         previous[v] = u;
@@ -2090,8 +2081,7 @@ function autoDetectEngineData() {
                 }
             }
             
-            // 2. TELEPORTY ZAKONNIKÓW (Priorytet wysoki. Koszt: 1.5)
-            // Używa TP tylko, gdy oszczędza to przynajmniej 2 zwykłe mapy biegania
+            // 2. TELEPORTY ZAKONNIKÓW (Tylko zaznaczone na liście)
             if (botSettings.useTeleports && ZAKONNICY[u]) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
@@ -2101,19 +2091,6 @@ function autoDetectEngineData() {
                             previous[tpMap] = u;
                             queue.push({node: tpMap, dist: alt});
                         }
-                    }
-                }
-            }
-            
-            // 3. ŚCIEŻKI WIRTUALNE/ODWROTNE (Ostatnia deska ratunku! Koszt: 10)
-            // Bot użyje ich tylko wtedy, gdy utknie w jaskini bez zapisanego fizycznego wyjścia
-            if (reverseEdges[u]) {
-                for (let v of reverseEdges[u]) {
-                    let alt = distances[u] + 10; // Potężna kara za chodzenie "pod prąd"
-                    if (distances[v] === undefined || alt < distances[v]) {
-                        distances[v] = alt;
-                        previous[v] = u;
-                        queue.push({node: v, dist: alt});
                     }
                 }
             }
