@@ -6267,6 +6267,16 @@ window.toggleTeleportLock = function(city, isChecked) {
             window.autoSellState.nextActionTime = 0;
             window.isRushingToShop = false;
             window.isRushing = true;
+
+            // --- NAPRAWA: Wyłączenie Berserka przy ręcznym uruchomieniu ---
+            window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+            if (window.autoSellState.wasBerserkOn) {
+                botSettings.berserk.enabled = false;
+                let chkBerserk = document.getElementById('berserkEnabled');
+                if (chkBerserk) chkBerserk.checked = false;
+                if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
+            }
         }
 // 2. POKAŻ POLECANE EQ (Z filtrowaniem, Porównywaniem i Podwójnym Tooltipem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
