@@ -7186,7 +7186,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 300);
     }
 
-    // --- DAEMON: AUTO-POTY (Kupowanie mikstur z humanizacją) ---
+// --- DAEMON: AUTO-POTY (Kupowanie mikstur z humanizacją) ---
     if (!window.autoPotDaemonInstalled) {
         window.autoPotDaemonInstalled = true;
         window.autoPotState = { active: false, step: 0, nextActionTime: 0, targetNpc: null, targetItem: null };
@@ -7194,6 +7194,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
             if (window.autoSellState && window.autoSellState.active) return;
+            
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {}).filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null).reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
                 if (potCount <= 0) {
@@ -7218,40 +7219,65 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     maxhp = maxhp || 5000;
                     let currentLvl = Engine.hero.d.lvl || 1;
                     let targetHeal = Math.floor(maxhp * 0.30);
+                    let minAcceptableHeal = targetHeal * 0.15; // Potka musi leczyć chociaż 15% tego co chcemy
+                    
                     let currMap = Engine.map.d.name;
                     let availablePotions = [];
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
+                    
                     healers.forEach(k => {
-                        if (k.map_name !== currMap) {
+                        let dist = Infinity;
+                        if (k.map_name === currMap) {
+                            dist = 0;
+                        } else {
                             let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name) : null;
-                            if (!path || path.length < 2) return;
+                            if (path && path.length > 0) dist = path.length;
                         }
-                        if (k.items) {
+                        
+                        if (dist !== Infinity && k.items) {
                             k.items.forEach(i => {
                                 let statString = (i.stat || i.stats || i.tooltip_text || i.raw_detected_text || i.name || "").toLowerCase();
                                 let itemLvl = i.lvl || 1;
                                 let lvlMatch = statString.match(/reqlvl[=:](\d+)/) || statString.match(/poziom:\s*(\d+)/);
                                 if (lvlMatch) itemLvl = parseInt(lvlMatch[1]);
                                 if (itemLvl > currentLvl) return;
+                                
                                 let healAmount = 0;
                                 let healMatch = statString.match(/leczy[=:](\d+)/) || statString.match(/leczy\s+([0-9\s]+)\s+punkt/);
                                 if (healMatch) healAmount = parseInt(healMatch[1].replace(/\s/g, ''));
+                                
                                 if (healAmount > 0) {
-                                    availablePotions.push({ npc: k, itemName: i.name.split('Typ:')[0].trim(), heal: healAmount });
+                                    availablePotions.push({ npc: k, itemName: i.name.split('Typ:')[0].trim(), heal: healAmount, distance: dist });
                                 }
                             });
                         }
                     });
+
                     if (availablePotions.length > 0) {
-                        availablePotions.sort((a, b) => Math.abs(a.heal - targetHeal) - Math.abs(b.heal - targetHeal));
+                        // SORTOWANIE (Priorytet nr 1: Dystans, Priorytet nr 2: Najlepsza potka u TEGO SAMEGO npc)
+                        availablePotions.sort((a, b) => {
+                            let aAcceptable = a.heal >= minAcceptableHeal;
+                            let bAcceptable = b.heal >= minAcceptableHeal;
+                            
+                            // Odrzucamy śmieci, chyba że nie mamy wyjścia
+                            if (aAcceptable && !bAcceptable) return -1;
+                            if (!aAcceptable && bAcceptable) return 1;
+                            
+                            // Najważniejszy warunek: kto jest bliżej?
+                            if (a.distance !== b.distance) return a.distance - b.distance;
+                            
+                            // Jeśli dystans ten sam, bierzemy potkę, która lepiej pasuje
+                            return Math.abs(a.heal - targetHeal) - Math.abs(b.heal - targetHeal);
+                        });
+
                         let bestChoice = availablePotions[0];
                         window.autoPotState.targetNpc = bestChoice.npc;
                         window.autoPotState.targetItem = bestChoice.itemName;
                         window.autoPotState.step = 1;
                         window.autoPotState.nextActionTime = Date.now() + 500;
                         window.isRushing = true;
-                        let stacksToBuy = botSettings.autopot.stacks || 14;
-                        let msg = `🧪 Analiza... Moje Max HP: ${maxhp}. Szukam potki na ~${targetHeal} HP. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name}.`;
+                        
+                        let msg = `🧪 Analiza... Szukam potki na ~${targetHeal} HP. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name} (Dystans: ${bestChoice.distance} map).`;
                         if (window.logHero) window.logHero(msg, "#e91e63");
                         if (window.logExp) window.logExp(msg, "#e91e63");
                     } else {
@@ -7572,17 +7598,30 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             return null;
         }
 
-        // --- OBSŁUGA POJAWIENIA SIĘ ZAGADKI (ALARM + OPÓŹNIONY STOP) ---
+// --- OBSŁUGA POJAWIENIA SIĘ ZAGADKI (ALARM + OPÓŹNIONY STOP) ---
         async function handleCaptchaDetection(preEl, fullEl) {
             if (window.__captchaPhase !== "none") return;
             window.__captchaPhase = "handling_delay";
             
             window.__wasExpingBeforeCaptcha = window.isExping;
 
-            // 1. NATYCHMIASTOWY ALARM
+            // 1. NATYCHMIASTOWY ALARM I KLIKALNE POWIADOMIENIE PUSH
             if (botSettings.exp.captchaAlert) {
                 try { new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg').play(); } catch(e) {}
-                if (Notification.permission === "granted") new Notification("🚨 ALARM: ZAPADKA!", { body: "Rozwiąż zagadkę na ekranie!", requireInteraction: true });
+                window.focus(); // Czasem zadziała samoistnie
+                
+                if (Notification.permission === "granted") {
+                    let notif = new Notification("🚨 ALARM: ZAPADKA!", { 
+                        body: "Wykryto zapadkę! KLIKNIJ TUTAJ, aby wyciągnąć okno gry na wierzch.", 
+                        requireInteraction: true 
+                    });
+                    
+                    // To kliknięcie mówi systemowi "skup się na tej karcie i rzuć na wierzch"
+                    notif.onclick = function() {
+                        window.focus();
+                        this.close();
+                    };
+                }
                 if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
             }
 
