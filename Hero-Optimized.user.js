@@ -7065,24 +7065,32 @@ window.toggleTeleportLock = function(city, isChecked) {
         }, 800);
     }
 
-   // --- DAEMON: AUTOHEAL ---
+  // --- DAEMON: AUTOHEAL ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
-        window.lastHealTime = 0; // Twardy hamulec przed zjedzeniem całej paczki!
+        window.lastHealTime = 0;
 
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
 
-            let hp = Engine.hero.d.hp;
-            let maxhp = Engine.hero.d.maxhp;
-            if (!maxhp) return;
+            // PANCERNE ODCZYTYWANIE HP (Z silnika lub bezpośrednio z czerwonej kuli na ekranie)
+            let hp = parseInt(Engine.hero.d.hp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
+            let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
             
-            // Pobieramy suwak, domyślnie 80%
+            if (!maxhp) {
+                let hpEl = document.querySelector('.health-val') || document.querySelector('.hp-values');
+                if (hpEl && hpEl.innerText) {
+                    let match = hpEl.innerText.match(/^(\d+)\s*\/\s*(\d+)/);
+                    if (match) { hp = parseInt(match[1]); maxhp = parseInt(match[2]); }
+                }
+            }
+            
+            if (!maxhp) return; // Jeśli gra jest w trakcie mocnego ładowania, po prostu czekamy ułamek sekundy
+            
             let threshold = botSettings.autoheal ? parseInt(botSettings.autoheal.threshold) || 80 : 80;
             let hpPercent = (hp / maxhp) * 100;
 
-            // Sprawdzamy czy HP poniżej progu I CZY minęła sekunda od ostatniego leczenia
             if (hpPercent < threshold && Date.now() > window.lastHealTime) {
                 let items = Object.values(Engine.heroEquipment.getHItems?.() || {});
                 let potions = items.filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null);
@@ -7102,8 +7110,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                         window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
 
-                    // MAGIA: Blokujemy kolejne użycie mikstury na 1.2 sekundy, dając serwerowi czas na odświeżenie HP!
-                    window.lastHealTime = Date.now() + 1200;
+                    window.lastHealTime = Date.now() + 1200; // Twarda blokada przed zjedzeniem całej paczki na raz
 
                     if (window.lastHealLog !== bestPot.id || Date.now() - (window._lastHealLogTime || 0) > 3000) {
                         let msg = `💚 Leczę się: ${bestPot._cachedStats?.name || bestPot.name}`;
@@ -7128,7 +7135,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             
             if (window.autoSellState && window.autoSellState.active) return; // Priorytety (Sprzedaż ważniejsza)
 
-      // 1. Sprawdzanie mikstur
+   // 1. Sprawdzanie mikstur
             if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {})
                   .filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null)
@@ -7147,19 +7154,25 @@ window.toggleTeleportLock = function(city, isChecked) {
                         if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do miasta.", "#ff9800");
                     }
                     
-                    let maxhp = Engine.hero.d.maxhp || 1000;
-                    let currentLvl = Engine.hero.d.lvl || 1;
+                    // PANCERNE ODCZYTYWANIE MAX HP (Teraz bot nigdy się nie pomyli!)
+                    let maxhp = parseInt(Engine.hero.d.maxhp) || (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
+                    if (!maxhp) {
+                        let hpEl = document.querySelector('.health-val') || document.querySelector('.hp-values');
+                        if (hpEl && hpEl.innerText) {
+                            let match = hpEl.innerText.match(/\/\s*(\d+)/);
+                            if (match) maxhp = parseInt(match[1]);
+                        }
+                    }
+                    maxhp = maxhp || 5000; // Awaryjny fallback podniesiony do bezpieczniejszej wartości
                     
-                    // ZMIANA ZGODNIE Z TWOJĄ LOGIKĄ: Szukamy potki, która na JEDNO użycie leczy ~30% HP 
-                    // (np. dla 7200 HP, cel to ~2160 HP. Jedna paczka uleczy ponad 10 000 HP!)
-                    let targetHeal = Math.floor(maxhp * 0.30); 
+                    let currentLvl = Engine.hero.d.lvl || 1;
+                    let targetHeal = Math.floor(maxhp * 0.30); // Szuka potki, która na JEDNO użycie leczy 30% HP
                     let currMap = Engine.map.d.name;
                     
                     let availablePotions = [];
 
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
                     healers.forEach(k => {
-                        // Odrzucamy Uzdrowicieli, do których bot NIE ZNA trasy w swojej bazie!
                         if (k.map_name !== currMap) {
                             let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name) : null;
                             if (!path || path.length < 2) return; 
@@ -7169,13 +7182,11 @@ window.toggleTeleportLock = function(city, isChecked) {
                             k.items.forEach(i => {
                                 let statString = (i.stat || i.stats || i.tooltip_text || i.raw_detected_text || i.name || "").toLowerCase();
                                 
-                                // Weryfikacja levelu (nie kupi niczego, czego nie możesz założyć)
                                 let itemLvl = i.lvl || 1;
                                 let lvlMatch = statString.match(/reqlvl[=:](\d+)/) || statString.match(/poziom:\s*(\d+)/);
                                 if (lvlMatch) itemLvl = parseInt(lvlMatch[1]);
                                 if (itemLvl > currentLvl) return;
 
-                                // Odczyt punktów leczenia na pojedyncze użycie
                                 let healAmount = 0;
                                 let healMatch = statString.match(/leczy[=:](\d+)/) || statString.match(/leczy\s+([0-9\s]+)\s+punkt/);
                                 if (healMatch) healAmount = parseInt(healMatch[1].replace(/\s/g, ''));
@@ -7192,7 +7203,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                     });
 
                     if (availablePotions.length > 0) {
-                        // INTELIGENTNE SORTOWANIE: Znajduje potkę, której leczenie jest najbliższe wartości 30% max HP
                         availablePotions.sort((a, b) => {
                             return Math.abs(a.heal - targetHeal) - Math.abs(b.heal - targetHeal);
                         });
@@ -7205,13 +7215,13 @@ window.toggleTeleportLock = function(city, isChecked) {
                         window.isRushing = true;
                         
                         let stacksToBuy = botSettings.autopot.stacks || 14;
-                        let msg = `🧪 Analiza... Cel: ~${targetHeal} HP na użycie. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name}. Kupuję ${stacksToBuy} staków!`;
+                        let msg = `🧪 Analiza... Moje Max HP: ${maxhp}. Szukam potki na ~${targetHeal} HP. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name}.`;
                         if (window.logHero) window.logHero(msg, "#e91e63");
                         if (window.logExp) window.logExp(msg, "#e91e63");
                     } else {
                         window.autoPotState.active = false;
-                        if (window.logHero) window.logHero(`🚨 Brak mikstur! Znam drogę, ale handlarze nie mają nic na Twój level!`, "#e53935");
-                        if (window.logExp) window.logExp(`🚨 Brak mikstur! Znam drogę, ale handlarze nie mają nic na Twój level!`, "#e53935");
+                        if (window.logHero) window.logHero(`🚨 Brak mikstur! Handlarze w Twoim zasięgu nie mają nic na Twój level!`, "#e53935");
+                        if (window.logExp) window.logExp(`🚨 Brak mikstur! Handlarze w Twoim zasięgu nie mają nic na Twój level!`, "#e53935");
                     }
                 }
             }
