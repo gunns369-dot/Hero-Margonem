@@ -6826,15 +6826,19 @@ window.toggleTeleportLock = function(city, isChecked) {
                 }
             }, 500);
         }
-        // 8. ZATRZYMYWANIE RUCHU
-        if (e.target && e.target.closest('#btnStopWalk')) {
-            if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
-            window.autoBuyTask = null;
-            if (window.logHero) window.logHero(`🛑 Zatrzymano akcję manualnie.`, "#d32f2f");
-            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
-            if (btnStop) btnStop.style.display = 'none';
-        }
-    });
+      // 8. ZATRZYMYWANIE RUCHU (Niezależny, bezpieczny blok)
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.closest('#btnStopWalk')) {
+                if (window.npcWalkInterval) clearInterval(window.npcWalkInterval);
+                window.autoBuyTask = null;
+                if (window.logHero) window.logHero(`🛑 Zatrzymano akcję manualnie.`, "#d32f2f");
+                if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                    Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y});
+                }
+                let btnStop = document.getElementById('btnStopWalk') || e.target.closest('#btnStopWalk');
+                if (btnStop) btnStop.style.display = 'none';
+            }
+        });
 
     // --- SILNIK WYSZUKIWANIA SKLEPÓW NA ŻYWO ---
     document.addEventListener('input', (e) => {
