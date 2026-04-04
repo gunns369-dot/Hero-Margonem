@@ -7304,20 +7304,19 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         window.isHealLocked = false;
         window.isRegeneratingToFull = false;
 
-        function extractHeal(item) {
-            if (typeof item.getLeczyStat === 'function') {
-                let v = item.getLeczyStat();
+        function extractHeal(itemData) {
+            if (typeof itemData.getLeczyStat === 'function') {
+                let v = itemData.getLeczyStat();
                 if (v) return v;
             }
-            let statStr = (item.stat || (item.d && item.d.stat) || (item._cachedStats && item._cachedStats.stat) || "").toLowerCase();
+            
+            let statStr = String(itemData.stat || itemData.stats || "").toLowerCase();
             
             if (statStr.includes('fullheal') || statStr.includes('całe życie') || statStr.includes('całą energię')) return 999999;
             if (statStr.includes('hot=')) return 0; 
             
-            // Usunięcie spacji z dużych liczb (np. "1 500" -> "1500") żeby bot mógł to przeczytać jako jedną liczbę
             statStr = statStr.replace(/(\d)\s+(\d)/g, '$1$2');
             
-            // Uniwersalny odczyt: szuka słowa leczy/przywraca i pierwszej liczby po nim
             let match = statStr.match(/(?:leczy|przywraca)[^\d]*(\d+)/);
             if (match) return parseInt(match[1]);
             
@@ -7334,7 +7333,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
-            // Failsafe (zabezpieczenie odblokowujące przy laga-ch)
+            // Zabezpieczenie (Failsafe) przed zablokowaniem pętli przy lagu
             if (window.isHealLocked && Date.now() > window.lastHealTime + 3000) {
                 window.isHealLocked = false;
             }
@@ -7381,33 +7380,39 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
 
             if (window.isRegeneratingToFull && Date.now() > window.lastHealTime) {
-                let hItems = typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : (Engine.items && Engine.items.d ? Engine.items.d : {});
-                let items = Object.values(hItems);
                 
-                // KRYTYCZNA NAPRAWA: Zgodność z nowymi torbami (NI)
-                let potions = items.filter(i => {
-                    let cl = Number(i?.cl || i?.d?.cl);
-                    let st = Number(i?.st || i?.d?.st);
-                    let loc = i?.loc || i?.d?.loc;
-                    let inBag = (st === 0 || loc === "g" || st > 8);
-                    return inBag && cl === 16;
-                });
+                // POTĘŻNY, KULOODPORNY SKANER EKWIPUNKU (NI & SI)
+                let items = [];
+                if (Engine.items && Engine.items.d) items = Object.values(Engine.items.d);
+                else if (Engine.heroEquipment && typeof Engine.heroEquipment.getHItems === 'function') items = Object.values(Engine.heroEquipment.getHItems());
                 
                 let ignoreList = (botSettings.autoheal.ignoreItems || "").toLowerCase().split('\n').map(s => s.trim()).filter(s => s.length > 0);
                 let unidList = (botSettings.autoheal.unidItems || "").toLowerCase().split('\n').map(s => s.trim()).filter(s => s.length > 0);
 
                 let validPotions = [];
-                potions.forEach(p => {
-                    let potName = (p._cachedStats?.name || p.name || p.d?.name || "").toLowerCase();
+                let heroLvl = parseInt(Engine.hero.d.lvl) || 1;
+
+                items.forEach(i => {
+                    let itemData = i.d || i;
+                    if (!itemData || itemData.del || itemData.dead) return;
+                    if (parseInt(itemData.cl) !== 16) return; // Tylko przedmioty konsumpcyjne
+
+                    let potName = String(itemData.name || i._cachedStats?.name || "").toLowerCase();
+                    let statStr = String(itemData.stat || i._cachedStats?.stat || "").toLowerCase();
                     
                     if (ignoreList.some(ig => potName.includes(ig))) return;
                     if (unidList.some(un => potName.includes(un))) return;
-
-                    let statStr = (p.stat || (p.d && p.d.stat) || (p._cachedStats && p._cachedStats.stat) || "").toLowerCase();
                     if (statStr.includes('unid')) return; 
 
-                    let heal = extractHeal(p);
-                    if (heal > 0) validPotions.push({ pot: p, heal: heal });
+                    // Zabezpieczenie przed jedzeniem mikstur na wyższy level!
+                    let reqLvlMatch = statStr.match(/reqlvl[=:](\d+)/) || statStr.match(/wymagany poziom:\s*(\d+)/);
+                    if (reqLvlMatch) {
+                        let reqLvl = parseInt(reqLvlMatch[1]);
+                        if (heroLvl < reqLvl) return; // Nie możesz tego zjeść
+                    }
+
+                    let heal = extractHeal(itemData);
+                    if (heal > 0) validPotions.push({ pot: i, heal: heal, id: itemData.id });
                 });
                 
                 if (validPotions.length > 0) {
@@ -7416,26 +7421,24 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     
                     validPotions.sort((a, b) => Math.abs(a.heal - missingHp) - Math.abs(b.heal - missingHp));
                     
-                    let bestPot = validPotions[0].pot;
-                    let healVal = validPotions[0].heal;
-                    let potId = bestPot.id || bestPot.d?.id;
+                    let bestPot = validPotions[0];
                     
                     if (typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.sendUseRequest === 'function') {
-                        Engine.heroEquipment.sendUseRequest(bestPot);
+                        Engine.heroEquipment.sendUseRequest(bestPot.pot);
                     } else if (typeof Engine.items !== 'undefined' && typeof Engine.items.useItem === 'function') {
-                        Engine.items.useItem(potId);
+                        Engine.items.useItem(bestPot.id);
                     } else {
-                        window._g(`moveitem&st=1&id=${potId}`);
+                        window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
                     
-                    if (Engine.hero.d.hp !== undefined) Engine.hero.d.hp = Math.min(maxhp, hp + healVal);
-                    if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + healVal);
+                    if (Engine.hero.d.hp !== undefined) Engine.hero.d.hp = Math.min(maxhp, hp + bestPot.heal);
+                    if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + bestPot.heal);
                     
                     window.lastHealTime = Date.now() + 600; 
                     setTimeout(() => { window.isHealLocked = false; }, 500);
                 } else {
                     window.isRegeneratingToFull = false;
-                    if (window.logHero) window.logHero(`⚠️ Skończyło Ci się jedzenie w plecaku! (Sprawdź też listę ignorowanych)`, "#ffb300");
+                    if (window.logHero) window.logHero(`⚠️ Skończyło Ci się jedzenie w plecaku! (Zbyt wysoki lvl / Lista ignorowanych)`, "#ffb300");
                 }
             }
         }, 350);
