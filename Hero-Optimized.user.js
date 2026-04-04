@@ -8313,8 +8313,8 @@ let checkBrowser = botSettings.exp?.playerAlert;
             };
         }
     }, 3000);
-   // ==========================================
-        // GWARANTOWANY ZAPIS I PODPIĘCIE MODUŁÓW (OSTATECZNA WERSJA)
+  // ==========================================
+        // GWARANTOWANY ZAPIS I PODPIĘCIE MODUŁÓW (AUTO-ZAPIS)
         // ==========================================
         setTimeout(() => {
             // Wymuszona struktura pamięci
@@ -8352,7 +8352,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             let idInput = document.getElementById('discordUserId');
             if (idInput) idInput.value = botSettings.discord.userId || '';
 
-            // Aktualizujemy WSZYSTKIE Checkboxy w kodzie po wyczyszczeniu duchów!
+            // Aktualizujemy Checkboxy w kodzie z bazy danych
             let checks = [
                 {id: 'discordAlert_Hero', val: botSettings.discord.alerts.hero},
                 {id: 'discordStop_Hero', val: botSettings.discord.stop.hero},
@@ -8374,8 +8374,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 if (el) el.checked = c.val;
             });
 
-            // 3. TWARDE ZAPISYWANIE POWIADOMIEŃ PRZEGLĄDARKI 
-            // (Przypinamy akcje dopiero teraz, omijając błąd przeglądarki)
+            // 3. TWARDE AUTO-ZAPISYWANIE PRZEGLĄDARKI 
             document.querySelectorAll('#browserAlertsSettingsGUI input[type="checkbox"]').forEach(chk => {
                 chk.addEventListener('change', (e) => {
                     let id = e.target.id;
@@ -8384,47 +8383,66 @@ let checkBrowser = botSettings.exp?.playerAlert;
                     if (id === 'playerAlertStopBot') botSettings.exp.playerAlertStopBot = e.target.checked;
                     if (id === 'chatAlert') { botSettings.exp.chatAlert = e.target.checked; if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); }
                     if (id === 'chatAlertStopBot') botSettings.exp.chatAlertStopBot = e.target.checked;
-                    saveSettings(); // Pchamy od razu do pamięci!
+                    saveSettings(); // Wpychamy do pamięci przy każdym kliknięciu!
                 });
             });
 
-            // 4. Osobisty Strażnik Zapisywania dla Discorda
+            // 4. TWARDE AUTO-ZAPISYWANIE DISCORDA
+            const discordMap = [
+                { id: 'discordAlert_Hero', type: 'alerts', key: 'hero' },
+                { id: 'discordStop_Hero', type: 'stop', key: 'hero' },
+                { id: 'discordAlert_Player', type: 'alerts', key: 'player' },
+                { id: 'discordStop_Player', type: 'stop', key: 'player' },
+                { id: 'discordAlert_Chat', type: 'alerts', key: 'chat' },
+                { id: 'discordStop_Chat', type: 'stop', key: 'chat' },
+                { id: 'discordAlert_Captcha', type: 'alerts', key: 'captcha' },
+                { id: 'discordStop_Captcha', type: 'stop', key: 'captcha' }
+            ];
+            
+            discordMap.forEach(cfg => {
+                let el = document.getElementById(cfg.id);
+                if (el) {
+                    el.addEventListener('change', (e) => {
+                        botSettings.discord[cfg.type][cfg.key] = e.target.checked;
+                        saveSettings(); // Zapisuje dokładnie w chwili kliknięcia!
+                    });
+                }
+            });
+
+            // Reagowanie na tekst (link / ID) w czasie rzeczywistym
+            if (urlInput) {
+                urlInput.addEventListener('input', (e) => { 
+                    botSettings.discord.url = e.target.value.trim(); 
+                    botSettings.discord.enabled = botSettings.discord.url.length > 10;
+                    saveSettings(); 
+                });
+            }
+            if (idInput) {
+                idInput.addEventListener('input', (e) => { 
+                    botSettings.discord.userId = e.target.value.trim(); 
+                    saveSettings(); 
+                });
+            }
+
+            // 5. Osobisty Strażnik - od teraz służy tylko do testów
             let btnSaveDiscord = document.getElementById('btnSaveDiscord');
             if (btnSaveDiscord) {
                 let freshSaveBtn = btnSaveDiscord.cloneNode(true);
                 btnSaveDiscord.parentNode.replaceChild(freshSaveBtn, btnSaveDiscord);
+                
+                freshSaveBtn.innerText = "🚀 WYŚLIJ WIADOMOŚĆ TESTOWĄ";
 
                 freshSaveBtn.addEventListener('click', (e) => {
                     e.preventDefault(); e.stopPropagation();
-                    
-                    let newUrl = document.getElementById('discordWebhookUrl').value.trim();
-                    let newId = document.getElementById('discordUserId').value.trim();
-
-                    botSettings.discord.url = newUrl;
-                    botSettings.discord.userId = newId;
-                    botSettings.discord.enabled = newUrl.length > 10;
-                    
-                    botSettings.discord.alerts.hero = document.getElementById('discordAlert_Hero').checked;
-                    botSettings.discord.alerts.player = document.getElementById('discordAlert_Player').checked;
-                    botSettings.discord.alerts.chat = document.getElementById('discordAlert_Chat').checked;
-                    botSettings.discord.alerts.captcha = document.getElementById('discordAlert_Captcha').checked;
-
-                    botSettings.discord.stop.hero = document.getElementById('discordStop_Hero').checked;
-                    botSettings.discord.stop.player = document.getElementById('discordStop_Player').checked;
-                    botSettings.discord.stop.chat = document.getElementById('discordStop_Chat').checked;
-                    botSettings.discord.stop.captcha = document.getElementById('discordStop_Captcha').checked;
-                    
-                    saveSettings(); 
-                    
                     if(botSettings.discord.enabled) {
-                        window.sendDiscordWebhook("🟢 MARGONEURO ZSYNCHRONIZOWANE", "Powiadomienia Discord zostały skonfigurowane poprawnie i działają niezależnie od przeglądarki!", 5763719);
-                        heroAlert("Ustawienia Discord zostały zapisane!\\nLink do Webhooka i ID wczytają się poprawnie po odświeżeniu gry.");
+                        window.sendDiscordWebhook("🟢 TEST POWIADOMIEŃ", "Wszystko działa! Twoje ustawienia są automatycznie zapisywane.", 5763719);
+                        heroAlert("Wysłano wiadomość testową na Twój kanał Discord!");
                     } else {
-                        heroAlert("Ustawienia zapisane (Webhook wyłączony ze względu na pusty link).");
+                        heroAlert("Błąd: Uzupełnij URL Webhooka, by testować wysyłanie.");
                     }
                 });
             }
-        }, 1500); 
+        }, 1500);
     // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
     setTimeout(() => {
         if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
