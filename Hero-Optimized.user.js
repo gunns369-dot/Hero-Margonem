@@ -5316,7 +5316,7 @@ if (hx !== expLastX || hy !== expLastY) {
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    // 1. Zbudowanie mapy "Stref Zagrożenia" (Bossy, których nie bijemy)
+    // 1. Strefy Zagrożenia
     let dangerousSpots = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
@@ -5333,12 +5333,13 @@ if (hx !== expLastX || hy !== expLastY) {
         }
     });
 
-    // 2. Filtrowanie i Klastrowanie Potworów
+    // 2. Wstępne Filtrowanie
     let validMobs = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
         
+        // Pomijamy zbugowane w ścianach
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
@@ -5367,71 +5368,55 @@ if (hx !== expLastX || hy !== expLastY) {
 
         let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
 
+        // Zabezpieczenie mgły wojny (PVP)
+        if (Engine.map && Engine.map.d && Engine.map.d.pvp === 2 && dist > 18) return;
+
         validMobs.push({
             id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga, grp: n.grp,
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
-            dist: dist
+            dist: dist,
+            score: dist
         });
     });
 
-    // 3. MAPOWANIE GRUP MARGONEM
-    let groupsMap = new Map();
+    // 3. Ocenianie "Odkurzacza" V11 (Każdy mob wyliczany indywidualnie dla stabilności!)
+    let groupsCount = {};
     validMobs.forEach(m => {
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
-        if (!groupsMap.has(key)) groupsMap.set(key, []);
-        groupsMap.get(key).push(m);
+        groupsCount[key] = (groupsCount[key] || 0) + 1;
     });
 
-    let clusters = [];
-    groupsMap.forEach((clusterMobs, key) => {
-        clusterMobs.sort((a, b) => {
-            let aLocked = (a.id === expCurrentTargetId) ? 0 : 1;
-            let bLocked = (b.id === expCurrentTargetId) ? 0 : 1;
-            if (aLocked !== bLocked) return aLocked - bLocked;
-            return a.dist - b.dist;
-        });
-        let entryMob = clusterMobs[0]; 
-
-        let bestRank = "normal";
-        if (clusterMobs.some(m => m.ranga === "elite1")) bestRank = "elite1";
-        if (clusterMobs.some(m => m.ranga === "elite2")) bestRank = "elite2";
-        if (clusterMobs.some(m => m.ranga === "hero")) bestRank = "hero";
-
-        clusters.push({
-            size: clusterMobs.length,
-            target: entryMob,
-            rank: bestRank,
-            isLocked: clusterMobs.some(m => m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0)),
-            groupLabel: clusterMobs.length > 1 ? `Grupa (${clusterMobs.length}x) ${entryMob.nick}` : `Solo ${entryMob.nick}`
-        });
-    });
-
-    // 4. SORTOWANIE (Smart-Gravity V10 - Czyść drogę!)
-    clusters.sort((a, b) => {
-        let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
-        if (rankVal[a.rank] !== rankVal[b.rank]) return rankVal[b.rank] - rankVal[a.rank];
-
-        if (a.isLocked && !b.isLocked) return -1;
-        if (b.isLocked && !a.isLocked) return 1;
+    validMobs.forEach(m => {
+        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
+        let size = groupsCount[key];
+        m.groupLabel = size > 1 ? `Grupa (${size}x) ${m.nick}` : `Solo ${m.nick}`;
         
-        // ZABEZPIECZENIE: Jeśli mob jest bardzo blisko (pod nogami, dystans <= 4), 
-        // to bijemy go ZANIM polecimy do grupy! (Żeby utorować sobie drogę).
-        if (a.target.dist <= 4 && b.target.dist > 4) return -1;
-        if (b.target.dist <= 4 && a.target.dist > 4) return 1;
+        // Premia grupowa (-6 kratek za każdego potwora w grupie do wagi)
+        m.score = m.dist - ((size - 1) * 6);
 
-        // KOSIARKA V10: Osłabione przyciąganie (-4 kratki za moba w grupie zamiast -12). 
-        // Zbyt silny magnes sprawiał, że bot omijał moby po drodze wpadając w pętle.
-        let scoreA = a.target.dist - ((a.size - 1) * 4);
-        let scoreB = b.target.dist - ((b.size - 1) * 4);
-
-        return scoreA - scoreB;
+        // ABSOLUTNY PRIORYTET: Jeśli mob wejdzie Ci pod nogi (<= 4 kratki), kosi go od razu.
+        if (m.dist <= 4) {
+            m.score = -1000 + m.dist; 
+        }
     });
 
-    let bestCluster = clusters.length > 0 ? clusters[0] : null;
+    // 4. SORTOWANIE (Twardy Lock + Score)
+    validMobs.sort((a, b) => {
+        let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
+        if (rankVal[a.ranga] !== rankVal[b.ranga]) return rankVal[b.ranga] - rankVal[a.ranga];
+
+        // TWARDY LOCK! Jeśli mamy wybranego moba, trzymamy się go pazurami! Koniec kręcenia się w kółko.
+        let aLocked = (a.id === expCurrentTargetId) ? 1 : 0;
+        let bLocked = (b.id === expCurrentTargetId) ? 1 : 0;
+        if (aLocked !== bLocked) return bLocked - aLocked;
+
+        return a.score - b.score;
+    });
+
+    let target = validMobs.length > 0 ? validMobs[0] : null;
 
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
-    if (bestCluster) {
-        let target = bestCluster.target;
+    if (target) {
         const targetDist = target.dist;
 
         if (expEmptyScans > 0) {
@@ -5444,19 +5429,17 @@ if (hx !== expLastX || hy !== expLastY) {
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
             if (isNewDestination) {
-                // ZABEZPIECZENIE ANTY-FLOOD (Chroni przed wywaleniem z serwera)
                 if (now < nextAllowedClickTime) return;
 
                 if (expCurrentTargetId !== target.id) {
-                    window.logExp(`🏃 Cel: ${bestCluster.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
+                    window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
-                    window.expTargetLockTime = now + 4000; 
                 }
 
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${bestCluster.groupLabel}`;
+                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.groupLabel}`;
                 
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                nextAllowedClickTime = now + 300; 
+                nextAllowedClickTime = now + 350; 
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
@@ -5472,9 +5455,9 @@ if (hx !== expLastX || hy !== expLastY) {
 
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
-                    // Odcięcie twardego zacięcia
+                    // Ominięcie zablokowanego moba (zrzucenie Twardego Locka)
                     if (timeStandingStill > 3000) {
-                        window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Ignoruję go na chwilę.`, "#ff5252");
+                        window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Zrzucam cel i szukam objazdu.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
                         expCurrentTargetId = null;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
@@ -5491,7 +5474,7 @@ if (hx !== expLastX || hy !== expLastY) {
                     if (timeStandingStill > 1000 && (now % 1000 < 150)) {
                         if (now >= nextAllowedClickTime) {
                             Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                            nextAllowedClickTime = now + 300;
+                            nextAllowedClickTime = now + 350;
                         }
                     }
                 }
@@ -5502,7 +5485,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
         // --- WALKA ---
         if (targetDist <= 1) {
-            if (displayTarget) displayTarget.innerText = `Walka: ${bestCluster.groupLabel}`;
+            if (displayTarget) displayTarget.innerText = `Walka: ${target.groupLabel}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
@@ -5518,8 +5501,7 @@ if (hx !== expLastX || hy !== expLastY) {
             expLastActionTime = now + 100;
         }
         return;
-    } // <--- TO JEST TA KLAMRA, KTÓRA WCZEŚNIEJ ZNIKNĘŁA I ROZWALIŁA KOD!
-      
+    }
 // --- ZAAWANSOWANY SMART ROAM: PĘTLE BRAM I TUNELI ---
     if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
 
