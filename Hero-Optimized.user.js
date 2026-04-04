@@ -5181,15 +5181,35 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
     if (now < expLastActionTime) return;
 
-   // --- ZABEZPIECZENIE PRZED ŚMIERCIĄ I CZEKANIE NA RESPAWN ---
-    let isDead = Engine.dead || hero.dead === true || hero.dead === 1 || hero.dead === "1" || document.querySelector('.dead-window, .death-window, [data-wnd="dead"]') !== null;
+  // --- ODCZYT HP I ZABEZPIECZENIA (ŚMIERĆ / AUTO-RESPAWN / AUTO-HEAL) ---
+    let hp = hero.hp !== undefined ? parseInt(hero.hp) : (hero.warrior_stats ? parseInt(hero.warrior_stats.hp) : 100);
+    let maxhp = hero.maxhp !== undefined ? parseInt(hero.maxhp) : (hero.warrior_stats ? parseInt(hero.warrior_stats.maxhp) : 100);
+
+    let isDead = Engine.dead || hero.dead === true || hero.dead === 1 || hero.dead === "1" || document.querySelector('.dead-window, .death-window, [data-wnd="dead"]') !== null || (hp === 1 && maxhp > 1);
+
     if (isDead) {
         if (window._lastDeadLog !== Math.floor(now / 5000)) {
-            window.logExp("💀 Jesteś nieprzytomny. Czekam na respawn...", "#e53935");
+            window.logExp("💀 Jesteś nieprzytomny (Wykryto 1 HP). Pauza i powrót do miasta...", "#e53935");
             window._lastDeadLog = Math.floor(now / 5000);
+            
+            setTimeout(() => {
+                if (typeof window._g === 'function') {
+                    window._g('deadresp'); 
+                } else if (typeof Engine !== 'undefined' && Engine.communication) {
+                    Engine.communication.send({ "a": "deadresp" }); 
+                }
+                
+                let reviveBtn = Array.from(document.querySelectorAll('button, .button, .btn, .dialog-button')).find(el => {
+                    let txt = (el.innerText || el.textContent || "").toLowerCase();
+                    return txt.includes('wróć do miasta') || txt.includes('ożyw') || txt.includes('zmartwychwstań');
+                });
+                if (reviveBtn) {
+                    if (window.jQuery) jQuery(reviveBtn).trigger('click');
+                    if (typeof reviveBtn.click === 'function') reviveBtn.click();
+                }
+            }, 1500);
         }
         
-        // Zrzucamy zablokowany cel i czyścimy kordy, żeby po ożywieniu nie biegł w ścianę
         expCurrentTargetId = null;
         window.expTargetLockTime = 0;
         window.expLastMoveTx = -1; 
@@ -5199,18 +5219,14 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         return;
     }
 
-    // --- ZABEZPIECZENIE PO RESPAWNIE (Czekanie na wyleczenie) ---
-    let hp = parseInt(hero.hp) || (hero.warrior_stats ? parseInt(hero.warrior_stats.hp) : 1);
-    let maxhp = parseInt(hero.maxhp) || (hero.warrior_stats ? parseInt(hero.warrior_stats.maxhp) : 1);
-    
-    // Jeśli HP jest poniżej 50%, zatrzymujemy expa, by dać czas AutoHealowi na wyleczenie do pełna
+    // --- ZABEZPIECZENIE PO RESPAWNIE ---
     if ((hp / maxhp) * 100 < 50) {
         if (window._lastLowHpLog !== Math.floor(now / 5000)) {
-            window.logExp(`🩸 Krytyczny poziom HP! Czekam na uleczenie...`, "#e53935");
+            window.logExp(`🩸 Krytyczny poziom HP (${hp}/${maxhp})! Czekam na uleczenie...`, "#e53935");
             window._lastLowHpLog = Math.floor(now / 5000);
         }
         expLastActionTime = now + 1000;
-        return;
+        return; 
     }
 
     try {
@@ -5223,42 +5239,29 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             window.expLastMoveTx = -1; window.expLastMoveTy = -1;
             window.expWasInBattle = true; 
             
-            // --- AUTOMATYCZNE ZAMYKANIE WALKI (ZWŁASZCZA PO ŚMIERCI) ---
             let quitBtn = Array.from(document.querySelectorAll('button, .button, div')).find(el => el.innerText && el.innerText.includes('Opuść walkę'));
             if (quitBtn) {
                 quitBtn.click();
             } else if (Engine.battle.d && Engine.battle.d.winner !== undefined) {
                 if (typeof window._g === 'function') window._g('fight&a=quit');
             }
-
             return;
         } else if (window.expWasInBattle) {
-            // Walka właśnie się skończyła
             window.expWasInBattle = false;
             expLastActionTime = now + 1500;
             return;
         }
     } catch (e) {}
 
-
-
     const wantNormal = document.getElementById('expN')?.checked ?? botSettings.exp.normal;
-
     const wantElite = document.getElementById('expE')?.checked ?? botSettings.exp.elite;
-
     const minL = parseInt(document.getElementById('expMinL')?.value || botSettings.exp.minLvl, 10);
-
     const maxL = parseInt(document.getElementById('expMaxL')?.value || botSettings.exp.maxLvl, 10);
-
     const displayTarget = document.getElementById('expTargetDisplay');
-
-
 
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
 
-
-
-// --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
+    // --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
     if (expLastMapName !== currMap) {
         window.expLastVisitedMap = expLastMapName;
         expLastMapName = currMap;
@@ -5270,32 +5273,20 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         expGatewayLockUntil = now + 1200;
         window.expUnreachableMobs.clear();
 
-        // Zabezpieczenie stoperów bram (czyszczenie po ekranie ładowania)
         window.expGatewayStandTime = 0;
         window.expGatewayArrivalTime = 0;
     }
 
-
-
     const isOnGateway = (x, y) => {
-
         let gws = (Engine.map && Engine.map.gateways) ? Engine.map.gateways : ((Engine.map && Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
-
         for (let id in gws) {
-
             let gw = gws[id].d || gws[id];
-
             if (gw && gw.x === x && gw.y === y) return true;
-
         }
-
         return false;
-
     };
 
-
-
-if (hx !== expLastX || hy !== expLastY) {
+    if (hx !== expLastX || hy !== expLastY) {
         expLastX = hx;
         expLastY = hy;
         expAntiLagTime = now + getAntiLagDelay();
@@ -5303,7 +5294,6 @@ if (hx !== expLastX || hy !== expLastY) {
     } else if (now > expAntiLagTime) {
         if (isOnGateway(hx, hy)) {
             if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
-            // WYDŁUŻONY CZAS: Odbiega dopiero, gdy stoi na samej bramie ponad 12 sekund!
             if (now - window.expGatewayStandTime > 12000) {
                 window.logExp(`[Anti-Lag] Zacięcie na bramie. Odbiegam...`, "#ff9800");
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
@@ -5313,11 +5303,10 @@ if (hx !== expLastX || hy !== expLastY) {
                 expCurrentTargetId = null; window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                 window.expGatewayStandTime = 0;
             }
-            return; // Bot cierpliwie czeka na zmianę mapy
+            return;
         }
         expAntiLagTime = now + getAntiLagDelay();
     }
-
 
 // --- SKANOWANIE POTWORÓW (KOSIARKA V13 - PAMIĘĆ ABSOLUTNA) ---
     if (!window.expMonsterCache) window.expMonsterCache = new Map();
@@ -8016,6 +8005,11 @@ let checkBrowser = botSettings.exp?.playerAlert;
             if (Engine.dead || Engine.hero.d.dead) return; 
             if (window.isHealLocked || window.isRegeneratingToFull) return; 
             if (window.__captchaPhase && window.__captchaPhase !== "none") return; 
+            // ZABEZPIECZENIE: Nie wykonuj mikroruchów, jeśli celowo czekamy na respawn (45 sekund)
+            if (window.isExping && window.expMapTransitionCooldown && Date.now() < window.expMapTransitionCooldown) {
+                window.stuckIdleCount = 0;
+                return;
+            }
 
             let currentMap = Engine.map.d.name;
             let currentX = Engine.hero.d.x;
