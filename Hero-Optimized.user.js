@@ -8273,23 +8273,31 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Aktywowany przez Berserka) ---
+// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Persistent Engine) ---
     if (window.statsIntervalId) clearInterval(window.statsIntervalId);
     
-    window.sessionStats = {
-        active: false,
-        startTime: 0,
-        expGained: 0,
-        goldGained: 0,
-        lastExp: -1,
-        lastGold: -1
-    };
+    // Obiekt trwały – nie zostanie zniszczony nawet jeśli gra złapie mikro-laga
+    if (!window.__heroStats) {
+        window.__heroStats = {
+            totalSeconds: 0,
+            expGained: 0,
+            goldGained: 0,
+            lastExp: -1,
+            lastGold: -1,
+            lastTick: Date.now(),
+            wasWorking: false
+        };
+    }
 
     window.statsIntervalId = setInterval(() => {
+        let now = Date.now();
+        let delta = now - window.__heroStats.lastTick;
+        window.__heroStats.lastTick = now;
+
         let curExp = 0, curGold = 0, maxExp = 0, expLeft = 0;
         let isEngineReady = false;
 
-        // 1. POBIERANIE DANYCH Z SILNIKA (SI / NI)
+        // 1. ODCZYT DANYCH (SI / NI)
         if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
             curExp = parseInt(Engine.hero.d.exp) || 0;
             curGold = parseInt(Engine.hero.d.gold) || 0;
@@ -8303,55 +8311,61 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             isEngineReady = true;
         }
 
-        if (!isEngineReady) return;
+        if (!isEngineReady) return; // Czekamy na załadowanie się świata
 
-        // 2. DETEKCJA STARTU: Zgodnie z Twoim pomysłem! 
-        // Licznik działa TYLKO wtedy, gdy "Kieszonkowy Berserk" jest fizycznie włączony.
-        // Kiedy bot pójdzie sprzedawać itemy (lub go wyłączysz), Berserk gaśnie, a zegar się zatrzymuje.
-        let isBerserkRunning = (typeof botSettings !== 'undefined' && botSettings.berserk && botSettings.berserk.enabled === true);
-
-        if (isBerserkRunning && !window.sessionStats.active) {
-            window.sessionStats.active = true;
-            window.sessionStats.startTime = Date.now();
-            window.sessionStats.expGained = 0;
-            window.sessionStats.goldGained = 0;
-            window.sessionStats.lastExp = curExp;
-            window.sessionStats.lastGold = curGold;
-        } else if (!isBerserkRunning && window.sessionStats.active) {
-            window.sessionStats.active = false;
+        // Inicjalizacja bazowa
+        if (window.__heroStats.lastExp === -1) {
+            window.__heroStats.lastExp = curExp;
+            window.__heroStats.lastGold = curGold;
         }
 
-        if (!window.sessionStats.active) return; // Jeśli Berserk wyłączony, bot odpoczywa
-
-        // --- 3. OBLICZANIE PRZYROSTÓW ---
-        if (window.sessionStats.lastExp !== -1) {
-            let expDiff = curExp - window.sessionStats.lastExp;
-            if (expDiff > 0) window.sessionStats.expGained += expDiff;
-            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Zabezpieczenie przy awansie
-        }
-        window.sessionStats.lastExp = curExp;
-
-        if (window.sessionStats.lastGold !== -1) {
-            let goldDiff = curGold - window.sessionStats.lastGold;
-            if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
-        }
-        window.sessionStats.lastGold = curGold;
-
-        // --- 4. MATEMATYKA & FORMATOWANIE CZASU ---
-        let elapsedSec = Math.floor((Date.now() - window.sessionStats.startTime) / 1000);
-        if (elapsedSec < 1) elapsedSec = 1;
+        // 2. KONTROLA STANU BOTA ZGODNA Z TWOIM POMYSŁEM
+        let isBotEnabled = (window.isExping || window.isPatrolling);
+        let isSellingOrBuying = ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active));
         
-        let h = Math.floor(elapsedSec / 3600);
-        let m = Math.floor((elapsedSec % 3600) / 60);
-        let s = elapsedSec % 60;
+        // Bot zlicza TYLKO gdy jest włączony ORAZ nie poszedł na zakupy/sprzedaż
+        let isActuallyRunning = isBotEnabled && !isSellingOrBuying;
+
+        // 3. RESET STATYSTYK PO NOWYM STARCIE
+        if (isBotEnabled && !window.__heroStats.wasWorking) {
+            // Przejście z "wyłączonego" na "włączony" -> czyścimy sesję
+            window.__heroStats.totalSeconds = 0;
+            window.__heroStats.expGained = 0;
+            window.__heroStats.goldGained = 0;
+            window.__heroStats.lastExp = curExp;
+            window.__heroStats.lastGold = curGold;
+        }
+        window.__heroStats.wasWorking = isBotEnabled;
+
+        // 4. ZLICZANIE (Aktywne tylko podczas właściwego expienia)
+        if (isActuallyRunning) {
+            window.__heroStats.totalSeconds += (delta / 1000);
+
+            let expDiff = curExp - window.__heroStats.lastExp;
+            if (expDiff > 0) window.__heroStats.expGained += expDiff;
+            else if (expDiff < 0) window.__heroStats.expGained += curExp; // Przy awansie pasek spada
+
+            let goldDiff = curGold - window.__heroStats.lastGold;
+            if (goldDiff > 0) window.__heroStats.goldGained += goldDiff;
+        }
+
+        // Zawsze odświeżamy ostatni stan, żeby nie liczyć w tle "ręcznej gry" gdy bot jest spauzowany
+        window.__heroStats.lastExp = curExp;
+        window.__heroStats.lastGold = curGold;
+
+        // 5. FORMATOWANIE CZASU
+        let sec = Math.floor(window.__heroStats.totalSeconds);
+        let h = Math.floor(sec / 3600);
+        let m = Math.floor((sec % 3600) / 60);
+        let s = sec % 60;
         let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
         let expPerHour = 0;
-        if (elapsedSec > 3) { // Czekamy 3 sekundy na wyrównanie
-            expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
+        if (sec > 2) {
+            expPerHour = Math.floor((window.__heroStats.expGained / sec) * 3600);
         }
 
-        // --- 5. ILE BRAKUJE DO AWANSU (TNL) ---
+        // 6. ILE BRAKUJE DO AWANSU (TNL)
         let missingExp = 0;
         if (expLeft > 0) {
             missingExp = expLeft;
@@ -8373,12 +8387,12 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             timeTnlStr = "Max Lvl?";
         }
 
-        // --- 6. AGRESYWNY RENDER W HTML ---
+        // 7. AGRESYWNY RENDER W HTML (Rozwiązuje problem powielonych/ukrytych okien w warstwach)
         document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
-        document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.sessionStats.expGained.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.__heroStats.expGained.toLocaleString('pl-PL'));
         document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
         document.querySelectorAll('#statTimeTnl').forEach(el => el.innerText = timeTnlStr);
-        document.querySelectorAll('#statGoldGained').forEach(el => el.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
+        document.querySelectorAll('#statGoldGained').forEach(el => el.innerText = window.__heroStats.goldGained.toLocaleString('pl-PL') + " zł");
 
     }, 1000);
 
