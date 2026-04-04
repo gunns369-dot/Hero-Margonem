@@ -5482,41 +5482,27 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
 
-                    // 🚨 ZŁOTY WARUNEK: Zatrzymanie na 2.5 sekundy a mob wciąż jest daleko!
-
+                 // 🚨 ZŁOTY WARUNEK: Zatrzymanie na 2.5 sekundy a mob wciąż jest daleko!
                     if (timeStandingStill > 2500) {
-
                         window.logExp(`🚨 Utknięto na [${hx}, ${hy}]. Omijam: ${target.nick}.`, "#ff5252");
-
                         window.expUnreachableMobs.add(target.id);
-
                         expCurrentTargetId = null;
-
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-
+                        
+                        // WYMUSZONY KROK ODBLOKOWUJĄCY PATHFINDER
+                        if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                        let dirs = [[0,1], [1,0], [0,-1], [-1,0], [1,1], [-1,-1]];
+                        for(let d of dirs) {
+                            let nx = hx + d[0], ny = hy + d[1];
+                            if(Engine.map && typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)){
+                                if(typeof window._g === 'function') window._g(`walk=${nx},${ny}`);
+                                else Engine.hero.autoGoTo({x:nx, y:ny});
+                                break;
+                            }
+                        }
+                        expLastActionTime = now + 1000;
                         return;
-
                     }
-
-
-
-                    // Co 1.5 sekundy przypominamy grze o ruchu (anty-lag)
-
-                    if (timeStandingStill > 1500 && (now % 1500 < 150)) {
-
-                        Engine.hero.autoGoTo({ x: target.x, y: target.y });
-
-                    }
-
-                }
-
-            }
-
-            expLastActionTime = now + 100;
-
-            return;
-
-        }
 
 
 
