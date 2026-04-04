@@ -2011,7 +2011,7 @@ function autoDetectEngineData() {
         window.executeRushStep();
     };
 
-// --- SYSTEM ZWOJÓW TELEPORTACJI Z BAZĄ MAP (V2) ---
+// --- SYSTEM ZWOJÓW TELEPORTACJI Z BAZĄ MAP (V3) ---
     window.getAvailableTeleports = function() {
         if (typeof Engine === 'undefined' || !Engine.heroEquipment) return [];
         let items = typeof Engine.heroEquipment.getHItems === 'function' ? Object.values(Engine.heroEquipment.getHItems()) : [];
@@ -2024,16 +2024,20 @@ function autoDetectEngineData() {
         for (let i of items) {
             let itemData = i.d || i;
             if (!itemData || itemData.del || itemData.dead) continue;
-            // Tylko przedmioty leżące luźno w torbach
-            if (Number(itemData.st) !== 0) continue;
+            
+            // Poprawka NI: Pomijamy tylko przedmioty aktualnie założone na postać (st: 1 do 8)
+            // Dzięki temu wykryje zwoje we wszystkich dodatkowych torbach!
+            if (Number(itemData.st) > 0 && Number(itemData.st) < 9) continue; 
 
             let statStr = String(itemData.stat || i._cachedStats?.stat || "").toLowerCase();
             let ttText = String(i.tooltip_text || itemData.tooltip_text || "").toLowerCase();
 
             let mapDest = null;
+            // Szuka: teleport=Andarum Ilami,x,y
             let match = statStr.match(/teleport=([^,;]+)/i);
             if (match) mapDest = match[1].trim();
 
+            // Szuka w opisie (tooltippie) słowa "Teleportuje do: Andarum Ilami"
             if (!mapDest) {
                 let ttMatch = ttText.match(/teleportuje do:\s*([^<]+)/i) || ttText.match(/teleportacja do:\s*([^<]+)/i);
                 if (ttMatch) mapDest = ttMatch[1].trim();
@@ -2043,9 +2047,8 @@ function autoDetectEngineData() {
                 let reqLvlMatch = statStr.match(/reqlvl[=:](\d+)/) || statStr.match(/wymagany poziom:\s*(\d+)/);
                 if (reqLvlMatch && heroLvl < parseInt(reqLvlMatch[1])) continue;
                 
-                // Kluczowe: Dopasowujemy wielkość liter do bazy map!
+                // Inteligentne wyrównywanie wielkości liter i formatu map
                 let exactMapName = allMapNames.find(k => k.toLowerCase() === mapDest.toLowerCase()) || mapDest;
-                // Jeśli jakimś cudem nie ma na liście, duże litery ratunkowo:
                 if (!allMapNames.includes(exactMapName)) exactMapName = exactMapName.replace(/\b\w/g, c => c.toUpperCase());
 
                 tps.push({ id: itemData.id, map: exactMapName });
