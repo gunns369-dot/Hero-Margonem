@@ -5521,291 +5521,165 @@ if (hx !== expLastX || hy !== expLastY) {
 
     let mapsPool = botSettings.exp.mapOrder || [];
     if (!mapsPool.length) {
-        // Gdy lista map jest pusta, bot nie przechodzi dalej. Po prostu resetuje skany i stoi.
         expEmptyScans = 0;
         expLastActionTime = now + 1500;
         return;
     }
 
-    // Oznacz obecną mapę jako "czystą"
     window.mapClearTimes[currMap] = now;
-
     let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m] && m !== currMap);
 
-
-
     if (uncheckedMaps.length === 0) {
-        // SPRAWDZANIE BEZPIECZEŃSTWA MAPY (PvP)
-        // Engine.map.d.pvp === 2 oznacza czerwoną mapę (bezwarunkowe PvP)
         if (Engine.map.d.pvp === 2 && mapsPool.length > 1) {
             window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
             let nextIdx = (mapsPool.indexOf(currMap) + 1) % mapsPool.length;
             let safeMap = mapsPool[nextIdx];
-
-            // Kasujemy z pamięci czas wyczyszczenia następnej mapy, więc bot od razu tam pobiegnie
             if (safeMap) {
                 delete window.mapClearTimes[safeMap];
                 expMapTransitionCooldown = now + 500;
                 return;
             }
         }
-
         window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s na resp...", "#ffb300");
         expMapTransitionCooldown = now + 45000;
         window.mapClearTimes = {};
         return;
     }
 
-
-
-    // 🚨 KRYTYCZNA POPRAWKA: Prawidłowe wybieranie najbliższej nieoczyszczonej mapy (GRAF)
-
     let gateways = globalGateways[currMap] || {};
-
     let nextStepMap = null;
-
     let targetGateway = null;
-
-
-
     let bestGraphPathLen = Infinity;
-
     let bestDistToDoor = Infinity;
 
-
-
-    // 1. Szukamy czy mamy bramę BEZPOŚREDNIO do nieodwiedzonej mapy
-
     let directGateways = [];
-
     for (let targetMap in gateways) {
-
         if (uncheckedMaps.includes(targetMap)) {
-
             directGateways.push({ map: targetMap, gw: gateways[targetMap], dist: Math.abs(gateways[targetMap].x - hx) + Math.abs(gateways[targetMap].y - hy) });
-
         }
-
     }
-
-
 
     if (directGateways.length > 0) {
-
         directGateways.sort((a, b) => a.dist - b.dist);
-
         nextStepMap = directGateways[0].map;
-
         targetGateway = directGateways[0].gw;
-
     } else {
-
-        // 2. Jeśli brakuje bezpośredniej, wyliczamy najkrótszą TRASĘ PRZEZ INNE MAPY (path.length wygrywa nad dystansem)
-
         for (let targetMap in gateways) {
-
             let gw = gateways[targetMap];
-
             for (let unvisitedMap of uncheckedMaps) {
-
                 let path = getShortestPath(targetMap, unvisitedMap);
-
                 if (path) {
-
                     let dist = Math.abs(gw.x - hx) + Math.abs(gw.y - hy);
-
-                    // Najpierw sprawdzamy Ilość Przejść, a potem dystans postaci do bramy! (Zabezpiecza przed cofaniem)
-
                     if (path.length < bestGraphPathLen) {
-
                         bestGraphPathLen = path.length;
-
                         bestDistToDoor = dist;
-
                         nextStepMap = targetMap;
-
                         targetGateway = gw;
-
                     } else if (path.length === bestGraphPathLen && dist < bestDistToDoor) {
-
                         bestDistToDoor = dist;
-
                         nextStepMap = targetMap;
-
                         targetGateway = gw;
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
-
 
     if (!nextStepMap) {
-
         window.logExp(`Brak dojścia do jakiejkolwiek bramy na ścieżce.`, "#e53935");
-
         expMapTransitionCooldown = now + 4000;
-
         return;
-
     }
 
-
-
     if (targetGateway) {
-
         let dx = targetGateway.x; let dy = targetGateway.y;
-
         let distToDoor = Math.max(Math.abs(dx - hx), Math.abs(dy - hy));
 
-
-
         let tp = ZAKONNICY[currMap];
-
         let isFakeDoor = tp && Math.abs(dx - tp.x) <= 2 && Math.abs(dy - tp.y) <= 2;
-
         let isTeleport = tp && (botSettings.unlockedTeleports[nextStepMap] || isFakeDoor);
 
-
-
         if (isTeleport) {
-
             if (displayTarget) displayTarget.innerText = `Teleport do: ${nextStepMap}`;
-
             if (!isHeroMoving || now >= expGatewayLockUntil) {
-
                 window.logExp(`🚀 Teleportuję do: ${nextStepMap}`, "#00acc1");
-
                 expGatewayLockUntil = now + 4000; expMapTransitionCooldown = now + 4000; expLastActionTime = now + 500;
-
                 if (typeof window.handleTeleportNPC === 'function') window.handleTeleportNPC(nextStepMap);
-
             }
-
             return;
-
         }
 
-
-
         if (distToDoor > 0) {
-
             if (displayTarget) displayTarget.innerText = `Przejście do: ${nextStepMap}`;
-
-
-
             let isNewDoorDest = (window.expLastMoveTx !== dx || window.expLastMoveTy !== dy);
-
+            
             if (isNewDoorDest) {
-
                 window.logExp(`🚪 Idę do: ${nextStepMap}`, "#ba68c8");
-
                 Engine.hero.autoGoTo({ x: dx, y: dy });
-
-
-
                 window.expLastMoveTx = dx; window.expLastMoveTy = dy;
-
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-
                 window.expTargetPursuitStart = now;
-
                 window.expMoveLockUntil = now + 1000;
-
             } else if (now > window.expMoveLockUntil) {
-
-
-
-                // Taka sama ochrona fizyczna przed zacięciem jak w przypadku mobów
-
                 if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
-
                     window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-
                     window.expTargetPursuitStart = now;
-
                 }
-
-
-
                 let timeStandingStill = now - window.expTargetPursuitStart;
 
-
-
-           if (timeStandingStill > 2500) {
+                if (timeStandingStill > 2500) {
                     window.logExp(`🚨 Brama na [${dx}, ${dy}] (do ${nextStepMap}) jest zablokowana! Pomijam tę mapę.`, "#ff5252");
-
-                    // Magia: Tymczasowo oznaczamy niedostępną mapę jako "wyczyszczoną", aby algorytm od razu poszedł do następnej!
                     window.mapClearTimes[nextStepMap] = now;
-
-                    expMapTransitionCooldown = now + 500; // Szybki reset, bot od razu przelicza nową trasę
+                    expMapTransitionCooldown = now + 500; 
                     window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                     return;
                 }
-
-
-
                 if (timeStandingStill > 1500 && (now % 1500 < 150)) Engine.hero.autoGoTo({ x: dx, y: dy });
-
             }
-
             expLastActionTime = now + 100;
-
             return;
-
         }
 
+        // --- FIZYCZNE WEJŚCIE W BRAMĘ (STOIMY NA BRAMIE) ---
+        if (now > expGatewayLockUntil) {
+            if (!window.expGatewayArrivalTime) window.expGatewayArrivalTime = Date.now();
 
+            // Czekamy 12 sekund na przejście
+            if (Date.now() - window.expGatewayArrivalTime > 12000) {
+                if (window.logHero) window.logHero("❌ Brama zamknięta lub uszkodzona! Blokuję wejście na 5 minut i idę dalej...", "#ff5252");
+                if (window.logExp) window.logExp("❌ Brama zablokowana! Zmieniam plany...", "#ff5252");
+                
+                if (!window.__bannedMaps) window.__bannedMaps = {};
+                window.__bannedMaps[nextStepMap] = Date.now() + 300000; 
 
-// --- FIZYCZNE WEJŚCIE W BRAMĘ (CZEKANIE NA ZMIANĘ MAPY) ---
-                if (now > expGatewayLockUntil) {
-                    if (!window.expGatewayArrivalTime) window.expGatewayArrivalTime = Date.now();
+                if (typeof window.nextExpMapIndex !== 'undefined') window.nextExpMapIndex++;
+                if (typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex++;
 
-                    // Czekamy 12 sekund na przejście, jeśli gra nas ignoruje
-                    if (Date.now() - window.expGatewayArrivalTime > 12000) {
-                        if (window.logHero) window.logHero("❌ Brama zamknięta lub uszkodzona! Blokuję wejście na 5 minut i idę dalej...", "#ff5252");
-                        if (window.logExp) window.logExp("❌ Brama zablokowana! Zmieniam plany...", "#ff5252");
-                    
-                        // 1. Dodajemy zepsutą mapę do czarnej listy na 5 minut
-                        if (!window.__bannedMaps) window.__bannedMaps = {};
-                        window.__bannedMaps[nextStepMap] = Date.now() + 300000; 
+                window.__movementLock = Date.now() + 2000; 
+                window.lastMapChange = Date.now(); 
+                window.lastGatewayAttempt = Date.now();
+                window.currentPath = null; 
+                window.mapClearTimes[nextStepMap] = now; // Pomijamy na teraz
 
-                        // 2. Wymuszamy porzucenie obecnego zadania
-                        if (typeof window.nextExpMapIndex !== 'undefined') window.nextExpMapIndex++;
-                        if (typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex++;
-
-                        // 3. Blokada nadpobudliwości bota
-                        window.__movementLock = Date.now() + 2000; 
-                        window.lastMapChange = Date.now(); 
-                        window.lastGatewayAttempt = Date.now();
-                        window.currentPath = null; 
-
-                        // 4. Fizyczny krok w tył
-                        let hx = parseInt(Engine.hero.d.x);
-                        let hy = parseInt(Engine.hero.d.y);
-                        let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
-                        for (let d of dirs) {
-                            let nx = hx + d[0], ny = hy + d[1];
-                            if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
-                                if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
-                                else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
-                                else window._g(`walk=${nx},${ny}`);
-                                break;
-                            }
-                        }
+                let hx = parseInt(Engine.hero.d.x);
+                let hy = parseInt(Engine.hero.d.y);
+                let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
+                for (let d of dirs) {
+                    let nx = hx + d[0], ny = hy + d[1];
+                    if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
+                        if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                        else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
+                        else window._g(`walk=${nx},${ny}`);
+                        break;
                     }
                 }
-            } // Koniec warunku (distToDoor > 0)
-        } // Koniec warunku (targetGateway)
-    } // !!! ZAMKNIĘCIE FUNKCJI runExpLogic (Tego brakowało!) !!!
+                window.expGatewayArrivalTime = 0;
+            }
+        }
+    }
+} // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
 
-    setInterval(runExpLogic, 150);
+setInterval(runExpLogic, 150);
     // --- BAZA DANYCH PROFILI EXPOWISK ---
 
     window.saveCurrentExpProfile = function() {
@@ -8373,147 +8247,122 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-    // --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
-        setTimeout(() => {
-            // Zabezpieczenie przed dublowaniem okna przy odświeżaniu skryptu
-            if (document.getElementById('accStats')) document.getElementById('accStats').nextElementSibling.remove();
-            if (document.getElementById('accStats')) document.getElementById('accStats').remove();
+   // --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
+    setTimeout(() => {
+        if (document.getElementById('accStats')) document.getElementById('accStats').nextElementSibling?.remove();
+        if (document.getElementById('accStats')) document.getElementById('accStats').remove();
 
-            let advContainer = document.getElementById('accAdvancedExpContent');
-            if (advContainer) {
-                let statsHtml = `
-                    <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
-                    <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy bota:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto (brutto):</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
-                    </div>
-                `;
-                advContainer.insertAdjacentHTML('afterend', statsHtml);
-            }
+        let advContainer = document.getElementById('accAdvancedExpContent');
+        if (advContainer) {
+            let statsHtml = `
+                <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
+                <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy bota:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
+                    <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto (brutto):</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
+                </div>
+            `;
+            advContainer.insertAdjacentHTML('afterend', statsHtml);
+        }
 
-            window.sessionStats = {
-                active: false,
-                startTime: 0,
-                expGained: 0,
-                goldGained: 0,
-                lastExp: -1,
-                lastGold: -1,
-                expPerHour: 0,
-                timeTnlStr: "--:--:--",
-                lastCalcTime: 0
-            };
+        window.sessionStats = { active: false, startTime: 0, expGained: 0, goldGained: 0, lastExp: -1, lastGold: -1, expPerHour: 0, timeTnlStr: "--:--:--", lastCalcTime: 0 };
 
-            let btnExp = document.getElementById('btnStartExp');
-            if (btnExp) {
-                btnExp.addEventListener('click', () => {
-                    setTimeout(() => {
-                        if (window.isExping) {
-                            window.sessionStats.active = true;
-                            window.sessionStats.startTime = Date.now();
-                            window.sessionStats.expGained = 0;
-                            window.sessionStats.goldGained = 0;
-                            window.sessionStats.expPerHour = 0;
-                            window.sessionStats.timeTnlStr = "--:--:--";
-                            window.sessionStats.lastCalcTime = 0;
-                            
-                            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                                window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                                window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
-                            }
-                        } else {
-                            window.sessionStats.active = false;
+        let btnExp = document.getElementById('btnStartExp');
+        if (btnExp) {
+            btnExp.addEventListener('click', () => {
+                setTimeout(() => {
+                    if (window.isExping) {
+                        window.sessionStats.active = true;
+                        window.sessionStats.startTime = Date.now();
+                        window.sessionStats.expGained = 0; window.sessionStats.goldGained = 0;
+                        window.sessionStats.expPerHour = 0; window.sessionStats.timeTnlStr = "--:--:--"; window.sessionStats.lastCalcTime = 0;
+                        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                            window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                            window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
                         }
-                    }, 100);
-                });
+                    } else {
+                        window.sessionStats.active = false;
+                    }
+                }, 100);
+            });
+        }
+
+        if (window.statsIntervalId) clearInterval(window.statsIntervalId);
+
+        window.statsIntervalId = setInterval(() => {
+            if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+
+            let d = Engine.hero.d;
+            let currentExp = parseInt(d.exp) || 0;
+            let currentGold = parseInt(d.gold) || 0;
+
+            if (window.sessionStats.lastExp !== -1) {
+                let expDiff = currentExp - window.sessionStats.lastExp;
+                if (expDiff > 0) window.sessionStats.expGained += expDiff;
+                else if (expDiff < 0) window.sessionStats.expGained += currentExp; 
+            }
+            window.sessionStats.lastExp = currentExp;
+
+            if (window.sessionStats.lastGold !== -1) {
+                let goldDiff = currentGold - window.sessionStats.lastGold;
+                if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
+            }
+            window.sessionStats.lastGold = currentGold;
+
+            let elapsedMs = Date.now() - window.sessionStats.startTime;
+            let elapsedSec = Math.floor(elapsedMs / 1000);
+            
+            let h = Math.floor(elapsedSec / 3600);
+            let m = Math.floor((elapsedSec % 3600) / 60);
+            let s = elapsedSec % 60;
+            let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+            let calcInterval = elapsedSec < 60 ? 5 : 60; 
+
+            if (elapsedSec > 0 && (elapsedSec - window.sessionStats.lastCalcTime >= calcInterval || window.sessionStats.expPerHour === 0)) {
+                window.sessionStats.lastCalcTime = elapsedSec;
+                window.sessionStats.expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
+
+                // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA
+                let missingExp = 0;
+                if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
+                    missingExp = parseInt(d.exp_left);
+                } else {
+                    let maxExp = parseInt(d.ttl_exp) || parseInt(d.next_lvl_exp) || parseInt(d.exp_req) || parseInt(d.max_exp) || 0;
+                    if (maxExp > currentExp) missingExp = maxExp - currentExp;
+                    else if (maxExp > 0) missingExp = maxExp; 
+                }
+
+                if (missingExp > 0 && window.sessionStats.expPerHour > 0) {
+                    let secsTnl = Math.floor((missingExp / window.sessionStats.expPerHour) * 3600);
+                    let hTnl = Math.floor(secsTnl / 3600);
+                    let mTnl = Math.floor((secsTnl % 3600) / 60);
+                    let sTnl = secsTnl % 60;
+                    if (hTnl > 99) window.sessionStats.timeTnlStr = "+99 godzin";
+                    else window.sessionStats.timeTnlStr = `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
+                } else if (missingExp === 0) {
+                    window.sessionStats.timeTnlStr = "Max Lvl?";
+                } else {
+                    window.sessionStats.timeTnlStr = "Obliczanie...";
+                }
             }
 
-            if (window.statsIntervalId) clearInterval(window.statsIntervalId);
+            let elTime = document.getElementById('statSessionTime');
+            let elExp = document.getElementById('statExpGained');
+            let elExpH = document.getElementById('statExpPerHour');
+            let elTnl = document.getElementById('statTimeTnl');
+            let elGold = document.getElementById('statGoldGained');
 
-            window.statsIntervalId = setInterval(() => {
-                if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+            if (elTime) elTime.innerText = timeStr;
+            if (elExp) elExp.innerText = window.sessionStats.expGained.toLocaleString('pl-PL');
+            if (elExpH) elExpH.innerText = window.sessionStats.expPerHour.toLocaleString('pl-PL');
+            if (elTnl) elTnl.innerText = window.sessionStats.timeTnlStr;
+            if (elGold) elGold.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł";
 
-                let d = Engine.hero.d;
-                let currentExp = parseInt(d.exp) || 0;
-                let currentGold = parseInt(d.gold) || 0;
-
-                // --- OBLICZANIE EXP ---
-                if (window.sessionStats.lastExp !== -1) {
-                    let expDiff = currentExp - window.sessionStats.lastExp;
-                    if (expDiff > 0) window.sessionStats.expGained += expDiff;
-                    else if (expDiff < 0) window.sessionStats.expGained += currentExp; 
-                }
-                window.sessionStats.lastExp = currentExp;
-
-                // --- OBLICZANIE ZŁOTA ---
-                if (window.sessionStats.lastGold !== -1) {
-                    let goldDiff = currentGold - window.sessionStats.lastGold;
-                    if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
-                }
-                window.sessionStats.lastGold = currentGold;
-
-                // --- STOPER CZASU (Odświeża się co 1 sek) ---
-                let elapsedMs = Date.now() - window.sessionStats.startTime;
-                let elapsedSec = Math.floor(elapsedMs / 1000);
-                
-                let h = Math.floor(elapsedSec / 3600);
-                let m = Math.floor((elapsedSec % 3600) / 60);
-                let s = elapsedSec % 60;
-                let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-
-                // --- STABILIZACJA CO 60 SEKUND (Kalkulator) ---
-                // Przez pierwszą minutę odświeża się co 5 sekund, potem blokuje się na aktualizacje co 60 sekund!
-                let calcInterval = elapsedSec < 60 ? 5 : 60; 
-
-                if (elapsedSec > 0 && (elapsedSec - window.sessionStats.lastCalcTime >= calcInterval || window.sessionStats.expPerHour === 0)) {
-                    window.sessionStats.lastCalcTime = elapsedSec;
-                    
-                    window.sessionStats.expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
-
-                  // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA (Naprawa błędu "--:--:--")
-                    let missingExp = 0;
-                    
-                    if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
-                        missingExp = parseInt(d.exp_left);
-                    } else {
-                        let maxExp = parseInt(d.next_lvl_exp) || parseInt(d.exp_req) || parseInt(d.ttl_exp) || parseInt(d.max_exp) || 0;
-                        if (maxExp > currentExp) missingExp = maxExp - currentExp;
-                        else if (maxExp > 0) missingExp = maxExp; 
-                    }
-
-                    // Przeliczanie na minuty i godziny
-                    if (missingExp > 0 && window.sessionStats.expPerHour > 0) {
-                        let secsTnl = Math.floor((missingExp / window.sessionStats.expPerHour) * 3600);
-                        let hTnl = Math.floor(secsTnl / 3600);
-                        let mTnl = Math.floor((secsTnl % 3600) / 60);
-                        let sTnl = secsTnl % 60;
-                        
-                        if (hTnl > 99) window.sessionStats.timeTnlStr = "+99 godzin";
-                        else window.sessionStats.timeTnlStr = `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
-                    } else if (missingExp === 0) {
-                        window.sessionStats.timeTnlStr = "Max Lvl?";
-                    } else {
-                        window.sessionStats.timeTnlStr = "Obliczanie...";
-                    }
-                } // Koniec klamry od stabilizacji co 60 sekund
-
-                // --- PODMIANA W INTERFEJSIE ---
-                let elTime = document.getElementById('statSessionTime');
-                let elExp = document.getElementById('statExpGained');
-                let elExpH = document.getElementById('statExpPerHour');
-                let elTnl = document.getElementById('statTimeTnl');
-                let elGold = document.getElementById('statGoldGained');
-
-                if (elTime) elTime.innerText = timeStr;
-                if (elExp) elExp.innerText = window.sessionStats.expGained.toLocaleString('pl-PL');
-                if (elExpH) elExpH.innerText = window.sessionStats.expPerHour.toLocaleString('pl-PL');
-                if (elTnl) elTnl.innerText = window.sessionStats.timeTnlStr;
-                if (elGold) elGold.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł";
-
-            }, 1000);
-        }, 2500);
+        }, 1000);
+    }, 2500);
             // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
         setTimeout(() => {
             if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
