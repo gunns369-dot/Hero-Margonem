@@ -5518,7 +5518,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
 
-                 // 🚨 ZŁOTY WARUNEK: Zatrzymanie na 2.5 sekundy a mob wciąż jest daleko!
+                // 🚨 ZŁOTY WARUNEK: Zatrzymanie na 2.5 sekundy a mob wciąż jest daleko!
                     if (timeStandingStill > 2500) {
                         window.logExp(`🚨 Utknięto na [${hx}, ${hy}]. Omijam: ${target.nick}.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
@@ -5540,12 +5540,18 @@ if (hx !== expLastX || hy !== expLastY) {
                         return;
                     }
 
-
+                    // Co 1.5 sekundy przypominamy grze o ruchu (anty-lag)
+                    if (timeStandingStill > 1500 && (now % 1500 < 150)) {
+                        Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                    }
+                }
+            }
+            expLastActionTime = now + 100;
+            return;
+        }
 
         // --- WALKA ---
-
         if (targetDist <= 1) {
-
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
 
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
