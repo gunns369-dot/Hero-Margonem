@@ -2011,42 +2011,47 @@ function autoDetectEngineData() {
         window.executeRushStep();
     };
 
-  // --- SYSTEM ZWOJÓW TELEPORTACJI ---
-    window.findTeleportScroll = function(targetMapName) {
-        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return null;
+// --- SYSTEM ZWOJÓW TELEPORTACJI Z BAZĄ MAP (V2) ---
+    window.getAvailableTeleports = function() {
+        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return [];
         let items = typeof Engine.heroEquipment.getHItems === 'function' ? Object.values(Engine.heroEquipment.getHItems()) : [];
         if (items.length === 0 && Engine.items && Engine.items.d) items = Object.values(Engine.items.d);
 
         let heroLvl = parseInt(Engine.hero.d.lvl) || 1;
-        let targetLower = targetMapName.toLowerCase().trim();
+        let tps = [];
+        let allMapNames = typeof globalGateways !== 'undefined' ? Object.keys(globalGateways) : [];
 
         for (let i of items) {
             let itemData = i.d || i;
             if (!itemData || itemData.del || itemData.dead) continue;
-            // Sprawdzamy tylko przedmioty leżące w plecaku (status 0)
+            // Tylko przedmioty leżące luźno w torbach
             if (Number(itemData.st) !== 0) continue;
 
             let statStr = String(itemData.stat || i._cachedStats?.stat || "").toLowerCase();
             let ttText = String(i.tooltip_text || itemData.tooltip_text || "").toLowerCase();
 
             let mapDest = null;
-            // Próba 1: Surowe staty z silnika gry (np. teleport=Andarum Ilami,x,y)
             let match = statStr.match(/teleport=([^,;]+)/i);
             if (match) mapDest = match[1].trim();
 
-            // Próba 2: Opis z tooltippa (np. Teleportuje do: Andarum Ilami)
             if (!mapDest) {
-                let ttMatch = ttText.match(/teleportuje do:\s*([^<]+)/i);
+                let ttMatch = ttText.match(/teleportuje do:\s*([^<]+)/i) || ttText.match(/teleportacja do:\s*([^<]+)/i);
                 if (ttMatch) mapDest = ttMatch[1].trim();
             }
 
-            if (mapDest && mapDest.toLowerCase() === targetLower) {
+            if (mapDest) {
                 let reqLvlMatch = statStr.match(/reqlvl[=:](\d+)/) || statStr.match(/wymagany poziom:\s*(\d+)/);
-                if (reqLvlMatch && heroLvl < parseInt(reqLvlMatch[1])) continue; // Nie masz levela na ten zwój
-                return itemData.id;
+                if (reqLvlMatch && heroLvl < parseInt(reqLvlMatch[1])) continue;
+                
+                // Kluczowe: Dopasowujemy wielkość liter do bazy map!
+                let exactMapName = allMapNames.find(k => k.toLowerCase() === mapDest.toLowerCase()) || mapDest;
+                // Jeśli jakimś cudem nie ma na liście, duże litery ratunkowo:
+                if (!allMapNames.includes(exactMapName)) exactMapName = exactMapName.replace(/\b\w/g, c => c.toUpperCase());
+
+                tps.push({ id: itemData.id, map: exactMapName });
             }
         }
-        return null;
+        return tps;
     };
 
     window.useItemById = function(itemId) {
@@ -2088,34 +2093,38 @@ function autoDetectEngineData() {
 
         let nextMap = null;
         let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
+        let currentDistance = path ? path.length : 999;
 
-        // --- INTELIGENTNE ZWOJE TELEPORTACJI ---
-        let scrollId = window.findTeleportScroll(rushTarget);
-        let targetScrollMap = rushTarget;
+        // --- MĄDRE ZWOJE TELEPORTACJI Z KALKULATOREM TRASY ---
+        let tps = window.getAvailableTeleports();
+        let bestTp = null;
+        // Wymagamy skrócenia trasy przynajmniej o 1 mapę, żeby opłacało się zużyć zwój (np. z 4 map na 2)
+        let bestDist = currentDistance - 1; 
 
-        // Jeśli nie mamy zwoju prosto do celu, sprawdzamy, czy nie mamy zwoju na jakąkolwiek mapę po drodze!
-        // Szukamy "od końca" ścieżki, żeby zwój przeniósł nas jak najdalej.
-        if (!scrollId && path && path.length > 1) {
-            for (let i = path.length - 1; i > 0; i--) {
-                scrollId = window.findTeleportScroll(path[i]);
-                if (scrollId) {
-                    targetScrollMap = path[i];
-                    break;
-                }
+        for (let tp of tps) {
+            if (tp.map === currentSysMap) continue; // Nie używaj zwoju na mapę, na której stoisz
+            
+            let tpPath = typeof getShortestPath === 'function' ? getShortestPath(tp.map, rushTarget) : null;
+            if (tpPath && tpPath.length < bestDist) {
+                bestDist = tpPath.length;
+                bestTp = tp;
+            } else if (tp.map.toLowerCase() === rushTarget.toLowerCase()) {
+                // Bezpośredni skok ratunkowy (gdyby pathfinder głupiał na exact matchu)
+                bestDist = 0;
+                bestTp = tp;
             }
         }
 
-        if (scrollId) {
-            if (window._lastRushNextMap !== targetScrollMap) {
-                let msg = `📜 Czytam zwój teleportacji do: ${targetScrollMap}!`;
+        if (bestTp) {
+            if (window._lastRushNextMap !== bestTp.map) {
+                let msg = `📜 Używam zwoju: ${bestTp.map}! (Trasa skraca się z ${currentDistance} do ${bestDist} map)`;
                 if (window.logExp) window.logExp(msg, "#e040fb");
                 if (window.logHero) window.logHero(msg, "#e040fb");
-                window._lastRushNextMap = targetScrollMap;
+                window._lastRushNextMap = bestTp.map;
             }
             clearTimeout(rushInterval);
-            window.useItemById(scrollId);
-            
-            // Czekamy 2.5 sekundy, żeby zagrała animacja użycia i przeładowała się mapa
+            window.useItemById(bestTp.id);
+            // Czekamy na przelot i animację
             rushInterval = setTimeout(window.executeRushStep, 2500);
             return;
         }
