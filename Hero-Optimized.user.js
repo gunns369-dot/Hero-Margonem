@@ -8274,85 +8274,99 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 2000);
 // --- DAEMON: KULOODPORNY KALKULATOR STATYSTYK ---
-    let statsData = { active: false, startTs: 0, gainedExp: 0, gainedGold: 0, lastExp: -1, lastGold: -1, expPerHour: 0, tnl: "--:--:--" };
+    if (window.statsIntervalId) clearInterval(window.statsIntervalId);
+    
+    window.botStats = {
+        active: false, startTs: 0, gainedExp: 0, gainedGold: 0,
+        lastExp: -1, lastGold: -1, expPerHour: 0, tnl: "--:--:--"
+    };
 
-    setInterval(() => {
-        // Sprawdza globalne i lokalne flagi ruchu (działa w każdym trybie)
-        let isWorking = (window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling) || (typeof isRushing !== 'undefined' && isRushing));
-
-        if (isWorking && !statsData.active) {
-            statsData.active = true;
-            statsData.startTs = Date.now();
-            statsData.gainedExp = 0;
-            statsData.gainedGold = 0;
-            statsData.expPerHour = 0;
-            statsData.tnl = "--:--:--";
-            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                statsData.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                statsData.lastGold = parseInt(Engine.hero.d.gold) || 0;
-            }
-        } else if (!isWorking && statsData.active) {
-            statsData.active = false;
-        }
-
-        if (!statsData.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
-
-        let d = Engine.hero.d;
-        let curExp = parseInt(d.exp) || 0;
-        let curGold = parseInt(d.gold) || 0;
-
-        if (statsData.lastExp !== -1) {
-            let diff = curExp - statsData.lastExp;
-            if (diff > 0) statsData.gainedExp += diff;
-            else if (diff < 0) statsData.gainedExp += curExp; 
-        }
-        statsData.lastExp = curExp;
-
-        if (statsData.lastGold !== -1) {
-            let diff = curGold - statsData.lastGold;
-            if (diff > 0) statsData.gainedGold += diff;
-        }
-        statsData.lastGold = curGold;
-
-        let sec = Math.floor((Date.now() - statsData.startTs) / 1000);
-        if (sec < 1) sec = 1;
+    window.statsIntervalId = setInterval(() => {
+        // 1. Bezwzględne sprawdzenie statusu - czyścimy stoper, jeśli gra się ładuje
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || Engine.map.isLoading) return;
         
-        let h = Math.floor(sec / 3600);
-        let m = Math.floor((sec % 3600) / 60);
-        let s = sec % 60;
-        let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        let h = Engine.hero.d;
+        let btnExp = document.getElementById('btnStartExp');
+        let btnPatrol = document.getElementById('btnStartStop');
+        
+        // 2. Czytanie fizycznego tekstu na przyciskach (Omija wszelkie problemy ze zmiennymi!)
+        let isExpingNow = btnExp && btnExp.innerText.includes('STOP');
+        let isPatrollingNow = btnPatrol && btnPatrol.innerText.includes('STOP');
+        let isRushingNow = btnPatrol && btnPatrol.innerText.includes('RUSH');
+        
+        let isWorking = (isExpingNow || isPatrollingNow || isRushingNow || window.isExping || window.isPatrolling || window.isRushing);
+
+        // 3. Zarządzanie zasilaniem kalkulatora
+        if (isWorking && !window.botStats.active) {
+            window.botStats.active = true;
+            window.botStats.startTs = Date.now();
+            window.botStats.gainedExp = 0;
+            window.botStats.gainedGold = 0;
+            window.botStats.lastExp = parseInt(h.exp) || 0;
+            window.botStats.lastGold = parseInt(h.gold) || 0;
+        } else if (!isWorking && window.botStats.active) {
+            window.botStats.active = false;
+        }
+
+        if (!window.botStats.active) return; // Jeśli bot stoi, nie marnujemy zasobów
+
+        // 4. Matematyka
+        let curExp = parseInt(h.exp) || 0;
+        let curGold = parseInt(h.gold) || 0;
+
+        if (window.botStats.lastExp !== -1) {
+            let diffExp = curExp - window.botStats.lastExp;
+            if (diffExp > 0) window.botStats.gainedExp += diffExp;
+            else if (diffExp < 0) window.botStats.gainedExp += curExp; // Awans
+        }
+        window.botStats.lastExp = curExp;
+
+        if (window.botStats.lastGold !== -1) {
+            let diffGold = curGold - window.botStats.lastGold;
+            if (diffGold > 0) window.botStats.gainedGold += diffGold;
+        }
+        window.botStats.lastGold = curGold;
+
+        // 5. Czas
+        let sec = Math.floor((Date.now() - window.botStats.startTs) / 1000);
+        if (sec < 1) sec = 1;
 
         if (sec % 3 === 0 || sec === 1) {
-            statsData.expPerHour = Math.floor((statsData.gainedExp / sec) * 3600);
+            window.botStats.expPerHour = Math.floor((window.botStats.gainedExp / sec) * 3600);
             
             let missingExp = 0;
-            if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
-                missingExp = parseInt(d.exp_left);
+            if (h.exp_left !== undefined && parseInt(h.exp_left) > 0) {
+                missingExp = parseInt(h.exp_left);
             } else {
-                let maxExp = parseInt(d.ttl_exp) || parseInt(d.next_lvl_exp) || parseInt(d.exp_req) || parseInt(d.max_exp) || 0;
+                let maxExp = parseInt(h.ttl_exp) || parseInt(h.next_lvl_exp) || parseInt(h.exp_req) || parseInt(h.max_exp) || 0;
                 if (maxExp > curExp) missingExp = maxExp - curExp;
                 else if (maxExp > 0) missingExp = maxExp; 
             }
 
-            if (missingExp > 0 && statsData.expPerHour > 0) {
-                let tnlSec = Math.floor((missingExp / statsData.expPerHour) * 3600);
+            if (missingExp > 0 && window.botStats.expPerHour > 0) {
+                let tnlSec = Math.floor((missingExp / window.botStats.expPerHour) * 3600);
                 let th = Math.floor(tnlSec / 3600);
                 let tm = Math.floor((tnlSec % 3600) / 60);
                 let ts = tnlSec % 60;
-                statsData.tnl = th > 99 ? "+99 godzin" : `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+                window.botStats.tnl = th > 99 ? "+99 godzin" : `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
             } else if (missingExp === 0) {
-                statsData.tnl = "Max Lvl?";
+                window.botStats.tnl = "Max Lvl?";
             } else {
-                statsData.tnl = "Obliczanie...";
+                window.botStats.tnl = "Obliczanie...";
             }
         }
 
-        // KULOODPORNA AKTUALIZACJA UI (Nadpisuje wszystkie "Duchy" okien)
-        document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
-        document.querySelectorAll('#statExpGained').forEach(el => el.innerText = statsData.gainedExp.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statGoldGained').forEach(el => el.innerText = statsData.gainedGold.toLocaleString('pl-PL') + " zł");
-        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = statsData.expPerHour.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerText = statsData.tnl);
+        // 6. Bezpośrednie wstrzyknięcie do HTML
+        let hh = Math.floor(sec / 3600).toString().padStart(2, '0');
+        let mm = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+        let ss = (sec % 60).toString().padStart(2, '0');
+        let timeStr = `${hh}:${mm}:${ss}`;
+
+        document.querySelectorAll('#statSessionTime').forEach(el => el.innerHTML = timeStr);
+        document.querySelectorAll('#statExpGained').forEach(el => el.innerHTML = window.botStats.gainedExp.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statGoldGained').forEach(el => el.innerHTML = window.botStats.gainedGold.toLocaleString('pl-PL') + " zł");
+        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerHTML = window.botStats.expPerHour.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerHTML = window.botStats.tnl);
 
     }, 1000);
             // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
