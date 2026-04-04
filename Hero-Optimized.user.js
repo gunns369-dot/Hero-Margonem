@@ -5426,18 +5426,16 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
     });
 
-    // 7. STABILNE SORTOWANIE
+// 7. STABILNE SORTOWANIE (Kto bliżej, ten ginie - bez priorytetu dla Elit)
     validMobs.sort((a, b) => {
-        let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
-        if (rankVal[a.ranga] !== rankVal[b.ranga]) return rankVal[b.ranga] - rankVal[a.ranga];
-
-        // Bezwzględny priorytet, ALE TYLKO DOPÓKI TRWA LOCK (3-5 sekund)
+        // Bezwzględny priorytet utrzymania celu (Lock na 3-5 sekund)
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
 
-        // Jeśli lock minął, wygrywa po prostu ten, kto jest obecnie najbliżej!
+        // Główna zasada: Bije to, co jest najbliżej (niezależnie czy to Elita, czy zwykły mob)
         if (a.dist !== b.dist) return a.dist - b.dist;
         
+        // Zabezpieczenie przed kręceniem się w miejscu
         return String(a.id).localeCompare(String(b.id));
     });
 
