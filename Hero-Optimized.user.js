@@ -4244,6 +4244,7 @@ function optimizeRoute() {
         // Poszukiwanie bramy prowadzącej do następnej mapy (TYLKO DO OBLICZEŃ, BEZ RUCHU!)
         if (hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0 && currentRouteIndex !== -1) {
             let mapList = heroMapOrder[hero];
+            // Ulepszenie: Następna mapa w pętli. Jeśli kończymy listę (np. indeks 3 z 4), weź indeks 0
             let nextMap = mapList[(currentRouteIndex + 1) % mapList.length];
             let path = getShortestPath(currentSysMap, nextMap);
 
@@ -4281,12 +4282,11 @@ function optimizeRoute() {
             cx = nextPt[0]; cy = nextPt[1];
         }
 
-        // Na koniec dodajemy "finalPoint" wyliczony obok drzwi
+        // Na koniec dodajemy "finalPoint" wyliczony obok drzwi (Teraz działa zawsze na końcu każdej mapy i pętli!)
         if (finalPoint) newRoute.push(finalPoint);
 
         currentCordsList = newRoute;
     }
-
 
 
     function safeGoTo(targetX, targetY, useRandom) {
