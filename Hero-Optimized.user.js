@@ -7344,9 +7344,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
                     
-                    // UWAGA: Usunięto lokalne oszukiwanie wartości HP. 
-                    // Bot zaczeka spokojnie te 600ms, aż serwer faktycznie prześle mu, że HP wzrosło!
-                    window.lastHealTime = Date.now() + 600; 
+                   // SZYBKIE LECZENIE W BIEGU: Bot pije mikstury dwukrotnie szybciej (co 300ms)
+                    window.lastHealTime = Date.now() + 300; 
+                    setTimeout(() => { window.isHealLocked = false; }, 250);
                     setTimeout(() => { window.isHealLocked = false; }, 500);
                 } else {
                     window.isRegeneratingToFull = false;
