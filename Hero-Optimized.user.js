@@ -2069,7 +2069,7 @@ function autoDetectEngineData() {
         }
     };
 
-  window.checkRushArrival = function() {
+ window.checkRushArrival = function() {
         if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
         let currentSysMap = lastMapName;
         if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
@@ -2111,31 +2111,32 @@ function autoDetectEngineData() {
             
             // SKRÓCONY CZAS: Reaguje błyskawicznie po 3.5 sekundach!
             if (Date.now() - window.rushGatewayArrivalTime > 3500) {
-     if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
-                    if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
+                if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
+                if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
                     
-                    // ZAKŁADAMY KAGANIEC: Blokujemy silnik Rusha na 1.5 sekundy!
-                    window.__movementLock = Date.now() + 1500; 
+                // ZAKŁADAMY KAGANIEC: Blokujemy silnik Rusha na 1.5 sekundy!
+                window.__movementLock = Date.now() + 1500; 
                     
-                    // Resetujemy licznik, żeby nie spamowało komunikatu
-                    if (typeof window.lastMapChange !== 'undefined') window.lastMapChange = Date.now(); 
-                    if (typeof window.lastGatewayAttempt !== 'undefined') window.lastGatewayAttempt = Date.now();
+                // Resetujemy licznik, żeby nie spamowało komunikatu
+                if (typeof window.lastMapChange !== 'undefined') window.lastMapChange = Date.now(); 
+                if (typeof window.lastGatewayAttempt !== 'undefined') window.lastGatewayAttempt = Date.now();
                     
-                    let hx = parseInt(Engine.hero.d.x);
-                    let hy = parseInt(Engine.hero.d.y);
+                let hx = parseInt(Engine.hero.d.x);
+                let hy = parseInt(Engine.hero.d.y);
                     
-                    // Mądry krok w tył: bot szuka dookoła siebie wolnej kratki, żeby nie wejść w ścianę
-                    let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
-                    for (let d of dirs) {
-                        let nx = hx + d[0], ny = hy + d[1];
-                        if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
-                            // Wymuszamy fizyczny ruch, omijając naszą własną blokadę (Strażnika)
-                            if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
-                            else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
-                            else window._g(`walk=${nx},${ny}`);
-                            break;
-                        }
+                // Mądry krok w tył: bot szuka dookoła siebie wolnej kratki, żeby nie wejść w ścianę
+                let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
+                for (let d of dirs) {
+                    let nx = hx + d[0], ny = hy + d[1];
+                    if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
+                        if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                        else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
+                        else window._g(`walk=${nx},${ny}`);
+                        break;
                     }
+                }
+            } // Koniec mechaniki kroku w tył
+        } // Koniec warunku stania na bramie
         
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
@@ -5762,46 +5763,49 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
 
-// Wejście w bramę
-        // --- REAKCJA NA ZAMKNIĘTĄ / ZEPSUTĄ BRAMĘ ---
-                    if (window.logHero) window.logHero("❌ Brama zamknięta lub uszkodzona! Blokuję wejście na 5 minut i idę dalej...", "#ff5252");
-                    if (window.logExp) window.logExp("❌ Brama zablokowana! Zmieniam plany...", "#ff5252");
+// --- FIZYCZNE WEJŚCIE W BRAMĘ (CZEKANIE NA ZMIANĘ MAPY) ---
+                if (now > expGatewayLockUntil) {
+                    if (!window.expGatewayArrivalTime) window.expGatewayArrivalTime = Date.now();
+
+                    // Czekamy 12 sekund na przejście, jeśli gra nas ignoruje
+                    if (Date.now() - window.expGatewayArrivalTime > 12000) {
+                        if (window.logHero) window.logHero("❌ Brama zamknięta lub uszkodzona! Blokuję wejście na 5 minut i idę dalej...", "#ff5252");
+                        if (window.logExp) window.logExp("❌ Brama zablokowana! Zmieniam plany...", "#ff5252");
                     
-                    // 1. Dodajemy zepsutą mapę (cel za bramą) do czarnej listy na 5 minut
-                    if (!window.__bannedMaps) window.__bannedMaps = {};
-                    if (window.currentPath && window.currentPath.length > 1) {
-                        let zepsutaMapa = window.currentPath[1]; 
-                        window.__bannedMaps[zepsutaMapa] = Date.now() + 300000; // 300 tys. ms = 5 min
-                    }
+                        // 1. Dodajemy zepsutą mapę do czarnej listy na 5 minut
+                        if (!window.__bannedMaps) window.__bannedMaps = {};
+                        window.__bannedMaps[nextStepMap] = Date.now() + 300000; 
 
-                    // 2. Wymuszamy porzucenie obecnego zadania i przejście do następnego expowiska!
-                    if (window.isExping && typeof window.nextExpMapIndex !== 'undefined') window.nextExpMapIndex++;
-                    if (window.isPatrolling && typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex++;
+                        // 2. Wymuszamy porzucenie obecnego zadania
+                        if (typeof window.nextExpMapIndex !== 'undefined') window.nextExpMapIndex++;
+                        if (typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex++;
 
-                    // 3. Blokada nadpobudliwości bota i wymuszenie wyliczenia nowej drogi
-                    window.__movementLock = Date.now() + 2000; 
-                    window.lastMapChange = Date.now(); 
-                    window.lastGatewayAttempt = Date.now();
-                    window.currentPath = null; // Niszczymy starą trasę
+                        // 3. Blokada nadpobudliwości bota
+                        window.__movementLock = Date.now() + 2000; 
+                        window.lastMapChange = Date.now(); 
+                        window.lastGatewayAttempt = Date.now();
+                        window.currentPath = null; 
 
-                    // 4. Fizyczny krok w tył, żeby odkleić się od ściany
-                    let hx = parseInt(Engine.hero.d.x);
-                    let hy = parseInt(Engine.hero.d.y);
-                    let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
-                    for (let d of dirs) {
-                        let nx = hx + d[0], ny = hy + d[1];
-                        if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
-                            if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
-                            else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
-                            else window._g(`walk=${nx},${ny}`);
-                            break;
+                        // 4. Fizyczny krok w tył
+                        let hx = parseInt(Engine.hero.d.x);
+                        let hy = parseInt(Engine.hero.d.y);
+                        let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
+                        for (let d of dirs) {
+                            let nx = hx + d[0], ny = hy + d[1];
+                            if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
+                                if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                                else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
+                                else window._g(`walk=${nx},${ny}`);
+                                break;
+                            }
                         }
                     }
-}
+                }
+            } // Koniec warunku (distToDoor > 0)
+        } // Koniec warunku (targetGateway)
+    } // !!! ZAMKNIĘCIE FUNKCJI runExpLogic (Tego brakowało!) !!!
 
-
-
-setInterval(runExpLogic, 150);
+    setInterval(runExpLogic, 150);
     // --- BAZA DANYCH PROFILI EXPOWISK ---
 
     window.saveCurrentExpProfile = function() {
@@ -8468,14 +8472,15 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     
                     window.sessionStats.expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
 
-                    // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA (Naprawa błędu "--:--:--")
-                    let maxExp = parseInt(d.next_lvl_exp) || parseInt(d.ttl_exp) || parseInt(d.mexp) || parseInt(d.max_exp) || 0;
+                  // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA (Naprawa błędu "--:--:--")
                     let missingExp = 0;
                     
-                    if (maxExp > currentExp) {
-                        missingExp = maxExp - currentExp;
-                    } else if (maxExp > 0) {
-                        missingExp = maxExp; 
+                    if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
+                        missingExp = parseInt(d.exp_left);
+                    } else {
+                        let maxExp = parseInt(d.next_lvl_exp) || parseInt(d.exp_req) || parseInt(d.ttl_exp) || parseInt(d.max_exp) || 0;
+                        if (maxExp > currentExp) missingExp = maxExp - currentExp;
+                        else if (maxExp > 0) missingExp = maxExp; 
                     }
 
                     // Przeliczanie na minuty i godziny
@@ -8487,10 +8492,12 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         
                         if (hTnl > 99) window.sessionStats.timeTnlStr = "+99 godzin";
                         else window.sessionStats.timeTnlStr = `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
+                    } else if (missingExp === 0) {
+                        window.sessionStats.timeTnlStr = "Max Lvl?";
                     } else {
                         window.sessionStats.timeTnlStr = "Obliczanie...";
                     }
-                }
+                } // Koniec klamry od stabilizacji co 60 sekund
 
                 // --- PODMIANA W INTERFEJSIE ---
                 let elTime = document.getElementById('statSessionTime');
