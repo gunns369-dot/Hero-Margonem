@@ -7843,7 +7843,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
 // --- ZSYNCHRONIZOWANA PĘTLA STRAŻNIKA (Z AUTO-WZNOWIENIEM) ---
         setInterval(async () => {
-            if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
             if (window.__captchaLock) return;
 
             let fullWin = getCaptchaWindow();
@@ -7856,6 +7855,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     
                     let delay = randomDelay(500, 2000); // Losujemy czas od 0.5s do 2s
                     if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
+                    if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     
                     setTimeout(() => {
                         // Wznawianie Expienia
@@ -7864,7 +7864,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (btn) btn.click();
                         }
                         
-                        // Wznawianie Patrolu za Herosem
+                        // Wznawianie Patrolu za Herosem (Działa nawet jeśli bot był w trakcie zmiany mapy!)
                         if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
                             if (typeof startPatrol === 'function') startPatrol();
                         }
@@ -7877,13 +7877,18 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
             // Sytuacja 2: Zapadka pojawiła się pierwszy raz
             if (window.__captchaPhase === "none") {
+                // Ignorujemy, jeśli bot stoi w miejscu wyłączony
+                if (!window.isExping && !window.isPatrolling && !window.isRushing) return;
+
                 window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
                 window.__captchaPhase = "manual_waiting";
                 
+                // KRYTYCZNA POPRAWKA: Bot zapisuje, czy patrolował LUB czy akurat zmieniał mapę (Rushing)
                 window.__wasExpingBeforeCaptcha = window.isExping;
-                window.__wasPatrollingBeforeCaptcha = window.isPatrolling;
+                window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
 
-                if (botSettings.exp.captchaAlert) {
+                // Alarm dźwiękowy (tylko jeśli jest włączony)
+                if (botSettings.exp && botSettings.exp.captchaAlert) {
                     try { 
                         let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); 
                         audio.play(); 
@@ -7895,19 +7900,17 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
                         notif.onclick = function() { window.focus(); this.close(); };
                     }
-                    if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
                 }
+                
+                if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
+                if (window.logHero) window.logHero("🚨 Wyskoczyła zapadka! Zatrzymuję bota na czas rozwiązania.", "#ff5252");
 
-                if (window.logExp) window.logExp("⏳ [Humanizacja] Odczekuję losowo 3-5 sekund przed zatrzymaniem postaci...", "#ff9800");
-                await sleep(randomDelay(3000, 5000));
-
+                // Hamulec awaryjny
                 if (window.isExping) {
                     let btn = document.getElementById('btnStartExp');
                     if (btn) btn.click();
                 }
                 if (typeof stopPatrol === 'function') stopPatrol(true);
-                
-                if (window.logExp) window.logExp("🛑 [Zapadka] Akcje zatrzymane. Czekam aż ręcznie rozwiążesz zagadkę...", "#f44336");
                 
                 window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
             }
