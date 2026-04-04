@@ -5333,13 +5333,12 @@ if (hx !== expLastX || hy !== expLastY) {
         }
     });
 
-    // 2. Filtrowanie i Klastrowanie Potworów (KOSIARKA V8 - Cała mapa, Logi Grupowe)
+    // 2. Filtrowanie i Klastrowanie Potworów
     let validMobs = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
         
-        // Pomijamy moby wrzucone na czarną listę
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
@@ -5358,7 +5357,6 @@ if (hx !== expLastX || hy !== expLastY) {
         if (ranga === "elite2" && !bE2) return;
         if (ranga === "hero" && !bHero) return;
 
-        // Ignorowanie obstawy niechcianych bossów
         let isSafeToAttack = true;
         for (let spot of dangerousSpots) {
             if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
@@ -5376,7 +5374,7 @@ if (hx !== expLastX || hy !== expLastY) {
         });
     });
 
-   // 3. MAPOWANIE GRUP MARGONEM
+    // 3. MAPOWANIE GRUP MARGONEM
     let groupsMap = new Map();
     validMobs.forEach(m => {
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
@@ -5386,7 +5384,6 @@ if (hx !== expLastX || hy !== expLastY) {
 
     let clusters = [];
     groupsMap.forEach((clusterMobs, key) => {
-        // Twarda blokada! Jeśli z tej grupy już kogoś bijemy, trzymamy go na celowniku (zapobiega miganiu celu)
         clusterMobs.sort((a, b) => {
             let aLocked = (a.id === expCurrentTargetId) ? 0 : 1;
             let bLocked = (b.id === expCurrentTargetId) ? 0 : 1;
@@ -5409,16 +5406,23 @@ if (hx !== expLastX || hy !== expLastY) {
         });
     });
 
-    // 4. SORTOWANIE (Smart-Gravity)
+    // 4. SORTOWANIE (Smart-Gravity V10 - Czyść drogę!)
     clusters.sort((a, b) => {
         let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
         if (rankVal[a.rank] !== rankVal[b.rank]) return rankVal[b.rank] - rankVal[a.rank];
 
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
+        
+        // ZABEZPIECZENIE: Jeśli mob jest bardzo blisko (pod nogami, dystans <= 4), 
+        // to bijemy go ZANIM polecimy do grupy! (Żeby utorować sobie drogę).
+        if (a.target.dist <= 4 && b.target.dist > 4) return -1;
+        if (b.target.dist <= 4 && a.target.dist > 4) return 1;
 
-        let scoreA = a.target.dist - ((a.size - 1) * 12);
-        let scoreB = b.target.dist - ((b.size - 1) * 12);
+        // KOSIARKA V10: Osłabione przyciąganie (-4 kratki za moba w grupie zamiast -12). 
+        // Zbyt silny magnes sprawiał, że bot omijał moby po drodze wpadając w pętle.
+        let scoreA = a.target.dist - ((a.size - 1) * 4);
+        let scoreB = b.target.dist - ((b.size - 1) * 4);
 
         return scoreA - scoreB;
     });
@@ -5451,9 +5455,8 @@ if (hx !== expLastX || hy !== expLastY) {
 
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${bestCluster.groupLabel}`;
                 
-                // Używamy bezpiecznej, wewnętrznej funkcji gry, która sama limituje zapytania
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                nextAllowedClickTime = now + 300; // Limit wysyłania ruchu: max co 300ms
+                nextAllowedClickTime = now + 300; 
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
@@ -5469,7 +5472,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
-                    // Odcięcie twardego zacięcia po 3 sekundach stania w miejscu
+                    // Odcięcie twardego zacięcia
                     if (timeStandingStill > 3000) {
                         window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Ignoruję go na chwilę.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
@@ -5477,7 +5480,6 @@ if (hx !== expLastX || hy !== expLastY) {
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
                         
-                        // Odklejenie od przeszkody
                         let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                         let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
                         Engine.hero.autoGoTo({ x: rx, y: ry });
@@ -5486,7 +5488,6 @@ if (hx !== expLastX || hy !== expLastY) {
                         return;
                     }
 
-                    // Co sekundę przypominamy grze o ruchu (zabezpieczone limitem anti-flood)
                     if (timeStandingStill > 1000 && (now % 1000 < 150)) {
                         if (now >= nextAllowedClickTime) {
                             Engine.hero.autoGoTo({ x: target.x, y: target.y });
@@ -5517,8 +5518,8 @@ if (hx !== expLastX || hy !== expLastY) {
             expLastActionTime = now + 100;
         }
         return;
-    }
-
+    } // <--- TO JEST TA KLAMRA, KTÓRA WCZEŚNIEJ ZNIKNĘŁA I ROZWALIŁA KOD!
+      
 // --- ZAAWANSOWANY SMART ROAM: PĘTLE BRAM I TUNELI ---
     if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
 
