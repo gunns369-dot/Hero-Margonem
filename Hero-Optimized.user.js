@@ -5311,16 +5311,55 @@ if (hx !== expLastX || hy !== expLastY) {
     }
 
 
-// --- SKANOWANIE POTWORÓW ---
-    const arr = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
+// --- SKANOWANIE POTWORÓW (KOSIARKA V13 - PAMIĘĆ ABSOLUTNA) ---
+    if (!window.expMonsterCache) window.expMonsterCache = new Map();
+    // Asekuracyjne czyszczenie pamięci po wejściu na nową mapę jest robione na początku pętli (expLastMapName !== currMap),
+    // ale dla pewności usuwamy też tutaj jeśli coś utknęło z innej mapy.
+
+    const currentVisibleNpcs = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    // 1. Zbudowanie mapy "Stref Zagrożenia"
-    let dangerousSpots = [];
-    arr.forEach(npcObj => {
+    // 1. ZAPISYWANIE DO PAMIĘCI (Keszowanie mobów, które weszły w zasięg wzroku)
+    currentVisibleNpcs.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
-        if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+        if (!n || n.type === 4 || n.type < 2) return;
+
+        if (n.dead || n.del || npcObj.del) {
+            window.expMonsterCache.delete(n.id);
+        } else {
+            // Zapisujemy tylko potrzebne statystyki
+            window.expMonsterCache.set(n.id, {
+                id: n.id, x: n.x, y: n.y, wt: n.wt, type: n.type, grp: n.grp, lvl: n.lvl,
+                nick: n.nick || n.name
+            });
+        }
+    });
+
+    // 2. WERYFIKACJA DUCHÓW (Usuwanie z pamięci zdezaktualizowanych celów)
+    window.expMonsterCache.forEach((cachedMob, id) => {
+        let distToCached = Math.abs(hx - cachedMob.x) + Math.abs(hy - cachedMob.y);
+        
+        // Jeśli jesteśmy blisko zapisanego kordu (<= 14 kratek), to powinniśmy widzieć potwora.
+        // Jeśli gra go nam nie przesyła = został zabity przez kogoś innego lub zniknął. Kasujemy!
+        if (distToCached <= 14) {
+            let isCurrentlyVisible = currentVisibleNpcs.some(v => {
+                let vn = v?.d || v;
+                return vn.id === id && !vn.dead && !vn.del && !v.del;
+            });
+            if (!isCurrentlyVisible) {
+                window.expMonsterCache.delete(id);
+                if (expCurrentTargetId === id) expCurrentTargetId = null;
+            }
+        }
+    });
+
+    // OD TERAZ BOT PATRZY NA SWOJĄ PAMIĘĆ, A NIE TYLKO NA TO, CO POKAZUJE MU SERWER!
+    const arr = Array.from(window.expMonsterCache.values());
+
+    // 3. Zbudowanie mapy "Stref Zagrożenia"
+    let dangerousSpots = [];
+    arr.forEach(n => {
         let wt = parseInt(n.wt, 10);
         let ranga = "normal";
         if (n.type === 2) {
@@ -5333,11 +5372,9 @@ if (hx !== expLastX || hy !== expLastY) {
         }
     });
 
-    // 2. Filtrowanie Potworów (KOSIARKA V12 - Lock na 4-6s z przerwaniem)
+    // 4. Filtrowanie Potworów 
     let validMobs = [];
-    arr.forEach(npcObj => {
-        let n = npcObj?.d || npcObj;
-        if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+    arr.forEach(n => {
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
@@ -5365,19 +5402,16 @@ if (hx !== expLastX || hy !== expLastY) {
         if (!isSafeToAttack) return;
 
         let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
-        
-        // Zabezpieczenie mgły wojny dla PVP
-        if (Engine.map && Engine.map.d && Engine.map.d.pvp === 2 && dist > 18) return;
 
         validMobs.push({
             id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
-            nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
+            nick: n.nick.replace(/<[^>]*>?/gm, '').trim(),
             dist: dist,
             isLocked: false
         });
     });
 
-    // 3. Weryfikacja blokady celu i reagowanie na moby pod nogami
+    // 5. Oportunista + Lock (Trzyma cel dopóki nie zobaczy czegoś pod nosem)
     let lockedMob = null;
     validMobs.forEach(m => {
         if (m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0)) {
@@ -5386,27 +5420,22 @@ if (hx !== expLastX || hy !== expLastY) {
         }
     });
 
-    // MĄDRY MECHANIZM OPORTUNISTY:
-    // Jeśli zablokowaliśmy cel (idziemy do niego od 2 sekund), ale po drodze pojawił się lub zrespił
-    // inny mob, który JEST BLIŻEJ niż nasz zablokowany cel -> Puszczamy locka i tniemy tego bliżej!
     if (lockedMob) {
         let closerMobExists = validMobs.some(m => m.id !== lockedMob.id && m.dist < lockedMob.dist);
         if (closerMobExists) {
             lockedMob.isLocked = false;
-            window.expTargetLockTime = 0; // Kasujemy lock, by bot na nowo wybrał najbliższego
+            window.expTargetLockTime = 0; 
         }
     }
 
-    // 4. CZYSTE SORTOWANIE (Tylko po dystansie, żadnych magnesów grupowych!)
+    // 6. CZYSTE SORTOWANIE (Równe szanse, kto najbliżej ten ginie)
     validMobs.sort((a, b) => {
         let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
         if (rankVal[a.ranga] !== rankVal[b.ranga]) return rankVal[b.ranga] - rankVal[a.ranga];
 
-        // Priorytet dla potwora, który jest aktualnie zablokowany jako cel
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
 
-        // Banalne: Kto bliżej, ten ginie pierwszy
         return a.dist - b.dist;
     });
 
@@ -5432,7 +5461,6 @@ if (hx !== expLastX || hy !== expLastY) {
                     window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
                     
-                    // LOSOWY LOCK: Postać ustala, że będzie za nim biec nieugięcie przez 4 do 6 sekund
                     let randomLockSeconds = Math.floor(Math.random() * (6000 - 4000 + 1)) + 4000;
                     window.expTargetLockTime = now + randomLockSeconds; 
                 }
@@ -5456,7 +5484,6 @@ if (hx !== expLastX || hy !== expLastY) {
 
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
-                    // Ominięcie zablokowanego moba po 3s stania
                     if (timeStandingStill > 3000) {
                         window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Szukam innej ofiary.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
@@ -5472,7 +5499,6 @@ if (hx !== expLastX || hy !== expLastY) {
                         return;
                     }
 
-                    // System powtarzania kliknięcia
                     if (timeStandingStill > 1000 && (now % 1000 < 150)) {
                         if (now >= nextAllowedClickTime) {
                             Engine.hero.autoGoTo({ x: target.x, y: target.y });
@@ -5491,6 +5517,7 @@ if (hx !== expLastX || hy !== expLastY) {
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
+            // Szybkie ubicie ducha z pamięci, żeby zaatakować go w grze (jeśli zniknął z ekranu przez mgłę, ale wciąż fizycznie tam stoi)
             if (expAttackLockUntil === 0) {
                 expAttackLockUntil = now + ((botSettings.berserk && botSettings.berserk.enabled) ? 2500 : 0);
             } else if (now > expAttackLockUntil) {
