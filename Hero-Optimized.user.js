@@ -12,11 +12,25 @@
 (function() {
     'use strict';
 
-   // ==========================================
-        // SILNIK ANTI-THROTTLE V2 (WEB WORKER + rAF) - Omijanie usypiania zakładek
+ // ==========================================
+        // SILNIK ANTI-THROTTLE V3 (NIESKOŃCZONOŚĆ) - Omijanie uśpienia kart
         // ==========================================
         if (!window.__antiThrottleInstalled) {
             window.__antiThrottleInstalled = true;
+            
+            // 1. OSZUKIWANIE PRZEGLĄDARKI (Główny powód zamrażania Margonem)
+            // Wycinamy grze możliwość sprawdzenia, czy karta jest zminimalizowana
+            Object.defineProperty(document, 'hidden', { get: () => false });
+            Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+            
+            // Blokujemy eventy usypiające - gra nigdy nie dostanie sygnału "straciłem focus"
+            const blockEvent = (e) => e.stopImmediatePropagation();
+            document.addEventListener('visibilitychange', blockEvent, true);
+            window.addEventListener('visibilitychange', blockEvent, true);
+            window.addEventListener('blur', blockEvent, true);
+            window.addEventListener('focus', blockEvent, true);
+
+            // 2. WEB WORKER (Niezabijalne zegary z prawdziwego zdarzenia)
             const workerCode = `
                 let timers = {};
                 self.onmessage = function(e) {
@@ -33,8 +47,7 @@
                     }
                 };
             `;
-            const blob = new Blob([workerCode], { type: 'application/javascript' });
-            const worker = new Worker(URL.createObjectURL(blob));
+            const worker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
             
             const callbacks = {};
             let timerId = 1;
@@ -54,61 +67,41 @@
             window.originalCancelAnimationFrame = window.cancelAnimationFrame;
             
             window.setInterval = function(cb, timeout, ...args) {
-                let id = timerId++;
-                callbacks[id] = () => cb(...args);
-                worker.postMessage({ command: 'setInterval', id: id, timeout: timeout });
-                return id;
+                let id = timerId++; callbacks[id] = () => cb(...args);
+                worker.postMessage({ command: 'setInterval', id: id, timeout: timeout }); return id;
             };
-            window.clearInterval = function(id) {
-                worker.postMessage({ command: 'clearInterval', id: id });
-                delete callbacks[id];
-            };
+            window.clearInterval = function(id) { worker.postMessage({ command: 'clearInterval', id: id }); delete callbacks[id]; };
             window.setTimeout = function(cb, timeout, ...args) {
-                let id = timerId++;
-                callbacks[id] = () => cb(...args);
-                worker.postMessage({ command: 'setTimeout', id: id, timeout: timeout });
-                return id;
+                let id = timerId++; callbacks[id] = () => cb(...args);
+                worker.postMessage({ command: 'setTimeout', id: id, timeout: timeout }); return id;
             };
-            window.clearTimeout = function(id) {
-                worker.postMessage({ command: 'clearTimeout', id: id });
-                delete callbacks[id];
-            };
+            window.clearTimeout = function(id) { worker.postMessage({ command: 'clearTimeout', id: id }); delete callbacks[id]; };
 
-            // NAPRAWA ZAMRAŻANIA GRY (Sztuczne klatki animacji w tle)
-            const rafMap = new Map();
+            // 3. WYMUSZANIE KLATEK ANIMACJI (Oszukiwanie silnika graficznego)
             let rafCounter = 0;
+            let rafMap = new Map();
             
             window.requestAnimationFrame = function(cb) {
                 let id = ++rafCounter;
-                // document.hidden sprawdza, czy zminimalizowałeś lub zmieniłeś kartę
-                if (document.hidden) {
-                    // Gdy karta jest w tle, używamy naszego potężnego setTimeout (wymuszamy 60 FPS)
-                    let workerTimeoutId = window.setTimeout(() => {
-                        rafMap.delete(id);
-                        cb(performance.now());
-                    }, 16); // 16ms = ~60 klatek na sekundę
-                    rafMap.set(id, { type: 'worker', realId: workerTimeoutId });
-                } else {
-                    // Gdy karta jest aktywna, używamy normalnej grafiki przeglądarki
-                    let nativeId = window.originalRequestAnimationFrame((time) => {
-                        rafMap.delete(id);
-                        cb(time);
-                    });
-                    rafMap.set(id, { type: 'native', realId: nativeId });
-                }
+                // Rzucamy własne, niezabijalne (dzięki Workerowi) klatki animacji co 16ms (~60 FPS)
+                // Używamy performance.now(), bo silnik Margonem używa tego do obliczania płynności chodu
+                let timeoutId = window.setTimeout(() => {
+                    rafMap.delete(id);
+                    cb(performance.now()); 
+                }, 16); 
+                rafMap.set(id, timeoutId);
                 return id;
             };
             
             window.cancelAnimationFrame = function(id) {
-                let record = rafMap.get(id);
-                if (record) {
-                    if (record.type === 'worker') window.clearTimeout(record.realId);
-                    else window.originalCancelAnimationFrame(record.realId);
+                let timeoutId = rafMap.get(id);
+                if (timeoutId) {
+                    window.clearTimeout(timeoutId);
                     rafMap.delete(id);
                 }
             };
 
-            console.log("%c[System] Web Worker Anti-Throttle V2 aktywny! Silnik gry zmuszony do pracy w tle.", "color: #00acc1; font-weight: bold; font-size: 14px;");
+            console.log("%c[System] Anti-Throttle V3 (Nieskończoność) Aktywny! Gra została odcięta od wiedzy o ukrytej karcie.", "color: #ff5252; font-weight: bold; font-size: 14px;");
         }
         // ==========================================
    // WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - z Twoją metodą NI)
