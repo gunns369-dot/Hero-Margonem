@@ -7314,8 +7314,12 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (statStr.includes('fullheal') || statStr.includes('całe życie') || statStr.includes('całą energię')) return 999999;
             if (statStr.includes('hot=')) return 0; 
             
-            let match = statStr.match(/leczy[=:](\d+)/) || statStr.match(/leczy\s+([0-9\s]+)\s+punkt/) || statStr.match(/przywraca\s+([0-9\s]+)\s+punkt/);
-            if (match) return parseInt(match[1].replace(/\s/g, ''));
+            // Usunięcie spacji z dużych liczb (np. "1 500" -> "1500") żeby bot mógł to przeczytać jako jedną liczbę
+            statStr = statStr.replace(/(\d)\s+(\d)/g, '$1$2');
+            
+            // Uniwersalny odczyt: szuka słowa leczy/przywraca i pierwszej liczby po nim
+            let match = statStr.match(/(?:leczy|przywraca)[^\d]*(\d+)/);
+            if (match) return parseInt(match[1]);
             
             let matchPct = statStr.match(/leczy\s*p[=:](\d+)/);
             if (matchPct) {
@@ -7330,7 +7334,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
-            // Zabezpieczenie (Failsafe) przed zablokowaniem pętli przy lagu
+            // Failsafe (zabezpieczenie odblokowujące przy laga-ch)
             if (window.isHealLocked && Date.now() > window.lastHealTime + 3000) {
                 window.isHealLocked = false;
             }
@@ -7344,12 +7348,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             
             if (Engine.battle && Engine.battle.show) return;
             
-            // --- POGROMCA DUCHÓW (Naprawa błędu Margonem z zapominaniem ożywienia) ---
             let isDead = Engine.dead || Engine.hero.d.dead === true || Engine.hero.d.dead === 1 || Engine.hero.d.dead === "1";
             let deathWindowVisible = document.querySelector('.death-window, .dead-window, [data-wnd="dead"], .alert-window') !== null;
             
             if (isDead && !deathWindowVisible) {
-                // Jesteśmy "martwi" w kodzie, ale nie ma okna śmierci na ekranie - wymuszamy ożywienie!
                 isDead = false;
                 Engine.dead = false;
                 Engine.hero.d.dead = 0;
@@ -7360,7 +7362,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 return;
             }
 
-            // Kuloodporne czytanie HP (Rozwiązuje problem z zerem = false)
             let hp = Engine.hero.d.hp !== undefined ? parseInt(Engine.hero.d.hp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
             let maxhp = Engine.hero.d.maxhp !== undefined ? parseInt(Engine.hero.d.maxhp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
             if (!maxhp) return;
@@ -7383,10 +7384,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 let hItems = typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : (Engine.items && Engine.items.d ? Engine.items.d : {});
                 let items = Object.values(hItems);
                 
+                // KRYTYCZNA NAPRAWA: Zgodność z nowymi torbami (NI)
                 let potions = items.filter(i => {
                     let cl = Number(i?.cl || i?.d?.cl);
                     let st = Number(i?.st || i?.d?.st);
-                    return st === 0 && cl === 16;
+                    let loc = i?.loc || i?.d?.loc;
+                    let inBag = (st === 0 || loc === "g" || st > 8);
+                    return inBag && cl === 16;
                 });
                 
                 let ignoreList = (botSettings.autoheal.ignoreItems || "").toLowerCase().split('\n').map(s => s.trim()).filter(s => s.length > 0);
