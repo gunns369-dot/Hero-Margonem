@@ -2734,7 +2734,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             </div>
                         </div>
                     </div>
-                    <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Trasy / Alarm / Opcje walki)</div>
+  <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Alarmy / Opcje walki)</div>
                     <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
                         <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                         <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
@@ -2747,7 +2747,6 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                         </div>
                         <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
-                            <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska</label>
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha</label>
                             <div style="display:flex; align-items:center; gap:5px; margin-top:4px;">
                                 <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
@@ -2765,7 +2764,8 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             </div>
                         </div>
                     </div>
-                   <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
+
+                    <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
                     <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
                         <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
@@ -2775,6 +2775,16 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                     </div>
 
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
+                    <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
+                        <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin-bottom:6px; display:block;"><input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska</label>
+                        <input type="hidden" id="expRange" value="999">
+                        <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map: <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
+                        <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:80px; max-height:160px; padding:2px;"></div>
+                        <div style="display:flex; gap:4px; margin-top:6px;">
+                            <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
+                            <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
+                        </div>
+                    </div>
                     <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
                         <input type="hidden" id="expRange" value="999">
                         <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map: <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
@@ -7790,7 +7800,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 return;
             }
 
-            // Sytuacja 2: Zapadka pojawiła się pierwszy raz
+          // Sytuacja 2: Zapadka pojawiła się pierwszy raz
             if (window.__captchaPhase === "none") {
                 // Ignorujemy, jeśli bot stoi w miejscu wyłączony
                 if (!window.isExping && !window.isPatrolling && !window.isRushing) return;
@@ -7802,18 +7812,22 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
 
-                // Alarm dźwiękowy (tylko jeśli jest włączony)
+                // Alarm dźwiękowy i powiadomienie (Z BLOKADĄ PRZED DUBLOWANIEM SPAMU)
                 if (botSettings.exp && botSettings.exp.captchaAlert) {
-                    try { 
-                        let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); 
-                        audio.play(); 
-                        setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 2000); 
-                    } catch(e) {}
-                    
-                    window.focus();
-                    if (Notification.permission === "granted") {
-                        let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
-                        notif.onclick = function() { window.focus(); this.close(); };
+                    if (!window.__lastCaptchaNotif || Date.now() - window.__lastCaptchaNotif > 15000) {
+                        window.__lastCaptchaNotif = Date.now();
+                        
+                        try { 
+                            let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); 
+                            audio.play(); 
+                            setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 2000); 
+                        } catch(e) {}
+                        
+                        window.focus();
+                        if (Notification.permission === "granted") {
+                            let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
+                            notif.onclick = function() { window.focus(); this.close(); };
+                        }
                     }
                 }
                 
@@ -8264,35 +8278,35 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
     setTimeout(() => {
         window.sessionStats = { active: false, startTime: 0, expGained: 0, goldGained: 0, lastExp: -1, lastGold: -1, expPerHour: 0, timeTnlStr: "--:--:--", lastCalcTime: 0 };
 
-        let btnExp = document.getElementById('btnStartExp');
-        if (btnExp) {
-            btnExp.addEventListener('click', () => {
-                setTimeout(() => {
-                    if (window.isExping) {
-                        window.sessionStats.active = true;
-                        window.sessionStats.startTime = Date.now();
-                        window.sessionStats.expGained = 0; window.sessionStats.goldGained = 0;
-                        window.sessionStats.expPerHour = 0; window.sessionStats.timeTnlStr = "--:--:--"; window.sessionStats.lastCalcTime = 0;
-                        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                            window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                            window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
-                        }
-                    } else {
-                        window.sessionStats.active = false;
-                    }
-                }, 100);
-            });
-        }
-
         if (window.statsIntervalId) clearInterval(window.statsIntervalId);
 
         window.statsIntervalId = setInterval(() => {
+            // 🚨 NAPRAWA: Moduł włącza się i wyłącza sam, czytając flagę isExping (bez patrzenia na przycisk!)
+            if (window.isExping && !window.sessionStats.active) {
+                window.sessionStats.active = true;
+                window.sessionStats.startTime = Date.now();
+                window.sessionStats.expGained = 0; 
+                window.sessionStats.goldGained = 0;
+                window.sessionStats.expPerHour = 0; 
+                window.sessionStats.timeTnlStr = "--:--:--"; 
+                window.sessionStats.lastCalcTime = 0;
+                
+                if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                    window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                    window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
+                }
+            } else if (!window.isExping && window.sessionStats.active) {
+                window.sessionStats.active = false; // Zatrzymuje stoper, gdy wyłączysz bota
+            }
+
+            // Jeśli bot wyłączony lub gra się ładuje - zatrzymujemy liczenie
             if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
             let d = Engine.hero.d;
             let currentExp = parseInt(d.exp) || 0;
             let currentGold = parseInt(d.gold) || 0;
 
+            // --- OBLICZANIE EXP ---
             if (window.sessionStats.lastExp !== -1) {
                 let expDiff = currentExp - window.sessionStats.lastExp;
                 if (expDiff > 0) window.sessionStats.expGained += expDiff;
@@ -8300,12 +8314,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
             window.sessionStats.lastExp = currentExp;
 
+            // --- OBLICZANIE ZŁOTA ---
             if (window.sessionStats.lastGold !== -1) {
                 let goldDiff = currentGold - window.sessionStats.lastGold;
                 if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
             }
             window.sessionStats.lastGold = currentGold;
 
+            // --- STOPER ---
             let elapsedMs = Date.now() - window.sessionStats.startTime;
             let elapsedSec = Math.floor(elapsedMs / 1000);
             
@@ -8316,6 +8332,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
             let calcInterval = elapsedSec < 60 ? 5 : 60; 
 
+            // --- KALKULATOR EXP/h i TNL ---
             if (elapsedSec > 0 && (elapsedSec - window.sessionStats.lastCalcTime >= calcInterval || window.sessionStats.expPerHour === 0)) {
                 window.sessionStats.lastCalcTime = elapsedSec;
                 window.sessionStats.expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
@@ -8343,6 +8360,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }
 
+            // --- WYSYŁANIE DO HTML ---
             let elTime = document.getElementById('statSessionTime');
             let elExp = document.getElementById('statExpGained');
             let elExpH = document.getElementById('statExpPerHour');
