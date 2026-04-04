@@ -8187,4 +8187,60 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 opacitySlider.addEventListener('input', (e) => setWindowOpacity(e.target.value));
             }
         }, 1500);
+    // --- OSTATECZNA ŁATKA TELEPORTÓW ---
+        setTimeout(() => {
+            // 1. Brutalne zniszczenie pływającego okna TP
+            document.querySelectorAll('.hero-window#heroTeleportsGUI').forEach(el => {
+                if (el.parentElement === document.body) {
+                    el.remove(); // Niszczy okno doczepione do głównego ekranu gry
+                }
+            });
+
+            // 2. Naprawa funkcji rysującej (Używamy ścisłego querySelector zamiast getElementById)
+            window.renderTeleportList = function() {
+                let container = document.querySelector('#teleportsContainer #heroTeleportsGUI');
+                if (!container) return;
+
+                let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"];
+                let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
+                let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div><div style="display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height:250px;">`;
+
+                tpList.forEach(map => {
+                    let isChecked = (botSettings.unlockedTeleports && botSettings.unlockedTeleports[map]) ? 'checked' : '';
+                    html += `<label style="display:flex; align-items:center; background:#1a1a1a; padding:4px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px; border-left: 2px solid #00838f;"><input type="checkbox" class="chk-teleport" data-map="${map}" ${isChecked} style="margin-right:8px; cursor:pointer;"><b>${map}</b></label>`;
+                });
+
+                html += `</div><button id="btnSaveTeleportsManual" class="btn btn-go-sepia" style="margin-top:6px; color:#4caf50; font-weight:bold; border-color:#4caf50; width:100%; padding:6px;">💾 ZAPISZ TELEPORTY</button>`;
+                container.innerHTML = html;
+            };
+
+            // 3. Naprawa przycisku (działa jak włącz/wyłącz)
+            let btnTp = document.getElementById('btnOpenTeleports');
+            if (btnTp) {
+                // Klonujemy przycisk, żeby usunąć z niego stare, zepsute eventy (kradnące kliknięcia)
+                let newBtn = btnTp.cloneNode(true);
+                btnTp.parentNode.replaceChild(newBtn, btnTp);
+                
+                newBtn.addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    
+                    // Ukryj resztę zakładek (Eq, Potki, Sklepy), jeśli są włączone
+                    ['recommendedEqList', 'potionsList', 'shopsSearchWrapper'].forEach(id => {
+                        let el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
+                    
+                    // Znajdź i przełącz właściwy, wewnętrzny kontener
+                    let innerContainer = document.querySelector('#teleportsContainer #heroTeleportsGUI');
+                    if (innerContainer) {
+                        if (innerContainer.style.display === 'flex') {
+                            innerContainer.style.display = 'none';
+                        } else {
+                            innerContainer.style.display = 'flex';
+                            if (typeof window.renderTeleportList === 'function') window.renderTeleportList();
+                        }
+                    }
+                });
+            }
+        }, 2000);
 })(); // Koniec kodu
