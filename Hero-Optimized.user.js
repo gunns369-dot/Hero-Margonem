@@ -8317,4 +8317,96 @@ let checkBrowser = botSettings.exp?.playerAlert;
             };
         }
     }, 3000);
+    // ==========================================
+        // GWARANTOWANY ZAPIS I PODPIĘCIE MODUŁÓW (OSTATECZNA WERSJA)
+        // ==========================================
+        setTimeout(() => {
+            // Wymuszona struktura pamięci
+            if (!botSettings.discord) botSettings.discord = { enabled: false, url: '', userId: '', alerts: {}, stop: {} };
+            if (!botSettings.discord.alerts) botSettings.discord.alerts = { hero: true, player: true, chat: true, captcha: true };
+            if (!botSettings.discord.stop) botSettings.discord.stop = { hero: true, player: false, chat: false, captcha: true };
+
+            // 1. Zabezpieczone Przyciski (Otwarcia Okienek)
+            const openBrowserAlerts = document.getElementById('btnOpenBrowserAlertsModule');
+            if (openBrowserAlerts) {
+                let freshBtn = openBrowserAlerts.cloneNode(true);
+                openBrowserAlerts.parentNode.replaceChild(freshBtn, openBrowserAlerts);
+                freshBtn.addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    let p = document.getElementById('browserAlertsSettingsGUI');
+                    if (p) p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+                });
+            }
+
+            const openDiscordAlerts = document.getElementById('btnOpenDiscordModule');
+            if (openDiscordAlerts) {
+                let freshBtn = openDiscordAlerts.cloneNode(true);
+                openDiscordAlerts.parentNode.replaceChild(freshBtn, openDiscordAlerts);
+                freshBtn.addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    let p = document.getElementById('discordSettingsGUI');
+                    if (p) p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+                });
+            }
+
+            // 2. Automatyczne Wstrzykiwanie Zapisanych Danych (Na start)
+            let urlInput = document.getElementById('discordWebhookUrl');
+            if (urlInput) urlInput.value = botSettings.discord.url || '';
+
+            let idInput = document.getElementById('discordUserId');
+            if (idInput) idInput.value = botSettings.discord.userId || '';
+
+            // Aktualizujemy Checkboxy w kodzie
+            let checks = [
+                {id: 'discordAlert_Hero', val: botSettings.discord.alerts.hero},
+                {id: 'discordStop_Hero', val: botSettings.discord.stop.hero},
+                {id: 'discordAlert_Player', val: botSettings.discord.alerts.player},
+                {id: 'discordStop_Player', val: botSettings.discord.stop.player},
+                {id: 'discordAlert_Chat', val: botSettings.discord.alerts.chat},
+                {id: 'discordStop_Chat', val: botSettings.discord.stop.chat},
+                {id: 'discordAlert_Captcha', val: botSettings.discord.alerts.captcha},
+                {id: 'discordStop_Captcha', val: botSettings.discord.stop.captcha}
+            ];
+            checks.forEach(c => {
+                let el = document.getElementById(c.id);
+                if (el) el.checked = c.val;
+            });
+
+            // 3. Osobisty Strażnik Zapisywania (Przycisk "Zapisz i Testuj")
+            let btnSaveDiscord = document.getElementById('btnSaveDiscord');
+            if (btnSaveDiscord) {
+                let freshSaveBtn = btnSaveDiscord.cloneNode(true);
+                btnSaveDiscord.parentNode.replaceChild(freshSaveBtn, btnSaveDiscord);
+
+                freshSaveBtn.addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    
+                    let newUrl = document.getElementById('discordWebhookUrl').value.trim();
+                    let newId = document.getElementById('discordUserId').value.trim();
+
+                    botSettings.discord.url = newUrl;
+                    botSettings.discord.userId = newId;
+                    botSettings.discord.enabled = newUrl.length > 10;
+                    
+                    botSettings.discord.alerts.hero = document.getElementById('discordAlert_Hero').checked;
+                    botSettings.discord.alerts.player = document.getElementById('discordAlert_Player').checked;
+                    botSettings.discord.alerts.chat = document.getElementById('discordAlert_Chat').checked;
+                    botSettings.discord.alerts.captcha = document.getElementById('discordAlert_Captcha').checked;
+
+                    botSettings.discord.stop.hero = document.getElementById('discordStop_Hero').checked;
+                    botSettings.discord.stop.player = document.getElementById('discordStop_Player').checked;
+                    botSettings.discord.stop.chat = document.getElementById('discordStop_Chat').checked;
+                    botSettings.discord.stop.captcha = document.getElementById('discordStop_Captcha').checked;
+                    
+                    saveSettings(); // To jest najważniejsze, to wpycha do localStorage!
+                    
+                    if(botSettings.discord.enabled) {
+                        window.sendDiscordWebhook("🟢 MARGONEURO ZSYNCHRONIZOWANE", "Powiadomienia Discord zostały skonfigurowane poprawnie i działają niezależnie od przeglądarki!", 5763719);
+                        heroAlert("Ustawienia Discord zostały zapisane!\nLink do Webhooka i ID wczytają się poprawnie po odświeżeniu gry.");
+                    } else {
+                        heroAlert("Ustawienia zapisane (Webhook wyłączony ze względu na pusty link).");
+                    }
+                });
+            }
+        }, 1500); // 1.5 sekundy opóźnienia upewnia nas, że GUI gry i wszystkie okienka MargoNeuro już wyrenderowały się z HTML'a!
 })(); // Koniec kodu
