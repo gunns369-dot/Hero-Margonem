@@ -8273,98 +8273,105 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: OSTATECZNY KALKULATOR STATYSTYK (Niezależny od zacięć) ---
+// --- DAEMON: KULOODPORNY KALKULATOR STATYSTYK ---
     setTimeout(() => {
-        window._stats = {
-            active: false, startTs: 0, gainedExp: 0, gainedGold: 0,
-            lastExp: -1, lastGold: -1, expPerHour: 0, tnl: "--:--:--"
-        };
+        window.__calc = { active: false, startTs: 0, expGained: 0, goldGained: 0, lastExp: -1, lastGold: -1 };
 
-        // Anonimowy interwał = brak możliwości skasowania przez inne moduły
+        // Główny podsłuchiwacz kliknięć - zawsze wykryje wciśnięcie START/STOP myszką!
+        document.body.addEventListener('click', (e) => {
+            let target = e.target;
+            if (target && (target.id === 'btnStartExp' || target.closest('#btnStartExp') || target.id === 'btnStartStop' || target.closest('#btnStartStop'))) {
+                
+                // Czekamy 200ms, aby upewnić się, że gra uruchomiła bota
+                setTimeout(() => {
+                    let isBotWorking = (window.isExping || window.isPatrolling || window.isRushing);
+                    
+                    if (isBotWorking) {
+                        window.__calc.active = true;
+                        window.__calc.startTs = Date.now();
+                        window.__calc.expGained = 0;
+                        window.__calc.goldGained = 0;
+                        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                            window.__calc.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                            window.__calc.lastGold = parseInt(Engine.hero.d.gold) || 0;
+                        }
+                    } else {
+                        window.__calc.active = false;
+                    }
+                }, 200);
+            }
+        });
+
+        // Niezależna pętla rysująca
         setInterval(() => {
             let elTime = document.getElementById('statSessionTime');
-            if (!elTime) return; // Przerywa pętle, jeśli interfejsu jeszcze nie ma na ekranie
+            if (!elTime || !window.__calc.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
-            // Licznik odpala się w ułamku sekundy, w którym klikasz START (gdy flaga isExping zmienia się na true)
-            if (window.isExping && !window._stats.active) {
-                window._stats.active = true;
-                window._stats.startTs = Date.now();
-                window._stats.gainedExp = 0;
-                window._stats.gainedGold = 0;
-                window._stats.expPerHour = 0;
-                window._stats.tnl = "--:--:--";
-                if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                    window._stats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                    window._stats.lastGold = parseInt(Engine.hero.d.gold) || 0;
-                }
-            } else if (!window.isExping && window._stats.active) {
-                window._stats.active = false; // Zatrzymuje zegar po kliknięciu STOP
+            let curExp = parseInt(Engine.hero.d.exp) || 0;
+            let curGold = parseInt(Engine.hero.d.gold) || 0;
+
+            // Naliczanie EXP
+            if (window.__calc.lastExp !== -1) {
+                let diff = curExp - window.__calc.lastExp;
+                if (diff > 0) window.__calc.expGained += diff;
+                else if (diff < 0) window.__calc.expGained += curExp; // Przy awansie pasek spada
             }
+            window.__calc.lastExp = curExp;
 
-            if (!window._stats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
-
-            let d = Engine.hero.d;
-            let curExp = parseInt(d.exp) || 0;
-            let curGold = parseInt(d.gold) || 0;
-
-            // Czysta matematyka postępu
-            if (window._stats.lastExp !== -1) {
-                let diff = curExp - window._stats.lastExp;
-                if (diff > 0) window._stats.gainedExp += diff;
-                else if (diff < 0) window._stats.gainedExp += curExp; // Reakcja na awans poziomu (pasek spada do 0)
+            // Naliczanie Złota
+            if (window.__calc.lastGold !== -1) {
+                let diff = curGold - window.__calc.lastGold;
+                if (diff > 0) window.__calc.goldGained += diff;
             }
-            window._stats.lastExp = curExp;
+            window.__calc.lastGold = curGold;
 
-            if (window._stats.lastGold !== -1) {
-                let diff = curGold - window._stats.lastGold;
-                if (diff > 0) window._stats.gainedGold += diff;
-            }
-            window._stats.lastGold = curGold;
-
-            // Rysowanie Stopera co 1s
-            let sec = Math.floor((Date.now() - window._stats.startTs) / 1000);
+            // Czas
+            let sec = Math.floor((Date.now() - window.__calc.startTs) / 1000);
+            if (sec < 1) sec = 1;
+            
             let h = Math.floor(sec / 3600);
             let m = Math.floor((sec % 3600) / 60);
             let s = sec % 60;
             
             elTime.innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            
+
             let elExp = document.getElementById('statExpGained');
             let elGold = document.getElementById('statGoldGained');
-            if(elExp) elExp.innerText = window._stats.gainedExp.toLocaleString('pl-PL');
-            if(elGold) elGold.innerText = window._stats.gainedGold.toLocaleString('pl-PL') + " zł";
+            if (elExp) elExp.innerText = window.__calc.expGained.toLocaleString('pl-PL');
+            if (elGold) elGold.innerText = window.__calc.goldGained.toLocaleString('pl-PL') + " zł";
 
-            // Kalkulator TNL/Exph odświeża cyferki na ekranie co 3 sekundy (Zabezpieczenie przed miganiem)
-            if (sec > 0 && sec % 3 === 0) {
-                window._stats.expPerHour = Math.floor((window._stats.gainedExp / sec) * 3600);
-                
+            // Wyliczanie co 3 sekundy, żeby liczniki nie skakały jak szalone
+            if (sec % 3 === 0 || sec === 1) {
+                let expPerHour = Math.floor((window.__calc.expGained / sec) * 3600);
+                let elExpH = document.getElementById('statExpPerHour');
+                if (elExpH) elExpH.innerText = expPerHour.toLocaleString('pl-PL');
+
                 let missingExp = 0;
-                if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
-                    missingExp = parseInt(d.exp_left);
+                if (Engine.hero.d.exp_left !== undefined && parseInt(Engine.hero.d.exp_left) > 0) {
+                    missingExp = parseInt(Engine.hero.d.exp_left);
                 } else {
-                    let maxExp = parseInt(d.ttl_exp) || parseInt(d.next_lvl_exp) || parseInt(d.exp_req) || parseInt(d.max_exp) || 0;
+                    let maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 0;
                     if (maxExp > curExp) missingExp = maxExp - curExp;
-                    else if (maxExp > 0) missingExp = maxExp; 
+                    else if (maxExp > 0) missingExp = maxExp;
                 }
 
-                if (missingExp > 0 && window._stats.expPerHour > 0) {
-                    let tnlSec = Math.floor((missingExp / window._stats.expPerHour) * 3600);
-                    let th = Math.floor(tnlSec / 3600);
-                    let tm = Math.floor((tnlSec % 3600) / 60);
-                    let ts = tnlSec % 60;
-                    window._stats.tnl = th > 99 ? "+99 godzin" : `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
-                } else {
-                    window._stats.tnl = "Obliczanie...";
+                let elTnl = document.getElementById('statTimeTnl');
+                if (elTnl) {
+                    if (missingExp > 0 && expPerHour > 0) {
+                        let tnlSec = Math.floor((missingExp / expPerHour) * 3600);
+                        let th = Math.floor(tnlSec / 3600);
+                        let tm = Math.floor((tnlSec % 3600) / 60);
+                        let ts = tnlSec % 60;
+                        elTnl.innerText = th > 99 ? "+99 godzin" : `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+                    } else if (missingExp === 0) {
+                        elTnl.innerText = "Max Lvl?";
+                    } else {
+                        elTnl.innerText = "Obliczanie...";
+                    }
                 }
             }
-
-            let elExpH = document.getElementById('statExpPerHour');
-            let elTnl = document.getElementById('statTimeTnl');
-            if(elExpH) elExpH.innerText = window._stats.expPerHour.toLocaleString('pl-PL');
-            if(elTnl) elTnl.innerText = window._stats.tnl;
-
         }, 1000);
-    }, 1000);
+    }, 2000);
             // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
         setTimeout(() => {
             if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
