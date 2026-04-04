@@ -8352,4 +8352,129 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
+    // --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
+        setTimeout(() => {
+            if (document.getElementById('accStats')) return; // Zabezpieczenie przed dublowaniem okna
+
+            // 1. Wstrzyknięcie interfejsu (zakładki) pod menu 'Zaawansowane'
+            let advContainer = document.getElementById('accAdvancedExpContent');
+            if (advContainer) {
+                let statsHtml = `
+                    <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
+                    <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy bota:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto (brutto):</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
+                    </div>
+                `;
+                advContainer.insertAdjacentHTML('afterend', statsHtml);
+            }
+
+            // 2. Inicjalizacja pamięci podręcznej kalkulatora
+            window.sessionStats = {
+                active: false,
+                startTime: 0,
+                expGained: 0,
+                goldGained: 0,
+                lastExp: -1,
+                lastGold: -1
+            };
+
+            // 3. Podpięcie kalkulatora pod przycisk START w zakładce EXP
+            let btnExp = document.getElementById('btnStartExp');
+            if (btnExp) {
+                btnExp.addEventListener('click', () => {
+                    // Używamy opóźnienia 100ms, aby skrypt zdążył zmienić flagę window.isExping
+                    setTimeout(() => {
+                        if (window.isExping) {
+                            window.sessionStats.active = true;
+                            window.sessionStats.startTime = Date.now();
+                            window.sessionStats.expGained = 0;
+                            window.sessionStats.goldGained = 0;
+                            
+                            // Pobranie danych startowych postaci
+                            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                                window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                                window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
+                            }
+                        } else {
+                            window.sessionStats.active = false;
+                        }
+                    }, 100);
+                });
+            }
+
+            // 4. Daemon aktualizujący cyferki na żywo (tyka co 1 sekundę)
+            setInterval(() => {
+                if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+
+                let d = Engine.hero.d;
+                let currentExp = parseInt(d.exp) || 0;
+                let currentGold = parseInt(d.gold) || 0;
+
+                // --- OBLICZANIE EXP ---
+                if (window.sessionStats.lastExp !== -1) {
+                    let expDiff = currentExp - window.sessionStats.lastExp;
+                    if (expDiff > 0) {
+                        window.sessionStats.expGained += expDiff; // Normalny przyrost
+                    } else if (expDiff < 0) {
+                        window.sessionStats.expGained += currentExp; // Nastąpił awans! (EXP resetuje się z nowym poziomem)
+                    }
+                }
+                window.sessionStats.lastExp = currentExp;
+
+                // --- OBLICZANIE ZŁOTA ---
+                if (window.sessionStats.lastGold !== -1) {
+                    let goldDiff = currentGold - window.sessionStats.lastGold;
+                    if (goldDiff > 0) {
+                        window.sessionStats.goldGained += goldDiff; // Śledzimy tylko przychody (drop/sell), ignorujemy zakupy potek
+                    }
+                }
+                window.sessionStats.lastGold = currentGold;
+
+                // --- MATEMATYKA & FORMATOWANIE CZASU ---
+                let elapsedMs = Date.now() - window.sessionStats.startTime;
+                let elapsedSec = Math.floor(elapsedMs / 1000);
+                
+                let h = Math.floor(elapsedSec / 3600);
+                let m = Math.floor((elapsedSec % 3600) / 60);
+                let s = elapsedSec % 60;
+                let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+                let expPerHour = 0;
+                if (elapsedSec > 5) { // Czekamy 5 sekund, żeby kalkulacje nie wariowały na starcie
+                    expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
+                }
+
+                let timeTnlStr = "--:--:--";
+                let reqExp = parseInt(d.ttl_exp) || parseInt(d.exp_req) || 0; 
+                let missingExp = reqExp > currentExp ? (reqExp - currentExp) : 0;
+
+                if (missingExp > 0 && expPerHour > 0) {
+                    let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
+                    let hTnl = Math.floor(secsTnl / 3600);
+                    let mTnl = Math.floor((secsTnl % 3600) / 60);
+                    let sTnl = secsTnl % 60;
+                    timeTnlStr = `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
+                } else if (missingExp > 0) {
+                    timeTnlStr = "Obliczanie...";
+                }
+
+                // --- PODMIANA W INTERFEJSIE ---
+                let elTime = document.getElementById('statSessionTime');
+                let elExp = document.getElementById('statExpGained');
+                let elExpH = document.getElementById('statExpPerHour');
+                let elTnl = document.getElementById('statTimeTnl');
+                let elGold = document.getElementById('statGoldGained');
+
+                if (elTime) elTime.innerText = timeStr;
+                if (elExp) elExp.innerText = window.sessionStats.expGained.toLocaleString('pl-PL');
+                if (elExpH) elExpH.innerText = expPerHour.toLocaleString('pl-PL');
+                if (elTnl) elTnl.innerText = timeTnlStr;
+                if (elGold) elGold.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł";
+
+            }, 1000);
+        }, 2500);
 })(); // Koniec kodu
