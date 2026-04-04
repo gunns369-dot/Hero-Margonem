@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Hero, Elity II & Kolosy - Optimized Edition
+// @name         MargoNeuro - Optimized Edition
 // @version      64.3
 // @description  Automatyczne wykrywanie, inteligentny zasięg, natywny auto-atak, poprawne limity poziomowe, naprawiony scroll.
 // @author       Ty & Gemini
@@ -971,9 +971,9 @@ let opacityValue = 0.95;
         expAntiLagMin: 1500, expAntiLagMax: 2500,
 
         useTeleports: true,
+        discord: { enabled: false, url: '' }, // NOWOŚĆ: Pamięć ustawień Discorda
 
         unlockedTeleports: JSON.parse(localStorage.getItem('hero_teleports_v64') || '{"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false}'),
-
         exp: {
 
             enabled: false, minLvl: 1, maxLvl: 300,
@@ -1149,6 +1149,30 @@ function loadData() {
 
 
     function saveSettings() { localStorage.setItem('hero_settings_db_v64', JSON.stringify(botSettings)); }
+
+    function saveSettings() { localStorage.setItem('hero_settings_db_v64', JSON.stringify(botSettings)); }
+
+    // --- SILNIK MARGONEURO: DISCORD WEBHOOK ---
+    window.sendDiscordWebhook = function(title, description, colorHex = 16753920) {
+        if (!botSettings.discord || !botSettings.discord.enabled || !botSettings.discord.url) return;
+        
+        let payload = {
+            username: "MargoNeuro",
+            avatar_url: "https://www.margonem.pl/favicon.ico",
+            embeds: [{
+                title: title,
+                description: description,
+                color: colorHex,
+                timestamp: new Date().toISOString()
+            }]
+        };
+
+        fetch(botSettings.discord.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(e => console.error("[MargoNeuro] Błąd wysyłania na Discorda:", e));
+    };
 
     function saveGateways() { localStorage.setItem('hero_global_gateways_v20', JSON.stringify(globalGateways)); }
 
@@ -1542,9 +1566,19 @@ let attackInterval = null;
 
 
 
-                    let foundName = nData.nick ? nData.nick.replace(/<[^>]*>?/gm, '') : targetHero;
 
+                    let foundName = nData.nick ? nData.nick.replace(/<[^>]*>?/gm, '') : targetHero;
                     showHeroAlertBanner(foundName);
+                    
+                 // PUSH NA DISCORD
+                    if (botSettings.discord?.alerts?.player) {
+                        let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
+                        window.sendDiscordWebhook(
+                            msgTitle, 
+                            `${msgBody}\n**Mapa:** ${mapName}`, 
+                            16711680 // Czerwony kolor
+                        );
+                    }
 
 
 
@@ -2493,134 +2527,68 @@ window.handleTeleportNPC = function(targetMap) {
 
     // ==========================================
 
-    function initGUI() {
-
+function initGUI() {
         const style = document.createElement('style');
-
         style.innerHTML = `
-
             .hero-window { position: fixed; background: #111; border: 1px solid #5a4b31; border-radius: 4px; color: #cbd5e1; font-family: Tahoma, Arial, sans-serif; z-index: 10000; box-shadow: 0 4px 15px rgba(0,0,0,0.8); display: flex; flex-direction: column; overflow: hidden; }
-
             #heroNavGUI { top: 50px; left: 50px; width: 340px; height: 570px; resize: both; }
-
-            #heroSettingsGUI, #heroGatewaysGUI { top: 60px; left: 400px; width: 320px; max-height: 560px; resize: both; }
-
+            #heroSettingsGUI, #heroGatewaysGUI, #discordSettingsGUI { top: 60px; left: 400px; width: 320px; max-height: 560px; resize: both; }
             .gui-header { padding: 6px 6px; font-size: 13px; font-weight: bold; text-align: left; color: #a99a75; border-bottom: 2px solid #5a4b31; background: #222; display: flex; justify-content: space-between; align-items: center; cursor: grab; flex-shrink: 0; text-shadow: 1px 1px 1px #000; }
-
             .gui-content { padding: 10px; flex-grow: 1; overflow-y: auto; overflow-x: hidden; position:relative; background: #1a1d21; display: flex; flex-direction: column; }
-
             .gui-content::-webkit-scrollbar { width: 8px; } .gui-content::-webkit-scrollbar-track { background: #111; border-left: 1px solid #333; } .gui-content::-webkit-scrollbar-thumb { background: #5a4b31; border-radius: 4px; }
-
             .nav-row { margin-bottom: 8px; flex-shrink: 0; } .nav-row label { display: block; font-size: 11px; margin-bottom: 3px; color: #a99a75; }
-
             .nav-row select, .nav-row input[type="text"], .nav-row input[type="number"] { width: 100%; padding: 4px 6px; background: #0f0f0f; color: #e0d8c0; border: 1px solid #4a3f2b; border-radius: 2px; outline: none; font-size:11px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8); }
 
-
-
             .location-wrapper { display: flex; align-items: center; justify-content: space-between; background: #141414; border: 1px solid #333; border-radius: 2px; padding: 4px 8px; margin-bottom: 8px; }
-
             .location-label { font-size: 10px; color: #a99a75; white-space: nowrap; margin-right: 5px; }
-
             #currentMapNameDisplay { color: #d4af37; font-weight: bold; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; flex-grow: 1; }
 
-
-
             .tabs-wrapper { display: flex; background: #222; border-bottom: 1px solid #4a3f2b; }
-
             .nav-tab { flex: 1; text-align: center; padding: 6px 0; font-size: 11px; font-weight: bold; color: #888; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; }
-
             .nav-tab:hover { color: #d4af37; background: #2a2a2a; }
-
             .active-tab { color: #d4af37; border-bottom-color: #d4af37; background: #1a1d21; }
 
-
-
             #cordsListContainer, #heroMapListContainer, #gatewaysListContainer, #e2ListContainer, #kolosyListContainer {
-
                 margin-top: 5px; border: 1px solid #3a3020; background: #141414;
-
                 overflow-y: auto; overflow-x: hidden; padding: 2px;
-
             }
-
             #heroMapListContainer, #cordsListContainer { height: 140px; resize: vertical; display: block; }
-
             #gatewaysListContainer { height: 350px; max-height: 80vh; resize: vertical; display: block; }
 
-
-
             #e2Container, #kolosyContainer { display: none; flex-direction: column; flex: 1; min-height: 0; }
-
             #e2ListContainer, #kolosyListContainer { flex: 1; min-height: 0; display: block; height: auto; }
 
-
-
             .list-item { display: flex; justify-content: space-between; align-items: center; background: #222; margin-bottom: 2px; padding: 4px 5px; font-size: 11px; border: 1px solid #2a2a2a; border-radius: 2px; gap: 5px; }
-
             .list-item:hover { border-color: #5a4b31; background: #333;}
-
             .list-item.active-route { border-left: 3px solid #00acc1; background: rgba(0, 172, 193, 0.1); }
-
             .list-item.checked { border-left: 3px solid #43a047; color: #a5d6a7; background: rgba(67, 160, 71, 0.1); }
-
             .btn-sepia { background: linear-gradient(to bottom, #7a6b51, #5a4b31); color: #fff; border: 1px solid #4a3f2b; padding: 2px 6px; cursor: pointer; border-radius: 2px; font-weight:bold; font-size: 10px; text-shadow: 1px 1px 0 #000; }
-
             .btn-sepia:hover { background: linear-gradient(to bottom, #8a7b61, #6a5b41); border-color: #5a4b31; color: #fff; }
-
             .btn-go-sepia { background: linear-gradient(to bottom, #5a4b31, #3a2b11); }
-
             .icon-btn { cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s; background: none; border: none; padding: 0 2px;}
-
             .icon-btn:hover { filter: grayscale(0%); transform: scale(1.1); }
-
             .btn-del-map { color: #e53935; cursor: pointer; font-weight: bold; padding: 0 4px; font-size: 12px; text-shadow: 1px 1px 0 #000; }
-
             .btn { width: 100%; padding: 6px; font-weight: bold; cursor: pointer; margin-top: 5px; border-radius: 2px; border: 1px solid #4a3f2b; font-size: 11px; color: #e0d8c0; text-shadow: 1px 1px 0 #000; transition: 0.2s; }
-
             .header-buttons { display: flex; gap: 3px; align-items: center; }
-
             .header-buttons button { display: flex; align-items: center; gap: 3px; font-size: 9px; font-weight: bold; background: #333; border: 1px solid #444; border-radius: 3px; padding: 2px 4px; color: #e0d8c0; cursor: pointer; transition: 0.2s; }
-
             .header-buttons button:hover { background: #444; color: #fff; border-color: #a99a75; }
-
             .btn-close { background:transparent; border:none; color:#777; cursor:pointer; font-size:14px; font-weight:bold; } .btn-close:hover { color:#e53935; }
-
             #gearIcon { position: fixed; top: 50px; left: 10px; background: #111; border: 1px solid #5a4b31; border-radius: 50%; width: 40px; height: 40px; display: none; justify-content: center; align-items: center; cursor: grab; z-index: 10000; font-size: 20px; color: #d4af37; box-shadow: 0 0 10px #000; }
-
             .map-name-wrap { display: flex; align-items: center; flex-grow: 1; overflow: hidden; }
-
             .map-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; line-height: 1.2; padding-right: 5px; cursor: pointer; color: #d4af37; }
-
             .buttons-wrapper { display: flex; gap: 4px; align-items: center; flex-shrink: 0; justify-content: flex-end; }
-
             .order-input { width: 25px !important; flex: 0 0 25px !important; padding: 0; font-size: 9px; text-align: center; background: #0f0f0f; color: #d4af37; border: 1px solid #4a3f2b; border-radius: 2px; outline: none; box-shadow: inset 0 1px 2px #000; font-weight: bold; height: 16px; }
-
             .accordion-header { background: #1a1a1a; border: 1px solid #333; padding: 4px 5px; cursor: pointer; color: #81c784; font-weight: bold; font-size: 10px; transition: background 0.2s; }
-
             .accordion-header:hover { background: #2a2a2a; }
-
         `;
-
         document.head.appendChild(style);
-
-
 
         const gearIcon = document.createElement('div'); gearIcon.id = 'gearIcon'; gearIcon.innerHTML = '⚙️'; gearIcon.title = 'Przesuń lub Kliknij'; document.body.appendChild(gearIcon);
 
-
-
-        let recStyle = botSettings.isRecording ? 'border-color:#e53935; color:#ff5252;' : '';
-
-        let recIcon = botSettings.isRecording ? '⏹' : '🎥';
-
-        let recText = botSettings.isRecording ? 'Nagrywam' : 'Nagraj';
-
-
-
-const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
+        const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
         mainGui.innerHTML = `
             <div class="gui-header">
-                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.3</div>
+                <div id="guiHeaderTitle" style="margin-right:5px; color:#00e5ff; text-shadow: 0 0 5px #00e5ff; font-weight:900;">MargoNeuro</div>
                 <div class="header-buttons">
                     <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
                     <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
@@ -2734,7 +2702,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             </div>
                         </div>
                     </div>
-  <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Alarmy / Opcje walki)</div>
+                  <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Alarmy / Opcje walki)</div>
                     <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
                         <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                         <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
@@ -2746,46 +2714,20 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                         </div>
+                        
                         <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
-                            <label style="color:#ff5252; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha</label>
-                            <div style="display:flex; align-items:center; gap:5px; margin-top:4px;">
-                                <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
-                                <span id="btnPlayerAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%);">⚙️</span>
-                            </div>
-                            <div id="playerAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #ffb300; border-radius:3px; margin-bottom:4px; margin-top:4px;">
-                                <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;"><input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu</label>
-                            </div>
-                            <div style="display:flex; align-items:center; gap:5px; margin-top:6px;">
-                                <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Powiadomienie o wiadomościach prywatnych"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat</label>
-                                <span id="btnChatAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu czatu">⚙️</span>
-                            </div>
-                            <div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
-                                <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
-                            </div>
+                            <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
+                            <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0; padding-left:20px;"><input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu</label>
+                            
+                            <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat</label>
+                            <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0; padding-left:20px;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
+                            
+                            <button id="btnOpenDiscordModule" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; margin-top:5px; padding:6px; font-weight:bold; font-size:11px;">💬 KONFIGURACJA DISCORD</button>
                         </div>
                     </div>
-
-                    <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
-                    <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto:</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
-                    </div>
-
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
                     <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
                         <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin-bottom:6px; display:block;"><input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska</label>
-                        <input type="hidden" id="expRange" value="999">
-                        <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map: <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
-                        <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:80px; max-height:160px; padding:2px;"></div>
-                        <div style="display:flex; gap:4px; margin-top:6px;">
-                            <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
-                            <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
-                        </div>
-                    </div>
-                    <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
                         <input type="hidden" id="expRange" value="999">
                         <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map: <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
                         <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:80px; max-height:160px; padding:2px;"></div>
@@ -2817,62 +2759,61 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
         `;
         document.body.appendChild(mainGui);
 
-
-
+        // --- OKNO GŁÓWNYCH USTAWIEŃ ---
         const settingsGui = document.createElement('div'); settingsGui.id = 'heroSettingsGUI'; settingsGui.className = 'hero-window'; settingsGui.style.display = 'none';
-
         settingsGui.innerHTML = `
-
             <div class="gui-header">⚙️ Opcje & Skróty <button class="btn-close" onclick="document.getElementById('heroSettingsGUI').style.display='none'">✖</button></div>
-
             <div class="gui-content">
-
                 <div class="accordion-header" id="accHuman" onclick="toggleSettingsAcc('accHuman')">▼ HUMANIZACJA ATAKU & RADARU</div>
-
                 <div id="accHumanContent" style="display:block; padding: 5px; background: rgba(0,0,0,0.2); border: 1px solid #333; margin-bottom:10px;">
-
                     <div class="nav-row"><label>Reakcja po wykryciu moba (Min/Max ms):</label><div style="display:flex;gap:4px;"><input type="number" id="inpReactionMin" value="${botSettings.reactionMin}"><input type="number" id="inpReactionMax" value="${botSettings.reactionMax}"></div></div>
-
                     <div class="nav-row"><label>Opóźnienie ataku po dotarciu (Min/Max ms):</label><div style="display:flex;gap:4px;"><input type="number" id="inpAttackDelayMin" value="${botSettings.attackDelayMin}"><input type="number" id="inpAttackDelayMax" value="${botSettings.attackDelayMax}"></div></div>
-
                 </div>
-
-
 
                 <div class="accordion-header" id="accMove" onclick="toggleSettingsAcc('accMove')">▶ HUMANIZACJA RUCHU</div>
-
                 <div id="accMoveContent" style="display:none; padding: 5px; background: rgba(0,0,0,0.2); border: 1px solid #333; margin-bottom:10px;">
-
                     <div class="nav-row"><label>Reakcja na załadowanie mapy (Min / Max ms):</label><div style="display:flex;gap:4px;"><input type="number" id="inpLoadMin" value="${botSettings.mapLoadMin}"><input type="number" id="inpLoadMax" value="${botSettings.mapLoadMax}"></div></div>
-
                     <div class="nav-row"><label>Czekaj na respie (Min / Max ms):</label><div style="display:flex;gap:4px;"><input type="number" id="inpWaitMin" value="${botSettings.waitMin}"><input type="number" id="inpWaitMax" value="${botSettings.waitMax}"></div><div style="font-size:9px;color:#777;">* Czas stania w miejscu po dotarciu do respu.</div></div>
-
                     <div class="nav-row"><label>Szybkość kroków pingu (Min / Max ms):</label><div style="display:flex;gap:4px;"><input type="number" id="inpStepMin" value="${botSettings.stepMin}"><input type="number" id="inpStepMax" value="${botSettings.stepMax}"></div></div>
-
                     <div class="nav-row"><label>Anti-Lag bota EXP (Min / Max ms):</label><div style="display:flex;gap:4px;"><input type="number" id="inpExpAntiLagMin" value="${botSettings.expAntiLagMin || 1500}"><input type="number" id="inpExpAntiLagMax" value="${botSettings.expAntiLagMax || 2500}"></div><div style="font-size:9px;color:#777;">* Czas stania w miejscu zanim bot uzna, że się zaciął i kliknie ponownie.</div></div>
-
                 </div>
 
-
-
                 <div class="nav-row"><label>Zasięg widoczności (Domyślnie 7):</label><input type="number" id="inpVisionRange" value="${botSettings.visionRange}" min="1" max="15"></div>
-
-
                 <div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
 
-
-
                 <button id="btnSaveSettings" class="btn btn-go-sepia">💾 ZAPISZ USTAWIENIA</button>
-
             </div>
-
         `;
-
         document.body.appendChild(settingsGui);
 
+        // --- ZUPEŁNIE NOWY MODUŁ DISCORDA ---
+        const discordGui = document.createElement('div'); discordGui.id = 'discordSettingsGUI'; discordGui.className = 'hero-window'; discordGui.style.display = 'none';
+        discordGui.innerHTML = `
+            <div class="gui-header" style="color:#5865F2;">💬 Konfiguracja Discorda <button class="btn-close" onclick="document.getElementById('discordSettingsGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="gap:8px;">
+                <div style="background:#1a1a1a; padding:6px; border:1px solid #444; border-radius:3px;">
+                    <p style="margin:0 0 5px 0; font-size:10px; color:#aaa; text-align:justify;">1. Stwórz prywatny serwer na Discordzie.<br>2. Wejdź w Ustawienia kanału -> Integracje -> Tworzenie Webhooka.<br>3. Skopiuj <b>URL Webhooka</b> i wklej go poniżej. <a href="https://support.discord.com/hc/pl/articles/228383668-Wst%C4%99p-do-Webhook%C3%B3w" target="_blank" style="color:#5865F2;">[Instrukcja]</a></p>
+                    <input type="text" id="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/..." value="${botSettings.discord?.url || ''}" style="width:100%; padding:5px; font-size:10px; background:#0f0f0f; color:#fff; border:1px solid #5865F2; border-radius:2px; box-sizing:border-box;">
+                </div>
+                
+                <div style="background:#1a1a1a; padding:6px; border:1px solid #444; border-radius:3px;">
+                    <p style="margin:0 0 5px 0; font-size:10px; color:#aaa;">Oznaczanie na telefonie (Opcjonalne):<br>Aby dostać powiadomienie Push z dzwiękiem tak jak przy wiadomości DM, wklej tu swój <b>ID Użytkownika Discord</b>.</p>
+                    <input type="text" id="discordUserId" placeholder="Np. 123456789012345678" value="${botSettings.discord?.userId || ''}" style="width:100%; padding:5px; font-size:10px; background:#0f0f0f; color:#fff; border:1px solid #333; border-radius:2px; box-sizing:border-box;">
+                </div>
+                
+                <div style="border-top:1px solid #444; padding-top:8px;">
+                    <label style="color:#e0d8c0; font-size:11px; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Hero" ${botSettings.discord?.alerts?.hero ? 'checked' : ''}> Powiadomienia z Radaru (Herosi/E2)</label>
+                    <label style="color:#e0d8c0; font-size:11px; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Player" ${botSettings.discord?.alerts?.player ? 'checked' : ''}> Powiadomienia o graczach na mapie</label>
+                    <label style="color:#e0d8c0; font-size:11px; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Chat" ${botSettings.discord?.alerts?.chat ? 'checked' : ''}> Prywatne wiadomości na czacie (DM)</label>
+                    <label style="color:#ff5252; font-size:11px; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Captcha" ${botSettings.discord?.alerts?.captcha ? 'checked' : ''}> 🚨 ALARM ZAPADKI (BARDZO WAŻNE)</label>
+                </div>
+                
+                <button id="btnSaveDiscord" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; padding:8px; margin-top:auto;">💾 ZAPISZ DISCORDA I WYŚLIJ TEST</button>
+            </div>
+        `;
+        document.body.appendChild(discordGui);
 
-
-      window.toggleSettingsAcc = function(id) {
+        window.toggleSettingsAcc = function(id) {
             let h = document.getElementById(id);
             let c = document.getElementById(id+'Content');
             let isHidden = c.style.display === 'none';
@@ -2880,43 +2821,26 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
             h.innerText = (isHidden ? '▼ ' : '▶ ') + h.innerText.replace(/^[▼▶]\s*/, '').trim();
         };
 
-
         const gatewaysGui = document.createElement('div'); gatewaysGui.id = 'heroGatewaysGUI'; gatewaysGui.className = 'hero-window'; gatewaysGui.style.display = 'none';
-
         gatewaysGui.innerHTML = `
-
             <div class="gui-header">🗃️ Baza Przejść <button class="btn-close" onclick="document.getElementById('heroGatewaysGUI').style.display='none'">✖</button></div>
-
             <div class="gui-content"><button id="btnScanGateways" class="btn btn-sepia" style="margin-bottom:5px;">🔍 SKANUJ OBECNĄ MAPĘ</button><div id="gatewaysListContainer"></div></div>
-
         `;
-
         document.body.appendChild(gatewaysGui);
 
-
-
         let modalHtml = `
-
             <div id="heroModalOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:99999; justify-content:center; align-items:center; flex-direction:column;">
-
                <div id="heroModalBox" style="background:#111; border:1px solid #5a4b31; padding:15px; width:80%; max-width:260px; border-radius:4px; text-align:center; box-shadow: 0 0 20px #000; font-family: Tahoma, Arial, sans-serif;">
-
                     <div id="heroModalText" style="color:#e0d8c0; font-size:12px; margin-bottom:12px; word-wrap:break-word; white-space:pre-wrap;"></div>
-
                     <input type="text" id="heroModalInput" style="display:none; width:90%; margin:0 auto 12px auto; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; padding:6px; font-size:12px; text-align:center;">
-
                     <div style="display:flex; justify-content:space-around; gap:10px;">
-
                         <button id="heroModalBtnYes" style="background: linear-gradient(to bottom, #7a6b51, #5a4b31); color:#fff; border: 1px solid #4a3f2b; padding: 4px 10px; border-radius: 2px; cursor: pointer; font-weight: bold;">OK</button>
-
                         <button id="heroModalBtnNo" style="background: linear-gradient(to bottom, #8e0000, #5c0000); color:#fff; border: 1px solid #4a3f2b; padding: 4px 10px; border-radius: 2px; cursor: pointer; font-weight: bold; display:none;">Anuluj</button>
-
                     </div>
-
                </div>
-
             </div>`;
-const goToGui = document.createElement('div');
+            
+        const goToGui = document.createElement('div');
         goToGui.id = 'heroGoToGUI';
         goToGui.className = 'hero-window';
         goToGui.style.display = 'none';
@@ -2925,7 +2849,6 @@ const goToGui = document.createElement('div');
         goToGui.style.width = '320px';
         goToGui.style.maxHeight = '560px';
         goToGui.style.resize = 'both';
-
         goToGui.innerHTML = `
             <div class="gui-header">➡ Idź do mapy <button class="btn-close" onclick="document.getElementById('heroGoToGUI').style.display='none'">✖</button></div>
             <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
@@ -2936,7 +2859,7 @@ const goToGui = document.createElement('div');
         document.body.appendChild(goToGui);
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-const expBaseGui = document.createElement('div');
+        const expBaseGui = document.createElement('div');
         expBaseGui.id = 'heroExpBaseGUI';
         expBaseGui.className = 'hero-window';
         expBaseGui.style.display = 'none';
@@ -2969,25 +2892,9 @@ const expBaseGui = document.createElement('div');
             </div>
         `;
         document.body.appendChild(expRecGui);
-const teleportsGui = document.createElement('div');
-        teleportsGui.id = 'heroTeleportsGUI';
-        teleportsGui.className = 'hero-window';
-        teleportsGui.style.display = 'none';
-        teleportsGui.style.top = '60px';
-        teleportsGui.style.left = '400px';
-        teleportsGui.style.width = '320px';
-        teleportsGui.style.maxHeight = '560px';
-    teleportsGui.innerHTML = `
-            <div class="gui-header">🚀 Teleporty <button class="btn-close" onclick="document.getElementById('heroTeleportsGUI').style.display='none'">✖</button></div>
-            <div class="gui-content" style="display:flex; flex-direction:column; height:100%;">
-                <div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto;"></div>
-            </div>
-        `;
-        document.body.appendChild(teleportsGui);
+        
         setupModals(); setupMultiDrag(); setupGearDrag(); setupLogic();
-
     }
-
 
 
     // ==========================================
@@ -3186,52 +3093,37 @@ if (btnExp) {
 
 
 // Inicjalizacja braku zmiennej, jeśli to pierwszy start z nową aktualizacją
-        if (!botSettings.berserk) {
+if (!botSettings.berserk) {
             botSettings.berserk = { enabled: false, userEnabled: false, common: true, e1: false, e2: false, hero: false, minLvlOffset: -20, maxLvlOffset: 100 };
             saveSettings();
         }
-        if (botSettings.berserk.userEnabled === undefined) {
-            botSettings.berserk.userEnabled = botSettings.berserk.enabled;
-        }
-       // Inicjalizacja ustawień AutoHeala i Auto-Potów
+        if (botSettings.berserk.userEnabled === undefined) botSettings.berserk.userEnabled = botSettings.berserk.enabled;
+        
         if (!botSettings.autoheal) { botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" }; saveSettings(); }
         if (!botSettings.autopot) { botSettings.autopot = { enabled: false, stacks: 14 }; saveSettings(); }
         if (botSettings.exp.autoChangeRoute === undefined) { botSettings.exp.autoChangeRoute = false; saveSettings(); }
-
         if (botSettings.exp.captchaAlert === undefined) { botSettings.exp.captchaAlert = true; saveSettings(); }
 
         bindChange('captchaAlert', (e) => {
             botSettings.exp.captchaAlert = e.target.checked;
             saveSettings();
-            // Prośba o zgodę na powiadomienia Windows, jeśli zaznaczamy opcję pierwszy raz
-            if (e.target.checked && Notification.permission !== "granted" && Notification.permission !== "denied") {
-                Notification.requestPermission();
-            }
+            if (e.target.checked && Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
         });
         
         if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
-
         bindChange('playerAlert', (e) => {
             botSettings.exp.playerAlert = e.target.checked;
             saveSettings();
-            // Ostrzeżenie i wymuszenie zgody na powiadomienia
             if (e.target.checked) {
                 if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
                 if (window.logExp) window.logExp("👁️ Włączono monitoring graczy i czatu.", "#ffb300");
             }
         });
+
         if (botSettings.exp.playerAlertStopBot === undefined) { botSettings.exp.playerAlertStopBot = false; saveSettings(); }
-
-        bindChange('playerAlertStopBot', (e) => {
-            botSettings.exp.playerAlertStopBot = e.target.checked;
-            saveSettings();
-        });
-
-        bindClick('btnPlayerAlertSettings', () => {
-            let p = document.getElementById('playerAlertSettingsPanel');
-            p.style.display = p.style.display === 'none' ? 'block' : 'none';
-        });
-if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
+        bindChange('playerAlertStopBot', (e) => { botSettings.exp.playerAlertStopBot = e.target.checked; saveSettings(); });
+        
+        if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
         if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
 
         bindChange('chatAlert', (e) => {
@@ -3239,17 +3131,38 @@ if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false
             saveSettings();
             if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission();
         });
+        bindChange('chatAlertStopBot', (e) => { botSettings.exp.chatAlertStopBot = e.target.checked; saveSettings(); });
 
-        bindChange('chatAlertStopBot', (e) => {
-            botSettings.exp.chatAlertStopBot = e.target.checked;
-            saveSettings();
-        });
-
-        bindClick('btnChatAlertSettings', () => {
-            let p = document.getElementById('chatAlertSettingsPanel');
-            p.style.display = p.style.display === 'none' ? 'block' : 'none';
-        });
+        // --- INICJALIZACJA DISCORDA ---
+        if (!botSettings.discord) { botSettings.discord = { enabled: true, url: '', userId: '', alerts: { hero: true, player: true, chat: true, captcha: true } }; saveSettings(); }
         
+        // Otwieranie Modułu Discorda z wewnątrz ustawień EXPa
+        bindClick('btnOpenDiscordModule', () => { 
+            let p = document.getElementById('discordSettingsGUI'); 
+            p.style.display = p.style.display === 'none' ? 'flex' : 'none'; 
+        });
+
+        // Przycisk Zapisz + Test na Discordzie
+        bindClick('btnSaveDiscord', () => {
+            botSettings.discord.url = document.getElementById('discordWebhookUrl').value.trim();
+            botSettings.discord.userId = document.getElementById('discordUserId').value.trim();
+            botSettings.discord.enabled = botSettings.discord.url.length > 10;
+            
+            if(!botSettings.discord.alerts) botSettings.discord.alerts = {};
+            botSettings.discord.alerts.hero = document.getElementById('discordAlert_Hero').checked;
+            botSettings.discord.alerts.player = document.getElementById('discordAlert_Player').checked;
+            botSettings.discord.alerts.chat = document.getElementById('discordAlert_Chat').checked;
+            botSettings.discord.alerts.captcha = document.getElementById('discordAlert_Captcha').checked;
+            
+            saveSettings();
+            
+            if(botSettings.discord.enabled) {
+                window.sendDiscordWebhook("🟢 MARGONEURO PODPIĘTE!", "Powiadomienia Discord zostały skonfigurowane poprawnie!\nOd teraz to okno jest gotowe do odbierania sygnałów.", 5763719);
+                heroAlert("Ustawienia Discord zostały zaktualizowane.\nWysłano wiadomość testową na Twój kanał!");
+            } else {
+                heroAlert("Ustawienia zapisane (Webhook wyłączony ze względu na pusty link).");
+            }
+        });
 
         bindChange('autohealEnabled', (e) => { botSettings.autoheal.enabled = e.target.checked; saveSettings(); });
         bindChange('autopotEnabled', (e) => { botSettings.autopot.enabled = e.target.checked; saveSettings(); });
@@ -7815,6 +7728,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (botSettings.exp && botSettings.exp.captchaAlert) {
                     if (!window.__lastCaptchaNotif || Date.now() - window.__lastCaptchaNotif > 15000) {
                         window.__lastCaptchaNotif = Date.now();
+
+                        // PUSH DISCORD O ZAPADCE
+                        if (botSettings.discord?.alerts?.captcha) {
+                            window.sendDiscordWebhook("🚨 [ZAPADKA] Wykryto Captcha!", "Gra wymaga Twojej uwagi! Zatrzymano bota.", 16711680);
+                        }
                         
                         try { 
                             let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); 
@@ -7897,10 +7815,18 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     // 1. Log w panelu (bez dźwięku!)
                     if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
 
-                    // 2. Zbiorcze powiadomienie w przeglądarce
+                   // 2. Zbiorcze powiadomienie w przeglądarce
                     if (Notification.permission === "granted") {
                         new Notification(msgTitle, { body: msgBody });
                     }
+
+                    // PUSH NA DISCORD
+                    let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
+                    window.sendDiscordWebhook(
+                        msgTitle, 
+                        `${msgBody}\n**Mapa:** ${mapName}`, 
+                        16711680 // Czerwony kolor
+                    );
 
                     // 3. Zatrzymanie bota (tylko raz dla całej grupy)
                     if (botSettings.exp.playerAlertStopBot) {
@@ -7967,12 +7893,21 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     // 1. Log w konsoli bota
                     if (window.logExp) window.logExp(`📩 PRIV od ${sender}: ${message}`, "#e040fb");
 
-                    // 2. Powiadomienie systemowe (Brak dźwięku)
+                   // 2. Powiadomienie systemowe (Brak dźwięku)
                     if (Notification.permission === "granted") {
                         new Notification(`📩 Nowa wiadomość (Margo)`, {
                             body: `${sender}: ${message}`,
                             icon: 'https://www.margonem.pl/favicon.ico'
                         });
+                    }
+
+                   // PUSH NA DISCORD
+                    if (botSettings.discord?.alerts?.chat) {
+                        window.sendDiscordWebhook(
+                            "📩 Otrzymano Wiadomość Prywatną", 
+                            `**Od:** ${sender}\n**Treść:** ${message}`, 
+                            14828287 // Różowy kolor
+                        );
                     }
 
                     // 3. Opcjonalne zatrzymanie bota
@@ -8273,106 +8208,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: PANEL STATYSTYK SESJI (Główny łącznik z GUI) ---
-    if (window.statsIntervalId) clearInterval(window.statsIntervalId);
-    
-    window.sessionStats = {
-        active: false,
-        startTime: 0,
-        expGained: 0,
-        goldGained: 0,
-        lastExp: -1,
-        lastGold: -1,
-        accumulatedTime: 0 // Zmienna zapamiętująca czas przy pauzowaniu
-    };
-
-    window.statsIntervalId = setInterval(() => {
-        // 1. Zabezpieczenie - upewnijmy się, że silnik gry istnieje
-        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
-
-        // 2. Pobranie aktualnego stanu EXP i Złota z gry (działa i na NI, i na SI)
-        let curExp = parseInt(Engine.hero.d.exp) || (typeof hero !== 'undefined' ? parseInt(hero.exp) : 0);
-        let curGold = parseInt(Engine.hero.d.gold) || (typeof hero !== 'undefined' ? parseInt(hero.gold) : 0);
-        
-        let maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 
-                     (typeof hero !== 'undefined' ? (parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp)) : 0);
-                     
-        let expLeft = parseInt(Engine.hero.d.exp_left) || 0;
-
-        // 3. FLAGA STARTU - czytamy bezpośrednio główną zmienną bota!
-        // Kiedy klikasz przycisk "▶ START" obok trasy, ta zmienna zmienia się na TRUE!
-        let isBotWorking = (window.isExping === true || window.isPatrolling === true);
-
-        // 4. Logika startu / stopu licznika
-        if (isBotWorking && !window.sessionStats.active) {
-            window.sessionStats.active = true;
-            window.sessionStats.startTime = Date.now(); // Zaczynamy mierzyć obecną "sesję" biegu
-            if (window.sessionStats.lastExp === -1) {
-                window.sessionStats.lastExp = curExp;
-                window.sessionStats.lastGold = curGold;
-            }
-        } else if (!isBotWorking && window.sessionStats.active) {
-            // PAUZA: Zatrzymujemy odliczanie, dopisujemy spędzony czas
-            window.sessionStats.active = false;
-            window.sessionStats.accumulatedTime += Date.now() - window.sessionStats.startTime;
-        }
-
-        // Jeśli bot nie jest włączony (START nie kliknięty), to nie dodajemy statystyk
-        if (!window.sessionStats.active) return;
-
-        // 5. Obliczanie przyrostów
-        if (window.sessionStats.lastExp !== -1) {
-            let expDiff = curExp - window.sessionStats.lastExp;
-            if (expDiff > 0) window.sessionStats.expGained += expDiff;
-            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Wbiłeś level, pasek spadł do zera
-        }
-        window.sessionStats.lastExp = curExp;
-
-        if (window.sessionStats.lastGold !== -1) {
-            let goldDiff = curGold - window.sessionStats.lastGold;
-            if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
-        }
-        window.sessionStats.lastGold = curGold;
-
-        // 6. Matematyka Czasu (Czas obecnego biegu + czas z poprzednich etapów przed pauzą)
-        let totalElapsedMs = window.sessionStats.accumulatedTime + (Date.now() - window.sessionStats.startTime);
-        let elapsedSec = Math.floor(totalElapsedMs / 1000);
-        if (elapsedSec < 1) elapsedSec = 1;
-        
-        let h = Math.floor(elapsedSec / 3600);
-        let m = Math.floor((elapsedSec % 3600) / 60);
-        let s = elapsedSec % 60;
-        let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-
-        // EXP / h
-        let expPerHour = 0;
-        if (elapsedSec > 2) expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
-
-        // TNL (Czas do awansu)
-        let missingExp = expLeft > 0 ? expLeft : (maxExp > curExp ? maxExp - curExp : 0);
-        let timeTnlStr = "--:--:--";
-        
-        if (missingExp > 0 && expPerHour > 0) {
-            let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
-            let hTnl = Math.floor(secsTnl / 3600);
-            let mTnl = Math.floor((secsTnl % 3600) / 60);
-            let sTnl = secsTnl % 60;
-            timeTnlStr = hTnl > 99 ? "+99 godzin" : `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
-        } else if (missingExp > 0) {
-            timeTnlStr = "Obliczanie...";
-        } else {
-            timeTnlStr = "Max Lvl?";
-        }
-
-        // 7. BŁYSKAWICZNA AKTUALIZACJA HTML (Dokładnie te ID, które podesłałeś)
-        // Używam getElementById (lub querySelectorAll na wszelki wypadek duchów)
-        document.querySelectorAll('#statSessionTime').forEach(el => el.innerHTML = timeStr);
-        document.querySelectorAll('#statExpGained').forEach(el => el.innerHTML = window.sessionStats.expGained.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerHTML = expPerHour.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerHTML = timeTnlStr);
-        document.querySelectorAll('#statGoldGained').forEach(el => el.innerHTML = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
-
-    }, 1000);
 
     // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
     setTimeout(() => {
