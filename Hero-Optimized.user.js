@@ -1570,13 +1570,13 @@ let attackInterval = null;
                     let foundName = nData.nick ? nData.nick.replace(/<[^>]*>?/gm, '') : targetHero;
                     showHeroAlertBanner(foundName);
                     
-                 // PUSH NA DISCORD
-                    if (botSettings.discord?.alerts?.player) {
-                        let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
+           // PUSH NA DISCORD
+                    if (botSettings.discord?.alerts?.hero) {
+                        let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : lastMapName;
                         window.sendDiscordWebhook(
-                            msgTitle, 
-                            `${msgBody}\n**Mapa:** ${mapName}`, 
-                            16711680 // Czerwony kolor
+                            "🚨 WYKRYTO CEL NA RADARZE!", 
+                            `**Znalazłem:** ${foundName}\n**Lokalizacja:** ${mapName} [X: ${nData.x}, Y: ${nData.y}]`, 
+                            16753920 // Złoty kolor
                         );
                     }
 
@@ -8317,7 +8317,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             };
         }
     }, 3000);
-    // ==========================================
+   // ==========================================
         // GWARANTOWANY ZAPIS I PODPIĘCIE MODUŁÓW (OSTATECZNA WERSJA)
         // ==========================================
         setTimeout(() => {
@@ -8356,7 +8356,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             let idInput = document.getElementById('discordUserId');
             if (idInput) idInput.value = botSettings.discord.userId || '';
 
-            // Aktualizujemy Checkboxy w kodzie
+            // Aktualizujemy WSZYSTKIE Checkboxy w kodzie po wyczyszczeniu duchów!
             let checks = [
                 {id: 'discordAlert_Hero', val: botSettings.discord.alerts.hero},
                 {id: 'discordStop_Hero', val: botSettings.discord.stop.hero},
@@ -8365,14 +8365,34 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 {id: 'discordAlert_Chat', val: botSettings.discord.alerts.chat},
                 {id: 'discordStop_Chat', val: botSettings.discord.stop.chat},
                 {id: 'discordAlert_Captcha', val: botSettings.discord.alerts.captcha},
-                {id: 'discordStop_Captcha', val: botSettings.discord.stop.captcha}
+                {id: 'discordStop_Captcha', val: botSettings.discord.stop.captcha},
+                
+                {id: 'captchaAlert', val: botSettings.exp.captchaAlert},
+                {id: 'playerAlert', val: botSettings.exp.playerAlert},
+                {id: 'playerAlertStopBot', val: botSettings.exp.playerAlertStopBot},
+                {id: 'chatAlert', val: botSettings.exp.chatAlert},
+                {id: 'chatAlertStopBot', val: botSettings.exp.chatAlertStopBot}
             ];
             checks.forEach(c => {
                 let el = document.getElementById(c.id);
                 if (el) el.checked = c.val;
             });
 
-            // 3. Osobisty Strażnik Zapisywania (Przycisk "Zapisz i Testuj")
+            // 3. TWARDE ZAPISYWANIE POWIADOMIEŃ PRZEGLĄDARKI 
+            // (Przypinamy akcje dopiero teraz, omijając błąd przeglądarki)
+            document.querySelectorAll('#browserAlertsSettingsGUI input[type="checkbox"]').forEach(chk => {
+                chk.addEventListener('change', (e) => {
+                    let id = e.target.id;
+                    if (id === 'captchaAlert') botSettings.exp.captchaAlert = e.target.checked;
+                    if (id === 'playerAlert') { botSettings.exp.playerAlert = e.target.checked; if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); }
+                    if (id === 'playerAlertStopBot') botSettings.exp.playerAlertStopBot = e.target.checked;
+                    if (id === 'chatAlert') { botSettings.exp.chatAlert = e.target.checked; if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); }
+                    if (id === 'chatAlertStopBot') botSettings.exp.chatAlertStopBot = e.target.checked;
+                    saveSettings(); // Pchamy od razu do pamięci!
+                });
+            });
+
+            // 4. Osobisty Strażnik Zapisywania dla Discorda
             let btnSaveDiscord = document.getElementById('btnSaveDiscord');
             if (btnSaveDiscord) {
                 let freshSaveBtn = btnSaveDiscord.cloneNode(true);
@@ -8398,15 +8418,26 @@ let checkBrowser = botSettings.exp?.playerAlert;
                     botSettings.discord.stop.chat = document.getElementById('discordStop_Chat').checked;
                     botSettings.discord.stop.captcha = document.getElementById('discordStop_Captcha').checked;
                     
-                    saveSettings(); // To jest najważniejsze, to wpycha do localStorage!
+                    saveSettings(); 
                     
                     if(botSettings.discord.enabled) {
                         window.sendDiscordWebhook("🟢 MARGONEURO ZSYNCHRONIZOWANE", "Powiadomienia Discord zostały skonfigurowane poprawnie i działają niezależnie od przeglądarki!", 5763719);
-                        heroAlert("Ustawienia Discord zostały zapisane!\nLink do Webhooka i ID wczytają się poprawnie po odświeżeniu gry.");
+                        heroAlert("Ustawienia Discord zostały zapisane!\\nLink do Webhooka i ID wczytają się poprawnie po odświeżeniu gry.");
                     } else {
                         heroAlert("Ustawienia zapisane (Webhook wyłączony ze względu na pusty link).");
                     }
                 });
             }
-        }, 1500); // 1.5 sekundy opóźnienia upewnia nas, że GUI gry i wszystkie okienka MargoNeuro już wyrenderowały się z HTML'a!
+        }, 1500); 
+    // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
+    setTimeout(() => {
+        if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
+            window.__movementGuardInstalled = true;
+            window.originalAutoWalk = Engine.hero.autoWalk;
+            Engine.hero.autoWalk = function(x, y, ...args) {
+                if (window.__movementLock && Date.now() < window.__movementLock) return false; 
+                return window.originalAutoWalk.call(this, x, y, ...args);
+            };
+        }
+    }, 3000);
 })(); // Koniec kodu
