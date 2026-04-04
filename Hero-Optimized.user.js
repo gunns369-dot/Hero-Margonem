@@ -3827,6 +3827,85 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
                 }
             });
         }
+
+        // ==========================================
+        // TWARDE PODPIĘCIE MODUŁÓW POWIADOMIEŃ I DISCORDA
+        // ==========================================
+        let btnBrowserAlerts = document.getElementById('btnOpenBrowserAlertsModule');
+        if (btnBrowserAlerts) {
+            btnBrowserAlerts.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                let p = document.getElementById('browserAlertsSettingsGUI');
+                if (p) p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+            });
+        }
+
+        let btnDiscordAlerts = document.getElementById('btnOpenDiscordModule');
+        if (btnDiscordAlerts) {
+            btnDiscordAlerts.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                let p = document.getElementById('discordSettingsGUI');
+                if (p) p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+            });
+        }
+
+        // Struktura bazy danych Discorda
+        if (!botSettings.discord) botSettings.discord = { enabled: false, url: '', userId: '', alerts: {}, stop: {} };
+        if (!botSettings.discord.alerts) botSettings.discord.alerts = { hero: true, player: true, chat: true, captcha: true };
+        if (!botSettings.discord.stop) botSettings.discord.stop = { hero: true, player: false, chat: false, captcha: true };
+
+        // Wymuszenie wczytania wpisanych linków do okienek
+        let inpUrl = document.getElementById('discordWebhookUrl');
+        if(inpUrl && botSettings.discord.url) inpUrl.value = botSettings.discord.url;
+        
+        let inpId = document.getElementById('discordUserId');
+        if(inpId && botSettings.discord.userId) inpId.value = botSettings.discord.userId;
+
+        // Podpięcie w czasie rzeczywistym
+        bindInput('discordWebhookUrl', (e) => { botSettings.discord.url = e.target.value.trim(); saveSettings(); });
+        bindInput('discordUserId', (e) => { botSettings.discord.userId = e.target.value.trim(); saveSettings(); });
+
+        // Twarde zapisywanie powiadomień przeglądarki
+        bindChange('captchaAlert', (e) => { botSettings.exp.captchaAlert = e.target.checked; saveSettings(); });
+        bindChange('playerAlert', (e) => { botSettings.exp.playerAlert = e.target.checked; saveSettings(); });
+        bindChange('playerAlertStopBot', (e) => { botSettings.exp.playerAlertStopBot = e.target.checked; saveSettings(); });
+        bindChange('chatAlert', (e) => { botSettings.exp.chatAlert = e.target.checked; saveSettings(); });
+        bindChange('chatAlertStopBot', (e) => { botSettings.exp.chatAlertStopBot = e.target.checked; saveSettings(); });
+
+        // Twardy przycisk zapisujący Discorda (Klonowanie zdejmuje zepsute blokady)
+        let btnSaveDiscord = document.getElementById('btnSaveDiscord');
+        if (btnSaveDiscord) {
+            let newBtnSaveDiscord = btnSaveDiscord.cloneNode(true);
+            btnSaveDiscord.parentNode.replaceChild(newBtnSaveDiscord, btnSaveDiscord);
+
+            newBtnSaveDiscord.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                
+                botSettings.discord.url = document.getElementById('discordWebhookUrl').value.trim();
+                botSettings.discord.userId = document.getElementById('discordUserId').value.trim();
+                botSettings.discord.enabled = botSettings.discord.url.length > 10;
+                
+                botSettings.discord.alerts.hero = document.getElementById('discordAlert_Hero').checked;
+                botSettings.discord.alerts.player = document.getElementById('discordAlert_Player').checked;
+                botSettings.discord.alerts.chat = document.getElementById('discordAlert_Chat').checked;
+                botSettings.discord.alerts.captcha = document.getElementById('discordAlert_Captcha').checked;
+
+                botSettings.discord.stop.hero = document.getElementById('discordStop_Hero').checked;
+                botSettings.discord.stop.player = document.getElementById('discordStop_Player').checked;
+                botSettings.discord.stop.chat = document.getElementById('discordStop_Chat').checked;
+                botSettings.discord.stop.captcha = document.getElementById('discordStop_Captcha').checked;
+                
+                saveSettings();
+                
+                if(botSettings.discord.enabled) {
+                    window.sendDiscordWebhook("🟢 MARGONEURO ZSYNCHRONIZOWANE", "Powiadomienia Discord zostały skonfigurowane poprawnie i działają niezależnie od przeglądarki!", 5763719);
+                    heroAlert("Ustawienia Discord zostały zapisane.\nWysłano wiadomość testową na Twój kanał!");
+                } else {
+                    heroAlert("Ustawienia zapisane (Webhook wyłączony ze względu na pusty link).");
+                }
+            });
+        }
+        
     } // <--- TO JEST ZAMKNIĘCIE FUNKCJI setupLogic, KTÓRE SIĘ ZEPSUŁO!
 
     // ==========================================
