@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Hero, Elity II & Kolosy - Optimized Edition
+// @name         MargoNeuro - Optimized Edition
 // @version      64.3
 // @description  Automatyczne wykrywanie, inteligentny zasięg, natywny auto-atak, poprawne limity poziomowe, naprawiony scroll.
 // @author       Ty & Gemini
@@ -971,9 +971,9 @@ let opacityValue = 0.95;
         expAntiLagMin: 1500, expAntiLagMax: 2500,
 
         useTeleports: true,
+        discord: { enabled: false, url: '' }, // NOWOŚĆ: Pamięć ustawień Discorda
 
         unlockedTeleports: JSON.parse(localStorage.getItem('hero_teleports_v64') || '{"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false}'),
-
         exp: {
 
             enabled: false, minLvl: 1, maxLvl: 300,
@@ -1149,6 +1149,30 @@ function loadData() {
 
 
     function saveSettings() { localStorage.setItem('hero_settings_db_v64', JSON.stringify(botSettings)); }
+
+    function saveSettings() { localStorage.setItem('hero_settings_db_v64', JSON.stringify(botSettings)); }
+
+    // --- SILNIK MARGONEURO: DISCORD WEBHOOK ---
+    window.sendDiscordWebhook = function(title, description, colorHex = 16753920) {
+        if (!botSettings.discord || !botSettings.discord.enabled || !botSettings.discord.url) return;
+        
+        let payload = {
+            username: "MargoNeuro",
+            avatar_url: "https://www.margonem.pl/favicon.ico",
+            embeds: [{
+                title: title,
+                description: description,
+                color: colorHex,
+                timestamp: new Date().toISOString()
+            }]
+        };
+
+        fetch(botSettings.discord.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(e => console.error("[MargoNeuro] Błąd wysyłania na Discorda:", e));
+    };
 
     function saveGateways() { localStorage.setItem('hero_global_gateways_v20', JSON.stringify(globalGateways)); }
 
@@ -1542,9 +1566,17 @@ let attackInterval = null;
 
 
 
-                    let foundName = nData.nick ? nData.nick.replace(/<[^>]*>?/gm, '') : targetHero;
 
+                    let foundName = nData.nick ? nData.nick.replace(/<[^>]*>?/gm, '') : targetHero;
                     showHeroAlertBanner(foundName);
+                    
+                    // PUSH NA DISCORD
+                    let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : lastMapName;
+                    window.sendDiscordWebhook(
+                        "🚨 WYKRYTO CEL NA RADARZE!", 
+                        `**Znalazłem:** ${foundName}\n**Lokalizacja:** ${mapName} [X: ${nData.x}, Y: ${nData.y}]`, 
+                        16753920 // Złoty kolor
+                    );
 
 
 
@@ -2620,7 +2652,7 @@ window.handleTeleportNPC = function(targetMap) {
 const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
         mainGui.innerHTML = `
             <div class="gui-header">
-                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.3</div>
+                <div id="guiHeaderTitle" style="margin-right:5px; color:#00e5ff; text-shadow: 0 0 5px #00e5ff; font-weight:900;">MargoNeuro</div>
                 <div class="header-buttons">
                     <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
                     <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
@@ -2759,8 +2791,15 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                                 <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Powiadomienie o wiadomościach prywatnych"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat</label>
                                 <span id="btnChatAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu czatu">⚙️</span>
                             </div>
-                            <div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
+                         <div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
                                 <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
+                            </div>
+                            
+                            <div style="border-top:1px dashed #444; margin-top: 4px; padding-top: 6px;">
+                                <label style="color:#7289da; font-size:10px; cursor:pointer; font-weight:bold; margin:0; display:flex; align-items:center; gap:5px;">
+                                    <input type="checkbox" id="discordAlertEnabled" ${botSettings.discord?.enabled ? 'checked' : ''}> 💬 Discord (Push na telefon)
+                                </label>
+                                <input type="text" id="discordWebhookUrl" placeholder="Wklej tutaj link z Discord Webhook..." value="${botSettings.discord?.url || ''}" style="width:100%; padding:4px; font-size:9px; background:#0f0f0f; color:#fff; border:1px solid #444; margin-top: 4px; border-radius:2px;">
                             </div>
                         </div>
                     </div>
@@ -3232,8 +3271,21 @@ if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false
             if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission();
         });
 
-        bindChange('chatAlertStopBot', (e) => {
+       bindChange('chatAlertStopBot', (e) => {
             botSettings.exp.chatAlertStopBot = e.target.checked;
+            saveSettings();
+        });
+
+        // --- ZAPIS USTAWIEŃ DISCORDA ---
+        if (!botSettings.discord) { botSettings.discord = { enabled: false, url: '' }; saveSettings(); }
+        
+        bindChange('discordAlertEnabled', (e) => {
+            botSettings.discord.enabled = e.target.checked;
+            saveSettings();
+        });
+        
+        bindInput('discordWebhookUrl', (e) => {
+            botSettings.discord.url = e.target.value.trim();
             saveSettings();
         });
 
@@ -7889,10 +7941,18 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     // 1. Log w panelu (bez dźwięku!)
                     if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
 
-                    // 2. Zbiorcze powiadomienie w przeglądarce
+                   // 2. Zbiorcze powiadomienie w przeglądarce
                     if (Notification.permission === "granted") {
                         new Notification(msgTitle, { body: msgBody });
                     }
+
+                    // PUSH NA DISCORD
+                    let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
+                    window.sendDiscordWebhook(
+                        msgTitle, 
+                        `${msgBody}\n**Mapa:** ${mapName}`, 
+                        16711680 // Czerwony kolor
+                    );
 
                     // 3. Zatrzymanie bota (tylko raz dla całej grupy)
                     if (botSettings.exp.playerAlertStopBot) {
@@ -7959,13 +8019,20 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     // 1. Log w konsoli bota
                     if (window.logExp) window.logExp(`📩 PRIV od ${sender}: ${message}`, "#e040fb");
 
-                    // 2. Powiadomienie systemowe (Brak dźwięku)
+                   // 2. Powiadomienie systemowe (Brak dźwięku)
                     if (Notification.permission === "granted") {
                         new Notification(`📩 Nowa wiadomość (Margo)`, {
                             body: `${sender}: ${message}`,
                             icon: 'https://www.margonem.pl/favicon.ico'
                         });
                     }
+
+                    // PUSH NA DISCORD
+                    window.sendDiscordWebhook(
+                        "📩 Otrzymano Wiadomość Prywatną", 
+                        `**Od:** ${sender}\n**Treść:** ${message}`, 
+                        14828287 // Różowy kolor
+                    );
 
                     // 3. Opcjonalne zatrzymanie bota
                     if (botSettings.exp.chatAlertStopBot) {
