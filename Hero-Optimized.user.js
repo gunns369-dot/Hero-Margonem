@@ -7228,35 +7228,28 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 let v = itemData.getLeczyStat();
                 if (v) return v;
             }
-            
             let statStr = String(itemData.stat || itemData.stats || "").toLowerCase();
-            
             if (statStr.includes('fullheal') || statStr.includes('całe życie') || statStr.includes('całą energię')) return 999999;
             if (statStr.includes('hot=')) return 0; 
-            
             statStr = statStr.replace(/(\d)\s+(\d)/g, '$1$2');
-            
             let match = statStr.match(/(?:leczy|przywraca)[^\d]*(\d+)/);
             if (match) return parseInt(match[1]);
-            
             let matchPct = statStr.match(/leczy\s*p[=:](\d+)/);
             if (matchPct) {
                 let pct = parseInt(matchPct[1]);
                 let maxhp = parseInt(Engine.hero.d.maxhp) || 1000;
                 return Math.floor(maxhp * (pct / 100));
             }
-            
             return 0;
         }
 
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
-            // Zabezpieczenie (Failsafe) przed zablokowaniem pętli przy lagu
+            // Awaryjne zdjęcie locka (jeśli internet zlaguje)
             if (window.isHealLocked && Date.now() > window.lastHealTime + 3000) {
                 window.isHealLocked = false;
             }
-
             if (window.isHealLocked) return;
             
             if (!botSettings.autoheal || !botSettings.autoheal.enabled) {
@@ -7268,13 +7261,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             
             let isDead = Engine.dead || Engine.hero.d.dead === true || Engine.hero.d.dead === 1 || Engine.hero.d.dead === "1";
             let deathWindowVisible = document.querySelector('.death-window, .dead-window, [data-wnd="dead"], .alert-window') !== null;
-            
             if (isDead && !deathWindowVisible) {
-                isDead = false;
-                Engine.dead = false;
-                Engine.hero.d.dead = 0;
+                isDead = false; Engine.dead = false; Engine.hero.d.dead = 0;
             }
-
             if (isDead) {
                 window.isRegeneratingToFull = false;
                 return;
@@ -7287,24 +7276,25 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let hpPercent = (hp / maxhp) * 100;
             let threshold = parseInt(botSettings.autoheal.threshold) || 80;
 
-        if (hpPercent < threshold && !window.isRegeneratingToFull) {
+            // Start leczenia
+            if (hpPercent < threshold && !window.isRegeneratingToFull) {
                 window.isRegeneratingToFull = true;
-                let msg = `🩸 Niski poziom HP (${hpPercent.toFixed(0)}%). Leczę do pełna...`;
+                let msg = `🩸 Niski poziom HP (${hpPercent.toFixed(0)}%). Rozpoczynam leczenie do pełna...`;
                 if (window.isExping && window.logExp) window.logExp(msg, "#ff5252");
                 else if (window.logHero) window.logHero(msg, "#ff5252");
             }
 
-            if (window.isRegeneratingToFull && hpPercent >= 99) {
+            // TWARDE LECZENIE DO 100% (Czekamy na potwierdzenie od serwera)
+            if (window.isRegeneratingToFull && hp >= maxhp) {
                 window.isRegeneratingToFull = false;
-                let msg = `💚 Zregenerowano siły. Wracam do akcji.`;
+                let msg = `💚 Zregenerowano siły (100%). Wracam do akcji.`;
                 if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
                 else if (window.logHero) window.logHero(msg, "#4caf50");
                 return;
             }
 
+            // Cykl konsumpcji
             if (window.isRegeneratingToFull && Date.now() > window.lastHealTime) {
-                
-                // POTĘŻNY, KULOODPORNY SKANER EKWIPUNKU (NI & SI)
                 let items = [];
                 if (Engine.items && Engine.items.d) items = Object.values(Engine.items.d);
                 else if (Engine.heroEquipment && typeof Engine.heroEquipment.getHItems === 'function') items = Object.values(Engine.heroEquipment.getHItems());
@@ -7318,7 +7308,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 items.forEach(i => {
                     let itemData = i.d || i;
                     if (!itemData || itemData.del || itemData.dead) return;
-                    if (parseInt(itemData.cl) !== 16) return; // Tylko przedmioty konsumpcyjne
+                    if (parseInt(itemData.cl) !== 16) return; // Tylko mikstury
 
                     let potName = String(itemData.name || i._cachedStats?.name || "").toLowerCase();
                     let statStr = String(itemData.stat || i._cachedStats?.stat || "").toLowerCase();
@@ -7327,11 +7317,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (unidList.some(un => potName.includes(un))) return;
                     if (statStr.includes('unid')) return; 
 
-                    // Zabezpieczenie przed jedzeniem mikstur na wyższy level!
                     let reqLvlMatch = statStr.match(/reqlvl[=:](\d+)/) || statStr.match(/wymagany poziom:\s*(\d+)/);
                     if (reqLvlMatch) {
                         let reqLvl = parseInt(reqLvlMatch[1]);
-                        if (heroLvl < reqLvl) return; // Nie możesz tego zjeść
+                        if (heroLvl < reqLvl) return;
                     }
 
                     let heal = extractHeal(itemData);
@@ -7342,10 +7331,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.isHealLocked = true;
                     let missingHp = maxhp - hp;
                     
+                    // Wybór najlepszej mikstury do wyleczenia braku
                     validPotions.sort((a, b) => Math.abs(a.heal - missingHp) - Math.abs(b.heal - missingHp));
-                    
                     let bestPot = validPotions[0];
                     
+                    // Wypicie potki
                     if (typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.sendUseRequest === 'function') {
                         Engine.heroEquipment.sendUseRequest(bestPot.pot);
                     } else if (typeof Engine.items !== 'undefined' && typeof Engine.items.useItem === 'function') {
@@ -7354,9 +7344,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
                     
-                    if (Engine.hero.d.hp !== undefined) Engine.hero.d.hp = Math.min(maxhp, hp + bestPot.heal);
-                    if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + bestPot.heal);
-                    
+                    // UWAGA: Usunięto lokalne oszukiwanie wartości HP. 
+                    // Bot zaczeka spokojnie te 600ms, aż serwer faktycznie prześle mu, że HP wzrosło!
                     window.lastHealTime = Date.now() + 600; 
                     setTimeout(() => { window.isHealLocked = false; }, 500);
                 } else {
