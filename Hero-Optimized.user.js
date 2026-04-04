@@ -8273,7 +8273,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Uniwersalny SI/NI) ---
+// --- DAEMON: PANEL STATYSTYK SESJI (Oparty na Twoim działającym kodzie + TNL) ---
     setTimeout(() => {
         window.sessionStats = {
             active: false,
@@ -8284,72 +8284,73 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             lastGold: -1
         };
 
+        // Podpinamy się pod WSZYSTKIE możliwe kliknięcia myszką na stronie
+        // Dzięki temu ignorujemy zniszczone okienka i "duchy"
+        document.addEventListener('click', (e) => {
+            let target = e.target;
+            if (target && (target.id === 'btnStartExp' || target.closest('#btnStartExp') || target.id === 'btnStartStop' || target.closest('#btnStartStop'))) {
+                
+                // Używamy 200ms opóźnienia z Twojego starego kodu
+                setTimeout(() => {
+                    let isWorking = (window.isExping || window.isPatrolling || window.isRushing);
+                    
+                    if (isWorking) {
+                        window.sessionStats.active = true;
+                        window.sessionStats.startTime = Date.now();
+                        window.sessionStats.expGained = 0;
+                        window.sessionStats.goldGained = 0;
+                        
+                        // Uniwersalne pobranie danych startowych (SI i NI)
+                        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                            window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                            window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
+                        } else if (typeof hero !== 'undefined' && hero.exp !== undefined) {
+                            window.sessionStats.lastExp = parseInt(hero.exp) || 0;
+                            window.sessionStats.lastGold = parseInt(hero.gold) || 0;
+                        }
+                    } else {
+                        window.sessionStats.active = false;
+                    }
+                }, 200);
+            }
+        }, true);
+
+        // Twój stary, działający Daemon aktualizujący cyferki na żywo
         if (window.statsIntervalId) clearInterval(window.statsIntervalId);
         
         window.statsIntervalId = setInterval(() => {
-            // Bezpieczne pobieranie expa dla OBU interfejsów (SI oraz NI)
-            let curExp = 0;
-            let curGold = 0;
-            let maxExp = 0;
-            let isGameReady = false;
+            if (!window.sessionStats.active) return;
 
-            // ODCZYT DLA STAREGO INTERFEJSU (SI)
-            if (typeof hero !== 'undefined' && hero.exp !== undefined) {
-                curExp = parseInt(hero.exp) || 0;
-                curGold = parseInt(hero.gold) || 0;
-                maxExp = parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp) || parseInt(hero.lvl * 1000) || 0;
-                isGameReady = true;
-            } 
-            // ODCZYT DLA NOWEGO INTERFEJSU (NI)
-            else if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+            let curExp = 0, curGold = 0, maxExp = 0;
+
+            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
                 curExp = parseInt(Engine.hero.d.exp) || 0;
                 curGold = parseInt(Engine.hero.d.gold) || 0;
                 maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || 0;
-                isGameReady = true;
+            } else if (typeof hero !== 'undefined' && hero.exp !== undefined) {
+                curExp = parseInt(hero.exp) || 0;
+                curGold = parseInt(hero.gold) || 0;
+                maxExp = parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp) || 0;
+            } else {
+                return;
             }
 
-            if (!isGameReady) return;
-
-            // 1. NIEZAWODNA DETEKCJA STANU: Czytamy fizycznie co na przycisku!
-            let expBtn = document.getElementById('btnStartExp');
-            let isExpingByBtn = expBtn && expBtn.innerText.includes('STOP');
-            
-            let patrolBtn = document.getElementById('btnStartStop');
-            let isPatrollingByBtn = patrolBtn && patrolBtn.innerText.includes('STOP');
-            
-            let isBotRunning = window.isExping || isExpingByBtn || isPatrollingByBtn;
-
-            // 2. Zarządzanie startem i stopem
-            if (isBotRunning && !window.sessionStats.active) {
-                window.sessionStats.active = true;
-                window.sessionStats.startTime = Date.now();
-                window.sessionStats.expGained = 0;
-                window.sessionStats.goldGained = 0;
-                window.sessionStats.lastExp = curExp;
-                window.sessionStats.lastGold = curGold;
-            } 
-            else if (!isBotRunning && window.sessionStats.active) {
-                window.sessionStats.active = false;
-            }
-
-            if (!window.sessionStats.active) return;
-
-            // --- 3. OBLICZANIE EXP ---
+            // --- OBLICZANIE EXP ---
             if (window.sessionStats.lastExp !== -1) {
                 let expDiff = curExp - window.sessionStats.lastExp;
                 if (expDiff > 0) window.sessionStats.expGained += expDiff;
-                else if (expDiff < 0) window.sessionStats.expGained += curExp; // Awans poziomu
+                else if (expDiff < 0) window.sessionStats.expGained += curExp; // Nastąpił awans poziomu!
             }
             window.sessionStats.lastExp = curExp;
 
-            // --- 4. OBLICZANIE ZŁOTA ---
+            // --- OBLICZANIE ZŁOTA ---
             if (window.sessionStats.lastGold !== -1) {
                 let goldDiff = curGold - window.sessionStats.lastGold;
                 if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
             }
             window.sessionStats.lastGold = curGold;
 
-            // --- 5. MATEMATYKA & FORMATOWANIE CZASU ---
+            // --- MATEMATYKA & FORMATOWANIE CZASU ---
             let elapsedMs = Date.now() - window.sessionStats.startTime;
             let elapsedSec = Math.floor(elapsedMs / 1000);
             if (elapsedSec < 1) elapsedSec = 1;
@@ -8360,13 +8361,18 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
             let expPerHour = 0;
-            if (elapsedSec > 2) { 
+            if (elapsedSec > 5) { // Czekamy 5 sekund z Twojego kodu
                 expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
             }
 
+            // --- OBLICZANIE CZASU DO AWANSU (TNL) ---
             let missingExp = 0;
-            if (maxExp > curExp) missingExp = maxExp - curExp;
-            else if (maxExp > 0) missingExp = maxExp; 
+            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.exp_left !== undefined && parseInt(Engine.hero.d.exp_left) > 0) {
+                missingExp = parseInt(Engine.hero.d.exp_left);
+            } else {
+                if (maxExp > curExp) missingExp = maxExp - curExp;
+                else if (maxExp > 0) missingExp = maxExp; 
+            }
 
             let timeTnlStr = "--:--:--";
             if (missingExp > 0 && expPerHour > 0) {
@@ -8381,7 +8387,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 timeTnlStr = "Max Lvl?";
             }
 
-            // --- 6. PODMIANA W INTERFEJSIE ---
+            // --- BŁYSKAWICZNA PODMIANA W INTERFEJSIE (querySelectorAll omija Duchy) ---
             document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
             document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.sessionStats.expGained.toLocaleString('pl-PL'));
             document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
@@ -8389,8 +8395,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             document.querySelectorAll('#statGoldGained').forEach(el => el.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
 
         }, 1000);
-    }, 2500);
-
+    }, 3500); // Wydłużono czas startu, aby załadował się po kasowaniu "duchów"
+    
     // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
     setTimeout(() => {
         if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
