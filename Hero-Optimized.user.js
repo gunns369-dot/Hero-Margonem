@@ -8063,6 +8063,16 @@ let checkBrowser = botSettings.exp?.playerAlert;
 
         // 2. Kuloodporne podpięcie kliknięć (Nadpisuje stare, zepsute eventy)
         document.addEventListener('click', (e) => {
+            if (e.target && e.target.closest('#btnOpenBrowserAlertsModule')) {
+                e.stopPropagation(); 
+                let p = document.getElementById('browserAlertsSettingsGUI');
+                if (p) p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            }
+            if (e.target && e.target.closest('#btnOpenDiscordModule')) {
+                e.stopPropagation();
+                let p = document.getElementById('discordSettingsGUI');
+                if (p) p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+            }
             if (e.target && e.target.closest('#btnOpenExpBase')) {
                 e.stopPropagation(); // Blokuje stare zepsute komendy
                 let p = document.getElementById('heroExpBaseGUI');
