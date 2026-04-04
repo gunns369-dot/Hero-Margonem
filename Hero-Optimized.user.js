@@ -2771,7 +2771,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto (brutto):</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto:</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
                     </div>
 
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
