@@ -2111,17 +2111,31 @@ function autoDetectEngineData() {
             
             // SKRÓCONY CZAS: Reaguje błyskawicznie po 3.5 sekundach!
             if (Date.now() - window.rushGatewayArrivalTime > 3500) {
-                if (window.logHero) window.logHero(`🚨 Brama zacięta. Robię krok w tył...`, "#ff9800");
-                
-                // Odbiegamy dokładnie o 1 kratkę, żeby wywołać ruch serwerowy
-                let stepX = Math.max(0, cx + (Math.random() > 0.5 ? 1 : -1));
-                let stepY = Math.max(0, cy + (Math.random() > 0.5 ? 1 : -1));
-                Engine.hero.autoGoTo({ x: stepX, y: stepY });
-                
-                window.rushGatewayArrivalTime = 0;
-                stuckCount = -4; // Dajemy grze 2 sekundy zanim bot ponowi atak na drzwi
-            }
-        }
+     if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
+                    if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
+                    
+                    // ZAKŁADAMY KAGANIEC: Blokujemy silnik Rusha na 1.5 sekundy!
+                    window.__movementLock = Date.now() + 1500; 
+                    
+                    // Resetujemy licznik, żeby nie spamowało komunikatu
+                    if (typeof window.lastMapChange !== 'undefined') window.lastMapChange = Date.now(); 
+                    if (typeof window.lastGatewayAttempt !== 'undefined') window.lastGatewayAttempt = Date.now();
+                    
+                    let hx = parseInt(Engine.hero.d.x);
+                    let hy = parseInt(Engine.hero.d.y);
+                    
+                    // Mądry krok w tył: bot szuka dookoła siebie wolnej kratki, żeby nie wejść w ścianę
+                    let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
+                    for (let d of dirs) {
+                        let nx = hx + d[0], ny = hy + d[1];
+                        if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
+                            // Wymuszamy fizyczny ruch, omijając naszą własną blokadę (Strażnika)
+                            if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                            else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
+                            else window._g(`walk=${nx},${ny}`);
+                            break;
+                        }
+                    }
         
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
@@ -8490,4 +8504,24 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
             }, 1000);
         }, 2500);
+            // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
+        setTimeout(() => {
+            if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
+                window.__movementGuardInstalled = true;
+                
+                // Klonujemy oryginalną funkcję gry odpowiadającą za chodzenie
+                window.originalAutoWalk = Engine.hero.autoWalk;
+                
+                // Nadpisujemy ją naszą funkcją z "bramką bezpieczeństwa"
+                Engine.hero.autoWalk = function(x, y, ...args) {
+                    // Jeśli bot dostał rozkaz "Krok w tył", ignorujemy agresywny spam od Rusha!
+                    if (window.__movementLock && Date.now() < window.__movementLock) {
+                        return false; 
+                    }
+                    // W przeciwnym razie puszczamy ruch normalnie
+                    return window.originalAutoWalk.call(this, x, y, ...args);
+                };
+                console.log("%c[System] Strażnik Ruchu zainstalowany. Bot potrafi się cofać!", "color: #ff9800; font-weight: bold;");
+            }
+        }, 3000);
 })(); // Koniec kodu
