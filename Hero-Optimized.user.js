@@ -7326,7 +7326,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     let heal = extractHeal(itemData);
                     if (heal > 0) validPotions.push({ pot: i, heal: heal, id: itemData.id });
                 });
-                
                 if (validPotions.length > 0) {
                     window.isHealLocked = true;
                     let missingHp = maxhp - hp;
@@ -7344,10 +7343,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
                     
-                   // SZYBKIE LECZENIE W BIEGU: Bot pije mikstury dwukrotnie szybciej (co 300ms)
-                    window.lastHealTime = Date.now() + 300; 
-                    setTimeout(() => { window.isHealLocked = false; }, 250);
-                    setTimeout(() => { window.isHealLocked = false; }, 500);
+                    // KLUCZOWA ŁATKA: Symulujemy zjedzenie potki lokalnie.
+                    // Dzięki temu bot od razu widzi, że ma 100% HP i nie spamuje potkami w oczekiwaniu na serwer!
+                    if (Engine.hero.d.hp !== undefined) Engine.hero.d.hp = Math.min(maxhp, hp + bestPot.heal);
+                    if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + bestPot.heal);
+                    
+                    // Szybkie leczenie z odpowiednim marginesem błędu
+                    window.lastHealTime = Date.now() + 350; 
+                    setTimeout(() => { window.isHealLocked = false; }, 300);
                 } else {
                     window.isRegeneratingToFull = false;
                     if (window.logHero) window.logHero(`⚠️ Skończyło Ci się jedzenie w plecaku! (Zbyt wysoki lvl / Lista ignorowanych)`, "#ffb300");
