@@ -5416,34 +5416,34 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         m.groupLabel = size > 1 ? `Grupa (${size}x) ${m.nick}` : `Solo ${m.nick}`;
     });
 
+    // 6. UTRZYMANIE CELU (ELASTYCZNY LOCK 3-5s - V16)
     let lockedMob = null;
     validMobs.forEach(m => {
+        // Zmienna expTargetLockTime trzyma w pamięci czas, kiedy lock wygaśnie
         if (m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0)) {
             m.isLocked = true;
             lockedMob = m;
         }
     });
 
-    if (lockedMob) {
-        let closerMobExists = validMobs.some(m => m.id !== lockedMob.id && m.dist < lockedMob.dist);
-        if (closerMobExists) {
-            lockedMob.isLocked = false;
-            window.expTargetLockTime = 0; 
-        }
-    }
-
+    // 7. STABILNE SORTOWANIE
     validMobs.sort((a, b) => {
         let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
         if (rankVal[a.ranga] !== rankVal[b.ranga]) return rankVal[b.ranga] - rankVal[a.ranga];
 
+        // Bezwzględny priorytet, ALE TYLKO DOPÓKI TRWA LOCK (3-5 sekund)
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
 
-        return a.dist - b.dist;
+        // Jeśli lock minął, wygrywa po prostu ten, kto jest obecnie najbliżej!
+        if (a.dist !== b.dist) return a.dist - b.dist;
+        
+        return String(a.id).localeCompare(String(b.id));
     });
 
     let target = validMobs.length > 0 ? validMobs[0] : null;
 
+    // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (target) {
         const targetDist = target.dist;
 
@@ -5460,10 +5460,12 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 if (now < nextAllowedClickTime) return;
 
                 if (expCurrentTargetId !== target.id) {
-                    // UŻYWAMY NOWEJ ETYKIETY GRUPY!
                     window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
-                    let randomLockSeconds = Math.floor(Math.random() * (6000 - 4000 + 1)) + 4000;
+                    
+                    // LOSOWY LOCK: Trzyma cel od 3 do 5 sekund. 
+                    // Po tym czasie bot "przejrzy na oczy" i jeśli inny mob będzie bliżej, zmieni trasę.
+                    let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
                     window.expTargetLockTime = now + randomLockSeconds; 
                 }
 
@@ -5486,13 +5488,13 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
+                    // Ominięcie zablokowanego moba (Gdy zablokujemy się w drodze - przerywamy locka od razu)
                     if (timeStandingStill > 3000) {
                         window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Szukam innej ofiary.`, "#ff5252");
-                        
                         let badCoordKey = target.x + "_" + target.y;
                         window.expUnreachableMobs.add(badCoordKey);
-                        
                         expCurrentTargetId = null;
+                        window.expTargetLockTime = 0; // Reset locka po zacięciu
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
                         
@@ -5515,13 +5517,13 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             expLastActionTime = now + 100;
             return;
         }
+
         // --- WALKA ---
         if (targetDist <= 1) {
-            if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
+            if (displayTarget) displayTarget.innerText = `Walka: ${target.groupLabel}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
-            // Szybkie ubicie ducha z pamięci, żeby zaatakować go w grze (jeśli zniknął z ekranu przez mgłę, ale wciąż fizycznie tam stoi)
             if (expAttackLockUntil === 0) {
                 expAttackLockUntil = now + ((botSettings.berserk && botSettings.berserk.enabled) ? 2500 : 0);
             } else if (now > expAttackLockUntil) {
