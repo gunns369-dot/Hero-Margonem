@@ -8273,108 +8273,85 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Persistent Engine) ---
+// --- DAEMON: PANEL STATYSTYK SESJI (Główny łącznik z GUI) ---
     if (window.statsIntervalId) clearInterval(window.statsIntervalId);
     
-    // Obiekt trwały – nie zostanie zniszczony nawet jeśli gra złapie mikro-laga
-    if (!window.__heroStats) {
-        window.__heroStats = {
-            totalSeconds: 0,
-            expGained: 0,
-            goldGained: 0,
-            lastExp: -1,
-            lastGold: -1,
-            lastTick: Date.now(),
-            wasWorking: false
-        };
-    }
+    window.sessionStats = {
+        active: false,
+        startTime: 0,
+        expGained: 0,
+        goldGained: 0,
+        lastExp: -1,
+        lastGold: -1,
+        accumulatedTime: 0 // Zmienna zapamiętująca czas przy pauzowaniu
+    };
 
     window.statsIntervalId = setInterval(() => {
-        let now = Date.now();
-        let delta = now - window.__heroStats.lastTick;
-        window.__heroStats.lastTick = now;
+        // 1. Zabezpieczenie - upewnijmy się, że silnik gry istnieje
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
-        let curExp = 0, curGold = 0, maxExp = 0, expLeft = 0;
-        let isEngineReady = false;
-
-        // 1. ODCZYT DANYCH (SI / NI)
-        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-            curExp = parseInt(Engine.hero.d.exp) || 0;
-            curGold = parseInt(Engine.hero.d.gold) || 0;
-            maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 0;
-            expLeft = parseInt(Engine.hero.d.exp_left) || 0;
-            isEngineReady = true;
-        } else if (typeof hero !== 'undefined' && hero.exp !== undefined) {
-            curExp = parseInt(hero.exp) || 0;
-            curGold = parseInt(hero.gold) || 0;
-            maxExp = parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp) || 0;
-            isEngineReady = true;
-        }
-
-        if (!isEngineReady) return; // Czekamy na załadowanie się świata
-
-        // Inicjalizacja bazowa
-        if (window.__heroStats.lastExp === -1) {
-            window.__heroStats.lastExp = curExp;
-            window.__heroStats.lastGold = curGold;
-        }
-
-        // 2. KONTROLA STANU BOTA ZGODNA Z TWOIM POMYSŁEM
-        let isBotEnabled = (window.isExping || window.isPatrolling);
-        let isSellingOrBuying = ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active));
+        // 2. Pobranie aktualnego stanu EXP i Złota z gry (działa i na NI, i na SI)
+        let curExp = parseInt(Engine.hero.d.exp) || (typeof hero !== 'undefined' ? parseInt(hero.exp) : 0);
+        let curGold = parseInt(Engine.hero.d.gold) || (typeof hero !== 'undefined' ? parseInt(hero.gold) : 0);
         
-        // Bot zlicza TYLKO gdy jest włączony ORAZ nie poszedł na zakupy/sprzedaż
-        let isActuallyRunning = isBotEnabled && !isSellingOrBuying;
+        let maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 
+                     (typeof hero !== 'undefined' ? (parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp)) : 0);
+                     
+        let expLeft = parseInt(Engine.hero.d.exp_left) || 0;
 
-        // 3. RESET STATYSTYK PO NOWYM STARCIE
-        if (isBotEnabled && !window.__heroStats.wasWorking) {
-            // Przejście z "wyłączonego" na "włączony" -> czyścimy sesję
-            window.__heroStats.totalSeconds = 0;
-            window.__heroStats.expGained = 0;
-            window.__heroStats.goldGained = 0;
-            window.__heroStats.lastExp = curExp;
-            window.__heroStats.lastGold = curGold;
-        }
-        window.__heroStats.wasWorking = isBotEnabled;
+        // 3. FLAGA STARTU - czytamy bezpośrednio główną zmienną bota!
+        // Kiedy klikasz przycisk "▶ START" obok trasy, ta zmienna zmienia się na TRUE!
+        let isBotWorking = (window.isExping === true || window.isPatrolling === true);
 
-        // 4. ZLICZANIE (Aktywne tylko podczas właściwego expienia)
-        if (isActuallyRunning) {
-            window.__heroStats.totalSeconds += (delta / 1000);
-
-            let expDiff = curExp - window.__heroStats.lastExp;
-            if (expDiff > 0) window.__heroStats.expGained += expDiff;
-            else if (expDiff < 0) window.__heroStats.expGained += curExp; // Przy awansie pasek spada
-
-            let goldDiff = curGold - window.__heroStats.lastGold;
-            if (goldDiff > 0) window.__heroStats.goldGained += goldDiff;
+        // 4. Logika startu / stopu licznika
+        if (isBotWorking && !window.sessionStats.active) {
+            window.sessionStats.active = true;
+            window.sessionStats.startTime = Date.now(); // Zaczynamy mierzyć obecną "sesję" biegu
+            if (window.sessionStats.lastExp === -1) {
+                window.sessionStats.lastExp = curExp;
+                window.sessionStats.lastGold = curGold;
+            }
+        } else if (!isBotWorking && window.sessionStats.active) {
+            // PAUZA: Zatrzymujemy odliczanie, dopisujemy spędzony czas
+            window.sessionStats.active = false;
+            window.sessionStats.accumulatedTime += Date.now() - window.sessionStats.startTime;
         }
 
-        // Zawsze odświeżamy ostatni stan, żeby nie liczyć w tle "ręcznej gry" gdy bot jest spauzowany
-        window.__heroStats.lastExp = curExp;
-        window.__heroStats.lastGold = curGold;
+        // Jeśli bot nie jest włączony (START nie kliknięty), to nie dodajemy statystyk
+        if (!window.sessionStats.active) return;
 
-        // 5. FORMATOWANIE CZASU
-        let sec = Math.floor(window.__heroStats.totalSeconds);
-        let h = Math.floor(sec / 3600);
-        let m = Math.floor((sec % 3600) / 60);
-        let s = sec % 60;
+        // 5. Obliczanie przyrostów
+        if (window.sessionStats.lastExp !== -1) {
+            let expDiff = curExp - window.sessionStats.lastExp;
+            if (expDiff > 0) window.sessionStats.expGained += expDiff;
+            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Wbiłeś level, pasek spadł do zera
+        }
+        window.sessionStats.lastExp = curExp;
+
+        if (window.sessionStats.lastGold !== -1) {
+            let goldDiff = curGold - window.sessionStats.lastGold;
+            if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
+        }
+        window.sessionStats.lastGold = curGold;
+
+        // 6. Matematyka Czasu (Czas obecnego biegu + czas z poprzednich etapów przed pauzą)
+        let totalElapsedMs = window.sessionStats.accumulatedTime + (Date.now() - window.sessionStats.startTime);
+        let elapsedSec = Math.floor(totalElapsedMs / 1000);
+        if (elapsedSec < 1) elapsedSec = 1;
+        
+        let h = Math.floor(elapsedSec / 3600);
+        let m = Math.floor((elapsedSec % 3600) / 60);
+        let s = elapsedSec % 60;
         let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
+        // EXP / h
         let expPerHour = 0;
-        if (sec > 2) {
-            expPerHour = Math.floor((window.__heroStats.expGained / sec) * 3600);
-        }
+        if (elapsedSec > 2) expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
 
-        // 6. ILE BRAKUJE DO AWANSU (TNL)
-        let missingExp = 0;
-        if (expLeft > 0) {
-            missingExp = expLeft;
-        } else {
-            if (maxExp > curExp) missingExp = maxExp - curExp;
-            else if (maxExp > 0) missingExp = maxExp; 
-        }
-
+        // TNL (Czas do awansu)
+        let missingExp = expLeft > 0 ? expLeft : (maxExp > curExp ? maxExp - curExp : 0);
         let timeTnlStr = "--:--:--";
+        
         if (missingExp > 0 && expPerHour > 0) {
             let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
             let hTnl = Math.floor(secsTnl / 3600);
@@ -8387,12 +8364,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             timeTnlStr = "Max Lvl?";
         }
 
-        // 7. AGRESYWNY RENDER W HTML (Rozwiązuje problem powielonych/ukrytych okien w warstwach)
-        document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
-        document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.__heroStats.expGained.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerText = timeTnlStr);
-        document.querySelectorAll('#statGoldGained').forEach(el => el.innerText = window.__heroStats.goldGained.toLocaleString('pl-PL') + " zł");
+        // 7. BŁYSKAWICZNA AKTUALIZACJA HTML (Dokładnie te ID, które podesłałeś)
+        // Używam getElementById (lub querySelectorAll na wszelki wypadek duchów)
+        document.querySelectorAll('#statSessionTime').forEach(el => el.innerHTML = timeStr);
+        document.querySelectorAll('#statExpGained').forEach(el => el.innerHTML = window.sessionStats.expGained.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerHTML = expPerHour.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerHTML = timeTnlStr);
+        document.querySelectorAll('#statGoldGained').forEach(el => el.innerHTML = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
 
     }, 1000);
 
