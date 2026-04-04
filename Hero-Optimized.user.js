@@ -2765,14 +2765,27 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                             </div>
                         </div>
                     </div>
-                    <input type="hidden" id="expRange" value="999">
-                    <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map (Smart-Roam): <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
-                    <div id="expMapList" style="flex:1; border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:50px; padding:2px;"></div>
-                    <div style="display:flex; gap:4px; margin-top:2px;">
-                        <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
-                        <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
+                   <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
+                    <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto (brutto):</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
                     </div>
-                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:4px; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
+
+                    <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
+                    <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
+                        <input type="hidden" id="expRange" value="999">
+                        <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map: <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
+                        <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:80px; max-height:160px; padding:2px;"></div>
+                        <div style="display:flex; gap:4px; margin-top:6px;">
+                            <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
+                            <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
+                        </div>
+                    </div>
+
+                    <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:auto; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
                 </div>
                 <div id="teleportsContainer" style="display:none; flex-direction:column; flex:1; min-height:0; padding-top:4px; gap:6px;">
                     <button id="btnOpenTeleports" class="btn btn-go-sepia" style="padding:6px; background:#00838f; border-color:#00acc1; font-weight:bold; color:white;">🚀 ZARZĄDZAJ TELEPORTAMI</button>
@@ -8247,26 +8260,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-   // --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
+// --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
     setTimeout(() => {
-        if (document.getElementById('accStats')) document.getElementById('accStats').nextElementSibling?.remove();
-        if (document.getElementById('accStats')) document.getElementById('accStats').remove();
-
-        let advContainer = document.getElementById('accAdvancedExpContent');
-        if (advContainer) {
-            let statsHtml = `
-                <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
-                <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy bota:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
-                    <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto (brutto):</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
-                </div>
-            `;
-            advContainer.insertAdjacentHTML('afterend', statsHtml);
-        }
-
         window.sessionStats = { active: false, startTime: 0, expGained: 0, goldGained: 0, lastExp: -1, lastGold: -1, expPerHour: 0, timeTnlStr: "--:--:--", lastCalcTime: 0 };
 
         let btnExp = document.getElementById('btnStartExp');
@@ -8325,7 +8320,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 window.sessionStats.lastCalcTime = elapsedSec;
                 window.sessionStats.expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
 
-                // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA
                 let missingExp = 0;
                 if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
                     missingExp = parseInt(d.exp_left);
