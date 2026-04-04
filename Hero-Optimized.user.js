@@ -2011,6 +2011,55 @@ function autoDetectEngineData() {
         window.executeRushStep();
     };
 
+  // --- SYSTEM ZWOJÓW TELEPORTACJI ---
+    window.findTeleportScroll = function(targetMapName) {
+        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return null;
+        let items = typeof Engine.heroEquipment.getHItems === 'function' ? Object.values(Engine.heroEquipment.getHItems()) : [];
+        if (items.length === 0 && Engine.items && Engine.items.d) items = Object.values(Engine.items.d);
+
+        let heroLvl = parseInt(Engine.hero.d.lvl) || 1;
+        let targetLower = targetMapName.toLowerCase().trim();
+
+        for (let i of items) {
+            let itemData = i.d || i;
+            if (!itemData || itemData.del || itemData.dead) continue;
+            // Sprawdzamy tylko przedmioty leżące w plecaku (status 0)
+            if (Number(itemData.st) !== 0) continue;
+
+            let statStr = String(itemData.stat || i._cachedStats?.stat || "").toLowerCase();
+            let ttText = String(i.tooltip_text || itemData.tooltip_text || "").toLowerCase();
+
+            let mapDest = null;
+            // Próba 1: Surowe staty z silnika gry (np. teleport=Andarum Ilami,x,y)
+            let match = statStr.match(/teleport=([^,;]+)/i);
+            if (match) mapDest = match[1].trim();
+
+            // Próba 2: Opis z tooltippa (np. Teleportuje do: Andarum Ilami)
+            if (!mapDest) {
+                let ttMatch = ttText.match(/teleportuje do:\s*([^<]+)/i);
+                if (ttMatch) mapDest = ttMatch[1].trim();
+            }
+
+            if (mapDest && mapDest.toLowerCase() === targetLower) {
+                let reqLvlMatch = statStr.match(/reqlvl[=:](\d+)/) || statStr.match(/wymagany poziom:\s*(\d+)/);
+                if (reqLvlMatch && heroLvl < parseInt(reqLvlMatch[1])) continue; // Nie masz levela na ten zwój
+                return itemData.id;
+            }
+        }
+        return null;
+    };
+
+    window.useItemById = function(itemId) {
+        if (typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.sendUseRequest === 'function') {
+            let itemObj = Object.values(Engine.heroEquipment.getHItems()).find(i => (i.d||i).id == itemId);
+            if (itemObj) Engine.heroEquipment.sendUseRequest(itemObj);
+        } else if (typeof Engine.items !== 'undefined' && typeof Engine.items.useItem === 'function') {
+            Engine.items.useItem(itemId);
+        } else {
+            window._g(`moveitem&st=1&id=${itemId}`);
+        }
+    };
+
     window.executeRushStep = function() {
         if (!isRushing && !window.isRushing) return;
         let currentSysMap = lastMapName;
@@ -2027,14 +2076,11 @@ function autoDetectEngineData() {
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
             }
             
-        // WZNOWIENIE PATROLU PO DOTARCIU (Klucz do naprawy Szukania Herosów!)
             if (window.resumePatrolAfterRush) {
                 window.resumePatrolAfterRush = false;
                 isPatrolling = true;
                 if (btn) { btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336"; }
                 if (window.logHero) window.logHero(`✅ Dotarto na nową mapę. Analizuję teren...`, "#4caf50");
-                
-                // WYDŁUŻONY CZAS (1.5 sekundy), aby gra wczytała koordynaty przed startem patrolu!
                 setTimeout(() => { if (typeof executePatrolStep === 'function') executePatrolStep(); }, 1500);
             }
             return;
@@ -2042,6 +2088,38 @@ function autoDetectEngineData() {
 
         let nextMap = null;
         let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
+
+        // --- INTELIGENTNE ZWOJE TELEPORTACJI ---
+        let scrollId = window.findTeleportScroll(rushTarget);
+        let targetScrollMap = rushTarget;
+
+        // Jeśli nie mamy zwoju prosto do celu, sprawdzamy, czy nie mamy zwoju na jakąkolwiek mapę po drodze!
+        // Szukamy "od końca" ścieżki, żeby zwój przeniósł nas jak najdalej.
+        if (!scrollId && path && path.length > 1) {
+            for (let i = path.length - 1; i > 0; i--) {
+                scrollId = window.findTeleportScroll(path[i]);
+                if (scrollId) {
+                    targetScrollMap = path[i];
+                    break;
+                }
+            }
+        }
+
+        if (scrollId) {
+            if (window._lastRushNextMap !== targetScrollMap) {
+                let msg = `📜 Czytam zwój teleportacji do: ${targetScrollMap}!`;
+                if (window.logExp) window.logExp(msg, "#e040fb");
+                if (window.logHero) window.logHero(msg, "#e040fb");
+                window._lastRushNextMap = targetScrollMap;
+            }
+            clearTimeout(rushInterval);
+            window.useItemById(scrollId);
+            
+            // Czekamy 2.5 sekundy, żeby zagrała animacja użycia i przeładowała się mapa
+            rushInterval = setTimeout(window.executeRushStep, 2500);
+            return;
+        }
+        // --- KONIEC SYSTEMU ZWOJÓW ---
 
         if (path && path.length > 1) {
             nextMap = path[1];
@@ -2075,7 +2153,7 @@ function autoDetectEngineData() {
 
         if (isTeleportRoute) {
             if (window._lastRushNextMap !== nextMap) {
-                if (window.logExp) window.logExp(`🚀 Teleportuję do: ${nextMap}`, "#9c27b0");
+                if (window.logExp) window.logExp(`🚀 Teleportuję (Zakonnik) do: ${nextMap}`, "#9c27b0");
                 window._lastRushNextMap = nextMap;
             }
             clearTimeout(rushInterval);
@@ -2095,14 +2173,13 @@ function autoDetectEngineData() {
             window.rushLastX = Engine.hero.d.x;
             window.rushLastY = Engine.hero.d.y;
             stuckCount = 0;
-            window.rushGatewayArrivalTime = 0; // Reset przy wyznaczeniu nowego celu
+            window.rushGatewayArrivalTime = 0; 
 
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
             rushInterval = setTimeout(window.checkRushArrival, 500);
         }
     };
-
  window.checkRushArrival = function() {
         if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
         let currentSysMap = lastMapName;
