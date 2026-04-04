@@ -8273,9 +8273,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
+// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Czysta detekcja wizualna) ---
     setTimeout(() => {
-        // Inicjalizacja pamięci
         window.sessionStats = {
             active: false,
             startTime: 0,
@@ -8285,61 +8284,57 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             lastGold: -1
         };
 
-        // KULOODPORNE Podpięcie kalkulatora pod WSZYSTKIE przyciski START (Exp i Patrol)
-        // Używamy Event Delegation na poziomie body, żeby omijać "Duchy" okienek Margonem
-        document.body.addEventListener('click', (e) => {
-            let target = e.target;
-            // Szuka id=btnStartExp lub btnStartStop (lub kliknięcia w ikonkę/tekst W ŚRODKU tego przycisku)
-            let isStartBtn = target && (target.id === 'btnStartExp' || target.closest('#btnStartExp') || target.id === 'btnStartStop' || target.closest('#btnStartStop'));
-            
-            if (isStartBtn) {
-                // Jeśli przycisk ma słowo "STOP" (czyli właśnie go WŁĄCZYLIŚMY)
-                let btnText = target.closest('button') ? target.closest('button').innerText : target.innerText;
-                
-                if (btnText && btnText.includes('STOP')) {
-                    window.sessionStats.active = true;
-                    window.sessionStats.startTime = Date.now();
-                    window.sessionStats.expGained = 0;
-                    window.sessionStats.goldGained = 0;
-                    
-                    // Pobranie danych startowych postaci z silnika gry
-                    if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                        window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                        window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
-                    }
-                } else {
-                    // Jeśli przycisk ma słowo "START" (czyli go WYŁĄCZYLIŚMY)
-                    window.sessionStats.active = false;
-                }
-            }
-        });
-
-        // Daemon aktualizujący cyferki na żywo (tyka co 1 sekundę)
         if (window.statsIntervalId) clearInterval(window.statsIntervalId);
         
         window.statsIntervalId = setInterval(() => {
-            if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+
+            // 1. NIEZAWODNA DETEKCJA STANU: Czytamy fizycznie, co jest napisane na przycisku!
+            let expBtn = document.getElementById('btnStartExp');
+            let isExpingByBtn = expBtn && expBtn.innerText.includes('STOP');
+            
+            let patrolBtn = document.getElementById('btnStartStop');
+            let isPatrollingByBtn = patrolBtn && patrolBtn.innerText.includes('STOP');
+            
+            // Bot pracuje, jeśli włączony jest Exp LUB Patrol
+            let isBotRunning = window.isExping || isExpingByBtn || isPatrollingByBtn;
+
+            // 2. Zarządzanie startem i stopem zegara
+            if (isBotRunning && !window.sessionStats.active) {
+                window.sessionStats.active = true;
+                window.sessionStats.startTime = Date.now();
+                window.sessionStats.expGained = 0;
+                window.sessionStats.goldGained = 0;
+                window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
+            } 
+            else if (!isBotRunning && window.sessionStats.active) {
+                window.sessionStats.active = false;
+            }
+
+            // Jeśli bot stoi, nie zliczaj i pomiń resztę
+            if (!window.sessionStats.active) return; 
 
             let d = Engine.hero.d;
             let currentExp = parseInt(d.exp) || 0;
             let currentGold = parseInt(d.gold) || 0;
 
-            // --- OBLICZANIE EXP ---
+            // --- 3. OBLICZANIE EXP ---
             if (window.sessionStats.lastExp !== -1) {
                 let expDiff = currentExp - window.sessionStats.lastExp;
                 if (expDiff > 0) window.sessionStats.expGained += expDiff;
-                else if (expDiff < 0) window.sessionStats.expGained += currentExp; // Nastąpił awans
+                else if (expDiff < 0) window.sessionStats.expGained += currentExp; // Nastąpił awans poziomu
             }
             window.sessionStats.lastExp = currentExp;
 
-            // --- OBLICZANIE ZŁOTA ---
+            // --- 4. OBLICZANIE ZŁOTA ---
             if (window.sessionStats.lastGold !== -1) {
                 let goldDiff = currentGold - window.sessionStats.lastGold;
                 if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
             }
             window.sessionStats.lastGold = currentGold;
 
-            // --- MATEMATYKA & FORMATOWANIE CZASU ---
+            // --- 5. MATEMATYKA & FORMATOWANIE CZASU ---
             let elapsedMs = Date.now() - window.sessionStats.startTime;
             let elapsedSec = Math.floor(elapsedMs / 1000);
             
@@ -8349,11 +8344,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
             let expPerHour = 0;
-            if (elapsedSec > 5) { // Czekamy 5 sekund, żeby kalkulacje nie wariowały na starcie
+            if (elapsedSec > 2) { // Zaczynamy liczyć EXP/h już po 2 sekundach
                 expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
             }
 
-            // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA DO AWANSU
+            // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA DO AWANSU (TNL)
             let missingExp = 0;
             if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
                 missingExp = parseInt(d.exp_left);
@@ -8376,7 +8371,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 timeTnlStr = "Max Lvl?";
             }
 
-            // --- PODMIANA W INTERFEJSIE (Używamy querySelectorAll, by zabić problem "Duchów") ---
+            // --- 6. PODMIANA W INTERFEJSIE (Używamy querySelectorAll na wypadek powielonych okienek!) ---
             document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
             document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.sessionStats.expGained.toLocaleString('pl-PL'));
             document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
