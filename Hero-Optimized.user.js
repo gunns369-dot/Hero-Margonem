@@ -2140,8 +2140,8 @@ function autoDetectEngineData() {
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
- // ==========================================
-    // ALGORYTM DIJKSTRY (ZAAWANSOWANY GPS Z WAGAMI)
+// ==========================================
+    // ALGORYTM DIJKSTRY (Z CZARNĄ LISTĄ BRAM I WAGAMI)
     // ==========================================
     function getShortestPath(start, end) {
         if (start === end) return [start];
@@ -2156,33 +2156,28 @@ function autoDetectEngineData() {
         let visited = new Set();
 
         while (queue.length > 0) {
-            // Zawsze wybieramy najkrótszą/najtańszą drogę
             queue.sort((a, b) => a.dist - b.dist);
             let current = queue.shift();
             let u = current.node;
             
-            // Jeśli dotarliśmy do celu, odtwarzamy trasę od tyłu
             if (u === end) {
                 let path = [];
                 let curr = end;
-                while (curr) {
-                    path.unshift(curr);
-                    curr = previous[curr];
-                }
+                while (curr) { path.unshift(curr); curr = previous[curr]; }
                 return path;
             }
             
             if (visited.has(u)) continue;
             visited.add(u);
             
-            // 1. FIZYCZNE BRAMY (Zapisane w bazie bota)
             if (globalGateways[u]) {
                 for (let v in globalGateways[u]) {
-                    let penalty = 1; // Standardowy koszt przejścia z mapy na mapę
-                    
-                    // KARA ZA WCHODZENIE DO BUDYNKÓW/JASKIŃ:
-                    // Jeśli mapa docelowa zawiera te słowa, a nie jest naszym ostatecznym celem, 
-                    // bot dostaje "karę" +50 do dystansu, co wymusza na nim trzymanie się głównych szlaków!
+                    // --- NOWOŚĆ: SPRAWDZENIE CZARNEJ LISTY ---
+                    if (window.__bannedMaps && window.__bannedMaps[v] && Date.now() < window.__bannedMaps[v]) {
+                        continue; // Brama jest uszkodzona/zamknięta - udajemy, że jej nie ma!
+                    }
+
+                    let penalty = 1; 
                     let vLower = v.toLowerCase();
                     if (v !== end && (vLower.includes(" p.") || vLower.includes(" s.") || vLower.includes(" - ") || vLower.includes("dom ") || vLower.includes("młyn") || vLower.includes("jaskinia") || vLower.includes("grota") || vLower.includes("kopalnia"))) {
                         penalty = 50; 
@@ -2190,28 +2185,23 @@ function autoDetectEngineData() {
                     
                     let alt = distances[u] + penalty;
                     if (distances[v] === undefined || alt < distances[v]) {
-                        distances[v] = alt;
-                        previous[v] = u;
-                        queue.push({node: v, dist: alt});
+                        distances[v] = alt; previous[v] = u; queue.push({node: v, dist: alt});
                     }
                 }
             }
             
-            // 2. TELEPORTY ZAKONNIKÓW (Koszt: 2, używa tylko gdy skraca to mocno drogę)
             if (botSettings.useTeleports && ZAKONNICY[u]) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
                         let alt = distances[u] + 2; 
                         if (distances[tpMap] === undefined || alt < distances[tpMap]) {
-                            distances[tpMap] = alt;
-                            previous[tpMap] = u;
-                            queue.push({node: tpMap, dist: alt});
+                            distances[tpMap] = alt; previous[tpMap] = u; queue.push({node: tpMap, dist: alt});
                         }
                     }
                 }
             }
         }
-        return null; // Zwraca null, gdy trasa jest fizycznie niemożliwa
+        return null; 
     }
 window.handleTeleportNPC = function(targetMap) {
         if (!isRushing && !isPatrolling && !window.isExping) return;
@@ -5773,27 +5763,40 @@ if (hx !== expLastX || hy !== expLastY) {
 
 
 // Wejście w bramę
-        if (hx === dx && hy === dy) {
-            if (!window.expGatewayArrivalTime) {
-                window.expGatewayArrivalTime = now;
-            } else if (now - window.expGatewayArrivalTime > 12000) {
-                window.logExp(`🚨 Brama nie reaguje przez 12s! Odbiegam by ponowić...`, "#ff9800");
-                let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
-                let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-                Engine.hero.autoGoTo({ x: stepX, y: stepY });
+        // --- REAKCJA NA ZAMKNIĘTĄ / ZEPSUTĄ BRAMĘ ---
+                    if (window.logHero) window.logHero("❌ Brama zamknięta lub uszkodzona! Blokuję wejście na 5 minut i idę dalej...", "#ff5252");
+                    if (window.logExp) window.logExp("❌ Brama zablokowana! Zmieniam plany...", "#ff5252");
+                    
+                    // 1. Dodajemy zepsutą mapę (cel za bramą) do czarnej listy na 5 minut
+                    if (!window.__bannedMaps) window.__bannedMaps = {};
+                    if (window.currentPath && window.currentPath.length > 1) {
+                        let zepsutaMapa = window.currentPath[1]; 
+                        window.__bannedMaps[zepsutaMapa] = Date.now() + 300000; // 300 tys. ms = 5 min
+                    }
 
-                window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                window.expGatewayArrivalTime = 0;
-                expGatewayLockUntil = now + 2000;
-            }
-            expLastActionTime = now + 200; // Czekamy w spokoju na czarny ekran ładowania
-            return;
-        } else {
-            // Jeśli zeszliśmy z bramy, resetujemy timer
-            window.expGatewayArrivalTime = 0;
-        }
-    }
+                    // 2. Wymuszamy porzucenie obecnego zadania i przejście do następnego expowiska!
+                    if (window.isExping && typeof window.nextExpMapIndex !== 'undefined') window.nextExpMapIndex++;
+                    if (window.isPatrolling && typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex++;
 
+                    // 3. Blokada nadpobudliwości bota i wymuszenie wyliczenia nowej drogi
+                    window.__movementLock = Date.now() + 2000; 
+                    window.lastMapChange = Date.now(); 
+                    window.lastGatewayAttempt = Date.now();
+                    window.currentPath = null; // Niszczymy starą trasę
+
+                    // 4. Fizyczny krok w tył, żeby odkleić się od ściany
+                    let hx = parseInt(Engine.hero.d.x);
+                    let hy = parseInt(Engine.hero.d.y);
+                    let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
+                    for (let d of dirs) {
+                        let nx = hx + d[0], ny = hy + d[1];
+                        if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
+                            if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                            else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
+                            else window._g(`walk=${nx},${ny}`);
+                            break;
+                        }
+                    }
 }
 
 
