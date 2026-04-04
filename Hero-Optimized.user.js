@@ -5376,7 +5376,7 @@ if (hx !== expLastX || hy !== expLastY) {
         });
     });
 
-    // 3. MAPOWANIE GRUP MARGONEM
+   // 3. MAPOWANIE GRUP MARGONEM
     let groupsMap = new Map();
     validMobs.forEach(m => {
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
@@ -5386,8 +5386,13 @@ if (hx !== expLastX || hy !== expLastY) {
 
     let clusters = [];
     groupsMap.forEach((clusterMobs, key) => {
-        // Znajdź potwora z grupy, który jest fizycznie NAJBLIŻEJ nas
-        clusterMobs.sort((a, b) => a.dist - b.dist);
+        // Twarda blokada! Jeśli z tej grupy już kogoś bijemy, trzymamy go na celowniku (zapobiega miganiu celu)
+        clusterMobs.sort((a, b) => {
+            let aLocked = (a.id === expCurrentTargetId) ? 0 : 1;
+            let bLocked = (b.id === expCurrentTargetId) ? 0 : 1;
+            if (aLocked !== bLocked) return aLocked - bLocked;
+            return a.dist - b.dist;
+        });
         let entryMob = clusterMobs[0]; 
 
         let bestRank = "normal";
@@ -5412,7 +5417,6 @@ if (hx !== expLastX || hy !== expLastY) {
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
 
-        // Balans: Każdy dodatkowy mob w grupie "przybliża" ją w oczach bota o 12 kratek!
         let scoreA = a.target.dist - ((a.size - 1) * 12);
         let scoreB = b.target.dist - ((b.size - 1) * 12);
 
@@ -5436,6 +5440,9 @@ if (hx !== expLastX || hy !== expLastY) {
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
             if (isNewDestination) {
+                // ZABEZPIECZENIE ANTY-FLOOD (Chroni przed wywaleniem z serwera)
+                if (now < nextAllowedClickTime) return;
+
                 if (expCurrentTargetId !== target.id) {
                     window.logExp(`🏃 Cel: ${bestCluster.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
@@ -5444,12 +5451,9 @@ if (hx !== expLastX || hy !== expLastY) {
 
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${bestCluster.groupLabel}`;
                 
-                // Wywołanie ruchu natywnego
-                if (typeof window._g === 'function' && targetDist < 6) {
-                    window._g(`walk=${target.x},${target.y}`);
-                } else {
-                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                }
+                // Używamy bezpiecznej, wewnętrznej funkcji gry, która sama limituje zapytania
+                Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                nextAllowedClickTime = now + 300; // Limit wysyłania ruchu: max co 300ms
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
@@ -5482,9 +5486,12 @@ if (hx !== expLastX || hy !== expLastY) {
                         return;
                     }
 
-                    // Co sekundę przypominamy grze o ruchu
+                    // Co sekundę przypominamy grze o ruchu (zabezpieczone limitem anti-flood)
                     if (timeStandingStill > 1000 && (now % 1000 < 150)) {
-                        Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                        if (now >= nextAllowedClickTime) {
+                            Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                            nextAllowedClickTime = now + 300;
+                        }
                     }
                 }
             }
