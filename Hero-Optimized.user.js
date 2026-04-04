@@ -8354,9 +8354,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 2000);
     // --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
         setTimeout(() => {
-            if (document.getElementById('accStats')) return; // Zabezpieczenie przed dublowaniem okna
+            // Zabezpieczenie przed dublowaniem okna przy odświeżaniu skryptu
+            if (document.getElementById('accStats')) document.getElementById('accStats').nextElementSibling.remove();
+            if (document.getElementById('accStats')) document.getElementById('accStats').remove();
 
-            // 1. Wstrzyknięcie interfejsu (zakładki) pod menu 'Zaawansowane'
             let advContainer = document.getElementById('accAdvancedExpContent');
             if (advContainer) {
                 let statsHtml = `
@@ -8372,29 +8373,31 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 advContainer.insertAdjacentHTML('afterend', statsHtml);
             }
 
-            // 2. Inicjalizacja pamięci podręcznej kalkulatora
             window.sessionStats = {
                 active: false,
                 startTime: 0,
                 expGained: 0,
                 goldGained: 0,
                 lastExp: -1,
-                lastGold: -1
+                lastGold: -1,
+                expPerHour: 0,
+                timeTnlStr: "--:--:--",
+                lastCalcTime: 0
             };
 
-            // 3. Podpięcie kalkulatora pod przycisk START w zakładce EXP
             let btnExp = document.getElementById('btnStartExp');
             if (btnExp) {
                 btnExp.addEventListener('click', () => {
-                    // Używamy opóźnienia 100ms, aby skrypt zdążył zmienić flagę window.isExping
                     setTimeout(() => {
                         if (window.isExping) {
                             window.sessionStats.active = true;
                             window.sessionStats.startTime = Date.now();
                             window.sessionStats.expGained = 0;
                             window.sessionStats.goldGained = 0;
+                            window.sessionStats.expPerHour = 0;
+                            window.sessionStats.timeTnlStr = "--:--:--";
+                            window.sessionStats.lastCalcTime = 0;
                             
-                            // Pobranie danych startowych postaci
                             if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
                                 window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
                                 window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
@@ -8406,8 +8409,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
 
-            // 4. Daemon aktualizujący cyferki na żywo (tyka co 1 sekundę)
-            setInterval(() => {
+            if (window.statsIntervalId) clearInterval(window.statsIntervalId);
+
+            window.statsIntervalId = setInterval(() => {
                 if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
                 let d = Engine.hero.d;
@@ -8417,24 +8421,19 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 // --- OBLICZANIE EXP ---
                 if (window.sessionStats.lastExp !== -1) {
                     let expDiff = currentExp - window.sessionStats.lastExp;
-                    if (expDiff > 0) {
-                        window.sessionStats.expGained += expDiff; // Normalny przyrost
-                    } else if (expDiff < 0) {
-                        window.sessionStats.expGained += currentExp; // Nastąpił awans! (EXP resetuje się z nowym poziomem)
-                    }
+                    if (expDiff > 0) window.sessionStats.expGained += expDiff;
+                    else if (expDiff < 0) window.sessionStats.expGained += currentExp; 
                 }
                 window.sessionStats.lastExp = currentExp;
 
                 // --- OBLICZANIE ZŁOTA ---
                 if (window.sessionStats.lastGold !== -1) {
                     let goldDiff = currentGold - window.sessionStats.lastGold;
-                    if (goldDiff > 0) {
-                        window.sessionStats.goldGained += goldDiff; // Śledzimy tylko przychody (drop/sell), ignorujemy zakupy potek
-                    }
+                    if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
                 }
                 window.sessionStats.lastGold = currentGold;
 
-                // --- MATEMATYKA & FORMATOWANIE CZASU ---
+                // --- STOPER CZASU (Odświeża się co 1 sek) ---
                 let elapsedMs = Date.now() - window.sessionStats.startTime;
                 let elapsedSec = Math.floor(elapsedMs / 1000);
                 
@@ -8443,23 +8442,37 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 let s = elapsedSec % 60;
                 let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
-                let expPerHour = 0;
-                if (elapsedSec > 5) { // Czekamy 5 sekund, żeby kalkulacje nie wariowały na starcie
-                    expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
-                }
+                // --- STABILIZACJA CO 60 SEKUND (Kalkulator) ---
+                // Przez pierwszą minutę odświeża się co 5 sekund, potem blokuje się na aktualizacje co 60 sekund!
+                let calcInterval = elapsedSec < 60 ? 5 : 60; 
 
-                let timeTnlStr = "--:--:--";
-                let reqExp = parseInt(d.ttl_exp) || parseInt(d.exp_req) || 0; 
-                let missingExp = reqExp > currentExp ? (reqExp - currentExp) : 0;
+                if (elapsedSec > 0 && (elapsedSec - window.sessionStats.lastCalcTime >= calcInterval || window.sessionStats.expPerHour === 0)) {
+                    window.sessionStats.lastCalcTime = elapsedSec;
+                    
+                    window.sessionStats.expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
 
-                if (missingExp > 0 && expPerHour > 0) {
-                    let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
-                    let hTnl = Math.floor(secsTnl / 3600);
-                    let mTnl = Math.floor((secsTnl % 3600) / 60);
-                    let sTnl = secsTnl % 60;
-                    timeTnlStr = `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
-                } else if (missingExp > 0) {
-                    timeTnlStr = "Obliczanie...";
+                    // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA (Naprawa błędu "--:--:--")
+                    let maxExp = parseInt(d.next_lvl_exp) || parseInt(d.ttl_exp) || parseInt(d.mexp) || parseInt(d.max_exp) || 0;
+                    let missingExp = 0;
+                    
+                    if (maxExp > currentExp) {
+                        missingExp = maxExp - currentExp;
+                    } else if (maxExp > 0) {
+                        missingExp = maxExp; 
+                    }
+
+                    // Przeliczanie na minuty i godziny
+                    if (missingExp > 0 && window.sessionStats.expPerHour > 0) {
+                        let secsTnl = Math.floor((missingExp / window.sessionStats.expPerHour) * 3600);
+                        let hTnl = Math.floor(secsTnl / 3600);
+                        let mTnl = Math.floor((secsTnl % 3600) / 60);
+                        let sTnl = secsTnl % 60;
+                        
+                        if (hTnl > 99) window.sessionStats.timeTnlStr = "+99 godzin";
+                        else window.sessionStats.timeTnlStr = `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
+                    } else {
+                        window.sessionStats.timeTnlStr = "Obliczanie...";
+                    }
                 }
 
                 // --- PODMIANA W INTERFEJSIE ---
@@ -8471,8 +8484,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
                 if (elTime) elTime.innerText = timeStr;
                 if (elExp) elExp.innerText = window.sessionStats.expGained.toLocaleString('pl-PL');
-                if (elExpH) elExpH.innerText = expPerHour.toLocaleString('pl-PL');
-                if (elTnl) elTnl.innerText = timeTnlStr;
+                if (elExpH) elExpH.innerText = window.sessionStats.expPerHour.toLocaleString('pl-PL');
+                if (elTnl) elTnl.innerText = window.sessionStats.timeTnlStr;
                 if (elGold) elGold.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł";
 
             }, 1000);
