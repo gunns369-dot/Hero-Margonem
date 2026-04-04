@@ -7749,7 +7749,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             return null;
         }
 
-        // --- ZSYNCHRONIZOWANA PĘTLA STRAŻNIKA ---
+// --- ZSYNCHRONIZOWANA PĘTLA STRAŻNIKA (Z AUTO-WZNOWIENIEM) ---
         setInterval(async () => {
             if (!botSettings.exp || !botSettings.exp.captchaAlert) return;
             if (window.__captchaLock) return;
@@ -7757,21 +7757,28 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // Sytuacja 1: Zapadki brak (Czysto lub rozwiązałeś ją ręcznie)
+            // Sytuacja 1: Zapadki brak (Czysto lub właśnie ją rozwiązałeś)
             if (!fullWin && !preWin) {
-                if (window.__captchaPhase !== "none") {
-                    if (window.logExp) window.logExp("✅ Zapadka zniknęła z ekranu. Wznawiam procesy.", "#4caf50");
+                if (window.__captchaPhase === "manual_waiting") {
+                    window.__captchaPhase = "resuming"; // Blokujemy wielokrotne wznowienie
                     
-                    if (window.__wasExpingBeforeCaptcha && !window.isExping) {
-                        let btn = document.getElementById('btnStartExp');
-                        if (btn) btn.click();
-                    }
-                    if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
-                        let btn = document.getElementById('btnStartStop');
-                        if (btn) btn.click();
-                    }
+                    let delay = randomDelay(500, 2000); // Losujemy czas od 0.5s do 2s
+                    if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     
-                    window.__captchaPhase = "none";
+                    setTimeout(() => {
+                        // Wznawianie Expienia
+                        if (window.__wasExpingBeforeCaptcha && !window.isExping) {
+                            let btn = document.getElementById('btnStartExp');
+                            if (btn) btn.click();
+                        }
+                        
+                        // Wznawianie Patrolu za Herosem
+                        if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
+                            if (typeof startPatrol === 'function') startPatrol();
+                        }
+                        
+                        window.__captchaPhase = "none";
+                    }, delay);
                 }
                 return;
             }
