@@ -8285,30 +8285,32 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             lastGold: -1
         };
 
-        // Podpięcie kalkulatora pod WSZYSTKIE przyciski START (Exp i Patrol)
+        // KULOODPORNE Podpięcie kalkulatora pod WSZYSTKIE przyciski START (Exp i Patrol)
+        // Używamy Event Delegation na poziomie body, żeby omijać "Duchy" okienek Margonem
         document.body.addEventListener('click', (e) => {
             let target = e.target;
-            if (target && (target.id === 'btnStartExp' || target.closest('#btnStartExp') || target.id === 'btnStartStop' || target.closest('#btnStartStop'))) {
+            // Szuka id=btnStartExp lub btnStartStop (lub kliknięcia w ikonkę/tekst W ŚRODKU tego przycisku)
+            let isStartBtn = target && (target.id === 'btnStartExp' || target.closest('#btnStartExp') || target.id === 'btnStartStop' || target.closest('#btnStartStop'));
+            
+            if (isStartBtn) {
+                // Jeśli przycisk ma słowo "STOP" (czyli właśnie go WŁĄCZYLIŚMY)
+                let btnText = target.closest('button') ? target.closest('button').innerText : target.innerText;
                 
-                // Opóźnienie 200ms, aby skrypt główny zdążył ustawić zmienne isExping/isPatrolling
-                setTimeout(() => {
-                    let isWorking = (window.isExping || window.isPatrolling || window.isRushing);
+                if (btnText && btnText.includes('STOP')) {
+                    window.sessionStats.active = true;
+                    window.sessionStats.startTime = Date.now();
+                    window.sessionStats.expGained = 0;
+                    window.sessionStats.goldGained = 0;
                     
-                    if (isWorking) {
-                        window.sessionStats.active = true;
-                        window.sessionStats.startTime = Date.now();
-                        window.sessionStats.expGained = 0;
-                        window.sessionStats.goldGained = 0;
-                        
-                        // Pobranie danych startowych
-                        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                            window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                            window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
-                        }
-                    } else {
-                        window.sessionStats.active = false;
+                    // Pobranie danych startowych postaci z silnika gry
+                    if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                        window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                        window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
                     }
-                }, 200);
+                } else {
+                    // Jeśli przycisk ma słowo "START" (czyli go WYŁĄCZYLIŚMY)
+                    window.sessionStats.active = false;
+                }
             }
         });
 
