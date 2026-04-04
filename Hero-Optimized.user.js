@@ -12,8 +12,8 @@
 (function() {
     'use strict';
 
-    // ==========================================
-        // SILNIK ANTI-THROTTLE (WEB WORKER) - Omijanie usypiania zakładek
+   // ==========================================
+        // SILNIK ANTI-THROTTLE V2 (WEB WORKER + rAF) - Omijanie usypiania zakładek
         // ==========================================
         if (!window.__antiThrottleInstalled) {
             window.__antiThrottleInstalled = true;
@@ -50,6 +50,8 @@
             window.originalClearInterval = window.clearInterval;
             window.originalSetTimeout = window.setTimeout;
             window.originalClearTimeout = window.clearTimeout;
+            window.originalRequestAnimationFrame = window.requestAnimationFrame;
+            window.originalCancelAnimationFrame = window.cancelAnimationFrame;
             
             window.setInterval = function(cb, timeout, ...args) {
                 let id = timerId++;
@@ -71,10 +73,44 @@
                 worker.postMessage({ command: 'clearTimeout', id: id });
                 delete callbacks[id];
             };
-            console.log("%c[System] Web Worker Anti-Throttle aktywny! Przeglądarka nie uśpi bota.", "color: #00acc1; font-weight: bold; font-size: 14px;");
+
+            // NAPRAWA ZAMRAŻANIA GRY (Sztuczne klatki animacji w tle)
+            const rafMap = new Map();
+            let rafCounter = 0;
+            
+            window.requestAnimationFrame = function(cb) {
+                let id = ++rafCounter;
+                // document.hidden sprawdza, czy zminimalizowałeś lub zmieniłeś kartę
+                if (document.hidden) {
+                    // Gdy karta jest w tle, używamy naszego potężnego setTimeout (wymuszamy 60 FPS)
+                    let workerTimeoutId = window.setTimeout(() => {
+                        rafMap.delete(id);
+                        cb(performance.now());
+                    }, 16); // 16ms = ~60 klatek na sekundę
+                    rafMap.set(id, { type: 'worker', realId: workerTimeoutId });
+                } else {
+                    // Gdy karta jest aktywna, używamy normalnej grafiki przeglądarki
+                    let nativeId = window.originalRequestAnimationFrame((time) => {
+                        rafMap.delete(id);
+                        cb(time);
+                    });
+                    rafMap.set(id, { type: 'native', realId: nativeId });
+                }
+                return id;
+            };
+            
+            window.cancelAnimationFrame = function(id) {
+                let record = rafMap.get(id);
+                if (record) {
+                    if (record.type === 'worker') window.clearTimeout(record.realId);
+                    else window.originalCancelAnimationFrame(record.realId);
+                    rafMap.delete(id);
+                }
+            };
+
+            console.log("%c[System] Web Worker Anti-Throttle V2 aktywny! Silnik gry zmuszony do pracy w tle.", "color: #00acc1; font-weight: bold; font-size: 14px;");
         }
         // ==========================================
-    
    // WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - z Twoją metodą NI)
     const HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
