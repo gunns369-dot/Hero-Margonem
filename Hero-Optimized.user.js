@@ -7557,10 +7557,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         }, 500);
     }
 
-    // --- DAEMON: AUTO-SPRZEDAŻ Z LUDZKĄ MECHANIKĄ SPRZEDAŻY TOREB ---
+   // --- DAEMON: AUTO-SPRZEDAŻ Z LUDZKĄ MECHANIKĄ SPRZEDAŻY TOREB ---
     if (!window.autoSellDaemonInstalled) {
         window.autoSellDaemonInstalled = true;
-        window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0 };
+        window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0, failedNPCs: [], shopWaitStartTime: 0, targetNpc: null };
         window.runSuperSellerBagAndAccept = function(bagNo, delay = 250) {
             const root = typeof Engine !== 'undefined' && Engine.shop && Engine.shop.wnd && Engine.shop.wnd.$ ? Engine.shop.wnd.$[0] : document;
             const btn = root.querySelector(`.btn-num.grab-bag-${bagNo}`);
@@ -7589,6 +7589,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
+            
             if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
                 const s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
                 if (s.freeSlots <= 0 && s.totalCapacity > 0) {
@@ -7596,6 +7597,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.autoSellState.active = true;
                     window.autoSellState.step = 1;
                     window.autoSellState.nextActionTime = 0;
+                    window.autoSellState.failedNPCs = []; // Reset blacklisty przy nowej sesji
+                    window.autoSellState.shopWaitStartTime = 0;
                     window.isRushingToShop = false;
                     window.isRushing = true;
                     window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
@@ -7611,14 +7614,33 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (window.logExp) window.logExp(msg, "#ffb300");
                 }
             }
+            
             if (window.autoSellState.active) {
                 if (Date.now() < window.autoSellState.nextActionTime) return;
                 window.isExpSuspended = true;
+                
                 if (window.autoSellState.step === 1) {
+                    if (!window.autoSellState.failedNPCs) window.autoSellState.failedNPCs = [];
+                    window.autoSellState.shopWaitStartTime = 0;
+
                     let kupcy = window.DatabaseModule.kupcy || [];
                     let validMerchants = kupcy.filter(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n)));
                     if (validMerchants.length === 0) validMerchants = kupcy;
-                    if (validMerchants.length === 0) { window.autoSellState.active = false; return; }
+                    
+                    // INTELIGENTNE OMIJANIE ZBUGOWANYCH KUPCÓW
+                    if (window.autoSellState.failedNPCs.length > 0) {
+                        validMerchants = validMerchants.filter(k => !window.autoSellState.failedNPCs.includes(k.npc_name));
+                    }
+
+                    if (validMerchants.length === 0) { 
+                        if (window.logHero) window.logHero("❌ Brak dostępnych kupców do sprzedaży! (Wszyscy pobliscy zignorowali bota)", "#e53935");
+                        window.autoSellState.active = false; 
+                        window.autoSellState.failedNPCs = []; // Reset by przy kolejnej próbie spróbować od nowa
+                        window.isExpSuspended = false;
+                        window.isRushing = false;
+                        return; 
+                    }
+
                     let currMap = Engine.map.d.name;
                     let bestNpc = null;
                     let bestDist = Infinity;
@@ -7629,7 +7651,15 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (path && path.length < bestDist) { bestDist = path.length; bestNpc = m; }
                         }
                     });
-                    if (!bestNpc) { window.autoSellState.active = false; return; }
+                    
+                    if (!bestNpc) { 
+                        if (window.logHero) window.logHero("❌ Nie potrafię znaleźć ścieżki do żadnego kupca!", "#e53935");
+                        window.autoSellState.active = false; 
+                        return; 
+                    }
+                    
+                    window.autoSellState.targetNpc = bestNpc;
+
                     if (Engine.map.d.name !== bestNpc.map_name) {
                         if (!window.isRushingToShop) {
                             window.isRushingToShop = true;
@@ -7657,14 +7687,41 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         }
                     }
                 } else if (window.autoSellState.step === 2) {
+                    // Startujemy zegar oczekiwania na okno sklepu
+                    if (!window.autoSellState.shopWaitStartTime) window.autoSellState.shopWaitStartTime = Date.now();
+
                     let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window, .shop-container');
+                    
                     if (shopWrapper && shopWrapper.style.display !== 'none') {
+                        // Sklep odpalony pomyślnie
                         window.autoSellState.step = 3;
                         window.autoSellState.oldGold = Engine.hero.d.gold;
                         window.autoSellState.bagToSell = 1;
                         window.autoSellState.lastFreeSlots = typeof window.getBagStats === 'function' ? window.getBagStats().freeSlots : 0;
                         window.autoSellState.nextActionTime = Date.now() + 500;
+                        window.autoSellState.shopWaitStartTime = 0; // Reset licznika
                     } else {
+                        // TIMEOUT: Jeśli po 8 sekundach od zagadania do NPC nie wyskoczyło okno sklepu...
+                        if (Date.now() - window.autoSellState.shopWaitStartTime > 8000) {
+                            let badNpcName = window.autoSellState.targetNpc ? window.autoSellState.targetNpc.npc_name : "Kupiec";
+                            if (window.logHero) window.logHero(`⚠️ Sklep u ${badNpcName} nie otworzył się. Blokuję go i szukam kogoś innego!`, "#ffb300");
+                            if (window.logExp) window.logExp(`⚠️ Omijam zbugowanego kupca: ${badNpcName}`, "#ffb300");
+                            
+                            // Nakładamy bana na kupca
+                            window.autoSellState.failedNPCs.push(badNpcName);
+                            window.autoSellState.step = 1; // Wracamy do szukania nowego kupca
+                            window.autoSellState.shopWaitStartTime = 0;
+                            
+                            // Próbujemy wyczyścić ewentualny zablokowany dialog
+                            let dialogClose = document.querySelector('.dialog-close, .close-button, [data-option="close"], .cancel');
+                            if (dialogClose) dialogClose.click();
+                            else if (typeof window._g === 'function') window._g("talk&c=0");
+
+                            window.autoSellState.nextActionTime = Date.now() + 1000;
+                            return;
+                        }
+
+                        // Normalne próby przeklikania dialogu
                         let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
                         if (dialogOptions.length > 0) {
                             let shopOpt = dialogOptions.find(el => {
@@ -7707,7 +7764,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (window.logHero) window.logHero(msg, "#4caf50");
                             if (window.logExp) window.logExp(msg, "#4caf50");
                         }
+                        
+                        // Pełny Reset po zakończeniu (Kasuje też listę zablokowanych kupców na przyszłość!)
                         window.autoSellState.active = false;
+                        window.autoSellState.failedNPCs = [];
                         window.isExpSuspended = false;
                         window.isRushing = false;
                         window.isRushingToShop = false;
