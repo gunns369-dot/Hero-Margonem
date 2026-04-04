@@ -2903,7 +2903,7 @@ function initGUI() {
     function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { window.toggleMainVisibility(); } }
 
 // --- MODUŁ: POWIADOMIENIA PRZEGLĄDARKI ---
-        const browserAlertsGui = document.createElement('div'); browserAlertsGui.id = 'browserAlertsSettingsGUI'; browserAlertsGui.className = 'hero-window'; browserAlertsGui.style.display = 'none';
+      const browserAlertsGui = document.createElement('div'); browserAlertsGui.id = 'browserAlertsSettingsGUI'; browserAlertsGui.className = 'hero-window'; browserAlertsGui.style.display = 'none'; browserAlertsGui.style.top = '60px'; browserAlertsGui.style.left = '400px'; browserAlertsGui.style.width = '320px';
         browserAlertsGui.innerHTML = `
             <div class="gui-header" style="color:#ff9800;">🔔 Powiadomienia Przeglądarki <button class="btn-close" onclick="document.getElementById('browserAlertsSettingsGUI').style.display='none'">✖</button></div>
             <div class="gui-content" style="gap:8px;">
@@ -8174,7 +8174,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             // 1. Kasujemy "Duchy" - usuwamy okna z klasą 'hero-window' które wiszą luzem
             document.querySelectorAll('body > .hero-window#heroTeleportsGUI').forEach(el => el.remove());
             
-            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI'];
+            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI', 'browserAlertsSettingsGUI', 'discordSettingsGUI', 'heroTeleportsGUI'];
             windowsToClean.forEach(id => {
                 let copies = document.querySelectorAll('#' + id);
                 if (copies.length > 1) {
