@@ -5311,19 +5311,17 @@ if (hx !== expLastX || hy !== expLastY) {
     }
 
 
-  // --- SKANOWANIE POTWORÓW ---
+// --- SKANOWANIE POTWORÓW ---
     const arr = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
     let rawMobs = [];
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    // 1. Zbudowanie mapy "Stref Zagrożenia"
-    // Szukamy wszystkich E2 i Herosów, których UŻYTKOWNIK NIE CHCE bić
+    // 1. Zbudowanie mapy "Stref Zagrożenia" (Bossy, których nie bijemy)
     let dangerousSpots = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
-
         let wt = parseInt(n.wt, 10);
         let ranga = "normal";
         if (n.type === 2) {
@@ -5331,18 +5329,18 @@ if (hx !== expLastX || hy !== expLastY) {
             else if (wt === 12 || wt === 2) ranga = "elite2";
             else if (wt >= 13 || wt >= 3) ranga = "hero";
         }
-
-        // Jeśli to E2, a nie mamy zaznaczonego bicia E2 (albo Heros) - oznaczamy to pole jako lawę!
         if ((ranga === "elite2" && !bE2) || (ranga === "hero" && !bHero)) {
             dangerousSpots.push({x: n.x, y: n.y});
         }
     });
 
-// 2. Filtrowanie i Klastrowanie Potworów (KOSIARKA V5 - Grupy Priorytetowe)
+    // 2. Filtrowanie i Klastrowanie Potworów (KOSIARKA V7)
     let validMobs = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
+        
+        // Pomijamy moby wrzucone na czarną listę (bo zacięliśmy się na nich ponad 3 sekundy)
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
@@ -5370,27 +5368,23 @@ if (hx !== expLastX || hy !== expLastY) {
         }
         if (!isSafeToAttack) return;
 
-        // BARDZO SZYBKI SKAN KOLIZJI (Omijanie zbugowanych w ścianie)
-        let isReachable = false;
-        let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [1,-1], [-1,1]];
-        for(let d of dirs) {
-             if(typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(n.x + d[0], n.y + d[1])) {
-                 isReachable = true; break;
-             }
+        let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
+        
+        // Zabezpieczenie przed niewidocznymi mobami za mgłą wojny (PVP)
+        if (Engine.map && Engine.map.d && Engine.map.d.pvp === 2) {
+            if (dist > 18) return; 
         }
-        if(!isReachable) return;
 
         validMobs.push({
             id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga, grp: n.grp,
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
-            dist: Math.abs(hx - n.x) + Math.abs(hy - n.y)
+            dist: dist
         });
     });
 
-    // 3. MAPOWANIE GRUP MARGONEM (Twoja metoda)
+    // 3. MAPOWANIE GRUP MARGONEM
     let groupsMap = new Map();
     validMobs.forEach(m => {
-        // Moby bez grupy dostają własny unikalny klaster oznaczony ID
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
         if (!groupsMap.has(key)) groupsMap.set(key, []);
         groupsMap.get(key).push(m);
@@ -5398,150 +5392,104 @@ if (hx !== expLastX || hy !== expLastY) {
 
     let clusters = [];
     groupsMap.forEach((clusterMobs, key) => {
-        // Znajdź potwora w tej grupie, który jest NAJBLIŻEJ NAS (najlepszy punkt wejścia)
+        // Znajdź potwora z grupy, który jest fizycznie NAJBLIŻEJ nas (punkt wejścia do walki)
         clusterMobs.sort((a, b) => a.dist - b.dist);
         let entryMob = clusterMobs[0]; 
 
-        // Wyciągnij najwyższą rangę w grupie (żeby np. wataha wilków z elitą miała priorytet)
         let bestRank = "normal";
         if (clusterMobs.some(m => m.ranga === "elite1")) bestRank = "elite1";
         if (clusterMobs.some(m => m.ranga === "elite2")) bestRank = "elite2";
         if (clusterMobs.some(m => m.ranga === "hero")) bestRank = "hero";
 
         clusters.push({
-            size: clusterMobs.length,     // Ilość potworów w walce
-            target: entryMob,             // Mob, którego faktycznie zaatakujemy
+            size: clusterMobs.length,
+            target: entryMob,
             rank: bestRank,
             isLocked: clusterMobs.some(m => m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0))
         });
     });
 
-// 4. SORTOWANIE KOSIARKI V6 (Balans: Dystans vs Rozmiar Grupy)
+    // 4. SORTOWANIE (Smart-Gravity)
     clusters.sort((a, b) => {
-        // Priorytet 1: Elity i Herosi ZAWSZE pierwsi
         let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
         if (rankVal[a.rank] !== rankVal[b.rank]) return rankVal[b.rank] - rankVal[a.rank];
 
-        // Priorytet 2: Twarda blokada (Kontynuujemy atakowany cel)
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
 
-        // Priorytet 3: Złoty Środek (Smart-Gravity)
-        // Każdy dodatkowy mob w grupie "przyciąga" bota z siłą 12 kratek.
-        // Jeśli grupa jest za daleko, bot woli wyczyścić to, co ma pod nogami, żeby nie wracać!
+        // Balans: Każdy dodatkowy mob w grupie "przybliża" ją w oczach bota o 12 kratek!
         let scoreA = a.target.dist - ((a.size - 1) * 12);
         let scoreB = b.target.dist - ((b.size - 1) * 12);
 
         return scoreA - scoreB;
     });
 
-    // Podmieniamy rawMobs na zmapowany wynik z naszego najlepiej wyliczonego klastra
     rawMobs = clusters.length > 0 ? [clusters[0].target] : [];
 
-
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
-
     if (rawMobs.length > 0) {
-
         let target = rawMobs[0];
-
         const targetDist = target.dist;
 
-
-
         if (expEmptyScans > 0) {
-
-            window.logExp(`✨ Zauważono nowy resp!`, "#8bc34a");
-
-            expEmptyScans = 0; expLastActionTime = now + 1500; return;
-
+            window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
+            expEmptyScans = 0; expLastActionTime = now + 1000; return;
         }
 
-
-
         if (targetDist > 1) {
-
             expAttackLockUntil = 0;
-
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
-
-
             if (isNewDestination) {
-
-                // Ustawienie nowego celu i wydanie komendy ruchu
-
-              // Ustawienie nowego celu i wydanie komendy ruchu (Nakłada 8s lock)
                 if (expCurrentTargetId !== target.id) {
                     window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
-                    window.expTargetLockTime = now + 4000; // 4 SEKUNDy TWARDEJ BLOKADY!
+                    window.expTargetLockTime = now + 4000; 
                 }
 
-
-
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
-
-                Engine.hero.autoGoTo({ x: target.x, y: target.y });
-
-
+                
+                // Wywołanie ruchu natywnego
+                if (typeof window._g === 'function' && targetDist < 6) {
+                    // Czysty ruch serwerowy dla bliskich mobów (omija ewentualne problemy ścieżkowania interfejsu)
+                    window._g(`walk=${target.x},${target.y}`);
+                } else {
+                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                }
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
-
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-
                 window.expTargetPursuitStart = now;
-
-                window.expMoveLockUntil = now + 1000;
-
+                window.expMoveLockUntil = now + 800; // Krótki lock, żeby bot odświeżał kierunek
             } else {
-
                 if (now > window.expMoveLockUntil) {
-
-                    // --- FIZYCZNA KONTROLA ZACIĘCIA ---
-
-                    // Jeśli postać zmieniła swoje X lub Y (czyli idzie), resetujemy stoper!
-
                     if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
-
                         window.expPursuitLastX = hx;
-
                         window.expPursuitLastY = hy;
-
                         window.expTargetPursuitStart = now;
-
                     }
-
-
 
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
-
-
-                // 🚨 ZŁOTY WARUNEK: Zatrzymanie na 2.5 sekundy a mob wciąż jest daleko!
-                    if (timeStandingStill > 2500) {
-                        window.logExp(`🚨 Utknięto na [${hx}, ${hy}]. Omijam: ${target.nick}.`, "#ff5252");
+                    // Odcięcie twardego zacięcia po 3 sekundach stania w miejscu bez walki
+                    if (timeStandingStill > 3000) {
+                        window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Ignoruję go na chwilę.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
                         expCurrentTargetId = null;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                        
-                        // WYMUSZONY KROK ODBLOKOWUJĄCY PATHFINDER
                         if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                        let dirs = [[0,1], [1,0], [0,-1], [-1,0], [1,1], [-1,-1]];
-                        for(let d of dirs) {
-                            let nx = hx + d[0], ny = hy + d[1];
-                            if(Engine.map && typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)){
-                                if(typeof window._g === 'function') window._g(`walk=${nx},${ny}`);
-                                else Engine.hero.autoGoTo({x:nx, y:ny});
-                                break;
-                            }
-                        }
+                        
+                        // Odklejenie od przeszkody
+                        let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+                        let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+                        Engine.hero.autoGoTo({ x: rx, y: ry });
+                        
                         expLastActionTime = now + 1000;
                         return;
                     }
 
-                    // Co 1.5 sekundy przypominamy grze o ruchu (anty-lag)
-                    if (timeStandingStill > 1500 && (now % 1500 < 150)) {
+                    // Co sekundę przypominamy grze o ruchu
+                    if (timeStandingStill > 1000 && (now % 1000 < 150)) {
                         Engine.hero.autoGoTo({ x: target.x, y: target.y });
                     }
                 }
