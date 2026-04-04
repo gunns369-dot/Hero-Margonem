@@ -6234,47 +6234,6 @@ window.toggleTeleportLock = function(city, isChecked) {
             `;
         }
     };
-// --- NOWA LOGIKA BAZY I POLECANYCH EXPOWISK ---
-    window.renderRecommendedExp = function() {
-        let c = document.getElementById('expRecList');
-        if(!c) return;
-
-        let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
-        // Rozszerzony zakres dla lepszej widoczności bazy (-10 do +25 lvl)
-        let minTarget = playerLvl - 10;
-        let maxTarget = playerLvl + 25;
-
-        let html = '';
-
-        // Zabezpieczenie: korzystamy bezpośrednio z odświeżonych botSettings
-        let safeProfiles = (botSettings && botSettings.expProfiles) ? botSettings.expProfiles : window.defaultExpProfiles;
-
-        safeProfiles.forEach((p, index) => {
-            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
-            if(lvlMatch && lvlMatch[1]) {
-                let baseLvl = parseInt(lvlMatch[1]);
-                if(baseLvl >= minTarget && baseLvl <= maxTarget) {
-                    // Dodano wyświetlanie p.desc (Opis zawierający ilość potworów)
-                    html += `
-                        <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px;">
-                            <input type="checkbox" class="chk-rec-profile" data-index="${index}" style="margin-top:2px;">
-                            <div style="display:flex; flex-direction:column;">
-                                <b style="color:#00acc1;">${p.name}</b>
-                                ${p.desc ? `<span style="color:#8bc34a; font-size:9px;">${p.desc}</span>` : ''}
-                                <span style="color:#888; font-size:9px;">Mapy: ${p.maps.join(', ')}</span>
-                            </div>
-                        </label>
-                    `;
-                }
-            }
-        });
-
-        if(html === '') {
-            c.innerHTML = '<div style="text-align:center; color:#777; padding:10px; font-size:10px;">Brak gotowych expowisk w bazie dla Twojego przedziału poziomowego.</div>';
-        } else {
-            c.innerHTML = html;
-        }
-    };
 
     let btnOpenTp = document.getElementById('btnOpenTeleports');
     if (btnOpenTp) {
