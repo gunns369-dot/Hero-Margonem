@@ -5181,12 +5181,20 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
     if (now < expLastActionTime) return;
 
-    // --- ZABEZPIECZENIE PRZED ŚMIERCIĄ I CZEKANIE NA RESPAWN ---
-    if (Engine.dead || hero.dead) {
+   // --- ZABEZPIECZENIE PRZED ŚMIERCIĄ I CZEKANIE NA RESPAWN ---
+    let isDead = Engine.dead || hero.dead === true || hero.dead === 1 || hero.dead === "1" || document.querySelector('.dead-window, .death-window, [data-wnd="dead"]') !== null;
+    if (isDead) {
         if (window._lastDeadLog !== Math.floor(now / 5000)) {
             window.logExp("💀 Jesteś nieprzytomny. Czekam na respawn...", "#e53935");
             window._lastDeadLog = Math.floor(now / 5000);
         }
+        
+        // Zrzucamy zablokowany cel i czyścimy kordy, żeby po ożywieniu nie biegł w ścianę
+        expCurrentTargetId = null;
+        window.expTargetLockTime = 0;
+        window.expLastMoveTx = -1; 
+        window.expLastMoveTy = -1;
+        
         expLastActionTime = now + 2000;
         return;
     }
