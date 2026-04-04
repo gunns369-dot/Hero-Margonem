@@ -5404,17 +5404,23 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         });
     });
 
-    // --- DODANIE ETYKIET GRUP DO LOGÓW ---
+   // --- DODANIE ETYKIET GRUP DO LOGÓW ORAZ FILTR DYSTANSU ---
     let groupsCount = {};
     validMobs.forEach(m => {
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
         groupsCount[key] = (groupsCount[key] || 0) + 1;
     });
+    
     validMobs.forEach(m => {
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
         let size = groupsCount[key];
+        m.groupSize = size;
         m.groupLabel = size > 1 ? `Grupa (${size}x) ${m.nick}` : `Solo ${m.nick}`;
     });
+
+    // ODRZUCANIE DALEKICH PŁOTEK: Jeśli zwykły potwór jest sam i dalej niż 50 kratek -> omijamy go.
+    // Dzięki temu validMobs będzie puste i bot od razu poleci na kolejną mapę!
+    validMobs = validMobs.filter(m => !(m.groupSize === 1 && m.dist > 50 && m.ranga === "normal"));
 
     // 6. UTRZYMANIE CELU (ELASTYCZNY LOCK 3-5s - V16)
     let lockedMob = null;
