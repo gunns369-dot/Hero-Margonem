@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         MargoNeuro - Optimized Edition
+// @name         Hero, Elity II & Kolosy - Optimized Edition
 // @version      64.3
 // @description  Automatyczne wykrywanie, inteligentny zasięg, natywny auto-atak, poprawne limity poziomowe, naprawiony scroll.
 // @author       Ty & Gemini
@@ -971,9 +971,9 @@ let opacityValue = 0.95;
         expAntiLagMin: 1500, expAntiLagMax: 2500,
 
         useTeleports: true,
-        discord: { enabled: false, url: '' }, // NOWOŚĆ: Pamięć ustawień Discorda
 
         unlockedTeleports: JSON.parse(localStorage.getItem('hero_teleports_v64') || '{"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false}'),
+
         exp: {
 
             enabled: false, minLvl: 1, maxLvl: 300,
@@ -1149,30 +1149,6 @@ function loadData() {
 
 
     function saveSettings() { localStorage.setItem('hero_settings_db_v64', JSON.stringify(botSettings)); }
-
-    function saveSettings() { localStorage.setItem('hero_settings_db_v64', JSON.stringify(botSettings)); }
-
-    // --- SILNIK MARGONEURO: DISCORD WEBHOOK ---
-    window.sendDiscordWebhook = function(title, description, colorHex = 16753920) {
-        if (!botSettings.discord || !botSettings.discord.enabled || !botSettings.discord.url) return;
-        
-        let payload = {
-            username: "MargoNeuro",
-            avatar_url: "https://www.margonem.pl/favicon.ico",
-            embeds: [{
-                title: title,
-                description: description,
-                color: colorHex,
-                timestamp: new Date().toISOString()
-            }]
-        };
-
-        fetch(botSettings.discord.url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }).catch(e => console.error("[MargoNeuro] Błąd wysyłania na Discorda:", e));
-    };
 
     function saveGateways() { localStorage.setItem('hero_global_gateways_v20', JSON.stringify(globalGateways)); }
 
@@ -1566,17 +1542,9 @@ let attackInterval = null;
 
 
 
-
                     let foundName = nData.nick ? nData.nick.replace(/<[^>]*>?/gm, '') : targetHero;
+
                     showHeroAlertBanner(foundName);
-                    
-                    // PUSH NA DISCORD
-                    let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : lastMapName;
-                    window.sendDiscordWebhook(
-                        "🚨 WYKRYTO CEL NA RADARZE!", 
-                        `**Znalazłem:** ${foundName}\n**Lokalizacja:** ${mapName} [X: ${nData.x}, Y: ${nData.y}]`, 
-                        16753920 // Złoty kolor
-                    );
 
 
 
@@ -2652,7 +2620,7 @@ window.handleTeleportNPC = function(targetMap) {
 const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGui.className = 'hero-window';
         mainGui.innerHTML = `
             <div class="gui-header">
-                <div id="guiHeaderTitle" style="margin-right:5px; color:#00e5ff; text-shadow: 0 0 5px #00e5ff; font-weight:900;">MargoNeuro</div>
+                <div id="guiHeaderTitle" style="margin-right:5px; color:#d4af37;">Radar v64.3</div>
                 <div class="header-buttons">
                     <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
                     <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
@@ -2791,20 +2759,21 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                                 <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;" title="Powiadomienie o wiadomościach prywatnych"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat</label>
                                 <span id="btnChatAlertSettings" style="cursor:pointer; font-size:12px; filter: grayscale(20%); transition: 0.2s;" title="Ustawienia alarmu czatu">⚙️</span>
                             </div>
-                         <div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
+                            <div id="chatAlertSettingsPanel" style="display:none; background:rgba(0,0,0,0.5); padding:6px; border:1px solid #e040fb; border-radius:3px; margin-bottom:4px; margin-top:4px;">
                                 <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
-                            </div>
-                            
-                            <div style="border-top:1px dashed #444; margin-top: 4px; padding-top: 6px;">
-                                <label style="color:#7289da; font-size:10px; cursor:pointer; font-weight:bold; margin:0; display:flex; align-items:center; gap:5px;">
-                                    <input type="checkbox" id="discordAlertEnabled" ${botSettings.discord?.enabled ? 'checked' : ''}> 💬 Discord (Push na telefon)
-                                </label>
-                                <input type="text" id="discordWebhookUrl" placeholder="Wklej tutaj link z Discord Webhook..." value="${botSettings.discord?.url || ''}" style="width:100%; padding:4px; font-size:9px; background:#0f0f0f; color:#fff; border:1px solid #444; margin-top: 4px; border-radius:2px;">
                             </div>
                         </div>
                     </div>
 
-            
+                    <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
+                    <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
+                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto:</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
+                    </div>
+
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
                     <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
                         <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin-bottom:6px; display:block;"><input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska</label>
@@ -3271,21 +3240,8 @@ if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false
             if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission();
         });
 
-       bindChange('chatAlertStopBot', (e) => {
+        bindChange('chatAlertStopBot', (e) => {
             botSettings.exp.chatAlertStopBot = e.target.checked;
-            saveSettings();
-        });
-
-        // --- ZAPIS USTAWIEŃ DISCORDA ---
-        if (!botSettings.discord) { botSettings.discord = { enabled: false, url: '' }; saveSettings(); }
-        
-        bindChange('discordAlertEnabled', (e) => {
-            botSettings.discord.enabled = e.target.checked;
-            saveSettings();
-        });
-        
-        bindInput('discordWebhookUrl', (e) => {
-            botSettings.discord.url = e.target.value.trim();
             saveSettings();
         });
 
@@ -6234,6 +6190,47 @@ window.toggleTeleportLock = function(city, isChecked) {
             `;
         }
     };
+// --- NOWA LOGIKA BAZY I POLECANYCH EXPOWISK ---
+    window.renderRecommendedExp = function() {
+        let c = document.getElementById('expRecList');
+        if(!c) return;
+
+        let playerLvl = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.lvl) ? Engine.hero.d.lvl : 1;
+        // Rozszerzony zakres dla lepszej widoczności bazy (-10 do +25 lvl)
+        let minTarget = playerLvl - 10;
+        let maxTarget = playerLvl + 25;
+
+        let html = '';
+
+        // Zabezpieczenie: korzystamy bezpośrednio z odświeżonych botSettings
+        let safeProfiles = (botSettings && botSettings.expProfiles) ? botSettings.expProfiles : window.defaultExpProfiles;
+
+        safeProfiles.forEach((p, index) => {
+            let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
+            if(lvlMatch && lvlMatch[1]) {
+                let baseLvl = parseInt(lvlMatch[1]);
+                if(baseLvl >= minTarget && baseLvl <= maxTarget) {
+                    // Dodano wyświetlanie p.desc (Opis zawierający ilość potworów)
+                    html += `
+                        <label style="display:flex; align-items:flex-start; gap:5px; background:#1a1a1a; padding:5px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px;">
+                            <input type="checkbox" class="chk-rec-profile" data-index="${index}" style="margin-top:2px;">
+                            <div style="display:flex; flex-direction:column;">
+                                <b style="color:#00acc1;">${p.name}</b>
+                                ${p.desc ? `<span style="color:#8bc34a; font-size:9px;">${p.desc}</span>` : ''}
+                                <span style="color:#888; font-size:9px;">Mapy: ${p.maps.join(', ')}</span>
+                            </div>
+                        </label>
+                    `;
+                }
+            }
+        });
+
+        if(html === '') {
+            c.innerHTML = '<div style="text-align:center; color:#777; padding:10px; font-size:10px;">Brak gotowych expowisk w bazie dla Twojego przedziału poziomowego.</div>';
+        } else {
+            c.innerHTML = html;
+        }
+    };
 
     let btnOpenTp = document.getElementById('btnOpenTeleports');
     if (btnOpenTp) {
@@ -7900,18 +7897,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     // 1. Log w panelu (bez dźwięku!)
                     if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
 
-                   // 2. Zbiorcze powiadomienie w przeglądarce
+                    // 2. Zbiorcze powiadomienie w przeglądarce
                     if (Notification.permission === "granted") {
                         new Notification(msgTitle, { body: msgBody });
                     }
-
-                    // PUSH NA DISCORD
-                    let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
-                    window.sendDiscordWebhook(
-                        msgTitle, 
-                        `${msgBody}\n**Mapa:** ${mapName}`, 
-                        16711680 // Czerwony kolor
-                    );
 
                     // 3. Zatrzymanie bota (tylko raz dla całej grupy)
                     if (botSettings.exp.playerAlertStopBot) {
@@ -7978,20 +7967,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     // 1. Log w konsoli bota
                     if (window.logExp) window.logExp(`📩 PRIV od ${sender}: ${message}`, "#e040fb");
 
-                   // 2. Powiadomienie systemowe (Brak dźwięku)
+                    // 2. Powiadomienie systemowe (Brak dźwięku)
                     if (Notification.permission === "granted") {
                         new Notification(`📩 Nowa wiadomość (Margo)`, {
                             body: `${sender}: ${message}`,
                             icon: 'https://www.margonem.pl/favicon.ico'
                         });
                     }
-
-                    // PUSH NA DISCORD
-                    window.sendDiscordWebhook(
-                        "📩 Otrzymano Wiadomość Prywatną", 
-                        `**Od:** ${sender}\n**Treść:** ${message}`, 
-                        14828287 // Różowy kolor
-                    );
 
                     // 3. Opcjonalne zatrzymanie bota
                     if (botSettings.exp.chatAlertStopBot) {
@@ -8291,6 +8273,106 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
+// --- DAEMON: PANEL STATYSTYK SESJI (Główny łącznik z GUI) ---
+    if (window.statsIntervalId) clearInterval(window.statsIntervalId);
+    
+    window.sessionStats = {
+        active: false,
+        startTime: 0,
+        expGained: 0,
+        goldGained: 0,
+        lastExp: -1,
+        lastGold: -1,
+        accumulatedTime: 0 // Zmienna zapamiętująca czas przy pauzowaniu
+    };
+
+    window.statsIntervalId = setInterval(() => {
+        // 1. Zabezpieczenie - upewnijmy się, że silnik gry istnieje
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+
+        // 2. Pobranie aktualnego stanu EXP i Złota z gry (działa i na NI, i na SI)
+        let curExp = parseInt(Engine.hero.d.exp) || (typeof hero !== 'undefined' ? parseInt(hero.exp) : 0);
+        let curGold = parseInt(Engine.hero.d.gold) || (typeof hero !== 'undefined' ? parseInt(hero.gold) : 0);
+        
+        let maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 
+                     (typeof hero !== 'undefined' ? (parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp)) : 0);
+                     
+        let expLeft = parseInt(Engine.hero.d.exp_left) || 0;
+
+        // 3. FLAGA STARTU - czytamy bezpośrednio główną zmienną bota!
+        // Kiedy klikasz przycisk "▶ START" obok trasy, ta zmienna zmienia się na TRUE!
+        let isBotWorking = (window.isExping === true || window.isPatrolling === true);
+
+        // 4. Logika startu / stopu licznika
+        if (isBotWorking && !window.sessionStats.active) {
+            window.sessionStats.active = true;
+            window.sessionStats.startTime = Date.now(); // Zaczynamy mierzyć obecną "sesję" biegu
+            if (window.sessionStats.lastExp === -1) {
+                window.sessionStats.lastExp = curExp;
+                window.sessionStats.lastGold = curGold;
+            }
+        } else if (!isBotWorking && window.sessionStats.active) {
+            // PAUZA: Zatrzymujemy odliczanie, dopisujemy spędzony czas
+            window.sessionStats.active = false;
+            window.sessionStats.accumulatedTime += Date.now() - window.sessionStats.startTime;
+        }
+
+        // Jeśli bot nie jest włączony (START nie kliknięty), to nie dodajemy statystyk
+        if (!window.sessionStats.active) return;
+
+        // 5. Obliczanie przyrostów
+        if (window.sessionStats.lastExp !== -1) {
+            let expDiff = curExp - window.sessionStats.lastExp;
+            if (expDiff > 0) window.sessionStats.expGained += expDiff;
+            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Wbiłeś level, pasek spadł do zera
+        }
+        window.sessionStats.lastExp = curExp;
+
+        if (window.sessionStats.lastGold !== -1) {
+            let goldDiff = curGold - window.sessionStats.lastGold;
+            if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
+        }
+        window.sessionStats.lastGold = curGold;
+
+        // 6. Matematyka Czasu (Czas obecnego biegu + czas z poprzednich etapów przed pauzą)
+        let totalElapsedMs = window.sessionStats.accumulatedTime + (Date.now() - window.sessionStats.startTime);
+        let elapsedSec = Math.floor(totalElapsedMs / 1000);
+        if (elapsedSec < 1) elapsedSec = 1;
+        
+        let h = Math.floor(elapsedSec / 3600);
+        let m = Math.floor((elapsedSec % 3600) / 60);
+        let s = elapsedSec % 60;
+        let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+        // EXP / h
+        let expPerHour = 0;
+        if (elapsedSec > 2) expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
+
+        // TNL (Czas do awansu)
+        let missingExp = expLeft > 0 ? expLeft : (maxExp > curExp ? maxExp - curExp : 0);
+        let timeTnlStr = "--:--:--";
+        
+        if (missingExp > 0 && expPerHour > 0) {
+            let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
+            let hTnl = Math.floor(secsTnl / 3600);
+            let mTnl = Math.floor((secsTnl % 3600) / 60);
+            let sTnl = secsTnl % 60;
+            timeTnlStr = hTnl > 99 ? "+99 godzin" : `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
+        } else if (missingExp > 0) {
+            timeTnlStr = "Obliczanie...";
+        } else {
+            timeTnlStr = "Max Lvl?";
+        }
+
+        // 7. BŁYSKAWICZNA AKTUALIZACJA HTML (Dokładnie te ID, które podesłałeś)
+        // Używam getElementById (lub querySelectorAll na wszelki wypadek duchów)
+        document.querySelectorAll('#statSessionTime').forEach(el => el.innerHTML = timeStr);
+        document.querySelectorAll('#statExpGained').forEach(el => el.innerHTML = window.sessionStats.expGained.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerHTML = expPerHour.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerHTML = timeTnlStr);
+        document.querySelectorAll('#statGoldGained').forEach(el => el.innerHTML = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
+
+    }, 1000);
 
     // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
     setTimeout(() => {
