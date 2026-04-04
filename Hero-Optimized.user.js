@@ -2765,15 +2765,7 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
                         </div>
                     </div>
 
-                    <div class="accordion-header" id="accStats" onclick="toggleSettingsAcc('accStats')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #9c27b0; margin-top: 5px; margin-bottom: 0;">▼ STATYSTYKI SESJI (EXP / ZŁOTO)</div>
-                    <div id="accStatsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px; font-size: 11px; color: #e0d8c0; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom: 1px solid #333; padding-bottom: 2px;"><span>Czas pracy:</span> <b id="statSessionTime" style="color:#00acc1;">00:00:00</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Zdobyty EXP:</span> <b id="statExpGained" style="color:#4caf50;">0</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Szacowany EXP/h:</span> <b id="statExpPerHour" style="color:#ffb300;">0</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Czas do awansu:</span> <b id="statTimeTnl" style="color:#2196f3;">--:--:--</b></div>
-                        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px solid #333;"><span>Zarobione złoto:</span> <b id="statGoldGained" style="color:#ffca28;">0 zł</b></div>
-                    </div>
-
+            
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
                     <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
                         <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin-bottom:6px; display:block;"><input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska</label>
@@ -8273,106 +8265,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: PANEL STATYSTYK SESJI (Główny łącznik z GUI) ---
-    if (window.statsIntervalId) clearInterval(window.statsIntervalId);
-    
-    window.sessionStats = {
-        active: false,
-        startTime: 0,
-        expGained: 0,
-        goldGained: 0,
-        lastExp: -1,
-        lastGold: -1,
-        accumulatedTime: 0 // Zmienna zapamiętująca czas przy pauzowaniu
-    };
-
-    window.statsIntervalId = setInterval(() => {
-        // 1. Zabezpieczenie - upewnijmy się, że silnik gry istnieje
-        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
-
-        // 2. Pobranie aktualnego stanu EXP i Złota z gry (działa i na NI, i na SI)
-        let curExp = parseInt(Engine.hero.d.exp) || (typeof hero !== 'undefined' ? parseInt(hero.exp) : 0);
-        let curGold = parseInt(Engine.hero.d.gold) || (typeof hero !== 'undefined' ? parseInt(hero.gold) : 0);
-        
-        let maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 
-                     (typeof hero !== 'undefined' ? (parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp)) : 0);
-                     
-        let expLeft = parseInt(Engine.hero.d.exp_left) || 0;
-
-        // 3. FLAGA STARTU - czytamy bezpośrednio główną zmienną bota!
-        // Kiedy klikasz przycisk "▶ START" obok trasy, ta zmienna zmienia się na TRUE!
-        let isBotWorking = (window.isExping === true || window.isPatrolling === true);
-
-        // 4. Logika startu / stopu licznika
-        if (isBotWorking && !window.sessionStats.active) {
-            window.sessionStats.active = true;
-            window.sessionStats.startTime = Date.now(); // Zaczynamy mierzyć obecną "sesję" biegu
-            if (window.sessionStats.lastExp === -1) {
-                window.sessionStats.lastExp = curExp;
-                window.sessionStats.lastGold = curGold;
-            }
-        } else if (!isBotWorking && window.sessionStats.active) {
-            // PAUZA: Zatrzymujemy odliczanie, dopisujemy spędzony czas
-            window.sessionStats.active = false;
-            window.sessionStats.accumulatedTime += Date.now() - window.sessionStats.startTime;
-        }
-
-        // Jeśli bot nie jest włączony (START nie kliknięty), to nie dodajemy statystyk
-        if (!window.sessionStats.active) return;
-
-        // 5. Obliczanie przyrostów
-        if (window.sessionStats.lastExp !== -1) {
-            let expDiff = curExp - window.sessionStats.lastExp;
-            if (expDiff > 0) window.sessionStats.expGained += expDiff;
-            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Wbiłeś level, pasek spadł do zera
-        }
-        window.sessionStats.lastExp = curExp;
-
-        if (window.sessionStats.lastGold !== -1) {
-            let goldDiff = curGold - window.sessionStats.lastGold;
-            if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
-        }
-        window.sessionStats.lastGold = curGold;
-
-        // 6. Matematyka Czasu (Czas obecnego biegu + czas z poprzednich etapów przed pauzą)
-        let totalElapsedMs = window.sessionStats.accumulatedTime + (Date.now() - window.sessionStats.startTime);
-        let elapsedSec = Math.floor(totalElapsedMs / 1000);
-        if (elapsedSec < 1) elapsedSec = 1;
-        
-        let h = Math.floor(elapsedSec / 3600);
-        let m = Math.floor((elapsedSec % 3600) / 60);
-        let s = elapsedSec % 60;
-        let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-
-        // EXP / h
-        let expPerHour = 0;
-        if (elapsedSec > 2) expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
-
-        // TNL (Czas do awansu)
-        let missingExp = expLeft > 0 ? expLeft : (maxExp > curExp ? maxExp - curExp : 0);
-        let timeTnlStr = "--:--:--";
-        
-        if (missingExp > 0 && expPerHour > 0) {
-            let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
-            let hTnl = Math.floor(secsTnl / 3600);
-            let mTnl = Math.floor((secsTnl % 3600) / 60);
-            let sTnl = secsTnl % 60;
-            timeTnlStr = hTnl > 99 ? "+99 godzin" : `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
-        } else if (missingExp > 0) {
-            timeTnlStr = "Obliczanie...";
-        } else {
-            timeTnlStr = "Max Lvl?";
-        }
-
-        // 7. BŁYSKAWICZNA AKTUALIZACJA HTML (Dokładnie te ID, które podesłałeś)
-        // Używam getElementById (lub querySelectorAll na wszelki wypadek duchów)
-        document.querySelectorAll('#statSessionTime').forEach(el => el.innerHTML = timeStr);
-        document.querySelectorAll('#statExpGained').forEach(el => el.innerHTML = window.sessionStats.expGained.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerHTML = expPerHour.toLocaleString('pl-PL'));
-        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerHTML = timeTnlStr);
-        document.querySelectorAll('#statGoldGained').forEach(el => el.innerHTML = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
-
-    }, 1000);
 
     // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
     setTimeout(() => {
