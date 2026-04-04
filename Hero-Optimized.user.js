@@ -2857,7 +2857,6 @@ const mainGui = document.createElement('div'); mainGui.id = 'heroNavGUI'; mainGu
 
                 <div class="nav-row"><label>Zasięg widoczności (Domyślnie 7):</label><input type="number" id="inpVisionRange" value="${botSettings.visionRange}" min="1" max="15"></div>
 
-                <div class="nav-row"><label>Przeźroczystość okna (0.2 - 1.0):</label><input type="range" id="sliderOpacity" min="0.2" max="1" step="0.05" value="0.95" style="width:100%;"></div>
 
                 <div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
 
@@ -8281,8 +8280,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         if (window.statsIntervalId) clearInterval(window.statsIntervalId);
 
         window.statsIntervalId = setInterval(() => {
-            // 🚨 NAPRAWA: Moduł włącza się i wyłącza sam, czytając flagę isExping (bez patrzenia na przycisk!)
-            if (window.isExping && !window.sessionStats.active) {
+            let elTime = document.getElementById('statSessionTime');
+            if (!elTime) return; // Czeka aż interfejs się załaduje
+
+            // 🚨 BOT WIDZI WSZYSTKO: Uruchamia stoper jeśli JAKAKOLWIEK funkcja bota jest włączona
+            let botWorking = (window.isExping === true || window.isPatrolling === true || window.isRushing === true);
+
+            if (botWorking && !window.sessionStats.active) {
                 window.sessionStats.active = true;
                 window.sessionStats.startTime = Date.now();
                 window.sessionStats.expGained = 0; 
@@ -8295,11 +8299,10 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
                     window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
                 }
-            } else if (!window.isExping && window.sessionStats.active) {
-                window.sessionStats.active = false; // Zatrzymuje stoper, gdy wyłączysz bota
+            } else if (!botWorking && window.sessionStats.active) {
+                window.sessionStats.active = false;
             }
 
-            // Jeśli bot wyłączony lub gra się ładuje - zatrzymujemy liczenie
             if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
             let d = Engine.hero.d;
@@ -8361,13 +8364,12 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
 
             // --- WYSYŁANIE DO HTML ---
-            let elTime = document.getElementById('statSessionTime');
             let elExp = document.getElementById('statExpGained');
             let elExpH = document.getElementById('statExpPerHour');
             let elTnl = document.getElementById('statTimeTnl');
             let elGold = document.getElementById('statGoldGained');
 
-            if (elTime) elTime.innerText = timeStr;
+            elTime.innerText = timeStr;
             if (elExp) elExp.innerText = window.sessionStats.expGained.toLocaleString('pl-PL');
             if (elExpH) elExpH.innerText = window.sessionStats.expPerHour.toLocaleString('pl-PL');
             if (elTnl) elTnl.innerText = window.sessionStats.timeTnlStr;
