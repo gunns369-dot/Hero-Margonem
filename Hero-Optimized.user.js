@@ -5316,7 +5316,7 @@ if (hx !== expLastX || hy !== expLastY) {
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    // 1. Strefy Zagrożenia
+    // 1. Zbudowanie mapy "Stref Zagrożenia"
     let dangerousSpots = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
@@ -5333,13 +5333,11 @@ if (hx !== expLastX || hy !== expLastY) {
         }
     });
 
-    // 2. Wstępne Filtrowanie
+    // 2. Filtrowanie Potworów (KOSIARKA V12 - Lock na 4-6s z przerwaniem)
     let validMobs = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
-        
-        // Pomijamy zbugowane w ścianach
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
@@ -5367,50 +5365,49 @@ if (hx !== expLastX || hy !== expLastY) {
         if (!isSafeToAttack) return;
 
         let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
-
-        // Zabezpieczenie mgły wojny (PVP)
+        
+        // Zabezpieczenie mgły wojny dla PVP
         if (Engine.map && Engine.map.d && Engine.map.d.pvp === 2 && dist > 18) return;
 
         validMobs.push({
-            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga, grp: n.grp,
+            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
             dist: dist,
-            score: dist
+            isLocked: false
         });
     });
 
-    // 3. Ocenianie "Odkurzacza" V11 (Każdy mob wyliczany indywidualnie dla stabilności!)
-    let groupsCount = {};
+    // 3. Weryfikacja blokady celu i reagowanie na moby pod nogami
+    let lockedMob = null;
     validMobs.forEach(m => {
-        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
-        groupsCount[key] = (groupsCount[key] || 0) + 1;
-    });
-
-    validMobs.forEach(m => {
-        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
-        let size = groupsCount[key];
-        m.groupLabel = size > 1 ? `Grupa (${size}x) ${m.nick}` : `Solo ${m.nick}`;
-        
-        // Premia grupowa (-6 kratek za każdego potwora w grupie do wagi)
-        m.score = m.dist - ((size - 1) * 6);
-
-        // ABSOLUTNY PRIORYTET: Jeśli mob wejdzie Ci pod nogi (<= 4 kratki), kosi go od razu.
-        if (m.dist <= 4) {
-            m.score = -1000 + m.dist; 
+        if (m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0)) {
+            m.isLocked = true;
+            lockedMob = m;
         }
     });
 
-    // 4. SORTOWANIE (Twardy Lock + Score)
+    // MĄDRY MECHANIZM OPORTUNISTY:
+    // Jeśli zablokowaliśmy cel (idziemy do niego od 2 sekund), ale po drodze pojawił się lub zrespił
+    // inny mob, który JEST BLIŻEJ niż nasz zablokowany cel -> Puszczamy locka i tniemy tego bliżej!
+    if (lockedMob) {
+        let closerMobExists = validMobs.some(m => m.id !== lockedMob.id && m.dist < lockedMob.dist);
+        if (closerMobExists) {
+            lockedMob.isLocked = false;
+            window.expTargetLockTime = 0; // Kasujemy lock, by bot na nowo wybrał najbliższego
+        }
+    }
+
+    // 4. CZYSTE SORTOWANIE (Tylko po dystansie, żadnych magnesów grupowych!)
     validMobs.sort((a, b) => {
         let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
         if (rankVal[a.ranga] !== rankVal[b.ranga]) return rankVal[b.ranga] - rankVal[a.ranga];
 
-        // TWARDY LOCK! Jeśli mamy wybranego moba, trzymamy się go pazurami! Koniec kręcenia się w kółko.
-        let aLocked = (a.id === expCurrentTargetId) ? 1 : 0;
-        let bLocked = (b.id === expCurrentTargetId) ? 1 : 0;
-        if (aLocked !== bLocked) return bLocked - aLocked;
+        // Priorytet dla potwora, który jest aktualnie zablokowany jako cel
+        if (a.isLocked && !b.isLocked) return -1;
+        if (b.isLocked && !a.isLocked) return 1;
 
-        return a.score - b.score;
+        // Banalne: Kto bliżej, ten ginie pierwszy
+        return a.dist - b.dist;
     });
 
     let target = validMobs.length > 0 ? validMobs[0] : null;
@@ -5432,11 +5429,15 @@ if (hx !== expLastX || hy !== expLastY) {
                 if (now < nextAllowedClickTime) return;
 
                 if (expCurrentTargetId !== target.id) {
-                    window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
+                    window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
+                    
+                    // LOSOWY LOCK: Postać ustala, że będzie za nim biec nieugięcie przez 4 do 6 sekund
+                    let randomLockSeconds = Math.floor(Math.random() * (6000 - 4000 + 1)) + 4000;
+                    window.expTargetLockTime = now + randomLockSeconds; 
                 }
 
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.groupLabel}`;
+                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
                 
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
                 nextAllowedClickTime = now + 350; 
@@ -5455,9 +5456,9 @@ if (hx !== expLastX || hy !== expLastY) {
 
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
-                    // Ominięcie zablokowanego moba (zrzucenie Twardego Locka)
+                    // Ominięcie zablokowanego moba po 3s stania
                     if (timeStandingStill > 3000) {
-                        window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Zrzucam cel i szukam objazdu.`, "#ff5252");
+                        window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Szukam innej ofiary.`, "#ff5252");
                         window.expUnreachableMobs.add(target.id);
                         expCurrentTargetId = null;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
@@ -5471,6 +5472,7 @@ if (hx !== expLastX || hy !== expLastY) {
                         return;
                     }
 
+                    // System powtarzania kliknięcia
                     if (timeStandingStill > 1000 && (now % 1000 < 150)) {
                         if (now >= nextAllowedClickTime) {
                             Engine.hero.autoGoTo({ x: target.x, y: target.y });
@@ -5485,7 +5487,7 @@ if (hx !== expLastX || hy !== expLastY) {
 
         // --- WALKA ---
         if (targetDist <= 1) {
-            if (displayTarget) displayTarget.innerText = `Walka: ${target.groupLabel}`;
+            if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
