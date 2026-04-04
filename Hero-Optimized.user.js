@@ -8273,7 +8273,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Czysta detekcja wizualna) ---
+// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Uniwersalny SI/NI) ---
     setTimeout(() => {
         window.sessionStats = {
             active: false,
@@ -8287,56 +8287,72 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         if (window.statsIntervalId) clearInterval(window.statsIntervalId);
         
         window.statsIntervalId = setInterval(() => {
-            if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+            // Bezpieczne pobieranie expa dla OBU interfejsów (SI oraz NI)
+            let curExp = 0;
+            let curGold = 0;
+            let maxExp = 0;
+            let isGameReady = false;
 
-            // 1. NIEZAWODNA DETEKCJA STANU: Czytamy fizycznie, co jest napisane na przycisku!
+            // ODCZYT DLA STAREGO INTERFEJSU (SI)
+            if (typeof hero !== 'undefined' && hero.exp !== undefined) {
+                curExp = parseInt(hero.exp) || 0;
+                curGold = parseInt(hero.gold) || 0;
+                maxExp = parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp) || parseInt(hero.lvl * 1000) || 0;
+                isGameReady = true;
+            } 
+            // ODCZYT DLA NOWEGO INTERFEJSU (NI)
+            else if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+                curExp = parseInt(Engine.hero.d.exp) || 0;
+                curGold = parseInt(Engine.hero.d.gold) || 0;
+                maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || 0;
+                isGameReady = true;
+            }
+
+            if (!isGameReady) return;
+
+            // 1. NIEZAWODNA DETEKCJA STANU: Czytamy fizycznie co na przycisku!
             let expBtn = document.getElementById('btnStartExp');
             let isExpingByBtn = expBtn && expBtn.innerText.includes('STOP');
             
             let patrolBtn = document.getElementById('btnStartStop');
             let isPatrollingByBtn = patrolBtn && patrolBtn.innerText.includes('STOP');
             
-            // Bot pracuje, jeśli włączony jest Exp LUB Patrol
             let isBotRunning = window.isExping || isExpingByBtn || isPatrollingByBtn;
 
-            // 2. Zarządzanie startem i stopem zegara
+            // 2. Zarządzanie startem i stopem
             if (isBotRunning && !window.sessionStats.active) {
                 window.sessionStats.active = true;
                 window.sessionStats.startTime = Date.now();
                 window.sessionStats.expGained = 0;
                 window.sessionStats.goldGained = 0;
-                window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
+                window.sessionStats.lastExp = curExp;
+                window.sessionStats.lastGold = curGold;
             } 
             else if (!isBotRunning && window.sessionStats.active) {
                 window.sessionStats.active = false;
             }
 
-            // Jeśli bot stoi, nie zliczaj i pomiń resztę
-            if (!window.sessionStats.active) return; 
-
-            let d = Engine.hero.d;
-            let currentExp = parseInt(d.exp) || 0;
-            let currentGold = parseInt(d.gold) || 0;
+            if (!window.sessionStats.active) return;
 
             // --- 3. OBLICZANIE EXP ---
             if (window.sessionStats.lastExp !== -1) {
-                let expDiff = currentExp - window.sessionStats.lastExp;
+                let expDiff = curExp - window.sessionStats.lastExp;
                 if (expDiff > 0) window.sessionStats.expGained += expDiff;
-                else if (expDiff < 0) window.sessionStats.expGained += currentExp; // Nastąpił awans poziomu
+                else if (expDiff < 0) window.sessionStats.expGained += curExp; // Awans poziomu
             }
-            window.sessionStats.lastExp = currentExp;
+            window.sessionStats.lastExp = curExp;
 
             // --- 4. OBLICZANIE ZŁOTA ---
             if (window.sessionStats.lastGold !== -1) {
-                let goldDiff = currentGold - window.sessionStats.lastGold;
+                let goldDiff = curGold - window.sessionStats.lastGold;
                 if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
             }
-            window.sessionStats.lastGold = currentGold;
+            window.sessionStats.lastGold = curGold;
 
             // --- 5. MATEMATYKA & FORMATOWANIE CZASU ---
             let elapsedMs = Date.now() - window.sessionStats.startTime;
             let elapsedSec = Math.floor(elapsedMs / 1000);
+            if (elapsedSec < 1) elapsedSec = 1;
             
             let h = Math.floor(elapsedSec / 3600);
             let m = Math.floor((elapsedSec % 3600) / 60);
@@ -8344,19 +8360,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
             let expPerHour = 0;
-            if (elapsedSec > 2) { // Zaczynamy liczyć EXP/h już po 2 sekundach
+            if (elapsedSec > 2) { 
                 expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
             }
 
-            // KULOODPORNE POBIERANIE BRAKUJĄCEGO EXPA DO AWANSU (TNL)
             let missingExp = 0;
-            if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
-                missingExp = parseInt(d.exp_left);
-            } else {
-                let maxExp = parseInt(d.ttl_exp) || parseInt(d.next_lvl_exp) || parseInt(d.exp_req) || parseInt(d.max_exp) || 0;
-                if (maxExp > currentExp) missingExp = maxExp - currentExp;
-                else if (maxExp > 0) missingExp = maxExp; 
-            }
+            if (maxExp > curExp) missingExp = maxExp - curExp;
+            else if (maxExp > 0) missingExp = maxExp; 
 
             let timeTnlStr = "--:--:--";
             if (missingExp > 0 && expPerHour > 0) {
@@ -8371,7 +8381,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 timeTnlStr = "Max Lvl?";
             }
 
-            // --- 6. PODMIANA W INTERFEJSIE (Używamy querySelectorAll na wypadek powielonych okienek!) ---
+            // --- 6. PODMIANA W INTERFEJSIE ---
             document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
             document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.sessionStats.expGained.toLocaleString('pl-PL'));
             document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
@@ -8380,24 +8390,16 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         }, 1000);
     }, 2500);
-            // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
-        setTimeout(() => {
-            if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
-                window.__movementGuardInstalled = true;
-                
-                // Klonujemy oryginalną funkcję gry odpowiadającą za chodzenie
-                window.originalAutoWalk = Engine.hero.autoWalk;
-                
-                // Nadpisujemy ją naszą funkcją z "bramką bezpieczeństwa"
-                Engine.hero.autoWalk = function(x, y, ...args) {
-                    // Jeśli bot dostał rozkaz "Krok w tył", ignorujemy agresywny spam od Rusha!
-                    if (window.__movementLock && Date.now() < window.__movementLock) {
-                        return false; 
-                    }
-                    // W przeciwnym razie puszczamy ruch normalnie
-                    return window.originalAutoWalk.call(this, x, y, ...args);
-                };
-                console.log("%c[System] Strażnik Ruchu zainstalowany. Bot potrafi się cofać!", "color: #ff9800; font-weight: bold;");
-            }
-        }, 3000);
+
+    // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
+    setTimeout(() => {
+        if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
+            window.__movementGuardInstalled = true;
+            window.originalAutoWalk = Engine.hero.autoWalk;
+            Engine.hero.autoWalk = function(x, y, ...args) {
+                if (window.__movementLock && Date.now() < window.__movementLock) return false; 
+                return window.originalAutoWalk.call(this, x, y, ...args);
+            };
+        }
+    }, 3000);
 })(); // Koniec kodu
