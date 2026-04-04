@@ -8273,7 +8273,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Odczyt bezpośrednio z silnika) ---
+// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Aktywowany przez Berserka) ---
     if (window.statsIntervalId) clearInterval(window.statsIntervalId);
     
     window.sessionStats = {
@@ -8286,52 +8286,48 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
     };
 
     window.statsIntervalId = setInterval(() => {
-        // 1. BEZPOŚREDNI ODCZYT DANYCH Z GRY (Działa na Starym i Nowym Interfejsie)
-        let curExp = -1;
-        let curGold = -1;
-        let maxExp = -1;
-        let expLeft = -1;
+        let curExp = 0, curGold = 0, maxExp = 0, expLeft = 0;
         let isEngineReady = false;
 
+        // 1. POBIERANIE DANYCH Z SILNIKA (SI / NI)
         if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-            // Nowy Interfejs (NI)
             curExp = parseInt(Engine.hero.d.exp) || 0;
             curGold = parseInt(Engine.hero.d.gold) || 0;
             maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 0;
-            if (Engine.hero.d.exp_left !== undefined) expLeft = parseInt(Engine.hero.d.exp_left);
+            expLeft = parseInt(Engine.hero.d.exp_left) || 0;
             isEngineReady = true;
         } else if (typeof hero !== 'undefined' && hero.exp !== undefined) {
-            // Stary Interfejs (SI)
             curExp = parseInt(hero.exp) || 0;
             curGold = parseInt(hero.gold) || 0;
             maxExp = parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp) || 0;
             isEngineReady = true;
         }
 
-        if (!isEngineReady) return; // Gra jeszcze się ładuje
+        if (!isEngineReady) return;
 
-        // 2. DETEKCJA STARTU - czytamy bezpośrednio wewnętrzne flagi bota!
-        // Nie musisz klikać w GUI, jeśli bot ruszy do expa/patrolu, zegar sam startuje.
-        let isBotWorking = (window.isExping === true || window.isPatrolling === true || window.isRushing === true);
+        // 2. DETEKCJA STARTU: Zgodnie z Twoim pomysłem! 
+        // Licznik działa TYLKO wtedy, gdy "Kieszonkowy Berserk" jest fizycznie włączony.
+        // Kiedy bot pójdzie sprzedawać itemy (lub go wyłączysz), Berserk gaśnie, a zegar się zatrzymuje.
+        let isBerserkRunning = (typeof botSettings !== 'undefined' && botSettings.berserk && botSettings.berserk.enabled === true);
 
-        if (isBotWorking && !window.sessionStats.active) {
+        if (isBerserkRunning && !window.sessionStats.active) {
             window.sessionStats.active = true;
             window.sessionStats.startTime = Date.now();
             window.sessionStats.expGained = 0;
             window.sessionStats.goldGained = 0;
             window.sessionStats.lastExp = curExp;
             window.sessionStats.lastGold = curGold;
-        } else if (!isBotWorking && window.sessionStats.active) {
+        } else if (!isBerserkRunning && window.sessionStats.active) {
             window.sessionStats.active = false;
         }
 
-        if (!window.sessionStats.active) return; // Bot pauzuje, my też
+        if (!window.sessionStats.active) return; // Jeśli Berserk wyłączony, bot odpoczywa
 
         // --- 3. OBLICZANIE PRZYROSTÓW ---
         if (window.sessionStats.lastExp !== -1) {
             let expDiff = curExp - window.sessionStats.lastExp;
             if (expDiff > 0) window.sessionStats.expGained += expDiff;
-            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Zabezpieczenie przy awansie (pasek spada)
+            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Zabezpieczenie przy awansie
         }
         window.sessionStats.lastExp = curExp;
 
@@ -8351,11 +8347,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 
         let expPerHour = 0;
-        if (elapsedSec > 3) { // 3 sekundy rozruchu
+        if (elapsedSec > 3) { // Czekamy 3 sekundy na wyrównanie
             expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
         }
 
-        // --- 5. ILE EXPA BRAKUJE DO AWANSU (TNL) ---
+        // --- 5. ILE BRAKUJE DO AWANSU (TNL) ---
         let missingExp = 0;
         if (expLeft > 0) {
             missingExp = expLeft;
@@ -8377,7 +8373,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             timeTnlStr = "Max Lvl?";
         }
 
-        // --- 6. AGRESYWNY RENDER W HTML (querySelectorAll nadpisuje absolutnie wszystkie widoczne klony menu) ---
+        // --- 6. AGRESYWNY RENDER W HTML ---
         document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
         document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.sessionStats.expGained.toLocaleString('pl-PL'));
         document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
