@@ -2367,158 +2367,154 @@ window.handleTeleportNPC = function(targetMap) {
 
 
 
- window.runRoutingAlgorithm = function(hero, targets, startMap) {
-
+window.runRoutingAlgorithm = function(hero, targets, startMap) {
         let unvisited = new Set(targets);
-
         let currentMap = startMap;
-
         let finalRoute = [currentMap];
-
-        unvisited.delete(currentMap);
-
-
+        
+        if (unvisited.has(currentMap)) unvisited.delete(currentMap);
 
         // Do kalkulacji odległości śledzimy naszą fizyczną pozycję X, Y
-
-        let currentX = 32, currentY = 32;
+        let currentX = (typeof Engine !== 'undefined' && Engine.hero) ? Engine.hero.d.x : 32;
+        let currentY = (typeof Engine !== 'undefined' && Engine.hero) ? Engine.hero.d.y : 32;
 
         if (heroData[hero][currentMap] && heroData[hero][currentMap].length > 0) {
-
             currentX = heroData[hero][currentMap][0][0]; currentY = heroData[hero][currentMap][0][1];
-
         }
 
-
-
+        // --- FAZA 1: OPTYMALIZACJA KOLEJNOŚCI MAP ---
         while(unvisited.size > 0) {
-
             let bestPath = null;
-
             let bestTarget = null;
-
             let minScore = Infinity;
 
-
-
             for (let target of unvisited) {
-
                 let path = getShortestPath(currentMap, target);
-
                 if (path) {
+                    // Waga 1: Ilość przejść między mapami (bardzo duży koszt, unikamy ładowania map)
+                    let score = (path.length - 1) * 10000;
 
-                    // Obliczamy wynik: Przejścia przez mapy kosztują najwięcej,
-
-                    // ale w przypadku remisu wygrywa fizyczny dystans z obecnej kratki do bramy!
-
-                    let score = path.length * 10000;
-
+                    // Waga 2: Dystans fizyczny do bramy
                     if (path.length > 1) {
-
                         let door = globalGateways[currentMap] && globalGateways[currentMap][path[1]];
+                        if (door) score += (Math.abs(currentX - door.x) + Math.abs(currentY - door.y)) * 10;
+                    }
 
-                        if (door) score += Math.abs(currentX - door.x) + Math.abs(currentY - door.y);
-
+                    // Waga 3: Szacowany koszt wejścia na pierwszego moba na nowej mapie
+                    if (heroData[hero][target] && heroData[hero][target].length > 0) {
+                        let entryDoor = null;
+                        if (path.length > 1 && globalGateways[path[path.length-2]] && globalGateways[path[path.length-2]][target]) {
+                            entryDoor = globalGateways[path[path.length-2]][target];
+                        }
+                        if (entryDoor) {
+                            let firstMobX = heroData[hero][target][0][0];
+                            let firstMobY = heroData[hero][target][0][1];
+                            score += Math.abs(entryDoor.x - firstMobX) + Math.abs(entryDoor.y - firstMobY);
+                        }
                     }
 
                     if (score < minScore) { minScore = score; bestPath = path; bestTarget = target; }
-
                 }
-
             }
-
-
 
             if (!bestPath) {
-
-                heroAlert(`🚨 Zatrzymano układanie!\nAlgorytm utknął na mapie:\n[${currentMap}]\nNie potrafi stąd wyjść.`);
-
+                heroAlert(`🚨 Zatrzymano układanie!\nAlgorytm utknął na mapie:\n[${currentMap}]\nNie potrafi stąd wyjść. Upewnij się, że nagrałeś bramy.`);
                 break;
-
             }
 
-
-
+            // Wrzucamy ścieżkę do finalnej pętli
             for (let i = 1; i < bestPath.length; i++) finalRoute.push(bestPath[i]);
-
             unvisited.delete(bestTarget);
-
             currentMap = bestTarget;
 
-
-
-            // Aktualizujemy pozycję na ostatni sprawdzany resp na nowej mapie
-
+            // Zaktualizuj pozycję do końca obliczonej mapy
             if (heroData[hero][currentMap] && heroData[hero][currentMap].length > 0) {
-
                 let coords = heroData[hero][currentMap];
-
                 currentX = coords[coords.length - 1][0]; currentY = coords[coords.length - 1][1];
-
             }
-
         }
 
-
-
-        // --- AUTOMATYCZNE SORTOWANIE KOORDYNATÓW POD WYJŚCIE ---
-
+        // --- FAZA 2: WEWNĘTRZNA OPTYMALIZACJA KOORDYNATÓW (Smart-Pathing na każdej mapie) ---
         finalRoute.forEach((mapName, idx) => {
-
             if (heroData[hero] && heroData[hero][mapName] && heroData[hero][mapName].length > 1) {
-
                 let nextMap = finalRoute[(idx + 1) % finalRoute.length];
-
                 let exitPath = getShortestPath(mapName, nextMap);
-
                 let exitGw = null;
 
                 if (exitPath && exitPath.length > 1 && globalGateways[mapName] && globalGateways[mapName][exitPath[1]]) {
-
                     exitGw = globalGateways[mapName][exitPath[1]];
-
                 }
 
-                if (exitGw) {
+                let originalCoords = [...heroData[hero][mapName]];
+                let optimizedCoords = [];
 
-                    let coords = [...heroData[hero][mapName]];
+                // Szacowanie punktu wejścia na mapę
+                let startX = 32, startY = 32;
+                let prevMap = idx > 0 ? finalRoute[idx - 1] : finalRoute[finalRoute.length - 1];
+                if (globalGateways[mapName] && globalGateways[mapName][prevMap]) {
+                    startX = globalGateways[mapName][prevMap].x;
+                    startY = globalGateways[mapName][prevMap].y;
+                }
 
-                    let closestIdx = 0; let minDist = Infinity;
+                let currX = startX, currY = startY;
 
-                    for(let i = 0; i < coords.length; i++) {
-
-                        let d = Math.abs(coords[i][0] - exitGw.x) + Math.abs(coords[i][1] - exitGw.y);
-
-                        if (d < minDist) { minDist = d; closestIdx = i; }
-
+                // Algorytm Problem Komiwojażera (Nearest Neighbor z omijaniem wyjścia)
+                while (originalCoords.length > 0) {
+                    if (originalCoords.length === 1) {
+                        optimizedCoords.push(originalCoords[0]);
+                        break;
                     }
 
-                    // Wycinamy ten najbliżej bramy i wrzucamy na sam koniec listy
+                    let bestIdx = 0;
+                    let bestScore = Infinity;
 
-                    let finalPt = coords.splice(closestIdx, 1)[0];
+                    for (let i = 0; i < originalCoords.length; i++) {
+                        let pt = originalCoords[i];
+                        let distToPt = Math.abs(currX - pt[0]) + Math.abs(currY - pt[1]);
+                        
+                        let distToExit = 0;
+                        if (exitGw) distToExit = Math.abs(pt[0] - exitGw.x) + Math.abs(pt[1] - exitGw.y);
 
-                    coords.push(finalPt);
+                        // Im mniejszy dystans tym lepiej. Odpychamy punkty, które leżą blisko wyjścia (zostawiamy je na koniec)
+                        let score = distToPt - (distToExit * 0.4); 
 
-                    heroData[hero][mapName] = coords;
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestIdx = i;
+                        }
+                    }
 
+                    let chosenPt = originalCoords.splice(bestIdx, 1)[0];
+                    optimizedCoords.push(chosenPt);
+                    currX = chosenPt[0];
+                    currY = chosenPt[1];
                 }
 
-            }
+                // Ostatni szlif: Wymuszenie absolutnie najbliższego punktu do wyjścia jako ostatniego
+                if (exitGw && optimizedCoords.length > 1) {
+                    let closestToExitIdx = 0;
+                    let minDistToExit = Infinity;
+                    for (let i = 0; i < optimizedCoords.length; i++) {
+                        let d = Math.abs(optimizedCoords[i][0] - exitGw.x) + Math.abs(optimizedCoords[i][1] - exitGw.y);
+                        if (d < minDistToExit) {
+                            minDistToExit = d;
+                            closestToExitIdx = i;
+                        }
+                    }
+                    let finalPt = optimizedCoords.splice(closestToExitIdx, 1)[0];
+                    optimizedCoords.push(finalPt);
+                }
 
+                heroData[hero][mapName] = optimizedCoords;
+            }
         });
 
-
-
         heroMapOrder[hero] = finalRoute;
-
         saveMapOrder();
-
         currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); checkedMapsThisSession.clear(); saveCheckedMaps(); updateUI();
-
-        if (unvisited.size === 0) heroAlert("✅ Auto-Trasa wygenerowana!\n\nAlgorytm zoptymalizował kolejność map oraz z automatu ustawił koordynaty w taki sposób, aby ostatni sprawdzany resp na liście był fizycznie najbliżej przejścia!");
-
-    }
-
+        
+        heroAlert("🧠 Zainstalowano MargoNeuro Smart-Route V2!\n\nTrasa została obliczona uwzględniając:\n1. Koszty wejścia na mapy.\n2. Optymalizację ścieżek bezpośrednio między mobami na mapach.\n3. Płynne wyprowadzenie postaci idealnie pod drzwi wyjściowe.");
+    };
 
 
     // ==========================================
