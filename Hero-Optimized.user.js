@@ -5338,12 +5338,11 @@ if (hx !== expLastX || hy !== expLastY) {
         }
     });
 
-    // 2. Filtrowanie potworów do ataku
+// 2. Filtrowanie i Klastrowanie Potworów (KOSIARKA V5 - Grupy Priorytetowe)
+    let validMobs = [];
     arr.forEach(npcObj => {
         let n = npcObj?.d || npcObj;
         if (!n || n.dead || n.del || n.type === 4 || n.type < 2) return;
-
-        // 🚨 IGNOROWANIE ZABLOKOWANYCH (Ominiętych anty-lagiem)
         if (window.expUnreachableMobs.has(n.id)) return;
 
         let lvl = parseInt(n.lvl, 10);
@@ -5362,45 +5361,82 @@ if (hx !== expLastX || hy !== expLastY) {
         if (ranga === "elite2" && !bE2) return;
         if (ranga === "hero" && !bHero) return;
 
-        // 🚨 NOWOŚĆ: Ignorowanie "obstawy"
-        // Sprawdzamy, czy ten potwór nie stoi przypadkiem w strefie zagrożenia (promień 2 kratek) od odznaczonego bossa!
+        // Ignorowanie obstawy niechcianych bossów
         let isSafeToAttack = true;
         for (let spot of dangerousSpots) {
-            // Obliczamy tzw. dystans Czebyszewa (jeśli potwór stoi w prostokącie 5x5 wokół bossa)
             if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
-                isSafeToAttack = false;
-                break;
+                isSafeToAttack = false; break;
             }
         }
+        if (!isSafeToAttack) return;
 
-        if (!isSafeToAttack) return; // Jeśli stoi przy bossie - ignorujemy go całkowicie!
+        // BARDZO SZYBKI SKAN KOLIZJI (Omijanie zbugowanych w ścianie)
+        let isReachable = false;
+        let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [1,-1], [-1,1]];
+        for(let d of dirs) {
+             if(typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(n.x + d[0], n.y + d[1])) {
+                 isReachable = true; break;
+             }
+        }
+        if(!isReachable) return;
 
-        rawMobs.push({
-            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
+        validMobs.push({
+            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga, grp: n.grp,
             nick: (n.nick || n.name).replace(/<[^>]*>?/gm, '').trim(),
             dist: Math.abs(hx - n.x) + Math.abs(hy - n.y)
         });
     });
 
-    // --- ZAAWANSOWANE SORTOWANIE (ELITY -> TWARDY LOCK -> DYSTANS) ---
-    rawMobs.sort((a, b) => {
-        let aElite = (a.ranga !== "normal") ? 1 : 0;
-        let bElite = (b.ranga !== "normal") ? 1 : 0;
-        if (aElite !== bElite) return bElite - aElite;
-
-        // TWARDA BLOKADA NA 8 SEKUND
-        let isALocked = (a.id === expCurrentTargetId && now < (window.expTargetLockTime || 0));
-        let isBLocked = (b.id === expCurrentTargetId && now < (window.expTargetLockTime || 0));
-
-        if (isALocked && !isBLocked) return -1;
-        if (isBLocked && !isALocked) return 1;
-
-        // Jeśli żaden nie jest w trakcie 8-sekundowego locka, liczymy czysty dystans z lekką lepkością
-        let distA = a.dist - (a.id === expCurrentTargetId ? 3 : 0);
-        let distB = b.dist - (b.id === expCurrentTargetId ? 3 : 0);
-        return distA - distB;
+    // 3. MAPOWANIE GRUP MARGONEM (Twoja metoda)
+    let groupsMap = new Map();
+    validMobs.forEach(m => {
+        // Moby bez grupy dostają własny unikalny klaster oznaczony ID
+        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
+        if (!groupsMap.has(key)) groupsMap.set(key, []);
+        groupsMap.get(key).push(m);
     });
 
+    let clusters = [];
+    groupsMap.forEach((clusterMobs, key) => {
+        // Znajdź potwora w tej grupie, który jest NAJBLIŻEJ NAS (najlepszy punkt wejścia)
+        clusterMobs.sort((a, b) => a.dist - b.dist);
+        let entryMob = clusterMobs[0]; 
+
+        // Wyciągnij najwyższą rangę w grupie (żeby np. wataha wilków z elitą miała priorytet)
+        let bestRank = "normal";
+        if (clusterMobs.some(m => m.ranga === "elite1")) bestRank = "elite1";
+        if (clusterMobs.some(m => m.ranga === "elite2")) bestRank = "elite2";
+        if (clusterMobs.some(m => m.ranga === "hero")) bestRank = "hero";
+
+        clusters.push({
+            size: clusterMobs.length,     // Ilość potworów w walce
+            target: entryMob,             // Mob, którego faktycznie zaatakujemy
+            rank: bestRank,
+            isLocked: clusterMobs.some(m => m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0))
+        });
+    });
+
+// 4. SORTOWANIE KOSIARKI V6 (Balans: Dystans vs Rozmiar Grupy)
+    clusters.sort((a, b) => {
+        // Priorytet 1: Elity i Herosi ZAWSZE pierwsi
+        let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
+        if (rankVal[a.rank] !== rankVal[b.rank]) return rankVal[b.rank] - rankVal[a.rank];
+
+        // Priorytet 2: Twarda blokada (Kontynuujemy atakowany cel)
+        if (a.isLocked && !b.isLocked) return -1;
+        if (b.isLocked && !a.isLocked) return 1;
+
+        // Priorytet 3: Złoty Środek (Smart-Gravity)
+        // Każdy dodatkowy mob w grupie "przyciąga" bota z siłą 12 kratek.
+        // Jeśli grupa jest za daleko, bot woli wyczyścić to, co ma pod nogami, żeby nie wracać!
+        let scoreA = a.target.dist - ((a.size - 1) * 12);
+        let scoreB = b.target.dist - ((b.size - 1) * 12);
+
+        return scoreA - scoreB;
+    });
+
+    // Podmieniamy rawMobs na zmapowany wynik z naszego najlepiej wyliczonego klastra
+    rawMobs = clusters.length > 0 ? [clusters[0].target] : [];
 
 
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
