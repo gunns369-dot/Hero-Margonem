@@ -2034,8 +2034,8 @@ function autoDetectEngineData() {
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
-  // ==========================================
-    // ALGORYTM DIJKSTRY (SZTYWNY GPS - TYLKO ZNANE TRASY)
+ // ==========================================
+    // ALGORYTM DIJKSTRY (ZAAWANSOWANY GPS Z WAGAMI)
     // ==========================================
     function getShortestPath(start, end) {
         if (start === end) return [start];
@@ -2050,7 +2050,7 @@ function autoDetectEngineData() {
         let visited = new Set();
 
         while (queue.length > 0) {
-            // Sortujemy kolejkę, aby zawsze wybierać najkrótszą drogę
+            // Zawsze wybieramy najkrótszą/najtańszą drogę
             queue.sort((a, b) => a.dist - b.dist);
             let current = queue.shift();
             let u = current.node;
@@ -2069,10 +2069,20 @@ function autoDetectEngineData() {
             if (visited.has(u)) continue;
             visited.add(u);
             
-            // 1. FIZYCZNE BRAMY (Tylko to, co bot sam widział i zapisał na 100%)
+            // 1. FIZYCZNE BRAMY (Zapisane w bazie bota)
             if (globalGateways[u]) {
                 for (let v in globalGateways[u]) {
-                    let alt = distances[u] + 1; 
+                    let penalty = 1; // Standardowy koszt przejścia z mapy na mapę
+                    
+                    // KARA ZA WCHODZENIE DO BUDYNKÓW/JASKIŃ:
+                    // Jeśli mapa docelowa zawiera te słowa, a nie jest naszym ostatecznym celem, 
+                    // bot dostaje "karę" +50 do dystansu, co wymusza na nim trzymanie się głównych szlaków!
+                    let vLower = v.toLowerCase();
+                    if (v !== end && (vLower.includes(" p.") || vLower.includes(" s.") || vLower.includes(" - ") || vLower.includes("dom ") || vLower.includes("młyn") || vLower.includes("jaskinia") || vLower.includes("grota") || vLower.includes("kopalnia"))) {
+                        penalty = 50; 
+                    }
+                    
+                    let alt = distances[u] + penalty;
                     if (distances[v] === undefined || alt < distances[v]) {
                         distances[v] = alt;
                         previous[v] = u;
@@ -2081,11 +2091,11 @@ function autoDetectEngineData() {
                 }
             }
             
-            // 2. TELEPORTY ZAKONNIKÓW (Tylko zaznaczone na liście)
+            // 2. TELEPORTY ZAKONNIKÓW (Koszt: 2, używa tylko gdy skraca to mocno drogę)
             if (botSettings.useTeleports && ZAKONNICY[u]) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
-                        let alt = distances[u] + 1.5; 
+                        let alt = distances[u] + 2; 
                         if (distances[tpMap] === undefined || alt < distances[tpMap]) {
                             distances[tpMap] = alt;
                             previous[tpMap] = u;
@@ -2095,9 +2105,8 @@ function autoDetectEngineData() {
                 }
             }
         }
-        return null;
+        return null; // Zwraca null, gdy trasa jest fizycznie niemożliwa
     }
-
 window.handleTeleportNPC = function(targetMap) {
         if (!isRushing && !isPatrolling && !window.isExping) return;
         let currentSysMap = lastMapName;
@@ -8098,16 +8107,25 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }
             }
         }, true);
-    // --- OSTATECZNA ŁATKA: PRZEZROCZYSTOŚĆ TŁA I NAPRAWA ZAKŁADKI TELEPORTÓW ---
+    // --- OSTATECZNA ŁATKA UI (TELEPORTY + PRZEŹROCZYSTOŚĆ) ---
         setTimeout(() => {
-            // 1. MORDUJEMY LATAJĄCE OKNO TELEPORTÓW (BŁĄD ZDUPLIKOWANEGO KODU)
-            // Okno z klasą 'hero-window' i ID 'heroTeleportsGUI' jest intruzem.
-            document.querySelectorAll('.hero-window#heroTeleportsGUI').forEach(el => el.remove());
+            // 1. Kasujemy "Duchy" - usuwamy okna z klasą 'hero-window' które wiszą luzem
+            document.querySelectorAll('body > .hero-window#heroTeleportsGUI').forEach(el => el.remove());
             
-            // Właściwy kontener teleportów znajduje się w zakładce EXP -> TP/EQ/HP. 
+            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI'];
+            windowsToClean.forEach(id => {
+                let copies = document.querySelectorAll('#' + id);
+                if (copies.length > 1) {
+                    for (let i = 0; i < copies.length - 1; i++) copies[i].remove();
+                }
+            });
+            
+            // 2. Naprawiamy przycisk Teleportów (Wyświetlanie w dobrej zakładce)
             let properTpContainer = document.querySelector('#teleportsContainer #heroTeleportsGUI');
-            if (properTpContainer) {
-                // Przekierowujemy funkcję renderującą na właściwy kontener
+            let btnTp = document.getElementById('btnOpenTeleports');
+            
+            if (btnTp && properTpContainer) {
+                // Nadpisujemy oryginalną funkcję rysującą, by na pewno trafiała do dobrego diva
                 window.renderTeleportList = function() {
                     let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"];
                     let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
@@ -8120,26 +8138,25 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     html += `</div><button id="btnSaveTeleportsManual" class="btn btn-go-sepia" style="margin-top:6px; color:#4caf50; font-weight:bold; border-color:#4caf50; width:100%; padding:6px;">💾 ZAPISZ TELEPORTY</button>`;
                     properTpContainer.innerHTML = html;
                 };
-            }
 
-            // 2. NAPRAWA KLIKNIĘCIA "ZARZĄDZAJ TELEPORTAMI"
-            document.body.addEventListener('click', (e) => {
-                if (e.target && e.target.closest('#btnOpenTeleports')) {
+                // Usuwamy stare eventy i dodajemy mocny listener
+                let newBtnTp = btnTp.cloneNode(true);
+                btnTp.parentNode.replaceChild(newBtnTp, btnTp);
+                
+                newBtnTp.addEventListener('click', (e) => {
                     e.preventDefault(); e.stopPropagation();
-                    // Ukrywamy pozostałe zakładki wewnątrz (EQ, Poty, Sklepy)
+                    // Ukrywamy inne listy
                     ['recommendedEqList', 'potionsList', 'shopsSearchWrapper'].forEach(id => {
                         let el = document.getElementById(id);
                         if (el) el.style.display = 'none';
                     });
                     
-                    if (properTpContainer) {
-                        properTpContainer.style.display = properTpContainer.style.display === 'flex' ? 'none' : 'flex';
-                        if (properTpContainer.style.display === 'flex' && typeof window.renderTeleportList === 'function') window.renderTeleportList();
-                    }
-                }
-            }, true);
+                    properTpContainer.style.display = properTpContainer.style.display === 'flex' ? 'none' : 'flex';
+                    if (properTpContainer.style.display === 'flex') window.renderTeleportList();
+                });
+            }
 
-            // 3. PRAWDZIWA PRZEZROCZYSTOŚĆ (TYLKO TŁO, CZYTELNY TEKST)
+            // 3. Włączamy Przeźroczystość tła w czasie rzeczywistym
             function setWindowOpacity(val) {
                 let style = document.getElementById('dynamic-bg-opacity');
                 if (!style) {
@@ -8148,10 +8165,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     document.head.appendChild(style);
                 }
                 
-                // Wymuszenie 100% opacity na oknach, aby tekst NIGDY nie znikał
-                document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = '1');
+                document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = '1'); // Tekst zawsze w 100% widoczny!
 
-                // Tworzymy kod CSS nadpisujący tła na format RGBA (gdzie A to nasza przeźroczystość z suwaka)
                 style.innerHTML = `
                     .hero-window { background: rgba(17, 17, 17, ${val}) !important; }
                     .gui-header { background: rgba(34, 34, 34, ${val}) !important; }
@@ -8168,12 +8183,8 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             if (opacitySlider) {
                 let savedOpacity = localStorage.getItem('hero_opacity_v64') || 0.95;
                 opacitySlider.value = savedOpacity;
-                setWindowOpacity(savedOpacity); // Ustaw na starcie
-                
-                // Podpięcie pod suwak
-                opacitySlider.addEventListener('input', (e) => {
-                    setWindowOpacity(e.target.value);
-                });
+                setWindowOpacity(savedOpacity);
+                opacitySlider.addEventListener('input', (e) => setWindowOpacity(e.target.value));
             }
         }, 1500);
 })(); // Koniec kodu
