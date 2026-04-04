@@ -8273,110 +8273,98 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: PANEL STATYSTYK SESJI (Kalkulator EXP/h i Złota) ---
+// --- DAEMON: OSTATECZNY KALKULATOR STATYSTYK (Niezależny od zacięć) ---
     setTimeout(() => {
-        window.sessionStats = { active: false, startTime: 0, expGained: 0, goldGained: 0, lastExp: -1, lastGold: -1, expPerHour: 0, timeTnlStr: "--:--:--", lastCalcTime: 0 };
+        window._stats = {
+            active: false, startTs: 0, gainedExp: 0, gainedGold: 0,
+            lastExp: -1, lastGold: -1, expPerHour: 0, tnl: "--:--:--"
+        };
 
-        if (window.statsIntervalId) clearInterval(window.statsIntervalId);
-
-        window.statsIntervalId = setInterval(() => {
+        // Anonimowy interwał = brak możliwości skasowania przez inne moduły
+        setInterval(() => {
             let elTime = document.getElementById('statSessionTime');
-            if (!elTime) return; // Czeka aż interfejs się załaduje
+            if (!elTime) return; // Przerywa pętle, jeśli interfejsu jeszcze nie ma na ekranie
 
-            // 🚨 BOT WIDZI WSZYSTKO: Uruchamia stoper jeśli JAKAKOLWIEK funkcja bota jest włączona
-            let botWorking = (window.isExping === true || window.isPatrolling === true || window.isRushing === true);
-
-            if (botWorking && !window.sessionStats.active) {
-                window.sessionStats.active = true;
-                window.sessionStats.startTime = Date.now();
-                window.sessionStats.expGained = 0; 
-                window.sessionStats.goldGained = 0;
-                window.sessionStats.expPerHour = 0; 
-                window.sessionStats.timeTnlStr = "--:--:--"; 
-                window.sessionStats.lastCalcTime = 0;
-                
+            // Licznik odpala się w ułamku sekundy, w którym klikasz START (gdy flaga isExping zmienia się na true)
+            if (window.isExping && !window._stats.active) {
+                window._stats.active = true;
+                window._stats.startTs = Date.now();
+                window._stats.gainedExp = 0;
+                window._stats.gainedGold = 0;
+                window._stats.expPerHour = 0;
+                window._stats.tnl = "--:--:--";
                 if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                    window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                    window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
+                    window._stats.lastExp = parseInt(Engine.hero.d.exp) || 0;
+                    window._stats.lastGold = parseInt(Engine.hero.d.gold) || 0;
                 }
-            } else if (!botWorking && window.sessionStats.active) {
-                window.sessionStats.active = false;
+            } else if (!window.isExping && window._stats.active) {
+                window._stats.active = false; // Zatrzymuje zegar po kliknięciu STOP
             }
 
-            if (!window.sessionStats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
+            if (!window._stats.active || typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
 
             let d = Engine.hero.d;
-            let currentExp = parseInt(d.exp) || 0;
-            let currentGold = parseInt(d.gold) || 0;
+            let curExp = parseInt(d.exp) || 0;
+            let curGold = parseInt(d.gold) || 0;
 
-            // --- OBLICZANIE EXP ---
-            if (window.sessionStats.lastExp !== -1) {
-                let expDiff = currentExp - window.sessionStats.lastExp;
-                if (expDiff > 0) window.sessionStats.expGained += expDiff;
-                else if (expDiff < 0) window.sessionStats.expGained += currentExp; 
+            // Czysta matematyka postępu
+            if (window._stats.lastExp !== -1) {
+                let diff = curExp - window._stats.lastExp;
+                if (diff > 0) window._stats.gainedExp += diff;
+                else if (diff < 0) window._stats.gainedExp += curExp; // Reakcja na awans poziomu (pasek spada do 0)
             }
-            window.sessionStats.lastExp = currentExp;
+            window._stats.lastExp = curExp;
 
-            // --- OBLICZANIE ZŁOTA ---
-            if (window.sessionStats.lastGold !== -1) {
-                let goldDiff = currentGold - window.sessionStats.lastGold;
-                if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
+            if (window._stats.lastGold !== -1) {
+                let diff = curGold - window._stats.lastGold;
+                if (diff > 0) window._stats.gainedGold += diff;
             }
-            window.sessionStats.lastGold = currentGold;
+            window._stats.lastGold = curGold;
 
-            // --- STOPER ---
-            let elapsedMs = Date.now() - window.sessionStats.startTime;
-            let elapsedSec = Math.floor(elapsedMs / 1000);
+            // Rysowanie Stopera co 1s
+            let sec = Math.floor((Date.now() - window._stats.startTs) / 1000);
+            let h = Math.floor(sec / 3600);
+            let m = Math.floor((sec % 3600) / 60);
+            let s = sec % 60;
             
-            let h = Math.floor(elapsedSec / 3600);
-            let m = Math.floor((elapsedSec % 3600) / 60);
-            let s = elapsedSec % 60;
-            let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            elTime.innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            
+            let elExp = document.getElementById('statExpGained');
+            let elGold = document.getElementById('statGoldGained');
+            if(elExp) elExp.innerText = window._stats.gainedExp.toLocaleString('pl-PL');
+            if(elGold) elGold.innerText = window._stats.gainedGold.toLocaleString('pl-PL') + " zł";
 
-            let calcInterval = elapsedSec < 60 ? 5 : 60; 
-
-            // --- KALKULATOR EXP/h i TNL ---
-            if (elapsedSec > 0 && (elapsedSec - window.sessionStats.lastCalcTime >= calcInterval || window.sessionStats.expPerHour === 0)) {
-                window.sessionStats.lastCalcTime = elapsedSec;
-                window.sessionStats.expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
-
+            // Kalkulator TNL/Exph odświeża cyferki na ekranie co 3 sekundy (Zabezpieczenie przed miganiem)
+            if (sec > 0 && sec % 3 === 0) {
+                window._stats.expPerHour = Math.floor((window._stats.gainedExp / sec) * 3600);
+                
                 let missingExp = 0;
                 if (d.exp_left !== undefined && parseInt(d.exp_left) > 0) {
                     missingExp = parseInt(d.exp_left);
                 } else {
                     let maxExp = parseInt(d.ttl_exp) || parseInt(d.next_lvl_exp) || parseInt(d.exp_req) || parseInt(d.max_exp) || 0;
-                    if (maxExp > currentExp) missingExp = maxExp - currentExp;
+                    if (maxExp > curExp) missingExp = maxExp - curExp;
                     else if (maxExp > 0) missingExp = maxExp; 
                 }
 
-                if (missingExp > 0 && window.sessionStats.expPerHour > 0) {
-                    let secsTnl = Math.floor((missingExp / window.sessionStats.expPerHour) * 3600);
-                    let hTnl = Math.floor(secsTnl / 3600);
-                    let mTnl = Math.floor((secsTnl % 3600) / 60);
-                    let sTnl = secsTnl % 60;
-                    if (hTnl > 99) window.sessionStats.timeTnlStr = "+99 godzin";
-                    else window.sessionStats.timeTnlStr = `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
-                } else if (missingExp === 0) {
-                    window.sessionStats.timeTnlStr = "Max Lvl?";
+                if (missingExp > 0 && window._stats.expPerHour > 0) {
+                    let tnlSec = Math.floor((missingExp / window._stats.expPerHour) * 3600);
+                    let th = Math.floor(tnlSec / 3600);
+                    let tm = Math.floor((tnlSec % 3600) / 60);
+                    let ts = tnlSec % 60;
+                    window._stats.tnl = th > 99 ? "+99 godzin" : `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
                 } else {
-                    window.sessionStats.timeTnlStr = "Obliczanie...";
+                    window._stats.tnl = "Obliczanie...";
                 }
             }
 
-            // --- WYSYŁANIE DO HTML ---
-            let elExp = document.getElementById('statExpGained');
             let elExpH = document.getElementById('statExpPerHour');
             let elTnl = document.getElementById('statTimeTnl');
-            let elGold = document.getElementById('statGoldGained');
-
-            elTime.innerText = timeStr;
-            if (elExp) elExp.innerText = window.sessionStats.expGained.toLocaleString('pl-PL');
-            if (elExpH) elExpH.innerText = window.sessionStats.expPerHour.toLocaleString('pl-PL');
-            if (elTnl) elTnl.innerText = window.sessionStats.timeTnlStr;
-            if (elGold) elGold.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł";
+            if(elExpH) elExpH.innerText = window._stats.expPerHour.toLocaleString('pl-PL');
+            if(elTnl) elTnl.innerText = window._stats.tnl;
 
         }, 1000);
-    }, 2500);
+    }, 1000);
             // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
         setTimeout(() => {
             if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
