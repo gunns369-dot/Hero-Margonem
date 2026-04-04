@@ -8273,130 +8273,119 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 });
             }
         }, 2000);
-// --- DAEMON: PANEL STATYSTYK SESJI (Oparty na Twoim działającym kodzie + TNL) ---
-    setTimeout(() => {
-        window.sessionStats = {
-            active: false,
-            startTime: 0,
-            expGained: 0,
-            goldGained: 0,
-            lastExp: -1,
-            lastGold: -1
-        };
-
-        // Podpinamy się pod WSZYSTKIE możliwe kliknięcia myszką na stronie
-        // Dzięki temu ignorujemy zniszczone okienka i "duchy"
-        document.addEventListener('click', (e) => {
-            let target = e.target;
-            if (target && (target.id === 'btnStartExp' || target.closest('#btnStartExp') || target.id === 'btnStartStop' || target.closest('#btnStartStop'))) {
-                
-                // Używamy 200ms opóźnienia z Twojego starego kodu
-                setTimeout(() => {
-                    let isWorking = (window.isExping || window.isPatrolling || window.isRushing);
-                    
-                    if (isWorking) {
-                        window.sessionStats.active = true;
-                        window.sessionStats.startTime = Date.now();
-                        window.sessionStats.expGained = 0;
-                        window.sessionStats.goldGained = 0;
-                        
-                        // Uniwersalne pobranie danych startowych (SI i NI)
-                        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                            window.sessionStats.lastExp = parseInt(Engine.hero.d.exp) || 0;
-                            window.sessionStats.lastGold = parseInt(Engine.hero.d.gold) || 0;
-                        } else if (typeof hero !== 'undefined' && hero.exp !== undefined) {
-                            window.sessionStats.lastExp = parseInt(hero.exp) || 0;
-                            window.sessionStats.lastGold = parseInt(hero.gold) || 0;
-                        }
-                    } else {
-                        window.sessionStats.active = false;
-                    }
-                }, 200);
-            }
-        }, true);
-
-        // Twój stary, działający Daemon aktualizujący cyferki na żywo
-        if (window.statsIntervalId) clearInterval(window.statsIntervalId);
-        
-        window.statsIntervalId = setInterval(() => {
-            if (!window.sessionStats.active) return;
-
-            let curExp = 0, curGold = 0, maxExp = 0;
-
-            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-                curExp = parseInt(Engine.hero.d.exp) || 0;
-                curGold = parseInt(Engine.hero.d.gold) || 0;
-                maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || 0;
-            } else if (typeof hero !== 'undefined' && hero.exp !== undefined) {
-                curExp = parseInt(hero.exp) || 0;
-                curGold = parseInt(hero.gold) || 0;
-                maxExp = parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp) || 0;
-            } else {
-                return;
-            }
-
-            // --- OBLICZANIE EXP ---
-            if (window.sessionStats.lastExp !== -1) {
-                let expDiff = curExp - window.sessionStats.lastExp;
-                if (expDiff > 0) window.sessionStats.expGained += expDiff;
-                else if (expDiff < 0) window.sessionStats.expGained += curExp; // Nastąpił awans poziomu!
-            }
-            window.sessionStats.lastExp = curExp;
-
-            // --- OBLICZANIE ZŁOTA ---
-            if (window.sessionStats.lastGold !== -1) {
-                let goldDiff = curGold - window.sessionStats.lastGold;
-                if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
-            }
-            window.sessionStats.lastGold = curGold;
-
-            // --- MATEMATYKA & FORMATOWANIE CZASU ---
-            let elapsedMs = Date.now() - window.sessionStats.startTime;
-            let elapsedSec = Math.floor(elapsedMs / 1000);
-            if (elapsedSec < 1) elapsedSec = 1;
-            
-            let h = Math.floor(elapsedSec / 3600);
-            let m = Math.floor((elapsedSec % 3600) / 60);
-            let s = elapsedSec % 60;
-            let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-
-            let expPerHour = 0;
-            if (elapsedSec > 5) { // Czekamy 5 sekund z Twojego kodu
-                expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
-            }
-
-            // --- OBLICZANIE CZASU DO AWANSU (TNL) ---
-            let missingExp = 0;
-            if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.exp_left !== undefined && parseInt(Engine.hero.d.exp_left) > 0) {
-                missingExp = parseInt(Engine.hero.d.exp_left);
-            } else {
-                if (maxExp > curExp) missingExp = maxExp - curExp;
-                else if (maxExp > 0) missingExp = maxExp; 
-            }
-
-            let timeTnlStr = "--:--:--";
-            if (missingExp > 0 && expPerHour > 0) {
-                let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
-                let hTnl = Math.floor(secsTnl / 3600);
-                let mTnl = Math.floor((secsTnl % 3600) / 60);
-                let sTnl = secsTnl % 60;
-                timeTnlStr = hTnl > 99 ? "+99 godzin" : `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
-            } else if (missingExp > 0) {
-                timeTnlStr = "Obliczanie...";
-            } else {
-                timeTnlStr = "Max Lvl?";
-            }
-
-            // --- BŁYSKAWICZNA PODMIANA W INTERFEJSIE (querySelectorAll omija Duchy) ---
-            document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
-            document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.sessionStats.expGained.toLocaleString('pl-PL'));
-            document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
-            document.querySelectorAll('#statTimeTnl').forEach(el => el.innerText = timeTnlStr);
-            document.querySelectorAll('#statGoldGained').forEach(el => el.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
-
-        }, 1000);
-    }, 3500); // Wydłużono czas startu, aby załadował się po kasowaniu "duchów"
+// --- DAEMON: KULOODPORNY PANEL STATYSTYK SESJI (Odczyt bezpośrednio z silnika) ---
+    if (window.statsIntervalId) clearInterval(window.statsIntervalId);
     
+    window.sessionStats = {
+        active: false,
+        startTime: 0,
+        expGained: 0,
+        goldGained: 0,
+        lastExp: -1,
+        lastGold: -1
+    };
+
+    window.statsIntervalId = setInterval(() => {
+        // 1. BEZPOŚREDNI ODCZYT DANYCH Z GRY (Działa na Starym i Nowym Interfejsie)
+        let curExp = -1;
+        let curGold = -1;
+        let maxExp = -1;
+        let expLeft = -1;
+        let isEngineReady = false;
+
+        if (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
+            // Nowy Interfejs (NI)
+            curExp = parseInt(Engine.hero.d.exp) || 0;
+            curGold = parseInt(Engine.hero.d.gold) || 0;
+            maxExp = parseInt(Engine.hero.d.ttl_exp) || parseInt(Engine.hero.d.next_lvl_exp) || parseInt(Engine.hero.d.exp_req) || parseInt(Engine.hero.d.max_exp) || 0;
+            if (Engine.hero.d.exp_left !== undefined) expLeft = parseInt(Engine.hero.d.exp_left);
+            isEngineReady = true;
+        } else if (typeof hero !== 'undefined' && hero.exp !== undefined) {
+            // Stary Interfejs (SI)
+            curExp = parseInt(hero.exp) || 0;
+            curGold = parseInt(hero.gold) || 0;
+            maxExp = parseInt(hero.ttl_exp) || parseInt(hero.next_lvl_exp) || parseInt(hero.max_exp) || 0;
+            isEngineReady = true;
+        }
+
+        if (!isEngineReady) return; // Gra jeszcze się ładuje
+
+        // 2. DETEKCJA STARTU - czytamy bezpośrednio wewnętrzne flagi bota!
+        // Nie musisz klikać w GUI, jeśli bot ruszy do expa/patrolu, zegar sam startuje.
+        let isBotWorking = (window.isExping === true || window.isPatrolling === true || window.isRushing === true);
+
+        if (isBotWorking && !window.sessionStats.active) {
+            window.sessionStats.active = true;
+            window.sessionStats.startTime = Date.now();
+            window.sessionStats.expGained = 0;
+            window.sessionStats.goldGained = 0;
+            window.sessionStats.lastExp = curExp;
+            window.sessionStats.lastGold = curGold;
+        } else if (!isBotWorking && window.sessionStats.active) {
+            window.sessionStats.active = false;
+        }
+
+        if (!window.sessionStats.active) return; // Bot pauzuje, my też
+
+        // --- 3. OBLICZANIE PRZYROSTÓW ---
+        if (window.sessionStats.lastExp !== -1) {
+            let expDiff = curExp - window.sessionStats.lastExp;
+            if (expDiff > 0) window.sessionStats.expGained += expDiff;
+            else if (expDiff < 0) window.sessionStats.expGained += curExp; // Zabezpieczenie przy awansie (pasek spada)
+        }
+        window.sessionStats.lastExp = curExp;
+
+        if (window.sessionStats.lastGold !== -1) {
+            let goldDiff = curGold - window.sessionStats.lastGold;
+            if (goldDiff > 0) window.sessionStats.goldGained += goldDiff;
+        }
+        window.sessionStats.lastGold = curGold;
+
+        // --- 4. MATEMATYKA & FORMATOWANIE CZASU ---
+        let elapsedSec = Math.floor((Date.now() - window.sessionStats.startTime) / 1000);
+        if (elapsedSec < 1) elapsedSec = 1;
+        
+        let h = Math.floor(elapsedSec / 3600);
+        let m = Math.floor((elapsedSec % 3600) / 60);
+        let s = elapsedSec % 60;
+        let timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+        let expPerHour = 0;
+        if (elapsedSec > 3) { // 3 sekundy rozruchu
+            expPerHour = Math.floor((window.sessionStats.expGained / elapsedSec) * 3600);
+        }
+
+        // --- 5. ILE EXPA BRAKUJE DO AWANSU (TNL) ---
+        let missingExp = 0;
+        if (expLeft > 0) {
+            missingExp = expLeft;
+        } else {
+            if (maxExp > curExp) missingExp = maxExp - curExp;
+            else if (maxExp > 0) missingExp = maxExp; 
+        }
+
+        let timeTnlStr = "--:--:--";
+        if (missingExp > 0 && expPerHour > 0) {
+            let secsTnl = Math.floor((missingExp / expPerHour) * 3600);
+            let hTnl = Math.floor(secsTnl / 3600);
+            let mTnl = Math.floor((secsTnl % 3600) / 60);
+            let sTnl = secsTnl % 60;
+            timeTnlStr = hTnl > 99 ? "+99 godzin" : `${hTnl.toString().padStart(2, '0')}:${mTnl.toString().padStart(2, '0')}:${sTnl.toString().padStart(2, '0')}`;
+        } else if (missingExp > 0) {
+            timeTnlStr = "Obliczanie...";
+        } else {
+            timeTnlStr = "Max Lvl?";
+        }
+
+        // --- 6. AGRESYWNY RENDER W HTML (querySelectorAll nadpisuje absolutnie wszystkie widoczne klony menu) ---
+        document.querySelectorAll('#statSessionTime').forEach(el => el.innerText = timeStr);
+        document.querySelectorAll('#statExpGained').forEach(el => el.innerText = window.sessionStats.expGained.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statExpPerHour').forEach(el => el.innerText = expPerHour.toLocaleString('pl-PL'));
+        document.querySelectorAll('#statTimeTnl').forEach(el => el.innerText = timeTnlStr);
+        document.querySelectorAll('#statGoldGained').forEach(el => el.innerText = window.sessionStats.goldGained.toLocaleString('pl-PL') + " zł");
+
+    }, 1000);
+
     // --- STRAŻNIK RUCHU (Ochrona przed paraliżem na bramach) ---
     setTimeout(() => {
         if (!window.__movementGuardInstalled && typeof Engine !== 'undefined' && Engine.hero) {
