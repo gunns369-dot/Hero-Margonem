@@ -12,6 +12,69 @@
 (function() {
     'use strict';
 
+    // ==========================================
+        // SILNIK ANTI-THROTTLE (WEB WORKER) - Omijanie usypiania zakładek
+        // ==========================================
+        if (!window.__antiThrottleInstalled) {
+            window.__antiThrottleInstalled = true;
+            const workerCode = `
+                let timers = {};
+                self.onmessage = function(e) {
+                    if (e.data.command === 'setInterval') {
+                        timers[e.data.id] = setInterval(() => self.postMessage({id: e.data.id, type: 'interval'}), e.data.timeout);
+                    } else if (e.data.command === 'clearInterval') {
+                        clearInterval(timers[e.data.id]);
+                        delete timers[e.data.id];
+                    } else if (e.data.command === 'setTimeout') {
+                        timers[e.data.id] = setTimeout(() => self.postMessage({id: e.data.id, type: 'timeout'}), e.data.timeout);
+                    } else if (e.data.command === 'clearTimeout') {
+                        clearTimeout(timers[e.data.id]);
+                        delete timers[e.data.id];
+                    }
+                };
+            `;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            const worker = new Worker(URL.createObjectURL(blob));
+            
+            const callbacks = {};
+            let timerId = 1;
+            
+            worker.onmessage = function(e) {
+                if (callbacks[e.data.id]) {
+                    callbacks[e.data.id]();
+                    if (e.data.type === 'timeout') delete callbacks[e.data.id];
+                }
+            };
+            
+            window.originalSetInterval = window.setInterval;
+            window.originalClearInterval = window.clearInterval;
+            window.originalSetTimeout = window.setTimeout;
+            window.originalClearTimeout = window.clearTimeout;
+            
+            window.setInterval = function(cb, timeout, ...args) {
+                let id = timerId++;
+                callbacks[id] = () => cb(...args);
+                worker.postMessage({ command: 'setInterval', id: id, timeout: timeout });
+                return id;
+            };
+            window.clearInterval = function(id) {
+                worker.postMessage({ command: 'clearInterval', id: id });
+                delete callbacks[id];
+            };
+            window.setTimeout = function(cb, timeout, ...args) {
+                let id = timerId++;
+                callbacks[id] = () => cb(...args);
+                worker.postMessage({ command: 'setTimeout', id: id, timeout: timeout });
+                return id;
+            };
+            window.clearTimeout = function(id) {
+                worker.postMessage({ command: 'clearTimeout', id: id });
+                delete callbacks[id];
+            };
+            console.log("%c[System] Web Worker Anti-Throttle aktywny! Przeglądarka nie uśpi bota.", "color: #00acc1; font-weight: bold; font-size: 14px;");
+        }
+        // ==========================================
+    
    // WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - z Twoją metodą NI)
     const HeroScannerModule = {
         scanCurrentMap: function(currentMapName, zakkonicyData) {
