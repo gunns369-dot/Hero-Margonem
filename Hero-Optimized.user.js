@@ -2011,60 +2011,81 @@ function autoDetectEngineData() {
         window.executeRushStep();
     };
 
-// --- SYSTEM ZWOJÓW TELEPORTACJI Z BAZĄ MAP (V3) ---
-    window.getAvailableTeleports = function() {
-        if (typeof Engine === 'undefined' || !Engine.heroEquipment) return [];
-        let items = typeof Engine.heroEquipment.getHItems === 'function' ? Object.values(Engine.heroEquipment.getHItems()) : [];
-        if (items.length === 0 && Engine.items && Engine.items.d) items = Object.values(Engine.items.d);
+// --- SYSTEM ZWOJÓW TELEPORTACJI Z BAZĄ MAP (V4 - PARSER ZEWNĘTRZNY) ---
+    window.parseStatString = function(stat) {
+        if (!stat || typeof stat !== "string") return {};
+        const out = {};
+        for (const part of stat.split(";")) {
+            if (!part) continue;
+            const idx = part.indexOf("=");
+            if (idx === -1) {
+                out[part] = true;
+            } else {
+                const key = part.slice(0, idx);
+                const value = part.slice(idx + 1);
+                out[key] = value;
+            }
+        }
+        return out;
+    };
 
-        let heroLvl = parseInt(Engine.hero.d.lvl) || 1;
+    window.getMyItems = function() {
+        // Priorytetowo używamy metody testMyItems() jeśli jest dostępna
+        if (typeof Engine !== 'undefined' && Engine.items && typeof Engine.items.testMyItems === 'function') {
+            return Object.values(Engine.items.testMyItems()).map(i => i?.d || i).filter(Boolean);
+        }
+        // Fallback dla innych trybów
+        if (typeof Engine !== 'undefined' && Engine.heroEquipment && typeof Engine.heroEquipment.getHItems === 'function') {
+            return Object.values(Engine.heroEquipment.getHItems()).map(i => i?.d || i).filter(Boolean);
+        }
+        if (typeof Engine !== 'undefined' && Engine.items && Engine.items.d) {
+            return Object.values(Engine.items.d).map(i => i?.d || i).filter(Boolean);
+        }
+        return [];
+    };
+
+    window.getAvailableTeleports = function() {
+        let items = window.getMyItems();
+        let heroLvl = parseInt(Engine.hero?.d?.lvl) || 1;
         let tps = [];
         let allMapNames = typeof globalGateways !== 'undefined' ? Object.keys(globalGateways) : [];
 
-        for (let i of items) {
-            let itemData = i.d || i;
-            if (!itemData || itemData.del || itemData.dead) continue;
-            
-            // Poprawka NI: Pomijamy tylko przedmioty aktualnie założone na postać (st: 1 do 8)
-            // Dzięki temu wykryje zwoje we wszystkich dodatkowych torbach!
-            if (Number(itemData.st) > 0 && Number(itemData.st) < 9) continue; 
+        for (let item of items) {
+            if (!item || item.del || item.dead) continue;
 
-            let statStr = String(itemData.stat || i._cachedStats?.stat || "").toLowerCase();
-            let ttText = String(i.tooltip_text || itemData.tooltip_text || "").toLowerCase();
+            const stats = window.parseStatString(item.stat);
+            if (!stats.teleport) continue;
 
-            let mapDest = null;
-            // Szuka: teleport=Andarum Ilami,x,y
-            let match = statStr.match(/teleport=([^,;]+)/i);
-            if (match) mapDest = match[1].trim();
+            // Wyciągamy [mapId, x, y, mapName]
+            const [mapId, x, y, mapName] = stats.teleport.split(",");
+            if (!mapName) continue;
 
-            // Szuka w opisie (tooltippie) słowa "Teleportuje do: Andarum Ilami"
-            if (!mapDest) {
-                let ttMatch = ttText.match(/teleportuje do:\s*([^<]+)/i) || ttText.match(/teleportacja do:\s*([^<]+)/i);
-                if (ttMatch) mapDest = ttMatch[1].trim();
-            }
+            // Sprawdzenie wymaganego levela
+            let reqLvl = parseInt(stats.reqLvl || stats.reqlvl || 0);
+            if (reqLvl && heroLvl < reqLvl) continue;
 
-            if (mapDest) {
-                let reqLvlMatch = statStr.match(/reqlvl[=:](\d+)/) || statStr.match(/wymagany poziom:\s*(\d+)/);
-                if (reqLvlMatch && heroLvl < parseInt(reqLvlMatch[1])) continue;
-                
-                // Inteligentne wyrównywanie wielkości liter i formatu map
-                let exactMapName = allMapNames.find(k => k.toLowerCase() === mapDest.toLowerCase()) || mapDest;
-                if (!allMapNames.includes(exactMapName)) exactMapName = exactMapName.replace(/\b\w/g, c => c.toUpperCase());
+            // Wyrównanie wielkości liter do bazy pathfindera
+            let exactMapName = allMapNames.find(k => k.toLowerCase() === mapName.trim().toLowerCase()) || mapName.trim();
+            if (!allMapNames.includes(exactMapName)) exactMapName = exactMapName.replace(/\b\w/g, c => c.toUpperCase());
 
-                tps.push({ id: itemData.id, map: exactMapName });
-            }
+            tps.push({ id: item.id, map: exactMapName, item: item });
         }
         return tps;
     };
 
     window.useItemById = function(itemId) {
-        if (typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.sendUseRequest === 'function') {
-            let itemObj = Object.values(Engine.heroEquipment.getHItems()).find(i => (i.d||i).id == itemId);
-            if (itemObj) Engine.heroEquipment.sendUseRequest(itemObj);
-        } else if (typeof Engine.items !== 'undefined' && typeof Engine.items.useItem === 'function') {
-            Engine.items.useItem(itemId);
-        } else {
-            window._g(`moveitem&st=1&id=${itemId}`);
+        try {
+            if (typeof Engine !== 'undefined' && Engine.items && typeof Engine.items.useItem === 'function') {
+                Engine.items.useItem(itemId);
+            } else if (typeof Engine !== 'undefined' && Engine.heroEquipment && typeof Engine.heroEquipment.sendUseRequest === 'function') {
+                let itemsList = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
+                let itemObj = Object.values(itemsList).find(i => (i.d||i).id == itemId);
+                if (itemObj) Engine.heroEquipment.sendUseRequest(itemObj);
+            } else {
+                window._g(`moveitem&st=1&id=${itemId}`);
+            }
+        } catch (e) {
+            console.error("❌ Błąd użycia teleportu:", e);
         }
     };
 
