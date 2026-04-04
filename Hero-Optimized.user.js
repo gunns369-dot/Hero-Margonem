@@ -5219,16 +5219,24 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         return;
     }
 
- // --- ZABEZPIECZENIE PO RESPAWNIE ---
-    if ((hp / maxhp) * 100 < 50) {
+// --- ZABEZPIECZENIE PO RESPAWNIE ORAZ W TRAKCIE LECZENIA ---
+    // Przywracamy blokadę `isRegeneratingToFull`! Bot musi poczekać, aż AutoHeal napompuje go do 100%.
+    // Jeśli zacznie iść lub zaatakuje moba w trakcie picia, gra przerwie leczenie!
+    if (window.isRegeneratingToFull || (hp / maxhp) * 100 < 40) {
         if (!window._waitingForHeal) {
-            window.logExp(`🩸 Czekam na wyleczenie przed powrotem do walki...`, "#e53935");
+            window.logExp(`🩸 Szybkie pompowanie mikstur... Czekam na 100% HP.`, "#e53935");
             window._waitingForHeal = true;
         }
-        expLastActionTime = now + 1000;
+        
+        // Zatrzymujemy postać w miejscu, żeby przypadkiem nie weszła w moba i nie przerwała leczenia
+        if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') {
+            Engine.hero.stop();
+        }
+        
+        expLastActionTime = now + 500;
         return; 
     } else {
-        window._waitingForHeal = false; // Resetujemy blokadę spamu, gdy HP wróci do normy
+        window._waitingForHeal = false;
     }
 
     try {
