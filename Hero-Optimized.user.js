@@ -5219,14 +5219,16 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         return;
     }
 
-    // --- ZABEZPIECZENIE PO RESPAWNIE ---
+ // --- ZABEZPIECZENIE PO RESPAWNIE ---
     if ((hp / maxhp) * 100 < 50) {
-        if (window._lastLowHpLog !== Math.floor(now / 5000)) {
-            window.logExp(`🩸 Krytyczny poziom HP (${hp}/${maxhp})! Czekam na uleczenie...`, "#e53935");
-            window._lastLowHpLog = Math.floor(now / 5000);
+        if (!window._waitingForHeal) {
+            window.logExp(`🩸 Czekam na wyleczenie przed powrotem do walki...`, "#e53935");
+            window._waitingForHeal = true;
         }
         expLastActionTime = now + 1000;
         return; 
+    } else {
+        window._waitingForHeal = false; // Resetujemy blokadę spamu, gdy HP wróci do normy
     }
 
     try {
@@ -5308,42 +5310,39 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         expAntiLagTime = now + getAntiLagDelay();
     }
 
-// --- SKANOWANIE POTWORÓW (KOSIARKA V13 - PAMIĘĆ ABSOLUTNA) ---
+    // --- SKANOWANIE POTWORÓW (KOSIARKA V14 - Z GRUPAMI) ---
     if (!window.expMonsterCache) window.expMonsterCache = new Map();
-    // Asekuracyjne czyszczenie pamięci po wejściu na nową mapę jest robione na początku pętli (expLastMapName !== currMap),
-    // ale dla pewności usuwamy też tutaj jeśli coś utknęło z innej mapy.
 
-    const currentVisibleNpcs = isExpMap ? Object.values(typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d) : [];
+    let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+    let currentVisibleNpcs = [];
+    for (let key in npcsData) {
+        let npcObj = npcsData[key];
+        let n = npcObj?.d || npcObj;
+        if (n) {
+            n.id = n.id || key; 
+            currentVisibleNpcs.push(n);
+        }
+    }
+
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    // 1. ZAPISYWANIE DO PAMIĘCI (Keszowanie mobów, które weszły w zasięg wzroku)
-    currentVisibleNpcs.forEach(npcObj => {
-        let n = npcObj?.d || npcObj;
-        if (!n || n.type === 4 || n.type < 2) return;
-
-        if (n.dead || n.del || npcObj.del) {
+    currentVisibleNpcs.forEach(n => {
+        if (n.type === 4 || n.type < 2) return;
+        if (n.dead || n.del || n.delete) {
             window.expMonsterCache.delete(n.id);
         } else {
-            // Zapisujemy tylko potrzebne statystyki
             window.expMonsterCache.set(n.id, {
                 id: n.id, x: n.x, y: n.y, wt: n.wt, type: n.type, grp: n.grp, lvl: n.lvl,
-                nick: n.nick || n.name
+                nick: n.nick || n.name || "Potwór"
             });
         }
     });
 
-    // 2. WERYFIKACJA DUCHÓW (Usuwanie z pamięci zdezaktualizowanych celów)
     window.expMonsterCache.forEach((cachedMob, id) => {
         let distToCached = Math.abs(hx - cachedMob.x) + Math.abs(hy - cachedMob.y);
-        
-        // Jeśli jesteśmy blisko zapisanego kordu (<= 14 kratek), to powinniśmy widzieć potwora.
-        // Jeśli gra go nam nie przesyła = został zabity przez kogoś innego lub zniknął. Kasujemy!
         if (distToCached <= 14) {
-            let isCurrentlyVisible = currentVisibleNpcs.some(v => {
-                let vn = v?.d || v;
-                return vn.id === id && !vn.dead && !vn.del && !v.del;
-            });
+            let isCurrentlyVisible = currentVisibleNpcs.some(v => v.id == id && !v.dead && !v.del);
             if (!isCurrentlyVisible) {
                 window.expMonsterCache.delete(id);
                 if (expCurrentTargetId === id) expCurrentTargetId = null;
@@ -5351,10 +5350,8 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
     });
 
-    // OD TERAZ BOT PATRZY NA SWOJĄ PAMIĘĆ, A NIE TYLKO NA TO, CO POKAZUJE MU SERWER!
     const arr = Array.from(window.expMonsterCache.values());
 
-    // 3. Zbudowanie mapy "Stref Zagrożenia"
     let dangerousSpots = [];
     arr.forEach(n => {
         let wt = parseInt(n.wt, 10);
@@ -5369,10 +5366,10 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
     });
 
-    // 4. Filtrowanie Potworów 
     let validMobs = [];
     arr.forEach(n => {
-        if (window.expUnreachableMobs.has(n.id)) return;
+        let coordKey = n.x + "_" + n.y;
+        if (window.expUnreachableMobs.has(coordKey)) return; 
 
         let lvl = parseInt(n.lvl, 10);
         if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
@@ -5399,16 +5396,26 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         if (!isSafeToAttack) return;
 
         let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
-
         validMobs.push({
-            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga,
+            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga, grp: n.grp,
             nick: n.nick.replace(/<[^>]*>?/gm, '').trim(),
             dist: dist,
             isLocked: false
         });
     });
 
-    // 5. Oportunista + Lock (Trzyma cel dopóki nie zobaczy czegoś pod nosem)
+    // --- DODANIE ETYKIET GRUP DO LOGÓW ---
+    let groupsCount = {};
+    validMobs.forEach(m => {
+        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
+        groupsCount[key] = (groupsCount[key] || 0) + 1;
+    });
+    validMobs.forEach(m => {
+        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
+        let size = groupsCount[key];
+        m.groupLabel = size > 1 ? `Grupa (${size}x) ${m.nick}` : `Solo ${m.nick}`;
+    });
+
     let lockedMob = null;
     validMobs.forEach(m => {
         if (m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0)) {
@@ -5425,7 +5432,6 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
     }
 
-    // 6. CZYSTE SORTOWANIE (Równe szanse, kto najbliżej ten ginie)
     validMobs.sort((a, b) => {
         let rankVal = {"normal": 0, "elite1": 1, "elite2": 2, "hero": 3};
         if (rankVal[a.ranga] !== rankVal[b.ranga]) return rankVal[b.ranga] - rankVal[a.ranga];
@@ -5438,7 +5444,6 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
     let target = validMobs.length > 0 ? validMobs[0] : null;
 
-    // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (target) {
         const targetDist = target.dist;
 
@@ -5455,14 +5460,14 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 if (now < nextAllowedClickTime) return;
 
                 if (expCurrentTargetId !== target.id) {
-                    window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${targetDist})`, "#00e5ff");
+                    // UŻYWAMY NOWEJ ETYKIETY GRUPY!
+                    window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
-                    
                     let randomLockSeconds = Math.floor(Math.random() * (6000 - 4000 + 1)) + 4000;
                     window.expTargetLockTime = now + randomLockSeconds; 
                 }
 
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick}`;
+                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.groupLabel}`;
                 
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
                 nextAllowedClickTime = now + 350; 
@@ -5483,7 +5488,10 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
                     if (timeStandingStill > 3000) {
                         window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Szukam innej ofiary.`, "#ff5252");
-                        window.expUnreachableMobs.add(target.id);
+                        
+                        let badCoordKey = target.x + "_" + target.y;
+                        window.expUnreachableMobs.add(badCoordKey);
+                        
                         expCurrentTargetId = null;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
@@ -5507,7 +5515,6 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             expLastActionTime = now + 100;
             return;
         }
-
         // --- WALKA ---
         if (targetDist <= 1) {
             if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
@@ -7280,14 +7287,18 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             let hpPercent = (hp / maxhp) * 100;
             let threshold = parseInt(botSettings.autoheal.threshold) || 80;
 
-            if (hpPercent < threshold && !window.isRegeneratingToFull) {
+        if (hpPercent < threshold && !window.isRegeneratingToFull) {
                 window.isRegeneratingToFull = true;
-                if (window.logHero) window.logHero(`🩸 Krytyczne HP (${hpPercent.toFixed(0)}%). Leczę do pełna...`, "#ff5252");
+                let msg = `🩸 Niski poziom HP (${hpPercent.toFixed(0)}%). Leczę do pełna...`;
+                if (window.isExping && window.logExp) window.logExp(msg, "#ff5252");
+                else if (window.logHero) window.logHero(msg, "#ff5252");
             }
 
             if (window.isRegeneratingToFull && hpPercent >= 99) {
                 window.isRegeneratingToFull = false;
-                if (window.logHero) window.logHero(`💚 Zregenerowano siły. Wracam do akcji.`, "#4caf50");
+                let msg = `💚 Zregenerowano siły. Wracam do akcji.`;
+                if (window.isExping && window.logExp) window.logExp(msg, "#4caf50");
+                else if (window.logHero) window.logHero(msg, "#4caf50");
                 return;
             }
 
