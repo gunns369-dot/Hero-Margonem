@@ -2702,7 +2702,7 @@ function initGUI() {
                             </div>
                         </div>
                     </div>
-                  <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Alarmy / Opcje walki)</div>
+                 <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Alarmy / Opcje walki)</div>
                     <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
                         <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                         <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
@@ -2716,13 +2716,8 @@ function initGUI() {
                         </div>
                         
                         <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
-                            <label style="color:#ffb300; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
-                            <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0; padding-left:20px;"><input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu</label>
-                            
-                            <label style="color:#e040fb; font-size:10px; cursor:pointer; font-weight:bold; margin:0;"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat</label>
-                            <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:5px; cursor:pointer; margin:0; padding-left:20px;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
-                            
-                            <button id="btnOpenDiscordModule" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; margin-top:5px; padding:6px; font-weight:bold; font-size:11px;">💬 KONFIGURACJA DISCORD</button>
+                            <button id="btnOpenBrowserAlertsModule" class="btn-sepia" style="background:#ff9800; border-color:#f57c00; width:100%; margin-top:2px; padding:6px; font-weight:bold; font-size:11px;">🔔 POWIADOMIENIA PRZEGLĄDARKI</button>
+                            <button id="btnOpenDiscordModule" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; margin-top:2px; padding:6px; font-weight:bold; font-size:11px;">💬 KONFIGURACJA DISCORD</button>
                         </div>
                     </div>
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
@@ -2907,7 +2902,60 @@ function initGUI() {
 
     function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { window.toggleMainVisibility(); } }
 
+// --- MODUŁ: POWIADOMIENIA PRZEGLĄDARKI ---
+        const browserAlertsGui = document.createElement('div'); browserAlertsGui.id = 'browserAlertsSettingsGUI'; browserAlertsGui.className = 'hero-window'; browserAlertsGui.style.display = 'none';
+        browserAlertsGui.innerHTML = `
+            <div class="gui-header" style="color:#ff9800;">🔔 Powiadomienia Przeglądarki <button class="btn-close" onclick="document.getElementById('browserAlertsSettingsGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="gap:8px;">
+                <label style="color:#ff5252; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="captchaAlert" ${botSettings.exp.captchaAlert ? 'checked' : ''}> 🚨 Wybudzanie Alarmem Captcha</label>
+                <div style="border-top:1px solid #333; padding-top:6px;">
+                    <label style="color:#ffb300; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
+                    <label style="color:#e0d8c0; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;"><input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu</label>
+                </div>
+                <div style="border-top:1px solid #333; padding-top:6px;">
+                    <label style="color:#e040fb; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat (Prywatne)</label>
+                    <label style="color:#e0d8c0; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(browserAlertsGui);
 
+        // --- MODUŁ: DISCORD WEBHOOK ---
+        const discordGui = document.createElement('div'); discordGui.id = 'discordSettingsGUI'; discordGui.className = 'hero-window'; discordGui.style.display = 'none';
+        discordGui.innerHTML = `
+            <div class="gui-header" style="color:#5865F2;">💬 Konfiguracja Discorda <button class="btn-close" onclick="document.getElementById('discordSettingsGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="gap:8px;">
+                <div style="background:#1a1a1a; padding:6px; border:1px solid #444; border-radius:3px;">
+                    <p style="margin:0 0 5px 0; font-size:10px; color:#aaa; text-align:justify;">Stwórz Webhook na swoim prywatnym serwerze (Integracje kanału). <a href="https://support.discord.com/hc/pl/articles/228383668-Wst%C4%99p-do-Webhook%C3%B3w" target="_blank" style="color:#5865F2;">[Instrukcja]</a></p>
+                    <input type="text" id="discordWebhookUrl" placeholder="Wklej URL Webhooka..." value="${botSettings.discord?.url || ''}" style="width:100%; padding:5px; font-size:10px; background:#0f0f0f; color:#fff; border:1px solid #5865F2; border-radius:2px; box-sizing:border-box;">
+                </div>
+                <div style="background:#1a1a1a; padding:6px; border:1px solid #444; border-radius:3px;">
+                    <p style="margin:0 0 5px 0; font-size:10px; color:#aaa;">(Opcjonalnie) Wpisz swój <b>ID Użytkownika Discord</b>, aby bot wysyłał Ci powiadomienie Push z wibracją na telefon (Ping):</p>
+                    <input type="text" id="discordUserId" placeholder="Np. 123456789012345678" value="${botSettings.discord?.userId || ''}" style="width:100%; padding:5px; font-size:10px; background:#0f0f0f; color:#fff; border:1px solid #333; border-radius:2px; box-sizing:border-box;">
+                </div>
+                <div style="border-top:1px solid #444; padding-top:8px;">
+                    <div style="margin-bottom:6px; background:#111; border:1px solid #333; padding:4px; border-radius:3px;">
+                        <label style="color:#d4af37; font-size:11px; font-weight:bold; cursor:pointer;"><input type="checkbox" id="discordAlert_Hero" ${botSettings.discord?.alerts?.hero ? 'checked' : ''}> 🐉 Radar (Herosi/E2)</label>
+                        <div style="padding-left:20px; margin-top:3px;"><label style="color:#aaa; font-size:10px; cursor:pointer;"><input type="checkbox" id="discordStop_Hero" ${botSettings.discord?.stop?.hero !== false ? 'checked' : ''}> Zatrzymuj bota (Zalecane)</label></div>
+                    </div>
+                    <div style="margin-bottom:6px; background:#111; border:1px solid #333; padding:4px; border-radius:3px;">
+                        <label style="color:#ffb300; font-size:11px; font-weight:bold; cursor:pointer;"><input type="checkbox" id="discordAlert_Player" ${botSettings.discord?.alerts?.player ? 'checked' : ''}> 👁️ Gracze na mapie</label>
+                        <div style="padding-left:20px; margin-top:3px;"><label style="color:#aaa; font-size:10px; cursor:pointer;"><input type="checkbox" id="discordStop_Player" ${botSettings.discord?.stop?.player ? 'checked' : ''}> Zatrzymuj bota</label></div>
+                    </div>
+                    <div style="margin-bottom:6px; background:#111; border:1px solid #333; padding:4px; border-radius:3px;">
+                        <label style="color:#e040fb; font-size:11px; font-weight:bold; cursor:pointer;"><input type="checkbox" id="discordAlert_Chat" ${botSettings.discord?.alerts?.chat ? 'checked' : ''}> 📩 Czat (Wiad. Prywatne)</label>
+                        <div style="padding-left:20px; margin-top:3px;"><label style="color:#aaa; font-size:10px; cursor:pointer;"><input type="checkbox" id="discordStop_Chat" ${botSettings.discord?.stop?.chat ? 'checked' : ''}> Zatrzymuj bota</label></div>
+                    </div>
+                    <div style="margin-bottom:6px; background:#111; border:1px solid #333; padding:4px; border-radius:3px;">
+                        <label style="color:#ff5252; font-size:11px; font-weight:bold; cursor:pointer;"><input type="checkbox" id="discordAlert_Captcha" ${botSettings.discord?.alerts?.captcha ? 'checked' : ''}> 🚨 Zapadka / Captcha</label>
+                        <div style="padding-left:20px; margin-top:3px;"><label style="color:#aaa; font-size:10px; cursor:pointer;"><input type="checkbox" id="discordStop_Captcha" ${botSettings.discord?.stop?.captcha !== false ? 'checked' : ''}> Zatrzymuj bota (Zalecane)</label></div>
+                    </div>
+                </div>
+                <button id="btnSaveDiscord" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; padding:8px; margin-top:auto;">💾 ZAPISZ DISCORDA I TESTUJ</button>
+            </div>
+        `;
+        document.body.appendChild(discordGui);
+    
     function setupModals() {
 
         window.heroModal = function(type, msg, defaultVal, callback) {
@@ -3102,63 +3150,54 @@ if (!botSettings.berserk) {
         if (!botSettings.autoheal) { botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" }; saveSettings(); }
         if (!botSettings.autopot) { botSettings.autopot = { enabled: false, stacks: 14 }; saveSettings(); }
         if (botSettings.exp.autoChangeRoute === undefined) { botSettings.exp.autoChangeRoute = false; saveSettings(); }
-        if (botSettings.exp.captchaAlert === undefined) { botSettings.exp.captchaAlert = true; saveSettings(); }
-
-        bindChange('captchaAlert', (e) => {
-            botSettings.exp.captchaAlert = e.target.checked;
-            saveSettings();
-            if (e.target.checked && Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
-        });
+      if (botSettings.exp.captchaAlert === undefined) { botSettings.exp.captchaAlert = true; saveSettings(); }
+        bindChange('captchaAlert', (e) => { botSettings.exp.captchaAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
         
         if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
-        bindChange('playerAlert', (e) => {
-            botSettings.exp.playerAlert = e.target.checked;
-            saveSettings();
-            if (e.target.checked) {
-                if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
-                if (window.logExp) window.logExp("👁️ Włączono monitoring graczy i czatu.", "#ffb300");
-            }
-        });
+        bindChange('playerAlert', (e) => { botSettings.exp.playerAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
 
         if (botSettings.exp.playerAlertStopBot === undefined) { botSettings.exp.playerAlertStopBot = false; saveSettings(); }
         bindChange('playerAlertStopBot', (e) => { botSettings.exp.playerAlertStopBot = e.target.checked; saveSettings(); });
         
         if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
         if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
-
-        bindChange('chatAlert', (e) => {
-            botSettings.exp.chatAlert = e.target.checked;
-            saveSettings();
-            if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission();
-        });
+        bindChange('chatAlert', (e) => { botSettings.exp.chatAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
         bindChange('chatAlertStopBot', (e) => { botSettings.exp.chatAlertStopBot = e.target.checked; saveSettings(); });
 
-        // --- INICJALIZACJA DISCORDA ---
-        if (!botSettings.discord) { botSettings.discord = { enabled: true, url: '', userId: '', alerts: { hero: true, player: true, chat: true, captcha: true } }; saveSettings(); }
-        
-        // Otwieranie Modułu Discorda z wewnątrz ustawień EXPa
+        // PRZYCISKI OTWIERAJĄCE MENU POWIADOMIEŃ
+        bindClick('btnOpenBrowserAlertsModule', () => { 
+            let p = document.getElementById('browserAlertsSettingsGUI'); 
+            p.style.display = p.style.display === 'none' ? 'flex' : 'none'; 
+        });
         bindClick('btnOpenDiscordModule', () => { 
             let p = document.getElementById('discordSettingsGUI'); 
             p.style.display = p.style.display === 'none' ? 'flex' : 'none'; 
         });
 
-        // Przycisk Zapisz + Test na Discordzie
+        // INICJALIZACJA DISCORDA Z NOWYMI BLOKADAMI
+        if (!botSettings.discord) { botSettings.discord = { enabled: true, url: '', userId: '', alerts: { hero: true, player: true, chat: true, captcha: true }, stop: { hero: true, player: false, chat: false, captcha: true } }; saveSettings(); }
+        if (!botSettings.discord.stop) { botSettings.discord.stop = { hero: true, player: false, chat: false, captcha: true }; saveSettings(); }
+        
         bindClick('btnSaveDiscord', () => {
             botSettings.discord.url = document.getElementById('discordWebhookUrl').value.trim();
             botSettings.discord.userId = document.getElementById('discordUserId').value.trim();
             botSettings.discord.enabled = botSettings.discord.url.length > 10;
             
-            if(!botSettings.discord.alerts) botSettings.discord.alerts = {};
             botSettings.discord.alerts.hero = document.getElementById('discordAlert_Hero').checked;
             botSettings.discord.alerts.player = document.getElementById('discordAlert_Player').checked;
             botSettings.discord.alerts.chat = document.getElementById('discordAlert_Chat').checked;
             botSettings.discord.alerts.captcha = document.getElementById('discordAlert_Captcha').checked;
+
+            botSettings.discord.stop.hero = document.getElementById('discordStop_Hero').checked;
+            botSettings.discord.stop.player = document.getElementById('discordStop_Player').checked;
+            botSettings.discord.stop.chat = document.getElementById('discordStop_Chat').checked;
+            botSettings.discord.stop.captcha = document.getElementById('discordStop_Captcha').checked;
             
             saveSettings();
             
             if(botSettings.discord.enabled) {
-                window.sendDiscordWebhook("🟢 MARGONEURO PODPIĘTE!", "Powiadomienia Discord zostały skonfigurowane poprawnie!\nOd teraz to okno jest gotowe do odbierania sygnałów.", 5763719);
-                heroAlert("Ustawienia Discord zostały zaktualizowane.\nWysłano wiadomość testową na Twój kanał!");
+                window.sendDiscordWebhook("🟢 MARGONEURO ZSYNCHRONIZOWANE", "Powiadomienia Discord zostały skonfigurowane poprawnie i działają niezależnie od przeglądarki!\nOd teraz to okno jest gotowe do odbierania sygnałów.", 5763719);
+                heroAlert("Ustawienia Discord zostały zapisane.\nWysłano wiadomość testową na Twój kanał!");
             } else {
                 heroAlert("Ustawienia zapisane (Webhook wyłączony ze względu na pusty link).");
             }
@@ -7769,79 +7808,49 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         setInterval(() => {
             let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
             
-            if (botSettings.exp && botSettings.exp.playerAlert && isBotActive) {
+let checkBrowser = botSettings.exp?.playerAlert;
+            let checkDiscord = botSettings.discord?.alerts?.player;
+
+            if ((checkBrowser || checkDiscord) && isBotActive) {
                 if (typeof Engine === 'undefined' || !Engine.others || !Engine.hero) return;
 
                 let others = typeof Engine.others.check === 'function' ? Engine.others.check() : Engine.others.d;
                 if (!others) return;
 
                 let myNick = (Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "";
+                const players = Object.values(others).filter(o => o?.isPlayer && o?.d?.nick && o.d.nick !== myNick).map(o => ({ id: o.d.id || o.id, nick: o.d.nick, lvl: o.d.lvl, x: o.d.x, y: o.d.y }));
 
-                const players = Object.values(others)
-                    .filter(o => o?.isPlayer && o?.d?.nick && o.d.nick !== myNick)
-                    .map(o => ({
-                        id: o.d.id || o.id,
-                        nick: o.d.nick,
-                        lvl: o.d.lvl,
-                        x: o.d.x,
-                        y: o.d.y
-                    }));
-
-                // Sprzątanie pamięci: usuwamy graczy, którzy zniknęli z mapy
                 let currentIds = new Set(players.map(p => p.id));
-                for (let id of window.alertedPlayersList) {
-                    if (!currentIds.has(id)) window.alertedPlayersList.delete(id);
-                }
+                for (let id of window.alertedPlayersList) { if (!currentIds.has(id)) window.alertedPlayersList.delete(id); }
 
-                // Zbieramy NOWYCH graczy do tablicy
                 let newPlayers = [];
-                players.forEach(p => {
-                    if (!window.alertedPlayersList.has(p.id)) {
-                        window.alertedPlayersList.add(p.id);
-                        newPlayers.push(p);
-                    }
-                });
+                players.forEach(p => { if (!window.alertedPlayersList.has(p.id)) { window.alertedPlayersList.add(p.id); newPlayers.push(p); } });
 
-                // Jeśli znaleziono jakichkolwiek nowych graczy
                 if (newPlayers.length > 0) {
                     let msgTitle = newPlayers.length === 1 ? `👁️ Wykryto Gracza!` : `👁️ Wykryto Graczy (${newPlayers.length})!`;
-                    
-                    // Formatowanie do powiadomienia w Windows (jeden pod drugim z myślnikiem)
                     let msgBody = newPlayers.map(p => `- ${p.nick} (${p.lvl} lvl)`).join('\n');
-                    
-                    // Formatowanie do logów HTML w bocznym panelu bota
                     let logBody = newPlayers.map(p => `${p.nick} (${p.lvl} lvl)`).join('<br> &nbsp;&nbsp;&nbsp; ↳ ');
                     
-                    // 1. Log w panelu (bez dźwięku!)
-                    if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
-
-                   // 2. Zbiorcze powiadomienie w przeglądarce
-                    if (Notification.permission === "granted") {
-                        new Notification(msgTitle, { body: msgBody });
+                    // Niezależna Przeglądarka
+                    if (checkBrowser) {
+                        if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
+                        if (Notification.permission === "granted") new Notification(msgTitle, { body: msgBody });
                     }
 
-                    // PUSH NA DISCORD
-                    let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
-                    window.sendDiscordWebhook(
-                        msgTitle, 
-                        `${msgBody}\n**Mapa:** ${mapName}`, 
-                        16711680 // Czerwony kolor
-                    );
+                    // Niezależny Discord
+                    if (checkDiscord) {
+                        let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
+                        window.sendDiscordWebhook(msgTitle, `${msgBody}\n**Mapa:** ${mapName}`, 16711680);
+                    }
 
-                    // 3. Zatrzymanie bota (tylko raz dla całej grupy)
-                    if (botSettings.exp.playerAlertStopBot) {
+                    // Niezależne zablokowanie bota (wystarczy, że jedno z nich jest zaznaczone)
+                    if (botSettings.exp.playerAlertStopBot || botSettings.discord?.stop?.player) {
                         if (typeof stopPatrol === 'function') stopPatrol(true); 
-                        
-                        if (window.isExping) {
-                            let btn = document.getElementById('btnStartExp');
-                            if (btn) btn.click();
-                        }
-                        
+                        if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
                         if (window.logExp) window.logExp(`🛑 Zatrzymano bota, ponieważ wykryto intruzów!`, "#f44336");
                     }
                 }
             } else if (!isBotActive) {
-                // Czyszczenie pamięci po zatrzymaniu bota
                 window.alertedPlayersList.clear();
             }
         }, 1000);
@@ -7873,7 +7882,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         window.__chatDomObserver = new MutationObserver(() => {
             // Działa tylko gdy bot pracuje (Exp lub Patrol) i opcja jest ON
             let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
-            if (!botSettings.exp.chatAlert || !isBotActive) return;
+           let checkBrowser = botSettings.exp?.chatAlert;
+            let checkDiscord = botSettings.discord?.alerts?.chat;
+            if (!(checkBrowser || checkDiscord) || !isBotActive) return;
 
             const myNick = getMyNick();
             if (!myNick) return;
@@ -7890,26 +7901,23 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     const sender = senderMatch ? senderMatch[1] : "Ktoś";
                     const message = line.split(`${myNick}:`)[1]?.trim() || "...";
 
-                    // 1. Log w konsoli bota
-                    if (window.logExp) window.logExp(`📩 PRIV od ${sender}: ${message}`, "#e040fb");
-
-                   // 2. Powiadomienie systemowe (Brak dźwięku)
-                    if (Notification.permission === "granted") {
-                        new Notification(`📩 Nowa wiadomość (Margo)`, {
-                            body: `${sender}: ${message}`,
-                            icon: 'https://www.margonem.pl/favicon.ico'
-                        });
+                  // Niezależna Przeglądarka
+                    if (checkBrowser) {
+                        if (window.logExp) window.logExp(`📩 PRIV od ${sender}: ${message}`, "#e040fb");
+                        if (Notification.permission === "granted") new Notification(`📩 Nowa wiadomość (Margo)`, { body: `${sender}: ${message}`, icon: 'https://www.margonem.pl/favicon.ico' });
                     }
 
-                   // PUSH NA DISCORD
-                    if (botSettings.discord?.alerts?.chat) {
-                        window.sendDiscordWebhook(
-                            "📩 Otrzymano Wiadomość Prywatną", 
-                            `**Od:** ${sender}\n**Treść:** ${message}`, 
-                            14828287 // Różowy kolor
-                        );
+                    // Niezależny Discord
+                    if (checkDiscord) {
+                        window.sendDiscordWebhook("📩 Otrzymano Wiadomość Prywatną", `**Od:** ${sender}\n**Treść:** ${message}`, 14828287);
                     }
 
+                    // Niezależny Stop
+                    if (botSettings.exp.chatAlertStopBot || botSettings.discord?.stop?.chat) {
+                        if (typeof stopPatrol === 'function') stopPatrol(true);
+                        if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
+                        if (window.logExp) window.logExp(`🛑 Zatrzymano bota z powodu wiadomości prywatnej!`, "#f44336");
+                    }
                     // 3. Opcjonalne zatrzymanie bota
                     if (botSettings.exp.chatAlertStopBot) {
                         if (typeof stopPatrol === 'function') stopPatrol(true);
