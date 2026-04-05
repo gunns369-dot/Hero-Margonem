@@ -15,7 +15,7 @@
  // ==========================================
         // SILNIK ANTI-THROTTLE V3 (NIESKOŃCZONOŚĆ) - Omijanie uśpienia kart
         // ==========================================
-        if (!window.__antiThrottleInstalled) {
+        if (!window.__antiThrottleInstalled) {window.lastExpMap = null;
             window.__antiThrottleInstalled = true;
             
             // 1. OSZUKIWANIE PRZEGLĄDARKI (Główny powód zamrażania Margonem)
@@ -7954,15 +7954,18 @@ if (isDead) {
                         }) || null;
                     };
                     
-                   window.openShopAsync = async (namePart) => {
-    // Szukamy NPC w pamięci gry
-    let npcs = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : (Engine?.npcs?.d || {});
+                  window.openShopAsync = async (namePart) => {
+    let npcs = typeof Engine?.npcs?.check === 'function'
+        ? Engine.npcs.check()
+        : (Engine?.npcs?.d || {});
+
     let npc = null;
+    const targetName = (namePart || "").toLowerCase();
 
     for (let i in npcs) {
         let n = npcs[i]?.d || npcs[i];
         let cleanNick = (n?.nick || n?.name || "").replace(/<[^>]*>?/gm, '').trim();
-        if (cleanNick.toLowerCase().includes((namePart || "").toLowerCase())) {
+        if (cleanNick.toLowerCase().includes(targetName)) {
             npc = n;
             break;
         }
@@ -7974,20 +7977,22 @@ if (isDead) {
     }
 
     const hero = () => Engine?.hero?.d || Engine?.hero || null;
+
     const distToNpc = () => {
         const h = hero();
         if (!h || !npc) return 999;
-        return Math.abs((h.x ?? 0) - npc.x) + Math.abs((h.y ?? 0) - npc.y);
+        return Math.max(Math.abs((h.x ?? 0) - npc.x), Math.abs((h.y ?? 0) - npc.y));
     };
 
     const isStandingStill = () => {
         const h = hero();
-        const path = h?.path;
-        return !path || path.length === 0;
+        const pathA = h?.path;
+        const pathB = Engine?.hero?.path;
+        return (!pathA || pathA.length === 0) && (!pathB || pathB.length === 0);
     };
 
     const getOpenDialogueNow = () =>
-        document.querySelector(".dialogue-window.is-open, #dialog");
+        document.querySelector(".dialogue-window.is-open, #dialog, .dialog-window");
 
     const findShopOptionNow = () => {
         const byClass = document.querySelector(".dialogue-window.is-open .dialogue-window-answer.line_shop");
@@ -7997,7 +8002,8 @@ if (isDead) {
             ...document.querySelectorAll(".dialogue-window.is-open .dialogue-window-answer"),
             ...document.querySelectorAll(".dialog-custom-scroll .answer"),
             ...document.querySelectorAll(".dialog-window .answer"),
-            ...document.querySelectorAll("#dialog li")
+            ...document.querySelectorAll("#dialog li"),
+            ...document.querySelectorAll(".dialogue-window-answer")
         ];
 
         return answers.find(el => {
@@ -8007,12 +8013,32 @@ if (isDead) {
                 txt.includes("co masz na sprzedaż") ||
                 txt.includes("sprzedaż") ||
                 txt.includes("sprzedaz") ||
-                txt.includes("handel")
+                txt.includes("handel") ||
+                txt.includes("kup")
             );
         }) || null;
     };
 
-    // 1. Podejdź bliżej niż wcześniej: do dystansu <= 1
+    const clickLikeHuman = (el) => {
+        if (!el) return false;
+        try {
+            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+            if (typeof el.click === "function") el.click();
+            return true;
+        } catch (e) {
+            console.warn("[AUTO-SELL] clickLikeHuman error:", e);
+            try {
+                el.click();
+                return true;
+            } catch {}
+        }
+        return false;
+    };
+
+    // podejdź blisko NPC
     if (distToNpc() > 1) {
         try {
             Engine?.hero?.autoGoTo?.(npc.x, npc.y);
@@ -8027,30 +8053,22 @@ if (isDead) {
         }
     }
 
-    // 2. Poczekaj aż postać całkowicie stanie
-    const fullyStopped = await window.waitFor(() => isStandingStill(), 2500, 80);
-    if (!fullyStopped) {
-        await window.sleep(250);
-    }
+    await window.waitFor(() => isStandingStill(), 2500, 80);
+    await window.sleep(250);
 
-    // 3. Kilka prób aktywacji rozmowy
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        // Jeśli dialog już jest, nie klikaj ponownie
+    // kilka prób aktywacji dialogu
+    for (let attempt = 1; attempt <= 4; attempt++) {
         if (getOpenDialogueNow()) break;
 
         try {
             if (typeof Engine?.npcs?.clickNpc === "function") {
                 Engine.npcs.clickNpc(npc.id);
-            } else if (typeof Engine?.communication !== "undefined" && Engine.communication?.send) {
-                Engine.communication.send({ a: "talk", id: npc.id });
-            } else if (typeof window._g === "function") {
-                window._g(`talk&id=${npc.id}`);
             }
         } catch (e) {
-            console.warn(`[AUTO-SELL] Próba ${attempt}: clickNpc/talk nieudane`, e);
+            console.warn(`[AUTO-SELL] Próba ${attempt}: clickNpc nieudane`, e);
         }
 
-        await window.sleep(220);
+        await window.sleep(180);
 
         try {
             if (typeof Engine?.interface?.clickTalkNearMob === "function") {
@@ -8060,49 +8078,56 @@ if (isDead) {
             console.warn(`[AUTO-SELL] Próba ${attempt}: clickTalkNearMob nieudane`, e);
         }
 
-        const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1200, 80);
-        if (opened) break;
+        await window.sleep(220);
 
-        // awaryjnie jeszcze raz, ale już sam talk po id
+        if (getOpenDialogueNow()) break;
+
         try {
-            if (typeof Engine?.communication !== "undefined" && Engine.communication?.send) {
+            if (typeof Engine?.communication?.send === "function") {
                 Engine.communication.send({ a: "talk", id: npc.id });
             } else if (typeof window._g === "function") {
                 window._g(`talk&id=${npc.id}`);
             }
-        } catch {}
+        } catch (e) {
+            console.warn(`[AUTO-SELL] Próba ${attempt}: fallback talk nieudane`, e);
+        }
 
-        const openedFallback = await window.waitFor(() => !!getOpenDialogueNow(), 900, 80);
-        if (openedFallback) break;
+        const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1200, 80);
+        if (opened) break;
 
         await window.sleep(250);
     }
 
-    // 4. Czekamy na dialog
     const dialogueOpened = await window.waitFor(() => !!getOpenDialogueNow(), 2500, 80);
     if (!dialogueOpened) {
         console.warn("[AUTO-SELL] Dialog z NPC się nie otworzył:", npc.nick);
         return false;
     }
 
-    // 5. Czekamy na opcję sklepu
     const optionReady = await window.waitFor(() => !!findShopOptionNow(), 2500, 80);
     if (!optionReady) {
         console.warn("[AUTO-SELL] Nie znaleziono opcji sklepu w dialogu:", npc.nick);
         return false;
     }
 
-    // 6. Klik opcji sklepu
     const shopOption = findShopOptionNow();
-    try {
-        shopOption.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-        shopOption.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-    } catch {}
+    clickLikeHuman(shopOption);
 
-    shopOption.click();
+    const shopOpened = await window.waitFor(() => {
+        return !!(
+            Engine?.shop?.wnd ||
+            Engine?.shop?.getData?.() ||
+            document.querySelector(".shop-window, .shop, .trade-window, .merchant-window")
+        );
+    }, 2500, 80);
+
+    if (!shopOpened) {
+        console.warn("[AUTO-SELL] Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
+        return false;
+    }
+
     return true;
 };
-
                 // --- GŁÓWNA LOGIKA KROKU 1 ---
                 if (window.autoSellState.step === 1) {
                     if (!window.autoSellState.failedNPCs) {
@@ -8214,7 +8239,6 @@ if (isDead) {
                         if (closeBtn) closeBtn.click();
                         window.lastExpMap = null;
                     }
-                }
             }
         }, 300);
     }
