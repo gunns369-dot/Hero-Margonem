@@ -15,8 +15,8 @@
  // ==========================================
         // SILNIK ANTI-THROTTLE V3 (NIESKOŃCZONOŚĆ) - Omijanie uśpienia kart
         // ==========================================
-        if (!window.__antiThrottleInstalled) {window.lastExpMap = null;
-            window.__antiThrottleInstalled = true;
+        if (!window.__antiThrottleInstalled) {
+    window.__antiThrottleInstalled = true;
             
             // 1. OSZUKIWANIE PRZEGLĄDARKI (Główny powód zamrażania Margonem)
             // Wycinamy grze możliwość sprawdzenia, czy karta jest zminimalizowana
