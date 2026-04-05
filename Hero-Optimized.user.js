@@ -7956,8 +7956,8 @@ if (isDead) {
                     
 window.openShopAsync = async (namePart) => {
                         const sleep = ms => new Promise(r => setTimeout(r, ms));
-                        const targetName = (namePart || "").toLowerCase();
-
+                        // KLUCZOWE: Odcinamy "(elita)" lub inne dopiski z bazy danych!
+                        const targetName = (namePart || "").split('(')[0].trim().toLowerCase();
                         console.log("🛒 [AUTO-SELL] Inicjacja dla:", namePart);
 
                         // 1. ZABEZPIECZENIE MAPY (Czekamy, aż zniknie kran ładowania)
