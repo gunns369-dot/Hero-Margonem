@@ -5382,7 +5382,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
 
-    // --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
+   // --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
     if (expLastMapName !== currMap) {
         window.expLastVisitedMap = expLastMapName;
         expLastMapName = currMap;
@@ -5393,6 +5393,9 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
         window.expUnreachableMobs.clear();
+        
+        // KLUCZOWA POPRAWKA: Twarde formatowanie mózgu z potworów po przejściu bramy!
+        if (window.expMonsterCache) window.expMonsterCache.clear();
 
         window.expGatewayStandTime = 0;
         window.expGatewayArrivalTime = 0;
