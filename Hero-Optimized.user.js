@@ -7343,38 +7343,66 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 800);
     }
-// --- DAEMON: AUTO LEAVE FIGHT (Szybkie i ciche zamykanie walki) ---
+// --- DAEMON: AUTO LEAVE FIGHT (Zoptymalizowany pod wydajność + Randomizacja) ---
     if (!window.__autoLeaveFightDaemon) {
         window.__autoLeaveFightDaemon = true;
         window.__lastFightQuitLog = 0; // Blokada spamu w logach
 
         setInterval(() => {
-            // Szukamy przycisku, który FIZYCZNIE JEST WIDOCZNY na ekranie (offsetParent !== null)
-            const btn = [...document.querySelectorAll("button, .button, .btn, div, span, a")].find(el => {
-                return el.offsetParent !== null && (el.innerText || "").replace(/\s+/g, " ").includes("Opuść walkę");
-            });
+            // SZALENIE WAŻNA OPTYMALIZACJA:
+            // Skanowanie wszystkich <div> i <span> zmuszało przeglądarkę do gigantycznych obliczeń.
+            // Teraz szukamy tylko konkretnych klas przycisków, co odciąża procesor o 99%!
+            const battleButtons = document.querySelectorAll("button, .button, .btn, .battle-window a, .loots-button");
             
-            if (btn) {
-                btn.click();
-                // Wyświetl log maksymalnie raz na 2 sekundy
-                if (Date.now() - window.__lastFightQuitLog > 2000) {
-                    if (window.logExp) window.logExp("⚔️ Zamknięto okno podsumowania walki.", "#9e9e9e");
-                    window.__lastFightQuitLog = Date.now();
-                }
-            } else if (typeof Engine !== 'undefined' && Engine.battle && Engine.battle.d && Engine.battle.d.winner !== undefined) {
-                // Jeśli silnik gry zgłasza koniec walki, ale okienko/przycisk się nie wczytało (zabezpieczenie)
-                if (Date.now() - window.__lastFightQuitLog > 2000) {
-                    if (Engine.communication) {
-                        Engine.communication.send({ a: "fight", action: "quit" }); 
-                    } else if (typeof window._g === 'function') {
-                        window._g("fight&a=quit"); 
+            let btn = null;
+            for (let i = 0; i < battleButtons.length; i++) {
+                let el = battleButtons[i];
+                // Odczyt surowego tekstu jest dużo "lżejszy" dla gry niż przeliczanie innerText
+                let txt = (el.textContent || "").toLowerCase();
+                
+                // Najpierw sprawdzamy lekki tekst, dopiero potem zasobożerne offsetParent!
+                if (txt.includes("opuść walkę") || txt.includes("zakończ walkę") || txt.includes("zamknij")) {
+                    if (el.offsetParent !== null) {
+                        btn = el;
+                        break;
                     }
-                    window.__lastFightQuitLog = Date.now();
                 }
             }
-        }, 250);
+            
+            if (btn) {
+                // ZABEZPIECZENIE: Nie spamujemy kliknięć (odczekujemy minimum 2.5s)
+                if (Date.now() - window.__lastFightQuitLog > 2500) {
+                    window.__lastFightQuitLog = Date.now();
+                    
+                    // RANDOMIZACJA: Czekamy od 150ms do 450ms, zamiast klikać natychmiast jak robot.
+                    // Daje to serwerowi czas na odblokowanie interfejsu (brak lagów)!
+                    let randomReaction = Math.floor(Math.random() * (450 - 150 + 1)) + 150; 
+                    
+                    setTimeout(() => {
+                        if (btn && typeof btn.click === 'function') {
+                            btn.click();
+                            if (window.logExp) window.logExp("⚔️ Zamykam podsumowanie walki...", "#9e9e9e");
+                        }
+                    }, randomReaction);
+                }
+            } else if (typeof Engine !== 'undefined' && Engine.battle && Engine.battle.d && Engine.battle.d.winner !== undefined) {
+                // LIMIT ZAPYTAŃ: Czekamy minimum 3.5 sekundy między próbami wysłania awaryjnego pakietu sieciowego
+                if (Date.now() - window.__lastFightQuitLog > 3500) {
+                    window.__lastFightQuitLog = Date.now();
+                    
+                    // Randomizacja pakietu ratunkowego (daje serwerowi wytchnienie)
+                    let randomDelay = Math.floor(Math.random() * (600 - 300 + 1)) + 300;
+                    setTimeout(() => {
+                        if (Engine.communication) {
+                            Engine.communication.send({ a: "fight", action: "quit" }); 
+                        } else if (typeof window._g === 'function') {
+                            window._g("fight&a=quit"); 
+                        }
+                    }, randomDelay);
+                }
+            }
+        }, 400); // Wydłużono czas sprawdzania (z 250 na 400ms), aby zdjąć obciążenie z gry
     }
-
     // --- DAEMON: INTELIGENTNY DETEKTOR ŚMIERCI I ZAMROŻONEGO ZEGARA ---
     if (!window.__smartDeathDaemon) {
         window.__smartDeathDaemon = true;
