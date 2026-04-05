@@ -7955,7 +7955,6 @@ if (isDead) {
                     };
                     
   window.openShopAsync = async (namePart) => {
-                        // Twoja innowacyjna funkcja szukania (bezpośrednie values):
                         const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
                         const targetName = (namePart || "").toLowerCase();
 
@@ -7971,11 +7970,11 @@ if (isDead) {
 
                         const hero = () => Engine?.hero?.d || Engine?.hero || null;
 
-                        // Używamy dystansu kratkowego (Manhattan), bo taki stosuje gra
+                        // WŁAŚCIWA MATEMATYKA: Używamy dystansu Chebyshev'a (jak w grze - na ukos to też 1 kratka dystansu!)
                         const distToNpc = () => {
                             const h = hero();
                             if (!h || !npc) return 999;
-                            return Math.abs((h.x ?? 0) - npc.x) + Math.abs((h.y ?? 0) - npc.y);
+                            return Math.max(Math.abs((h.x ?? 0) - npc.x), Math.abs((h.y ?? 0) - npc.y));
                         };
 
                         const isStandingStill = () => {
@@ -8020,14 +8019,21 @@ if (isDead) {
                             return false;
                         };
 
-                       // 1. PODEJŚCIE (DYSTANS 1 KRATKA - Bezpośrednio obok NPC)
+                        // 1. PODEJŚCIE (Z PONAWIANIEM, BO SILNIK MOŻE ZGUBIĆ ŚCIEŻKĘ PO TELEPORCIE LUB PRZEJŚCIU MAPY)
                         if (distToNpc() > 1) {
-                            try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch (e) {}
+                            // "Krzyczymy" do gry co 800ms, żeby postać biegła - nie da się zatrzymać na ładowaniu mapy!
+                            let moveInterval = setInterval(() => {
+                                if (distToNpc() > 1) {
+                                    try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch(e) {}
+                                }
+                            }, 800);
                             
-                            // Czekamy aż wejdzie w zasięg <= 1 kratki
-                            const reached = await window.waitFor(() => distToNpc() <= 1, 9000, 120);
+                            // Czekamy aż wejdzie w zasięg <= 1 kratki (Zwiększono timeout na 15s na wypadek długiej mapy)
+                            const reached = await window.waitFor(() => distToNpc() <= 1, 15000, 200);
+                            clearInterval(moveInterval); // Jak dobiegnie, wyłączamy krzyczenie
+                            
                             if (!reached) {
-                                console.warn("[AUTO-SELL] Nie udało się podejść do NPC (zacięcie):", npc.nick);
+                                console.warn("[AUTO-SELL] Nie udało się podejść do NPC (zacięcie w terenie):", npc.nick);
                                 return false;
                             }
                         }
@@ -8038,7 +8044,7 @@ if (isDead) {
                         // Humanizacja: Ułamek sekundy oddechu po dobiegnięciu (200-400ms)
                         await window.sleep(Math.floor(Math.random() * 200) + 200);
 
-                        // 3. INTERAKCJA Z NPC (Z losowymi odstępami czasowymi)
+                        // 3. INTERAKCJA Z NPC (Z losowymi odstępami czasowymi i powtarzaniem w razie lagu serwera)
                         for (let attempt = 1; attempt <= 4; attempt++) {
                             if (getOpenDialogueNow()) break;
 
@@ -8053,7 +8059,7 @@ if (isDead) {
                                 if (typeof Engine?.interface?.clickTalkNearMob === "function") Engine.interface.clickTalkNearMob();
                             } catch (e) {}
 
-                            // Humanizacja przed wysłaniem komendy twardej (jeśli UI nie załapie)
+                            // Humanizacja przed wysłaniem komendy twardej
                             await window.sleep(Math.floor(Math.random() * 100) + 150);
 
                             if (getOpenDialogueNow()) break;
@@ -8078,7 +8084,7 @@ if (isDead) {
                             return false;
                         }
 
-                        // Humanizacja: Udawanie odczytywania tekstu przez gracza
+                        // Humanizacja: Udawanie odczytywania powitania przez gracza
                         await window.sleep(Math.floor(Math.random() * 300) + 250);
 
                         const optionReady = await window.waitFor(() => !!findShopOptionNow(), 2500, 80);
@@ -8103,7 +8109,7 @@ if (isDead) {
                             return false;
                         }
                         
-                        // Humanizacja: Ładowanie przedmiotów w oknie sklepu
+                        // Humanizacja: Ładowanie wizualne zawartości okna sklepu
                         await window.sleep(Math.floor(Math.random() * 300) + 300);
 
                         return true;
