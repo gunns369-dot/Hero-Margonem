@@ -8121,14 +8121,16 @@ if (isDead) {
         );
     }, 2500, 80);
 
-    if (!shopOpened) {
+   if (!shopOpened) {
         console.warn("[AUTO-SELL] Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
         return false;
     }
 
     return true;
 };
-             // --- GŁÓWNA LOGIKA KROKU 1 ---
+} // <--- TEN JEDEN NAWIAS NAPRAWIA CAŁY SKRYPT!
+
+                // --- GŁÓWNA LOGIKA KROKU 1 ---
                 if (window.autoSellState.step === 1) {
                     if (!window.autoSellState.failedNPCs) {
                         window.autoSellState.failedNPCs = [];
