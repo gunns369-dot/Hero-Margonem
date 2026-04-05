@@ -7954,8 +7954,7 @@ if (isDead) {
                         }) || null;
                     };
                     
- window.openShopAsync = async (namePart) => {
-                        // Twój nowy sposób mapowania NPC
+window.openShopAsync = async (namePart) => {
                         const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
                         const targetName = (namePart || "").toLowerCase();
 
@@ -7965,7 +7964,7 @@ if (isDead) {
                         }) || null;
 
                         if (!npc) {
-                            console.warn("[AUTO-SELL/WALK] Nie znaleziono celu:", namePart);
+                            console.warn("[AUTO-SELL] Nie znaleziono NPC:", namePart);
                             return false;
                         }
 
@@ -7984,36 +7983,6 @@ if (isDead) {
                             return (!pathA || pathA.length === 0) && (!pathB || pathB.length === 0);
                         };
 
-                        // NOWOŚĆ: Wyliczanie najbliższej wolnej kratki obok Elity / NPC!
-                        const getSafeTile = () => {
-                            const h = hero();
-                            const spots = [
-                                {x: npc.x - 1, y: npc.y}, {x: npc.x + 1, y: npc.y},
-                                {x: npc.x, y: npc.y - 1}, {x: npc.x, y: npc.y + 1},
-                                {x: npc.x - 1, y: npc.y - 1}, {x: npc.x + 1, y: npc.y - 1},
-                                {x: npc.x - 1, y: npc.y + 1}, {x: npc.x + 1, y: npc.y + 1}
-                            ];
-                            
-                            // Wywalamy kratki, na które nie da się wejść fizycznie
-                            let freeSpots = spots.filter(s => {
-                                if (typeof Engine?.map?.checkCollision === 'function') {
-                                    return !Engine.map.checkCollision(s.x, s.y);
-                                }
-                                return true;
-                            });
-                            
-                            if (freeSpots.length === 0) return {x: npc.x, y: npc.y}; // Awaryjny fallback
-                            
-                            // Wybieramy kratkę, do której my mamy najbliżej
-                            freeSpots.sort((a, b) => {
-                                let dA = Math.max(Math.abs(h.x - a.x), Math.abs(h.y - a.y));
-                                let dB = Math.max(Math.abs(h.x - b.x), Math.abs(h.y - b.y));
-                                return dA - dB;
-                            });
-                            
-                            return freeSpots[0];
-                        };
-
                         const getOpenDialogueNow = () => document.querySelector(".dialogue-window.is-open, #dialog, .dialog-window");
 
                         const findShopOptionNow = () => {
@@ -8030,7 +7999,8 @@ if (isDead) {
 
                             return answers.find(el => {
                                 const txt = (el.innerText || el.textContent || "").toLowerCase().trim();
-                                return txt.includes("pokaż mi, co masz na sprzedaż") || txt.includes("co masz na sprzedaż") || txt.includes("sprzedaż") || txt.includes("sprzedaz") || txt.includes("handel") || txt.includes("kup");
+                                // Zaimplementowano szersze poszukiwanie z Twojego kodu ("co masz")
+                                return txt.includes("pokaż mi, co masz") || txt.includes("co masz") || txt.includes("sprzedaż") || txt.includes("sprzedaz") || txt.includes("handel") || txt.includes("kup");
                             }) || null;
                         };
 
@@ -8049,64 +8019,81 @@ if (isDead) {
                             return false;
                         };
 
-                        // 1. PODEJŚCIE - Bieg na bezpieczną kratkę OBOK NPC
+                        // 1. PODEJŚCIE (Z wykorzystaniem Twojej logiki pętli wymuszającej dojście)
                         if (distToNpc() > 1) {
-                            let moveInterval = setInterval(() => {
-                                if (distToNpc() > 1) {
-                                    let safeTile = getSafeTile();
-                                    try { Engine?.hero?.autoGoTo?.({x: safeTile.x, y: safeTile.y}); } catch(e) {}
-                                    
-                                    // Dodatkowe, twarde uderzenie w silnik (Działa świetnie na elity!)
-                                    try { if (typeof Engine?.npcs?.clickNpc === "function") Engine.npcs.clickNpc(npc.id); } catch(e) {}
+                            try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch(e) {}
+                            
+                            for (let i = 0; i < 60; i++) { // Max 60 skanów * 150ms = 9 sekund
+                                if (distToNpc() <= 1) break;
+                                
+                                // Ponawiamy komendę co ok. 1 sekundę na wypadek laga / odświeżenia mapy
+                                if (i > 0 && i % 8 === 0) {
+                                    try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch(e) {}
                                 }
-                            }, 800);
+                                await window.sleep(150);
+                            }
                             
-                            const reached = await window.waitFor(() => distToNpc() <= 1, 15000, 200);
-                            clearInterval(moveInterval); 
-                            
-                            if (!reached) {
-                                console.warn("[AUTO-SELL/WALK] Cel zablokowany, brak dostępu:", npc.nick);
+                            if (distToNpc() > 1) {
+                                console.warn("[AUTO-SELL/WALK] Cel zablokowany, brak dostępu do:", npc.nick);
                                 return false;
                             }
                         }
 
-                        // Jeśli celem była Elita do zaatakowania (type 2), możemy tu przerwać, bo walka zaraz się zacznie!
+                        // 2. ODDECH I ODBLOKOWANIE POSTACI (Twoje genialne rozwiązanie!)
+                        await window.waitFor(() => isStandingStill(), 2500, 80);
+                        await window.sleep(Math.floor(Math.random() * 150) + 150);
+
+                        // KLUCZOWE: Czasem silnik blokuje zmienną 'stop' na true. Odblokowujemy!
+                        if (typeof Engine !== 'undefined' && Engine.hero) {
+                            Engine.hero.stop = false;
+                        }
+                        
+                        await window.sleep(300); // Twarde opóźnienie z Twojego kodu po odblokowaniu
+
+                        // Jeśli celem była Elita (type 2), możemy tu przerwać, bo walka zaraz się zacznie sama!
                         if (npc.type === 2 || npc.type === 3) return true;
 
-                        // 2. CZEKAMY AŻ NOGI BOHATERA SIĘ ZATRZYMAJĄ
-                        await window.waitFor(() => isStandingStill(), 2500, 80);
-                        await window.sleep(Math.floor(Math.random() * 200) + 200);
-
-                        // 3. INTERAKCJA Z NPC (Sklepowym)
+                        // 3. INTERAKCJA Z NPC (Z użyciem Twojego sendRequestToTalk)
                         for (let attempt = 1; attempt <= 4; attempt++) {
                             if (getOpenDialogueNow()) break;
 
+                            // Zaznaczenie NPC
                             try { if (typeof Engine?.npcs?.clickNpc === "function") Engine.npcs.clickNpc(npc.id); } catch (e) {}
                             await window.sleep(Math.floor(Math.random() * 100) + 150);
 
-                            try { if (typeof Engine?.interface?.clickTalkNearMob === "function") Engine.interface.clickTalkNearMob(); } catch (e) {}
-                            await window.sleep(Math.floor(Math.random() * 100) + 150);
-
-                            if (getOpenDialogueNow()) break;
-
+                            // Prawdziwe natywne rozpoczęcie dialogu (Bypassuje UI)
                             try {
-                                if (typeof Engine?.communication?.send === "function") Engine.communication.send({ a: "talk", id: npc.id });
-                                else if (typeof window._g === "function") window._g(`talk&id=${npc.id}`);
+                                if (typeof Engine?.hero?.sendRequestToTalk === "function") {
+                                    Engine.hero.sendRequestToTalk(npc.id);
+                                } else if (typeof Engine?.interface?.clickTalkNearMob === "function") {
+                                    Engine.interface.clickTalkNearMob();
+                                } else if (typeof Engine?.communication?.send === "function") {
+                                    Engine.communication.send({ a: "talk", id: npc.id });
+                                } else if (typeof window._g === "function") {
+                                    window._g(`talk&id=${npc.id}`);
+                                }
                             } catch (e) {}
 
-                            const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1200, 80);
+                            const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1500, 80);
                             if (opened) break;
 
                             await window.sleep(Math.floor(Math.random() * 200) + 200);
                         }
 
                         const dialogueOpened = await window.waitFor(() => !!getOpenDialogueNow(), 2500, 80);
-                        if (!dialogueOpened) return false;
+                        if (!dialogueOpened) {
+                            console.warn("[AUTO-SELL] Dialog z NPC się nie otworzył:", npc.nick);
+                            return false;
+                        }
 
+                        // Humanizacja: Udawanie odczytywania powitania przez gracza przed kliknięciem w opcje
                         await window.sleep(Math.floor(Math.random() * 300) + 250);
 
                         const optionReady = await window.waitFor(() => !!findShopOptionNow(), 2500, 80);
-                        if (!optionReady) return false;
+                        if (!optionReady) {
+                            console.warn("[AUTO-SELL] Nie znaleziono opcji sklepu w dialogu:", npc.nick);
+                            return false;
+                        }
 
                         const shopOption = findShopOptionNow();
                         clickLikeHuman(shopOption);
@@ -8118,7 +8105,10 @@ if (isDead) {
                             );
                         }, 2500, 80);
 
-                        if (!shopOpened) return false;
+                        if (!shopOpened) {
+                            console.warn("[AUTO-SELL] Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
+                            return false;
+                        }
                         
                         await window.sleep(Math.floor(Math.random() * 300) + 300);
                         return true;
