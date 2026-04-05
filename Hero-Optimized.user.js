@@ -7340,86 +7340,87 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 800);
     }
-// --- DAEMON: MUTATION OBSERVER (Szybki Wykrywacz Śmierci Twojego autorstwa) ---
-    if (!window.__deathObserverInstalled) {
-        window.__deathObserverInstalled = true;
+// --- DAEMON: INTELIGENTNY DETEKTOR ŚMIERCI I ZAMROŻONEGO ZEGARA ---
+    if (!window.__smartDeathDaemon) {
+        window.__smartDeathDaemon = true;
         window.__unconscious = false;
+        window.__lastParsedSeconds = null;
+        window.__stuckTimerCount = 0;
 
-        let lastCheck = 0;
-        const observer = new MutationObserver(() => {
-            let now = Date.now();
-            if (now - lastCheck < 500) return; // Limitujemy do 2 skanów na sekundę, by nie zabić FPS
-            lastCheck = now;
+        // AUTO-WZNOWIENIE BOTA PO ZMUSZONYM ODŚWIEŻENIU STRONY
+        if (sessionStorage.getItem('margoBotAutoResume') === 'true') {
+            sessionStorage.removeItem('margoBotAutoResume');
+            setTimeout(() => {
+                if (window.logExp) window.logExp("🔄 Gra przeładowana. Wznawiam automatycznie pracę bota!", "#4caf50");
+                let btn = document.getElementById('btnStartExp') || document.getElementById('btnStartStop');
+                if (btn && btn.innerText.includes('START')) btn.click();
+            }, 3500); // Dajemy grze 3.5 sekundy na pełne wczytanie mapy
+        }
 
-            // textContent jest ultra szybkie i nie renderuje CSS
-            const isDead = document.body.textContent.includes("Jesteś nieprzytomny");
+        setInterval(() => {
+            // Szukamy tylko w konkretnych oknach, żeby ignorować trolli na czacie!
+            let deadWindows = Array.from(document.querySelectorAll('.dead-window, .death-window, [data-wnd="dead"], .alert-window, .dialog-window')).filter(el => {
+                return el.offsetParent !== null && (el.textContent.includes("Jesteś nieprzytomny") || el.textContent.includes("Zostałeś zabity"));
+            });
+            
+            let isEngineDead = (typeof Engine !== 'undefined') && (Engine.dead || (Engine.hero && Engine.hero.d && (Engine.hero.d.dead === 1 || Engine.hero.d.dead === true)));
+            let isDead = deadWindows.length > 0 || isEngineDead;
 
             if (isDead && !window.__unconscious) {
                 window.__unconscious = true;
-                if (window.logExp) window.logExp("💀 [OBSERVER] Wykryto zgon! Zatrzymuję bota...", "#e53935");
-                
-                // Natychmiastowy reset celów i ścieżek
+                if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zatrzymuję bota...", "#e53935");
                 if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                expCurrentTargetId = null;
-                window.expTargetLockTime = 0;
-                window.expLastMoveTx = -1; window.expLastMoveTy = -1;
             }
 
             if (!isDead && window.__unconscious) {
                 window.__unconscious = false;
-                if (window.logExp) window.logExp("✅ [OBSERVER] Ożyłeś. Wracamy do akcji!", "#4caf50");
-            }
-        });
-
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
-    // --- DAEMON: DEATH TIMER WATCHDOG (Zabezpieczenie przed zaciętym zegarem) ---
-    if (!window.__deathTimerWatchdogInstalled) {
-        window.__deathTimerWatchdogInstalled = true;
-        window.__lastParsedSeconds = null;
-        window.__stuckTimerCount = 0;
-
-        setInterval(() => {
-            // Uruchamiamy sprawdzanie zegara TYLKO gdy postać nie żyje (zmienna z Mutation Observera)
-            if (!window.__unconscious) {
-                window.__lastParsedSeconds = null;
                 window.__stuckTimerCount = 0;
-                return;
+                window.__lastParsedSeconds = null;
+                if (window.logExp) window.logExp("✅ [STRAŻNIK] Ożyłeś. Wracamy do akcji!", "#4caf50");
             }
 
-            // Używamy textContent dla wydajności
-            const text = document.body.textContent; 
-            let seconds = null;
-
-            // Sprytny Regex łapiący zarówno "1min 15s" jak i samo "45s"
-            const match = text.match(/(?:(\d+)\s*min\s*)?(\d+)\s*s/);
-            
-            if (match) {
-                let m = parseInt(match[1]) || 0;
-                let s = parseInt(match[2]) || 0;
-                seconds = m * 60 + s;
-            }
-
-            if (seconds !== null) {
-                // Jeśli sekundy się nie zmieniły od ostatniego sprawdzenia, nabijamy licznik zacięcia
-                if (window.__lastParsedSeconds === seconds) {
-                    window.__stuckTimerCount++;
-                } else {
-                    window.__lastParsedSeconds = seconds;
-                    window.__stuckTimerCount = 0; // Zegar działa poprawnie, resetujemy
+            // WATCHDOG ZEGARA (działa tylko gdy mamy 100% pewności, że nie żyjemy)
+            if (window.__unconscious && deadWindows.length > 0) {
+                let text = deadWindows[0].textContent;
+                let match = text.match(/(?:(\d+)\s*min\s*)?(\d+)\s*s/);
+                let seconds = null;
+                
+                if (match) {
+                    let m = parseInt(match[1]) || 0;
+                    let s = parseInt(match[2]) || 0;
+                    seconds = m * 60 + s;
                 }
 
-                // Jeśli zegar stoi na tej samej wartości przez pełne 5 sekund...
-                if (window.__stuckTimerCount >= 5) {
-                    if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Odświeżam grę...`, "#ffb300");
-                    else console.warn(`🔄 Zegar zamarzł na ${seconds}s. Odświeżam...`);
-                    
-                    window.__stuckTimerCount = -999; // Zabezpieczenie przed spamem
-                    
-                    // Twardy reload strony
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
+                if (seconds !== null) {
+                    if (window.__lastParsedSeconds === seconds) {
+                        window.__stuckTimerCount++;
+                    } else {
+                        window.__lastParsedSeconds = seconds;
+                        window.__stuckTimerCount = 0; 
+                    }
+
+                    // Gra zamrożona na tej samej sekundzie przez 6 sekund
+                    if (window.__stuckTimerCount >= 6) {
+                        if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Ratuję sytuację...`, "#ffb300");
+                        window.__stuckTimerCount = -999; 
+                        
+                        // Ratunek 1: Próbujemy po cichu wysłać komendę wstrząsu do serwera (bez odświeżania strony)
+                        if (typeof Engine !== 'undefined' && Engine.communication) {
+                            Engine.communication.send({ "a": "deadresp" });
+                        } else if (typeof window._g === 'function') {
+                            window._g('deadresp');
+                        }
+
+                        // Ratunek 2: Jeśli po kolejnych 3 sekundach serwer dalej nie odpowiada - Twardy Reset
+                        setTimeout(() => {
+                            if (window.__unconscious) {
+                                if (window.isExping || window.isPatrolling) {
+                                    sessionStorage.setItem('margoBotAutoResume', 'true'); // Zapisujemy info, że bot pracował
+                                }
+                                window.location.reload();
+                            }
+                        }, 3000);
+                    }
                 }
             }
         }, 1000);
