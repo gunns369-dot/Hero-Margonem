@@ -7932,7 +7932,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             return; 
                         }
 
-                        // 3. Postać stoi w miejscu obok kupca - ROZPOCZYNAMY ROZMOWĘ
+                       // 3. Postać stoi w miejscu obok kupca - ROZPOCZYNAMY ROZMOWĘ
                         let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
                         for (let i in npcs) {
                             let n = npcs[i].d || npcs[i];
@@ -7940,31 +7940,37 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             
                             if (cleanNick.includes(bestNpc.npc_name) || bestNpc.npc_name.includes(cleanNick)) {
                                 
+                                // TWOJA FUNKCJA POCIĘTA NA KROKI CZASOWE
                                 if (typeof Engine !== 'undefined' && Engine.npcs && typeof Engine.npcs.clickNpc === 'function') {
+                                    // Krok 1: Wybieramy NPC
                                     Engine.npcs.clickNpc(n.id);
-                                    
-                                    // Pół sekundy opóźnienia, by dać serwerowi czas na "połączenie" z NPC
-                                    setTimeout(() => {
-                                        if (Engine.interface && typeof Engine.interface.clickTalkNearMob === 'function') {
-                                            Engine.interface.clickTalkNearMob();
-                                        }
-                                    }, 400);
+                                    window.autoSellState.step = 1.5; // Przechodzimy do ukrytego kroku!
+                                    window.autoSellState.shopWaitStartTime = Date.now();
+                                    window.autoSellState.nextActionTime = Date.now() + 200; // Twarde 200ms z Twojego kodu
                                 } else if (typeof Engine !== 'undefined' && Engine.communication) {
                                     Engine.communication.send({ "a": "talk", "id": n.id });
+                                    window.autoSellState.step = 2;
+                                    window.autoSellState.shopWaitStartTime = Date.now();
+                                    window.autoSellState.nextActionTime = Date.now() + 500;
                                 } else {
                                     window._g(`talk&id=${n.id}`);
+                                    window.autoSellState.step = 2;
+                                    window.autoSellState.shopWaitStartTime = Date.now();
+                                    window.autoSellState.nextActionTime = Date.now() + 500;
                                 }
-                                
-                                window.autoSellState.step = 2;
-                                window.autoSellState.shopWaitStartTime = Date.now();
-                                window.autoSellState.nextActionTime = Date.now() + 1200; // Bezpieczny czas na wczytanie okienka
                                 break;
                             }
                         }
                     }
-                }
+                } else if (window.autoSellState.step === 1.5) {
+                    // Krok 1.5: Inicjacja rozmowy z zaznaczonym NPC
+                    if (typeof Engine !== 'undefined' && Engine.interface && typeof Engine.interface.clickTalkNearMob === 'function') {
+                        Engine.interface.clickTalkNearMob();
+                    }
+                    window.autoSellState.step = 2;
+                    window.autoSellState.nextActionTime = Date.now() + 500; // Twarde 500ms z Twojego kodu na wczytanie opcji
                 } else if (window.autoSellState.step === 2) {
-                    // TWOJA POPRAWKA: Precyzyjne wyszukiwanie opcji handlu (w tym klasa .line_shop)
+                    // Krok 2: Kliknięcie w otwarty już dialog
                     const shopOption = document.querySelector(".dialogue-window.is-open .dialogue-window-answer.line_shop") || 
                                        [...document.querySelectorAll(".dialogue-window.is-open .dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer")]
                                        .find(el => {
@@ -7973,12 +7979,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                                        });
 
                     if (shopOption) {
+                        if (window.logExp) window.logExp(`✅ Otwieram sklep u: ${window.autoSellState.targetNpc.npc_name}`, "#ffb300");
                         shopOption.click();
                         window.autoSellState.step = 3;
-                        window.autoSellState.nextActionTime = Date.now() + 1000; // Oczekiwanie na pobranie itemów
-                        if (window.logExp) window.logExp(`✅ Otwieram sklep u: ${window.autoSellState.targetNpc.npc_name}`, "#ffb300");
+                        window.autoSellState.nextActionTime = Date.now() + 1000; 
                     } else {
-                        // Timeout awaryjny - jeśli po 3.5 sekundach dialog dalej nie ma opcji handlu
                         if (Date.now() - window.autoSellState.shopWaitStartTime > 3500) {
                              if (window.logHero) window.logHero(`⚠️ Nie mogę znaleźć opcji sklepu u: ${window.autoSellState.targetNpc.npc_name}. Szukam innego...`, "#ff9800");
                              let closeBtn = document.querySelector('.dialogue-window.is-open .close-button, #dialog .close-button, .dialog-window .close-button');
