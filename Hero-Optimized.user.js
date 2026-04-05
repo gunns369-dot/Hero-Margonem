@@ -7958,13 +7958,17 @@ window.openShopAsync = async (namePart) => {
                         const sleep = ms => new Promise(r => setTimeout(r, ms));
                         const targetName = (namePart || "").toLowerCase();
 
-                        // 1. ZABEZPIECZENIE: Czekamy, aż zniknie ekran ładowania mapy
-                        while (Engine.map?.isLoading) {
+                        console.log("🛒 [AUTO-SELL] Inicjacja dla:", namePart);
+
+                        // 1. ZABEZPIECZENIE MAPY (Czekamy, aż zniknie kran ładowania)
+                        for (let w = 0; w < 50; w++) {
+                            if (!Engine.map?.isLoading) break;
                             await sleep(100);
                         }
-                        await sleep(500); // Twardy oddech po załadowaniu mapy (żeby zespawniło NPC)
+                        // Twardy oddech po wejściu na mapę (moby muszą się pojawić, a blokady ruchu wygasnąć)
+                        await sleep(800); 
 
-                        // 2. SZUKAMY NPC (Wg Twojego schematu)
+                        // 2. ZNALEZIENIE NPC (Wg Twojego schematu)
                         let npc = null;
                         for (let k = 0; k < 50; k++) {
                             npc = Object.values(Engine.npcs?.check?.() || {})
@@ -7976,52 +7980,67 @@ window.openShopAsync = async (namePart) => {
                         }
 
                         if (!npc) {
-                            console.warn("❌ brak NPC:", namePart);
+                            console.warn("❌ [A] Brak NPC na mapie po załadowaniu:", namePart);
                             return false;
                         }
 
-                        console.log(`🚶 Idę do ${npc.nick}...`);
+                        console.log(`🚶 [AUTO-SELL] Idę do ${npc.nick} (X: ${npc.x}, Y: ${npc.y})...`);
 
-                        // 🔑 poprawne wywołanie
-                        try { Engine.hero.autoGoTo({x: npc.x, y: npc.y}); } catch(e){}
-
-                        // ⏳ czekaj aż podejdzie
-                        for (let i = 0; i < 40; i++) {
+                        // 3. DOJŚCIE DO NPC
+                        let reached = false;
+                        for (let i = 0; i < 60; i++) { // 6 sekund
                             const h = Engine.hero?.d || Engine.hero;
-                            if (!h) continue;
+                            if (!h) { await sleep(100); continue; }
+                            
                             const dist = Math.max(Math.abs(h.x - npc.x), Math.abs(h.y - npc.y));
 
-                            if (dist <= 1) break;
+                            if (dist <= 1) {
+                                reached = true;
+                                break;
+                            }
                             
-                            // Ponawiamy komendę co 1 sekundę na wypadek zgubienia ścieżki
-                            if (i > 0 && i % 10 === 0 && dist > 1) { 
-                                try { Engine.hero.autoGoTo({x: npc.x, y: npc.y}); } catch(e){}
+                            // Agresywne ponawianie ruchu (omijamy wewnętrzne blokady anti-stuck bota!)
+                            if (i % 10 === 0) { 
+                                try {
+                                    if (typeof window.originalAutoWalk === 'function') {
+                                        window.originalAutoWalk.call(Engine.hero, npc.x, npc.y);
+                                    } else {
+                                        Engine.hero.autoGoTo({x: npc.x, y: npc.y}); 
+                                    }
+                                } catch(e){}
                             }
                             
                             await sleep(100);
                         }
 
-                        console.log("🛑 Odblokowuję stop...");
+                        // KRYTYCZNE: Jeśli nie podszedł, nie ma sensu klikać w dialog z 10 kratek!
+                        if (!reached) {
+                            console.warn("❌ [B] Bot nie mógł podejść do NPC (Dystans > 1). Omijam.");
+                            return false;
+                        }
+
+                        console.log("🛑 [AUTO-SELL] Odblokowuję stop...");
                         if (Engine.hero) Engine.hero.stop = false;
 
-                        await sleep(300);
+                        await sleep(400);
 
-                        // Jeżeli cel to Elita (nie sprzedawca), kończymy tu pracę, zaraz zacznie się walka
+                        // Jeśli to elita/potwór, walka zaraz włączy się sama
                         if (npc.type === 2 || npc.type === 3) return true;
 
-                        console.log("💬 Rozmowa...");
+                        console.log("💬 [AUTO-SELL] Rozmowa...");
 
+                        // --- 1:1 TWÓJ KOD ROZMOWY ---
                         try { Engine.npcs?.clickNpc?.(npc.id); } catch(e) {}
                         await sleep(200);
 
-                        try { Engine.hero?.sendRequestToTalk?.(npc.id); } catch(e) {}
-                        
-                        // Zapas awaryjny (do wstecznej kompatybilności)
-                        try { if (typeof window._g === 'function') window._g(`talk&id=${npc.id}`); } catch(e) {}
+                        try { 
+                            if (typeof Engine.hero?.sendRequestToTalk === 'function') Engine.hero.sendRequestToTalk(npc.id); 
+                            else if (typeof window._g === 'function') window._g(`talk&id=${npc.id}`);
+                        } catch(e) {}
 
-                        await sleep(500);
+                        await sleep(600);
 
-                        // 🛒 SZUKAMY PRZYCISKU SKLEPU
+                        // 4. SZUKANIE PRZYCISKU SKLEPU
                         let shopBtn = null;
                         for (let i = 0; i < 20; i++) {
                             shopBtn = [...document.querySelectorAll(".dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer, #dialog li")]
@@ -8034,16 +8053,17 @@ window.openShopAsync = async (namePart) => {
                         }
 
                         if (!shopBtn) {
-                            console.warn("❌ brak opcji sklepu u:", npc.nick);
+                            console.warn("❌ [C] Brak opcji sklepu u:", npc.nick);
                             return false;
                         }
 
-                        console.log("🛒 Otwieram sklep...");
+                        console.log("🛒 [AUTO-SELL] Otwieram sklep...");
                         try { shopBtn.click(); } catch(e){}
 
-                        // ⏳ Czekamy na załadowanie interfejsu sklepu
+                        // 5. WERYFIKACJA OTWARCIA SKLEPU
+                        let shopOpened = false;
                         for (let i = 0; i < 30; i++) {
-                            let shopOpened = !!(
+                            shopOpened = !!(
                                 Engine?.shop?.wnd || Engine?.shop?.getData?.() ||
                                 document.querySelector(".shop-window, .shop, .trade-window, .merchant-window")
                             );
@@ -8051,7 +8071,13 @@ window.openShopAsync = async (namePart) => {
                             await sleep(100);
                         }
 
-                        await sleep(400); // Ostatni margines czasu na zsynchronizowanie plecaka
+                        if (!shopOpened) {
+                            console.warn("❌ [D] Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
+                            return false;
+                        }
+
+                        await sleep(500); // Twardy margines czasu na zsynchronizowanie plecaka z nowym oknem
+                        console.log("✅ [AUTO-SELL] Sklep otwarty pomyślnie.");
                         return true;
                     };
 } // <--- TEN JEDEN NAWIAS NAPRAWIA CAŁY SKRYPT!
