@@ -7343,27 +7343,33 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 800);
     }
-// --- DAEMON: AUTO LEAVE FIGHT (Szybkie zamykanie podsumowania walki) ---
+// --- DAEMON: AUTO LEAVE FIGHT (Szybkie i ciche zamykanie walki) ---
     if (!window.__autoLeaveFightDaemon) {
         window.__autoLeaveFightDaemon = true;
+        window.__lastFightQuitLog = 0; // Blokada spamu w logach
+
         setInterval(() => {
-            const text = document.body.textContent || "";
-            // Szukamy słów kluczowych oznaczających koniec walki
-            if (text.includes("Walka zakończona.") || text.includes("Opuść walkę")) {
-                const btn = [...document.querySelectorAll("button, div, span, a")].find(el => {
-                    return (el.innerText || el.textContent || "").replace(/\s+/g, " ").includes("Opuść walkę");
-                });
-                
-                if (btn) {
-                    btn.click();
+            // Szukamy przycisku, który FIZYCZNIE JEST WIDOCZNY na ekranie (offsetParent !== null)
+            const btn = [...document.querySelectorAll("button, .button, .btn, div, span, a")].find(el => {
+                return el.offsetParent !== null && (el.innerText || "").replace(/\s+/g, " ").includes("Opuść walkę");
+            });
+            
+            if (btn) {
+                btn.click();
+                // Wyświetl log maksymalnie raz na 2 sekundy
+                if (Date.now() - window.__lastFightQuitLog > 2000) {
                     if (window.logExp) window.logExp("⚔️ Zamknięto okno podsumowania walki.", "#9e9e9e");
-                } else {
-                    // Twarde komendy awaryjne do serwera (jeśli przycisku brak)
-                    if (typeof Engine !== 'undefined' && Engine.communication) {
-                        Engine.communication.send({ a: "fight", action: "quit" }); // Nowy interfejs
+                    window.__lastFightQuitLog = Date.now();
+                }
+            } else if (typeof Engine !== 'undefined' && Engine.battle && Engine.battle.d && Engine.battle.d.winner !== undefined) {
+                // Jeśli silnik gry zgłasza koniec walki, ale okienko/przycisk się nie wczytało (zabezpieczenie)
+                if (Date.now() - window.__lastFightQuitLog > 2000) {
+                    if (Engine.communication) {
+                        Engine.communication.send({ a: "fight", action: "quit" }); 
                     } else if (typeof window._g === 'function') {
-                        window._g("fight&a=quit"); // Stary interfejs
+                        window._g("fight&a=quit"); 
                     }
+                    window.__lastFightQuitLog = Date.now();
                 }
             }
         }, 250);
