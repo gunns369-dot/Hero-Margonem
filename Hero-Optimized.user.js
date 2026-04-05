@@ -7954,7 +7954,8 @@ if (isDead) {
                         }) || null;
                     };
                     
-  window.openShopAsync = async (namePart) => {
+ window.openShopAsync = async (namePart) => {
+                        // Twój nowy sposób mapowania NPC
                         const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
                         const targetName = (namePart || "").toLowerCase();
 
@@ -7964,13 +7965,12 @@ if (isDead) {
                         }) || null;
 
                         if (!npc) {
-                            console.warn("[AUTO-SELL] Nie znaleziono NPC:", namePart);
+                            console.warn("[AUTO-SELL/WALK] Nie znaleziono celu:", namePart);
                             return false;
                         }
 
                         const hero = () => Engine?.hero?.d || Engine?.hero || null;
 
-                        // WŁAŚCIWA MATEMATYKA: Używamy dystansu Chebyshev'a (jak w grze - na ukos to też 1 kratka dystansu!)
                         const distToNpc = () => {
                             const h = hero();
                             if (!h || !npc) return 999;
@@ -7982,6 +7982,36 @@ if (isDead) {
                             const pathA = h?.path;
                             const pathB = Engine?.hero?.path;
                             return (!pathA || pathA.length === 0) && (!pathB || pathB.length === 0);
+                        };
+
+                        // NOWOŚĆ: Wyliczanie najbliższej wolnej kratki obok Elity / NPC!
+                        const getSafeTile = () => {
+                            const h = hero();
+                            const spots = [
+                                {x: npc.x - 1, y: npc.y}, {x: npc.x + 1, y: npc.y},
+                                {x: npc.x, y: npc.y - 1}, {x: npc.x, y: npc.y + 1},
+                                {x: npc.x - 1, y: npc.y - 1}, {x: npc.x + 1, y: npc.y - 1},
+                                {x: npc.x - 1, y: npc.y + 1}, {x: npc.x + 1, y: npc.y + 1}
+                            ];
+                            
+                            // Wywalamy kratki, na które nie da się wejść fizycznie
+                            let freeSpots = spots.filter(s => {
+                                if (typeof Engine?.map?.checkCollision === 'function') {
+                                    return !Engine.map.checkCollision(s.x, s.y);
+                                }
+                                return true;
+                            });
+                            
+                            if (freeSpots.length === 0) return {x: npc.x, y: npc.y}; // Awaryjny fallback
+                            
+                            // Wybieramy kratkę, do której my mamy najbliżej
+                            freeSpots.sort((a, b) => {
+                                let dA = Math.max(Math.abs(h.x - a.x), Math.abs(h.y - a.y));
+                                let dB = Math.max(Math.abs(h.x - b.x), Math.abs(h.y - b.y));
+                                return dA - dB;
+                            });
+                            
+                            return freeSpots[0];
                         };
 
                         const getOpenDialogueNow = () => document.querySelector(".dialogue-window.is-open, #dialog, .dialog-window");
@@ -8019,57 +8049,49 @@ if (isDead) {
                             return false;
                         };
 
-                        // 1. PODEJŚCIE (Z PONAWIANIEM, BO SILNIK MOŻE ZGUBIĆ ŚCIEŻKĘ PO TELEPORCIE LUB PRZEJŚCIU MAPY)
+                        // 1. PODEJŚCIE - Bieg na bezpieczną kratkę OBOK NPC
                         if (distToNpc() > 1) {
-                            // "Krzyczymy" do gry co 800ms, żeby postać biegła - nie da się zatrzymać na ładowaniu mapy!
                             let moveInterval = setInterval(() => {
                                 if (distToNpc() > 1) {
-                                    try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch(e) {}
+                                    let safeTile = getSafeTile();
+                                    try { Engine?.hero?.autoGoTo?.({x: safeTile.x, y: safeTile.y}); } catch(e) {}
+                                    
+                                    // Dodatkowe, twarde uderzenie w silnik (Działa świetnie na elity!)
+                                    try { if (typeof Engine?.npcs?.clickNpc === "function") Engine.npcs.clickNpc(npc.id); } catch(e) {}
                                 }
                             }, 800);
                             
-                            // Czekamy aż wejdzie w zasięg <= 1 kratki (Zwiększono timeout na 15s na wypadek długiej mapy)
                             const reached = await window.waitFor(() => distToNpc() <= 1, 15000, 200);
-                            clearInterval(moveInterval); // Jak dobiegnie, wyłączamy krzyczenie
+                            clearInterval(moveInterval); 
                             
                             if (!reached) {
-                                console.warn("[AUTO-SELL] Nie udało się podejść do NPC (zacięcie w terenie):", npc.nick);
+                                console.warn("[AUTO-SELL/WALK] Cel zablokowany, brak dostępu:", npc.nick);
                                 return false;
                             }
                         }
 
+                        // Jeśli celem była Elita do zaatakowania (type 2), możemy tu przerwać, bo walka zaraz się zacznie!
+                        if (npc.type === 2 || npc.type === 3) return true;
+
                         // 2. CZEKAMY AŻ NOGI BOHATERA SIĘ ZATRZYMAJĄ
                         await window.waitFor(() => isStandingStill(), 2500, 80);
-                        
-                        // Humanizacja: Ułamek sekundy oddechu po dobiegnięciu (200-400ms)
                         await window.sleep(Math.floor(Math.random() * 200) + 200);
 
-                        // 3. INTERAKCJA Z NPC (Z losowymi odstępami czasowymi i powtarzaniem w razie lagu serwera)
+                        // 3. INTERAKCJA Z NPC (Sklepowym)
                         for (let attempt = 1; attempt <= 4; attempt++) {
                             if (getOpenDialogueNow()) break;
 
-                            try {
-                                if (typeof Engine?.npcs?.clickNpc === "function") Engine.npcs.clickNpc(npc.id);
-                            } catch (e) {}
-
-                            // Humanizacja kliknięcia
+                            try { if (typeof Engine?.npcs?.clickNpc === "function") Engine.npcs.clickNpc(npc.id); } catch (e) {}
                             await window.sleep(Math.floor(Math.random() * 100) + 150);
 
-                            try {
-                                if (typeof Engine?.interface?.clickTalkNearMob === "function") Engine.interface.clickTalkNearMob();
-                            } catch (e) {}
-
-                            // Humanizacja przed wysłaniem komendy twardej
+                            try { if (typeof Engine?.interface?.clickTalkNearMob === "function") Engine.interface.clickTalkNearMob(); } catch (e) {}
                             await window.sleep(Math.floor(Math.random() * 100) + 150);
 
                             if (getOpenDialogueNow()) break;
 
                             try {
-                                if (typeof Engine?.communication?.send === "function") {
-                                    Engine.communication.send({ a: "talk", id: npc.id });
-                                } else if (typeof window._g === "function") {
-                                    window._g(`talk&id=${npc.id}`);
-                                }
+                                if (typeof Engine?.communication?.send === "function") Engine.communication.send({ a: "talk", id: npc.id });
+                                else if (typeof window._g === "function") window._g(`talk&id=${npc.id}`);
                             } catch (e) {}
 
                             const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1200, 80);
@@ -8079,39 +8101,26 @@ if (isDead) {
                         }
 
                         const dialogueOpened = await window.waitFor(() => !!getOpenDialogueNow(), 2500, 80);
-                        if (!dialogueOpened) {
-                            console.warn("[AUTO-SELL] Dialog z NPC się nie otworzył:", npc.nick);
-                            return false;
-                        }
+                        if (!dialogueOpened) return false;
 
-                        // Humanizacja: Udawanie odczytywania powitania przez gracza
                         await window.sleep(Math.floor(Math.random() * 300) + 250);
 
                         const optionReady = await window.waitFor(() => !!findShopOptionNow(), 2500, 80);
-                        if (!optionReady) {
-                            console.warn("[AUTO-SELL] Nie znaleziono opcji sklepu w dialogu:", npc.nick);
-                            return false;
-                        }
+                        if (!optionReady) return false;
 
                         const shopOption = findShopOptionNow();
                         clickLikeHuman(shopOption);
 
                         const shopOpened = await window.waitFor(() => {
                             return !!(
-                                Engine?.shop?.wnd ||
-                                Engine?.shop?.getData?.() ||
+                                Engine?.shop?.wnd || Engine?.shop?.getData?.() ||
                                 document.querySelector(".shop-window, .shop, .trade-window, .merchant-window")
                             );
                         }, 2500, 80);
 
-                        if (!shopOpened) {
-                            console.warn("[AUTO-SELL] Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
-                            return false;
-                        }
+                        if (!shopOpened) return false;
                         
-                        // Humanizacja: Ładowanie wizualne zawartości okna sklepu
                         await window.sleep(Math.floor(Math.random() * 300) + 300);
-
                         return true;
                     };
 } // <--- TEN JEDEN NAWIAS NAPRAWIA CAŁY SKRYPT!
