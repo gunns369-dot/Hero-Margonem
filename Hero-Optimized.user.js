@@ -7958,13 +7958,10 @@ window.openShopAsync = async (namePart) => {
                         const targetName = (namePart || "").toLowerCase();
                         let npc = null;
 
-                        // Czekamy aż gra wczyta postacie po wejściu przez drzwi
+                        // Czekamy na załadowanie NPC
                         await window.waitFor(() => {
                             const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
-                            npc = npcs.find(n => {
-                                let cleanNick = (n?.nick || n?.name || "").replace(/<[^>]*>?/gm, '').trim().toLowerCase();
-                                return cleanNick.includes(targetName);
-                            }) || null;
+                            npc = npcs.find(n => (n?.nick || n?.name || "").replace(/<[^>]*>?/gm, '').toLowerCase().includes(targetName));
                             return !!npc;
                         }, 5000, 150);
 
@@ -7975,19 +7972,15 @@ window.openShopAsync = async (namePart) => {
 
                         console.log(`🚶 Idę do ${npc.nick}...`);
 
-                        // 🔑 poprawne wywołanie
-                        if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.autoGoTo === 'function') {
-                            Engine.hero.autoGoTo({x: npc.x, y: npc.y});
-                        }
+                        try { Engine.hero.autoGoTo({x: npc.x, y: npc.y}); } catch(e){}
 
-                        // ⏳ czekaj aż podejdzie (Zgodnie z Twoją pętlą!)
+                        // ⏳ czekaj aż podejdzie (Twoja pętla)
                         for (let i = 0; i < 60; i++) {
                             const h = Engine.hero.d;
                             const dist = Math.max(Math.abs(h.x - npc.x), Math.abs(h.y - npc.y));
 
                             if (dist <= 1) break;
                             
-                            // Na wypadek zgubienia ścieżki po lagu, ponawiamy komendę idź co 1 sekundę
                             if (i % 10 === 0 && dist > 1) {
                                 try { Engine.hero.autoGoTo({x: npc.x, y: npc.y}); } catch(e) {}
                             }
@@ -7995,43 +7988,37 @@ window.openShopAsync = async (namePart) => {
                         }
 
                         console.log("🛑 Odblokowuję stop...");
-                        if (typeof Engine !== 'undefined' && Engine.hero) {
-                            Engine.hero.stop = false;
-                        }
+                        if (Engine.hero) Engine.hero.stop = false;
 
                         await window.sleep(300);
                         
-                        // Jeśli cel to elita, wychodzimy z funkcji, bo walka zaraz włączy się sama
                         if (npc.type === 2 || npc.type === 3) return true;
 
                         console.log("💬 Rozmowa...");
 
-                        if (typeof Engine.npcs?.clickNpc === 'function') {
-                            Engine.npcs.clickNpc(npc.id);
-                        }
+                        // --- 1:1 TWÓJ KOD ROZMOWY ---
+                        try { Engine.npcs?.clickNpc?.(npc.id); } catch(e) {}
                         await window.sleep(200);
 
-                        // 🔑 Wymuszenie otwarcia z Twojego kodu
-                        if (typeof Engine.hero?.sendRequestToTalk === 'function') {
-                            Engine.hero.sendRequestToTalk(npc.id);
-                        } else if (typeof Engine.interface?.clickTalkNearMob === 'function') {
-                            Engine.interface.clickTalkNearMob();
-                        } else if (typeof window._g === 'function') {
-                            window._g(`talk&id=${npc.id}`);
+                        try { 
+                            Engine.hero?.sendRequestToTalk?.(npc.id); 
+                        } catch(e) {
+                            // Zapas tylko i wyłącznie, jakby grało się na starym interfejsie (SI)
+                            if (typeof window._g === 'function') window._g(`talk&id=${npc.id}`);
                         }
 
                         await window.sleep(500);
 
-                        // Szukamy okna z opcjami (dajemy grze chwilę na dorenderowanie w przypadku wolniejszego neta)
+                        // Czekamy na pojawienie się opcji sklepu (oparte na Twoim kodzie)
                         let shopBtn = null;
-                        for (let j = 0; j < 10; j++) {
-                            shopBtn = [...document.querySelectorAll(".dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer, #dialog li")]
+                        for (let j = 0; j < 15; j++) {
+                            shopBtn = [...document.querySelectorAll(".dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer")]
                                 .find(el => {
-                                    let txt = (el.innerText || el.textContent || "").toLowerCase();
+                                    let txt = (el.innerText || "").toLowerCase();
                                     return txt.includes("co masz") || txt.includes("sprzeda") || txt.includes("handel") || txt.includes("kup");
                                 });
                             if (shopBtn) break;
-                            await window.sleep(200);
+                            await window.sleep(200); // bufor na lagi serwera
                         }
 
                         if (!shopBtn) {
@@ -8040,11 +8027,7 @@ window.openShopAsync = async (namePart) => {
                         }
 
                         console.log("🛒 Otwieram sklep...");
-                        try {
-                            shopBtn.click();
-                        } catch (e) {
-                            console.warn("❌ błąd kliknięcia w sklep", e);
-                        }
+                        try { shopBtn.click(); } catch (e) {}
 
                         const shopOpened = await window.waitFor(() => {
                             return !!(
