@@ -8001,7 +8001,7 @@ window.openShopAsync = async (namePart) => {
                             }) || null;
                         };
 
-                        // 1. PODEJŚCIE DO NPC (Zgodnie z Twoim kodem)
+               // 1. PODEJŚCIE DO NPC (Zgodnie z Twoim kodem)
                         if (distToNpc() > 1) {
                             try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch(e) {}
                             
@@ -8013,11 +8013,16 @@ window.openShopAsync = async (namePart) => {
                             }
                         }
 
-                        // 2. ODBLOKOWANIE RUCHU (Twoje rozwiązanie na blokadę przy ladzie!)
+                        // 2. TWARDY HAMULEC - CZEKAMY AŻ POSTAĆ FIZYCZNIE ZAKOŃCZY RUCH
+                        await window.waitFor(() => isStandingStill(), 2500, 80);
+
+                        // 3. ODBLOKOWANIE UI (Twoje rozwiązanie na blokadę przy ladzie!)
                         if (typeof Engine !== 'undefined' && Engine.hero) {
                             Engine.hero.stop = false;
                         }
-                        await window.sleep(300);
+                        
+                        // Humanizacja: Bierzemy oddech po zatrzymaniu (ok. 0.4 sekundy), żeby serwer przetworzył pozycję
+                        await window.sleep(Math.floor(Math.random() * 200) + 300);
 
                         // Jeśli cel to elita, wychodzimy - walka i tak zaraz się włączy
                         if (npc.type === 2 || npc.type === 3) return true;
