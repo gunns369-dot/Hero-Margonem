@@ -5296,7 +5296,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
     let maxhp = hero.maxhp !== undefined ? parseInt(hero.maxhp) : (hero.warrior_stats ? parseInt(hero.warrior_stats.maxhp) : 100);
 
    // Zmienna z Mutation Observera ma absolutne pierwszeństwo!
-    let isDead = window.__unconscious || Engine.dead || hero.dead === true || hero.dead === 1 || hero.dead === "1" || document.querySelector('.dead-window, .death-window, [data-wnd="dead"]') !== null || (hp === 1 && maxhp > 1);
+   let isDead = isUnconsciousNow() || window.__unconscious;
       
     if (isDead) {
         if (window._lastDeadLog !== Math.floor(now / 5000)) {
@@ -7568,15 +7568,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             
             if (Engine.battle && Engine.battle.show) return;
             
-            let isDead = Engine.dead || Engine.hero.d.dead === true || Engine.hero.d.dead === 1 || Engine.hero.d.dead === "1";
-            let deathWindowVisible = document.querySelector('.death-window, .dead-window, [data-wnd="dead"], .alert-window') !== null;
-            if (isDead && !deathWindowVisible) {
-                isDead = false; Engine.dead = false; Engine.hero.d.dead = 0;
-            }
-            if (isDead) {
-                window.isRegeneratingToFull = false;
-                return;
-            }
+      let isDead = isUnconsciousNow() || window.__unconscious;
+if (isDead) {
+    window.isRegeneratingToFull = false;
+    return;
+}
 
             let hp = Engine.hero.d.hp !== undefined ? parseInt(Engine.hero.d.hp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 0);
             let maxhp = Engine.hero.d.maxhp !== undefined ? parseInt(Engine.hero.d.maxhp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 0);
