@@ -7403,94 +7403,128 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 400); // Wydłużono czas sprawdzania (z 250 na 400ms), aby zdjąć obciążenie z gry
     }
-    // --- DAEMON: INTELIGENTNY DETEKTOR ŚMIERCI I ZAMROŻONEGO ZEGARA ---
-    if (!window.__smartDeathDaemon) {
-        window.__smartDeathDaemon = true;
-        window.__unconscious = false;
-        window.__lastParsedSeconds = null;
-        window.__stuckTimerCount = 0;
+    function isUnconsciousNow() {
+    const deathSelectors = [
+        '.dead-window',
+        '.death-window',
+        '[data-wnd="dead"]',
+        '.dead-overlay',
+        '.dead-overlay.map-overlay',
+        '.dead-overlay .inner-text',
+        '.death-overlay',
+        '.alert-window'
+    ].join(', ');
 
-        // Wznowienie po twardym resecie (jako ubezpieczenie)
-        if (sessionStorage.getItem('margoBotAutoResume') === 'true') {
-            sessionStorage.removeItem('margoBotAutoResume');
-            setTimeout(() => {
-                if (window.logExp) window.logExp("🔄 Gra przeładowana. Wznawiam automatycznie pracę bota!", "#4caf50");
-                let btn = document.getElementById('btnStartExp') || document.getElementById('btnStartStop');
-                if (btn && btn.innerText.includes('START')) btn.click();
-            }, 3500); 
+    const visibleDeathEls = Array.from(document.querySelectorAll(deathSelectors))
+        .filter(el => el && el.offsetParent !== null);
+
+    const hasDeathText = visibleDeathEls.some(el => {
+        const txt = (el.textContent || "").toLowerCase();
+        return (
+            txt.includes("jesteś nieprzytomny") ||
+            txt.includes("zostałeś zabity") ||
+            txt.includes("ockniesz się") ||
+            txt.includes("wrócą ci siły")
+        );
+    });
+
+    const hero = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d : null;
+    const hp = hero ? parseInt(hero.hp ?? hero.warrior_stats?.hp ?? 0) : 0;
+    const maxhp = hero ? parseInt(hero.maxhp ?? hero.warrior_stats?.maxhp ?? 0) : 0;
+
+    const engineDead = !!(
+        (typeof Engine !== 'undefined' && Engine.dead) ||
+        (hero && (hero.dead === true || hero.dead === 1 || hero.dead === "1"))
+    );
+
+    const hpSuggestsDeath = maxhp > 1 && hp <= 1;
+
+    return hasDeathText || engineDead || hpSuggestsDeath;
+}
+   setInterval(() => {
+    const deathCandidates = Array.from(document.querySelectorAll(
+        '.dead-window, .death-window, [data-wnd="dead"], .dead-overlay, .dead-overlay.map-overlay, .alert-window, .dialog-window'
+    )).filter(el => {
+        if (!el || el.offsetParent === null) return false;
+        const txt = (el.textContent || "").toLowerCase();
+        return (
+            txt.includes("jesteś nieprzytomny") ||
+            txt.includes("zostałeś zabity") ||
+            txt.includes("ockniesz się") ||
+            txt.includes("wrócą ci siły")
+        );
+    });
+
+    const isDead = isUnconsciousNow();
+
+    if (isDead && !window.__unconscious) {
+        window.__unconscious = true;
+        if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zatrzymuję bota...", "#e53935");
+        if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') {
+            Engine.hero.stop();
         }
+    }
 
-        setInterval(() => {
-            let deadWindows = Array.from(document.querySelectorAll('.dead-window, .death-window, [data-wnd="dead"], .alert-window, .dialog-window')).filter(el => {
-                return el.offsetParent !== null && (el.textContent.includes("Jesteś nieprzytomny") || el.textContent.includes("Zostałeś zabity"));
-            });
-            
-            let isEngineDead = (typeof Engine !== 'undefined') && (Engine.dead || (Engine.hero && Engine.hero.d && (Engine.hero.d.dead === 1 || Engine.hero.d.dead === true)));
-            let isDead = deadWindows.length > 0 || isEngineDead;
-
-            if (isDead && !window.__unconscious) {
-                window.__unconscious = true;
-                if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zatrzymuję bota...", "#e53935");
-                if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') Engine.hero.stop();
-            }
-
-            if (!isDead && window.__unconscious) {
+    if (!isDead && window.__unconscious) {
+        // lekkie opóźnienie, żeby nie zrobić fałszywego 'ożyłeś'
+        setTimeout(() => {
+            if (window.__unconscious && !isUnconsciousNow()) {
                 window.__unconscious = false;
                 window.__stuckTimerCount = 0;
                 window.__lastParsedSeconds = null;
                 if (window.logExp) window.logExp("✅ [STRAŻNIK] Ożyłeś. Wracamy do akcji!", "#4caf50");
             }
+        }, 1200);
+    }
 
-            // WATCHDOG ZEGARA
-            if (window.__unconscious && deadWindows.length > 0) {
-                let text = deadWindows[0].textContent;
-                let match = text.match(/(?:(\d+)\s*min\s*)?(\d+)\s*s/);
-                let seconds = null;
-                
-                if (match) {
-                    let m = parseInt(match[1]) || 0;
-                    let s = parseInt(match[2]) || 0;
-                    seconds = m * 60 + s;
+    if (window.__unconscious && deathCandidates.length > 0) {
+        const text = deathCandidates[0].textContent || "";
+        const match = text.match(/(?:(\d+)\s*min\s*)?(\d+)\s*s/);
+        let seconds = null;
+
+        if (match) {
+            const m = parseInt(match[1]) || 0;
+            const s = parseInt(match[2]) || 0;
+            seconds = m * 60 + s;
+        }
+
+        if (seconds !== null) {
+            if (window.__lastParsedSeconds === seconds) {
+                window.__stuckTimerCount++;
+            } else {
+                window.__lastParsedSeconds = seconds;
+                window.__stuckTimerCount = 0;
+            }
+
+            if (window.__stuckTimerCount >= 6) {
+                if (window.logExp) {
+                    window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Miękkie odświeżanie interfejsu...`, "#ffb300");
+                }
+                window.__stuckTimerCount = -999;
+
+                if (typeof Engine !== 'undefined' && Engine.communication) {
+                    Engine.communication.send({ a: "deadresp" });
+                } else if (typeof window._g === 'function') {
+                    window._g('deadresp');
                 }
 
-                if (seconds !== null) {
-                    if (window.__lastParsedSeconds === seconds) {
-                        window.__stuckTimerCount++;
-                    } else {
-                        window.__lastParsedSeconds = seconds;
-                        window.__stuckTimerCount = 0; 
-                    }
-
-                    if (window.__stuckTimerCount >= 6) {
-                        if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Miękkie odświeżanie interfejsu...`, "#ffb300");
-                        window.__stuckTimerCount = -999; 
-                        
-                        if (typeof Engine !== 'undefined' && Engine.communication) {
-                            Engine.communication.send({ "a": "deadresp" });
-                        } else if (typeof window._g === 'function') {
-                            window._g('deadresp');
+                setTimeout(() => {
+                    if (window.__unconscious) {
+                        if (window.isExping || window.isPatrolling) {
+                            sessionStorage.setItem('margoBotAutoResume', 'true');
                         }
 
-                        // MIĘKKIE ODŚWIEŻANIE (Soft Reload)
-                        setTimeout(() => {
-                            if (window.__unconscious) {
-                                if (window.isExping || window.isPatrolling) {
-                                    sessionStorage.setItem('margoBotAutoResume', 'true'); 
-                                }
-                                
-                                // Odbudowa samego silnika gry bez wywalania karty w przeglądarce!
-                                if (typeof Engine !== 'undefined' && typeof Engine.reload === 'function') {
-                                    Engine.reload(); 
-                                } else {
-                                    window.location.reload(); 
-                                }
-                            }
-                        }, 3000);
+                        if (typeof Engine !== 'undefined' && typeof Engine.reload === 'function') {
+                            Engine.reload();
+                        } else {
+                            window.location.reload();
+                        }
                     }
-                }
+                }, 3000);
             }
-        }, 1000);
+        }
     }
+}, 1000);
 // --- DAEMON: AUTOHEAL (Logika: Start poniżej progu -> Koniec przy 100%) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
