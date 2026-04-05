@@ -7869,7 +7869,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (Date.now() < window.autoSellState.nextActionTime) return;
                 window.isExpSuspended = true;
                 
-                if (window.autoSellState.step === 1) {
+              if (window.autoSellState.step === 1) {
                     if (!window.autoSellState.failedNPCs) window.autoSellState.failedNPCs = [];
                     window.autoSellState.shopWaitStartTime = 0;
 
@@ -7877,15 +7877,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     let validMerchants = kupcy.filter(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n)));
                     if (validMerchants.length === 0) validMerchants = kupcy;
                     
-                    // INTELIGENTNE OMIJANIE ZBUGOWANYCH KUPCÓW
                     if (window.autoSellState.failedNPCs.length > 0) {
                         validMerchants = validMerchants.filter(k => !window.autoSellState.failedNPCs.includes(k.npc_name));
                     }
 
                     if (validMerchants.length === 0) { 
-                        if (window.logHero) window.logHero("❌ Brak dostępnych kupców do sprzedaży! (Wszyscy pobliscy zignorowali bota)", "#e53935");
+                        if (window.logHero) window.logHero("❌ Brak dostępnych kupców do sprzedaży!", "#e53935");
                         window.autoSellState.active = false; 
-                        window.autoSellState.failedNPCs = []; // Reset by przy kolejnej próbie spróbować od nowa
+                        window.autoSellState.failedNPCs = []; 
                         window.isExpSuspended = false;
                         window.isRushing = false;
                         return; 
@@ -7903,7 +7902,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     });
                     
                     if (!bestNpc) { 
-                        if (window.logHero) window.logHero("❌ Nie potrafię znaleźć ścieżki do żadnego kupca!", "#e53935");
                         window.autoSellState.active = false; 
                         return; 
                     }
@@ -7917,77 +7915,69 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         }
                     } else {
                         let dist = Math.abs(Engine.hero.d.x - bestNpc.x) + Math.abs(Engine.hero.d.y - bestNpc.y);
-                        if (dist <= 2) {
+                        
+                        if (dist <= 4) {
                             window.isRushingToShop = false;
-                            let npcs = Engine.npcs.check ? Engine.npcs.check() : Engine.npcs.d;
+                            let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
                             for (let i in npcs) {
                                 let n = npcs[i].d || npcs[i];
-                                if (n.nick === bestNpc.npc_name) {
-                                    if (Engine.npcs.interact) Engine.npcs.interact(n.id);
-                                    else window._g(`talk&id=${n.id}`);
+                                let cleanNick = (n.nick || n.name || "").replace(/<[^>]*>?/gm, '').trim();
+                                
+                                if (cleanNick.includes(bestNpc.npc_name) || bestNpc.npc_name.includes(cleanNick)) {
+                                    
+                                    // TWOJA POPRAWKA: Natywna inicjacja dialogu z Nowego Interfejsu (NI)
+                                    if (typeof Engine !== 'undefined' && Engine.npcs && typeof Engine.npcs.clickNpc === 'function') {
+                                        Engine.npcs.clickNpc(n.id);
+                                        setTimeout(() => {
+                                            if (Engine.interface && typeof Engine.interface.clickTalkNearMob === 'function') {
+                                                Engine.interface.clickTalkNearMob();
+                                            }
+                                        }, 200);
+                                    } else if (typeof Engine !== 'undefined' && Engine.communication) {
+                                        Engine.communication.send({ "a": "talk", "id": n.id });
+                                    } else {
+                                        window._g(`talk&id=${n.id}`);
+                                    }
+                                    
                                     window.autoSellState.step = 2;
-                                    window.autoSellState.nextActionTime = Date.now() + 800;
+                                    window.autoSellState.shopWaitStartTime = Date.now();
+                                    window.autoSellState.nextActionTime = Date.now() + 800; // Czekamy chwilę na render okna
                                     break;
                                 }
                             }
                         } else if (!window.isRushingToShop) {
                             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-                            if (!isMoving) { Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); window.autoSellState.nextActionTime = Date.now() + 1000; }
-                            else { window.autoSellState.nextActionTime = Date.now() + 300; }
+                            if (!isMoving) { 
+                                Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); 
+                                window.autoSellState.nextActionTime = Date.now() + 500; 
+                            } else { 
+                                window.autoSellState.nextActionTime = Date.now() + 300; 
+                            }
                         }
                     }
                 } else if (window.autoSellState.step === 2) {
-                    // Startujemy zegar oczekiwania na okno sklepu
-                    if (!window.autoSellState.shopWaitStartTime) window.autoSellState.shopWaitStartTime = Date.now();
+                    // TWOJA POPRAWKA: Precyzyjne wyszukiwanie opcji handlu (w tym klasa .line_shop)
+                    const shopOption = document.querySelector(".dialogue-window.is-open .dialogue-window-answer.line_shop") || 
+                                       [...document.querySelectorAll(".dialogue-window.is-open .dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer")]
+                                       .find(el => {
+                                            let t = (el.innerText || el.textContent || "").toLowerCase();
+                                            return t.includes("sprzedaż") || t.includes("pokaż swoje towary") || t.includes("handluj");
+                                       });
 
-                    let shopWrapper = document.getElementById('shop-wrapper') || document.querySelector('.shop-wrapper, .shop-window, .shop-container');
-                    
-                    if (shopWrapper && shopWrapper.style.display !== 'none') {
-                        // Sklep odpalony pomyślnie
+                    if (shopOption) {
+                        shopOption.click();
                         window.autoSellState.step = 3;
-                        window.autoSellState.oldGold = Engine.hero.d.gold;
-                        window.autoSellState.bagToSell = 1;
-                        window.autoSellState.lastFreeSlots = typeof window.getBagStats === 'function' ? window.getBagStats().freeSlots : 0;
-                        window.autoSellState.nextActionTime = Date.now() + 500;
-                        window.autoSellState.shopWaitStartTime = 0; // Reset licznika
+                        window.autoSellState.nextActionTime = Date.now() + 1000; // Oczekiwanie na pobranie itemów
+                        if (window.logExp) window.logExp(`✅ Otwieram sklep u: ${window.autoSellState.targetNpc.npc_name}`, "#ffb300");
                     } else {
-                        // TIMEOUT: Jeśli po 8 sekundach od zagadania do NPC nie wyskoczyło okno sklepu...
-                        if (Date.now() - window.autoSellState.shopWaitStartTime > 8000) {
-                            let badNpcName = window.autoSellState.targetNpc ? window.autoSellState.targetNpc.npc_name : "Kupiec";
-                            if (window.logHero) window.logHero(`⚠️ Sklep u ${badNpcName} nie otworzył się. Blokuję go i szukam kogoś innego!`, "#ffb300");
-                            if (window.logExp) window.logExp(`⚠️ Omijam zbugowanego kupca: ${badNpcName}`, "#ffb300");
-                            
-                            // Nakładamy bana na kupca
-                            window.autoSellState.failedNPCs.push(badNpcName);
-                            window.autoSellState.step = 1; // Wracamy do szukania nowego kupca
-                            window.autoSellState.shopWaitStartTime = 0;
-                            
-                            // Próbujemy wyczyścić ewentualny zablokowany dialog
-                            let dialogClose = document.querySelector('.dialog-close, .close-button, [data-option="close"], .cancel');
-                            if (dialogClose) dialogClose.click();
-                            else if (typeof window._g === 'function') window._g("talk&c=0");
-
-                            window.autoSellState.nextActionTime = Date.now() + 1000;
-                            return;
-                        }
-
-                        // Normalne próby przeklikania dialogu
-                        let dialogOptions = Array.from(document.querySelectorAll('.dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
-                        if (dialogOptions.length > 0) {
-                            let shopOpt = dialogOptions.find(el => {
-                                let txt = (el.innerText || el.textContent).toLowerCase();
-                                return txt.includes('sklep') || txt.includes('handl') || txt.includes('sprzedaj') || txt.includes('pokaż') || txt.includes('towar') || txt.includes('kup');
-                            });
-                            if (shopOpt) {
-                                let humanDelay = Math.floor(Math.random() * 401) + 400;
-                                window.autoSellState.nextActionTime = Date.now() + humanDelay + 500;
-                                setTimeout(() => {
-                                    if (window.jQuery) jQuery(shopOpt).trigger("click");
-                                    if (typeof shopOpt.click === 'function') shopOpt.click();
-                                    shopOpt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
-                                    shopOpt.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
-                                }, humanDelay);
-                            }
+                        // Timeout awaryjny - jeśli po 3.5 sekundach dialog dalej nie ma opcji handlu
+                        if (Date.now() - window.autoSellState.shopWaitStartTime > 3500) {
+                             if (window.logHero) window.logHero(`⚠️ Nie mogę znaleźć opcji sklepu u: ${window.autoSellState.targetNpc.npc_name}. Szukam innego...`, "#ff9800");
+                             let closeBtn = document.querySelector('.dialogue-window.is-open .close-button, #dialog .close-button, .dialog-window .close-button');
+                             if (closeBtn) closeBtn.click();
+                             window.autoSellState.failedNPCs.push(window.autoSellState.targetNpc.npc_name);
+                             window.autoSellState.step = 1; 
+                             window.autoSellState.nextActionTime = Date.now() + 500;
                         }
                     }
                 } else if (window.autoSellState.step === 3) {
