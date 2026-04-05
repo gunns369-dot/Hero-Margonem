@@ -7955,16 +7955,21 @@ if (isDead) {
                     };
                     
 window.openShopAsync = async (namePart) => {
-                        const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
                         const targetName = (namePart || "").toLowerCase();
+                        let npc = null;
 
-                        let npc = npcs.find(n => {
-                            let cleanNick = (n?.nick || n?.name || "").replace(/<[^>]*>?/gm, '').trim().toLowerCase();
-                            return cleanNick.includes(targetName);
-                        }) || null;
+                        // KLUCZOWE: Czekamy aż gra wczyta tekstury i postacie po wejściu przez drzwi (max 5 sekund)
+                        await window.waitFor(() => {
+                            const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
+                            npc = npcs.find(n => {
+                                let cleanNick = (n?.nick || n?.name || "").replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                                return cleanNick.includes(targetName);
+                            }) || null;
+                            return !!npc;
+                        }, 5000, 150);
 
                         if (!npc) {
-                            console.warn("[AUTO-SELL] Nie znaleziono NPC:", namePart);
+                            console.warn("[AUTO-SELL] Nie znaleziono NPC po załadowaniu mapy:", namePart);
                             return false;
                         }
 
