@@ -8128,11 +8128,11 @@ if (isDead) {
 
     return true;
 };
-                // --- GŁÓWNA LOGIKA KROKU 1 ---
+             // --- GŁÓWNA LOGIKA KROKU 1 ---
                 if (window.autoSellState.step === 1) {
                     if (!window.autoSellState.failedNPCs) {
                         window.autoSellState.failedNPCs = [];
-                        window.autoSellState.targetNpc = null; 
+                        window.autoSellState.targetNpc = null;
                         window.autoSellState.isAsyncRunning = false;
                     }
 
@@ -8140,23 +8140,23 @@ if (isDead) {
                         let kupcy = window.DatabaseModule.kupcy || [];
                         let validMerchants = kupcy.filter(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n)));
                         if (validMerchants.length === 0) validMerchants = kupcy;
-                        
+
                         if (window.autoSellState.failedNPCs.length > 0) {
                             validMerchants = validMerchants.filter(k => !window.autoSellState.failedNPCs.includes(k.npc_name));
                         }
 
-                        if (validMerchants.length === 0) { 
+                        if (validMerchants.length === 0) {
                             if (window.logHero) window.logHero("❌ Brak dostępnych kupców do sprzedaży!", "#e53935");
-                            window.autoSellState.active = false; 
-                            window.autoSellState.failedNPCs = null; 
+                            window.autoSellState.active = false;
+                            window.autoSellState.failedNPCs = null;
                             window.isExpSuspended = false;
                             window.isRushing = false;
-                            return; 
+                            return;
                         }
 
                         let currMap = Engine.map.d.name;
                         let bestNpc = validMerchants.find(m => m.map_name === currMap);
-                        
+
                         if (!bestNpc) {
                             let bestDist = Infinity;
                             validMerchants.forEach(m => {
@@ -8164,12 +8164,12 @@ if (isDead) {
                                 if (path && path.length < bestDist) { bestDist = path.length; bestNpc = m; }
                             });
                         }
-                        
-                        if (!bestNpc) { 
-                            window.autoSellState.active = false; 
-                            return; 
+
+                        if (!bestNpc) {
+                            window.autoSellState.active = false;
+                            return;
                         }
-                        window.autoSellState.targetNpc = bestNpc; 
+                        window.autoSellState.targetNpc = bestNpc;
                     }
 
                     let bestNpc = window.autoSellState.targetNpc;
@@ -8181,12 +8181,12 @@ if (isDead) {
                         }
                     } else {
                         window.isRushingToShop = false;
-                        
+
                         // WYWOŁANIE TWOJEJ FUNKCJI ASYNCHRONICZNEJ
                         // Używamy blokady, żeby nie odpalić jej 100 razy naraz
                         if (!window.autoSellState.isAsyncRunning) {
                             window.autoSellState.isAsyncRunning = true;
-                            
+
                             window.openShopAsync(bestNpc.npc_name).then(success => {
                                 if (success) {
                                     if (window.logExp) window.logExp(`✅ Otwieram sklep u: ${bestNpc.npc_name}`, "#ffb300");
@@ -8197,7 +8197,7 @@ if (isDead) {
                                     let closeBtn = document.querySelector('.dialogue-window.is-open .close-button, #dialog .close-button, .dialog-window .close-button');
                                     if (closeBtn) closeBtn.click();
                                     window.autoSellState.failedNPCs.push(bestNpc.npc_name);
-                                    window.autoSellState.targetNpc = null; 
+                                    window.autoSellState.targetNpc = null;
                                 }
                                 window.autoSellState.isAsyncRunning = false; // Zdejmujemy blokadę
                             });
@@ -8213,7 +8213,7 @@ if (isDead) {
                         window.autoSellState.step = 4;
                         window.autoSellState.nextActionTime = Date.now() + 1000;
                     }
-                             } else if (window.autoSellState.step === 4) {
+                } else if (window.autoSellState.step === 4) {
                     let stats = typeof window.getBagStats === 'function'
                         ? window.getBagStats()
                         : { freeSlots: 99 };
@@ -8249,8 +8249,8 @@ if (isDead) {
                         window.lastExpMap = null;
                     }
                 }
-            }
-        }, 300);
+            } // Tutaj zamykamy warunki czasu i active
+        }, 1000); // POPRAWIONE ZAMKNIĘCIE PĘTLI Z PRZECINKIEM! Zmieniłem na 1000ms zgodnie z oryginałem.
     }
 // --- DAEMON: DETEKCJA ZAPADKI (ALARM + HUMAN STOP) ---
     if (!window.captchaDaemonInstalled) {
