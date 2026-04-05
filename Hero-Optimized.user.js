@@ -7343,25 +7343,50 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 800);
     }
-// --- DAEMON: INTELIGENTNY DETEKTOR ŚMIERCI I ZAMROŻONEGO ZEGARA ---
+// --- DAEMON: AUTO LEAVE FIGHT (Szybkie zamykanie podsumowania walki) ---
+    if (!window.__autoLeaveFightDaemon) {
+        window.__autoLeaveFightDaemon = true;
+        setInterval(() => {
+            const text = document.body.textContent || "";
+            // Szukamy słów kluczowych oznaczających koniec walki
+            if (text.includes("Walka zakończona.") || text.includes("Opuść walkę")) {
+                const btn = [...document.querySelectorAll("button, div, span, a")].find(el => {
+                    return (el.innerText || el.textContent || "").replace(/\s+/g, " ").includes("Opuść walkę");
+                });
+                
+                if (btn) {
+                    btn.click();
+                    if (window.logExp) window.logExp("⚔️ Zamknięto okno podsumowania walki.", "#9e9e9e");
+                } else {
+                    // Twarde komendy awaryjne do serwera (jeśli przycisku brak)
+                    if (typeof Engine !== 'undefined' && Engine.communication) {
+                        Engine.communication.send({ a: "fight", action: "quit" }); // Nowy interfejs
+                    } else if (typeof window._g === 'function') {
+                        window._g("fight&a=quit"); // Stary interfejs
+                    }
+                }
+            }
+        }, 250);
+    }
+
+    // --- DAEMON: INTELIGENTNY DETEKTOR ŚMIERCI I ZAMROŻONEGO ZEGARA ---
     if (!window.__smartDeathDaemon) {
         window.__smartDeathDaemon = true;
         window.__unconscious = false;
         window.__lastParsedSeconds = null;
         window.__stuckTimerCount = 0;
 
-        // AUTO-WZNOWIENIE BOTA PO ZMUSZONYM ODŚWIEŻENIU STRONY
+        // Wznowienie po twardym resecie (jako ubezpieczenie)
         if (sessionStorage.getItem('margoBotAutoResume') === 'true') {
             sessionStorage.removeItem('margoBotAutoResume');
             setTimeout(() => {
                 if (window.logExp) window.logExp("🔄 Gra przeładowana. Wznawiam automatycznie pracę bota!", "#4caf50");
                 let btn = document.getElementById('btnStartExp') || document.getElementById('btnStartStop');
                 if (btn && btn.innerText.includes('START')) btn.click();
-            }, 3500); // Dajemy grze 3.5 sekundy na pełne wczytanie mapy
+            }, 3500); 
         }
 
         setInterval(() => {
-            // Szukamy tylko w konkretnych oknach, żeby ignorować trolli na czacie!
             let deadWindows = Array.from(document.querySelectorAll('.dead-window, .death-window, [data-wnd="dead"], .alert-window, .dialog-window')).filter(el => {
                 return el.offsetParent !== null && (el.textContent.includes("Jesteś nieprzytomny") || el.textContent.includes("Zostałeś zabity"));
             });
@@ -7382,7 +7407,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (window.logExp) window.logExp("✅ [STRAŻNIK] Ożyłeś. Wracamy do akcji!", "#4caf50");
             }
 
-            // WATCHDOG ZEGARA (działa tylko gdy mamy 100% pewności, że nie żyjemy)
+            // WATCHDOG ZEGARA
             if (window.__unconscious && deadWindows.length > 0) {
                 let text = deadWindows[0].textContent;
                 let match = text.match(/(?:(\d+)\s*min\s*)?(\d+)\s*s/);
@@ -7402,25 +7427,29 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         window.__stuckTimerCount = 0; 
                     }
 
-                    // Gra zamrożona na tej samej sekundzie przez 6 sekund
                     if (window.__stuckTimerCount >= 6) {
-                        if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Ratuję sytuację...`, "#ffb300");
+                        if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Miękkie odświeżanie interfejsu...`, "#ffb300");
                         window.__stuckTimerCount = -999; 
                         
-                        // Ratunek 1: Próbujemy po cichu wysłać komendę wstrząsu do serwera (bez odświeżania strony)
                         if (typeof Engine !== 'undefined' && Engine.communication) {
                             Engine.communication.send({ "a": "deadresp" });
                         } else if (typeof window._g === 'function') {
                             window._g('deadresp');
                         }
 
-                        // Ratunek 2: Jeśli po kolejnych 3 sekundach serwer dalej nie odpowiada - Twardy Reset
+                        // MIĘKKIE ODŚWIEŻANIE (Soft Reload)
                         setTimeout(() => {
                             if (window.__unconscious) {
                                 if (window.isExping || window.isPatrolling) {
-                                    sessionStorage.setItem('margoBotAutoResume', 'true'); // Zapisujemy info, że bot pracował
+                                    sessionStorage.setItem('margoBotAutoResume', 'true'); 
                                 }
-                                window.location.reload();
+                                
+                                // Odbudowa samego silnika gry bez wywalania karty w przeglądarce!
+                                if (typeof Engine !== 'undefined' && typeof Engine.reload === 'function') {
+                                    Engine.reload(); 
+                                } else {
+                                    window.location.reload(); 
+                                }
                             }
                         }, 3000);
                     }
