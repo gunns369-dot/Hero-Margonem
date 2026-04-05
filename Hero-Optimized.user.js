@@ -5295,8 +5295,9 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
     let hp = hero.hp !== undefined ? parseInt(hero.hp) : (hero.warrior_stats ? parseInt(hero.warrior_stats.hp) : 100);
     let maxhp = hero.maxhp !== undefined ? parseInt(hero.maxhp) : (hero.warrior_stats ? parseInt(hero.warrior_stats.maxhp) : 100);
 
-    let isDead = Engine.dead || hero.dead === true || hero.dead === 1 || hero.dead === "1" || document.querySelector('.dead-window, .death-window, [data-wnd="dead"]') !== null || (hp === 1 && maxhp > 1);
-
+   // Zmienna z Mutation Observera ma absolutne pierwszeństwo!
+    let isDead = window.__unconscious || Engine.dead || hero.dead === true || hero.dead === 1 || hero.dead === "1" || document.querySelector('.dead-window, .death-window, [data-wnd="dead"]') !== null || (hp === 1 && maxhp > 1);
+      
     if (isDead) {
         if (window._lastDeadLog !== Math.floor(now / 5000)) {
             window.logExp("💀 Jesteś nieprzytomny (Wykryto 1 HP). Pauza i powrót do miasta...", "#e53935");
@@ -7339,7 +7340,39 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 800);
     }
+// --- DAEMON: MUTATION OBSERVER (Szybki Wykrywacz Śmierci Twojego autorstwa) ---
+    if (!window.__deathObserverInstalled) {
+        window.__deathObserverInstalled = true;
+        window.__unconscious = false;
 
+        let lastCheck = 0;
+        const observer = new MutationObserver(() => {
+            let now = Date.now();
+            if (now - lastCheck < 500) return; // Limitujemy do 2 skanów na sekundę, by nie zabić FPS
+            lastCheck = now;
+
+            // textContent jest ultra szybkie i nie renderuje CSS
+            const isDead = document.body.textContent.includes("Jesteś nieprzytomny");
+
+            if (isDead && !window.__unconscious) {
+                window.__unconscious = true;
+                if (window.logExp) window.logExp("💀 [OBSERVER] Wykryto zgon! Zatrzymuję bota...", "#e53935");
+                
+                // Natychmiastowy reset celów i ścieżek
+                if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                expCurrentTargetId = null;
+                window.expTargetLockTime = 0;
+                window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+            }
+
+            if (!isDead && window.__unconscious) {
+                window.__unconscious = false;
+                if (window.logExp) window.logExp("✅ [OBSERVER] Ożyłeś. Wracamy do akcji!", "#4caf50");
+            }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
 // --- DAEMON: AUTOHEAL (Logika: Start poniżej progu -> Koniec przy 100%) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
