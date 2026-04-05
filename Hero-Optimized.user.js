@@ -7343,152 +7343,84 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
         }, 800);
     }
-// --- DAEMON: AUTO LEAVE FIGHT (Zoptymalizowany pod wydajność + Randomizacja) ---
-    if (!window.__autoLeaveFightDaemon) {
-        window.__autoLeaveFightDaemon = true;
-        window.__lastFightQuitLog = 0; // Blokada spamu w logach
+// --- TWOJE FUNKCJE DO DETEKCJI STANU NIEPRZYTOMNOŚCI ---
+    function getUnconsciousState() {
+        const overlay = document.querySelector(".dead-overlay.map-overlay, .dead-window, .death-window");
+        const timerEl = document.querySelector(".dead-overlay.map-overlay .dazed-time, .dead-window .dazed-time");
 
-        setInterval(() => {
-            // SZALENIE WAŻNA OPTYMALIZACJA:
-            // Skanowanie wszystkich <div> i <span> zmuszało przeglądarkę do gigantycznych obliczeń.
-            // Teraz szukamy tylko konkretnych klas przycisków, co odciąża procesor o 99%!
-            const battleButtons = document.querySelectorAll("button, .button, .btn, .battle-window a, .loots-button");
-            
-            let btn = null;
-            for (let i = 0; i < battleButtons.length; i++) {
-                let el = battleButtons[i];
-                // Odczyt surowego tekstu jest dużo "lżejszy" dla gry niż przeliczanie innerText
-                let txt = (el.textContent || "").toLowerCase();
-                
-                // Najpierw sprawdzamy lekki tekst, dopiero potem zasobożerne offsetParent!
-                if (txt.includes("opuść walkę") || txt.includes("zakończ walkę") || txt.includes("zamknij")) {
-                    if (el.offsetParent !== null) {
-                        btn = el;
-                        break;
-                    }
-                }
-            }
-            
-            if (btn) {
-                // ZABEZPIECZENIE: Nie spamujemy kliknięć (odczekujemy minimum 2.5s)
-                if (Date.now() - window.__lastFightQuitLog > 2500) {
-                    window.__lastFightQuitLog = Date.now();
-                    
-                    // RANDOMIZACJA: Czekamy od 150ms do 450ms, zamiast klikać natychmiast jak robot.
-                    // Daje to serwerowi czas na odblokowanie interfejsu (brak lagów)!
-                    let randomReaction = Math.floor(Math.random() * (450 - 150 + 1)) + 150; 
-                    
-                    setTimeout(() => {
-                        if (btn && typeof btn.click === 'function') {
-                            btn.click();
-                            if (window.logExp) window.logExp("⚔️ Zamykam podsumowanie walki...", "#9e9e9e");
-                        }
-                    }, randomReaction);
-                }
-            } else if (typeof Engine !== 'undefined' && Engine.battle && Engine.battle.d && Engine.battle.d.winner !== undefined) {
-                // LIMIT ZAPYTAŃ: Czekamy minimum 3.5 sekundy między próbami wysłania awaryjnego pakietu sieciowego
-                if (Date.now() - window.__lastFightQuitLog > 3500) {
-                    window.__lastFightQuitLog = Date.now();
-                    
-                    // Randomizacja pakietu ratunkowego (daje serwerowi wytchnienie)
-                    let randomDelay = Math.floor(Math.random() * (600 - 300 + 1)) + 300;
-                    setTimeout(() => {
-                        if (Engine.communication) {
-                            Engine.communication.send({ a: "fight", action: "quit" }); 
-                        } else if (typeof window._g === 'function') {
-                            window._g("fight&a=quit"); 
-                        }
-                    }, randomDelay);
-                }
-            }
-        }, 400); // Wydłużono czas sprawdzania (z 250 na 400ms), aby zdjąć obciążenie z gry
-    }
-    function isUnconsciousNow() {
-    const deathSelectors = [
-        '.dead-window',
-        '.death-window',
-        '[data-wnd="dead"]',
-        '.dead-overlay',
-        '.dead-overlay.map-overlay',
-        '.dead-overlay .inner-text',
-        '.death-overlay',
-        '.alert-window'
-    ].join(', ');
-
-    const visibleDeathEls = Array.from(document.querySelectorAll(deathSelectors))
-        .filter(el => el && el.offsetParent !== null);
-
-    const hasDeathText = visibleDeathEls.some(el => {
-        const txt = (el.textContent || "").toLowerCase();
-        return (
-            txt.includes("jesteś nieprzytomny") ||
-            txt.includes("zostałeś zabity") ||
-            txt.includes("ockniesz się") ||
-            txt.includes("wrócą ci siły")
+        const visible = !!(
+            overlay &&
+            window.getComputedStyle(overlay).display !== "none" &&
+            overlay.offsetParent !== null
         );
-    });
 
-    const hero = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d : null;
-    const hp = hero ? parseInt(hero.hp ?? hero.warrior_stats?.hp ?? 0) : 0;
-    const maxhp = hero ? parseInt(hero.maxhp ?? hero.warrior_stats?.maxhp ?? 0) : 0;
+        const text = timerEl ? (timerEl.innerText || timerEl.textContent || "").trim() : null;
 
-    const engineDead = !!(
-        (typeof Engine !== 'undefined' && Engine.dead) ||
-        (hero && (hero.dead === true || hero.dead === 1 || hero.dead === "1"))
-    );
-
-    const hpSuggestsDeath = maxhp > 1 && hp <= 1;
-
-    return hasDeathText || engineDead || hpSuggestsDeath;
-}
-   setInterval(() => {
-    const deathCandidates = Array.from(document.querySelectorAll(
-        '.dead-window, .death-window, [data-wnd="dead"], .dead-overlay, .dead-overlay.map-overlay, .alert-window, .dialog-window'
-    )).filter(el => {
-        if (!el || el.offsetParent === null) return false;
-        const txt = (el.textContent || "").toLowerCase();
-        return (
-            txt.includes("jesteś nieprzytomny") ||
-            txt.includes("zostałeś zabity") ||
-            txt.includes("ockniesz się") ||
-            txt.includes("wrócą ci siły")
-        );
-    });
-
-    const isDead = isUnconsciousNow();
-
-    if (isDead && !window.__unconscious) {
-        window.__unconscious = true;
-        if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zatrzymuję bota...", "#e53935");
-        if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') {
-            Engine.hero.stop();
-        }
-    }
-
-    if (!isDead && window.__unconscious) {
-        // lekkie opóźnienie, żeby nie zrobić fałszywego 'ożyłeś'
-        setTimeout(() => {
-            if (window.__unconscious && !isUnconsciousNow()) {
-                window.__unconscious = false;
-                window.__stuckTimerCount = 0;
-                window.__lastParsedSeconds = null;
-                if (window.logExp) window.logExp("✅ [STRAŻNIK] Ożyłeś. Wracamy do akcji!", "#4caf50");
-            }
-        }, 1200);
-    }
-
-    if (window.__unconscious && deathCandidates.length > 0) {
-        const text = deathCandidates[0].textContent || "";
-        const match = text.match(/(?:(\d+)\s*min\s*)?(\d+)\s*s/);
         let seconds = null;
-
-        if (match) {
-            const m = parseInt(match[1]) || 0;
-            const s = parseInt(match[2]) || 0;
-            seconds = m * 60 + s;
+        if (text) {
+            const match = text.match(/(?:(\d+)\s*min)?\s*(\d+)\s*s/i);
+            if (match) {
+                const m = parseInt(match[1] || "0", 10);
+                const s = parseInt(match[2] || "0", 10);
+                seconds = m * 60 + s;
+            }
         }
 
-        if (seconds !== null) {
+        return {
+            unconscious: visible,
+            timerText: text,
+            timerSeconds: seconds
+        };
+    }
+
+    function isUnconsciousNow() {
+        // 1. Sprawdzamy DOM Twoją dokładną funkcją
+        const domState = getUnconsciousState();
+        
+        // 2. Twarde sprawdzenie w silniku gry (Zabezpieczenie)
+        const hero = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d : null;
+        const hp = hero ? parseInt(hero.hp ?? hero.warrior_stats?.hp ?? 0) : 0;
+        const maxhp = hero ? parseInt(hero.maxhp ?? hero.warrior_stats?.maxhp ?? 0) : 0;
+
+        const engineDead = !!(
+            (typeof Engine !== 'undefined' && Engine.dead) ||
+            (hero && (hero.dead === true || hero.dead === 1 || hero.dead === "1"))
+        );
+
+        const hpSuggestsDeath = maxhp > 1 && hp <= 1;
+
+        return domState.unconscious || engineDead || hpSuggestsDeath;
+    }
+
+    // --- PĘTLA STRAŻNIKA ŚMIERCI ---
+    setInterval(() => {
+        const state = getUnconsciousState();
+        const isDead = isUnconsciousNow();
+
+        if (isDead && !window.__unconscious) {
+            window.__unconscious = true;
+            if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zatrzymuję bota...", "#e53935");
+            if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') {
+                Engine.hero.stop();
+            }
+        }
+
+        if (!isDead && window.__unconscious) {
+            // Lekkie opóźnienie, żeby nie zrobić fałszywego 'ożyłeś'
+            setTimeout(() => {
+                if (window.__unconscious && !isUnconsciousNow()) {
+                    window.__unconscious = false;
+                    window.__stuckTimerCount = 0;
+                    window.__lastParsedSeconds = null;
+                    if (window.logExp) window.logExp("✅ [STRAŻNIK] Ożyłeś. Wracamy do akcji!", "#4caf50");
+                }
+            }, 1200);
+        }
+
+        // WATCHDOG: Wykrywanie ZAMROŻONEGO zegara z pomocą Twojego obiektu!
+        if (window.__unconscious && state.timerSeconds !== null) {
+            let seconds = state.timerSeconds;
+            
             if (window.__lastParsedSeconds === seconds) {
                 window.__stuckTimerCount++;
             } else {
@@ -7496,10 +7428,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 window.__stuckTimerCount = 0;
             }
 
+            // Jeśli zegar stoi w miejscu przez 6 sekund (lag gry)
             if (window.__stuckTimerCount >= 6) {
-                if (window.logExp) {
-                    window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Miękkie odświeżanie interfejsu...`, "#ffb300");
-                }
+                if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Miękkie odświeżanie interfejsu...`, "#ffb300");
                 window.__stuckTimerCount = -999;
 
                 if (typeof Engine !== 'undefined' && Engine.communication) {
@@ -7513,7 +7444,6 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         if (window.isExping || window.isPatrolling) {
                             sessionStorage.setItem('margoBotAutoResume', 'true');
                         }
-
                         if (typeof Engine !== 'undefined' && typeof Engine.reload === 'function') {
                             Engine.reload();
                         } else {
@@ -7523,8 +7453,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 }, 3000);
             }
         }
-    }
-}, 1000);
+    }, 1000);
 // --- DAEMON: AUTOHEAL (Logika: Start poniżej progu -> Koniec przy 100%) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
