@@ -7954,60 +7954,154 @@ if (isDead) {
                         }) || null;
                     };
                     
-                    window.openShopAsync = async (namePart) => {
-                        // Szukamy NPC w pamięci gry
-                        let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-                        let npc = null;
-                        for (let i in npcs) {
-                            let n = npcs[i].d || npcs[i];
-                            let cleanNick = (n.nick || n.name || "").replace(/<[^>]*>?/gm, '').trim();
-                            if (cleanNick.toLowerCase().includes(namePart.toLowerCase())) { npc = n; break; }
-                        }
-                        if (!npc) return false;
+                   window.openShopAsync = async (namePart) => {
+    // Szukamy NPC w pamięci gry
+    let npcs = typeof Engine?.npcs?.check === 'function' ? Engine.npcs.check() : (Engine?.npcs?.d || {});
+    let npc = null;
 
-                        // 1. Podchodzenie (Dystans 4 by ominąć lady sklepowe!)
-                        let dist = Math.abs(Engine.hero.d.x - npc.x) + Math.abs(Engine.hero.d.y - npc.y);
-                        if (dist > 4) { 
-                            Engine.hero?.autoGoTo?.({x: npc.x, y: npc.y});
-                            let reached = await window.waitFor(() => {
-                                let d = Math.abs(Engine.hero.d.x - npc.x) + Math.abs(Engine.hero.d.y - npc.y);
-                                return d <= 4;
-                            }, 7000, 120);
-                            if (!reached) return false;
-                        }
+    for (let i in npcs) {
+        let n = npcs[i]?.d || npcs[i];
+        let cleanNick = (n?.nick || n?.name || "").replace(/<[^>]*>?/gm, '').trim();
+        if (cleanNick.toLowerCase().includes((namePart || "").toLowerCase())) {
+            npc = n;
+            break;
+        }
+    }
 
-                        // Upewniamy się, że nogi bohatera całkowicie się zatrzymały
-                        await window.waitFor(() => {
-                            let path = Engine.hero?.d?.path;
-                            return !path || path.length === 0;
-                        }, 3000, 100);
+    if (!npc) {
+        console.warn("[AUTO-SELL] Nie znaleziono NPC:", namePart);
+        return false;
+    }
 
-                        // 2. Otwieranie dialogu (wg. Twojego kodu)
-                        if (typeof Engine.npcs?.clickNpc === "function") {
-                            Engine.npcs.clickNpc(npc.id);
-                            await window.sleep(250);
-                            if (typeof Engine.interface?.clickTalkNearMob === "function") {
-                                Engine.interface.clickTalkNearMob();
-                            }
-                        } else if (typeof Engine.communication !== 'undefined') {
-                            Engine.communication.send({ "a": "talk", "id": npc.id });
-                        } else {
-                            window._g(`talk&id=${npc.id}`);
-                        }
+    const hero = () => Engine?.hero?.d || Engine?.hero || null;
+    const distToNpc = () => {
+        const h = hero();
+        if (!h || !npc) return 999;
+        return Math.abs((h.x ?? 0) - npc.x) + Math.abs((h.y ?? 0) - npc.y);
+    };
 
-                        // 3. Czekamy aż dialog się fizycznie wyrenderuje
-                        const dialogueOpened = await window.waitFor(() => !!window.getOpenDialogue(), 4000, 100);
-                        if (!dialogueOpened) return false;
+    const isStandingStill = () => {
+        const h = hero();
+        const path = h?.path;
+        return !path || path.length === 0;
+    };
 
-                        // 4. Szukamy opcji sklepu
-                        const optionReady = await window.waitFor(() => !!window.findShopDialogueOption(), 3000, 100);
-                        if (!optionReady) return false;
+    const getOpenDialogueNow = () =>
+        document.querySelector(".dialogue-window.is-open, #dialog");
 
-                        const shopOption = window.findShopDialogueOption();
-                        shopOption.click();
-                        return true;
-                    };
-                }
+    const findShopOptionNow = () => {
+        const byClass = document.querySelector(".dialogue-window.is-open .dialogue-window-answer.line_shop");
+        if (byClass) return byClass;
+
+        const answers = [
+            ...document.querySelectorAll(".dialogue-window.is-open .dialogue-window-answer"),
+            ...document.querySelectorAll(".dialog-custom-scroll .answer"),
+            ...document.querySelectorAll(".dialog-window .answer"),
+            ...document.querySelectorAll("#dialog li")
+        ];
+
+        return answers.find(el => {
+            const txt = (el.innerText || el.textContent || "").toLowerCase().trim();
+            return (
+                txt.includes("pokaż mi, co masz na sprzedaż") ||
+                txt.includes("co masz na sprzedaż") ||
+                txt.includes("sprzedaż") ||
+                txt.includes("sprzedaz") ||
+                txt.includes("handel")
+            );
+        }) || null;
+    };
+
+    // 1. Podejdź bliżej niż wcześniej: do dystansu <= 1
+    if (distToNpc() > 1) {
+        try {
+            Engine?.hero?.autoGoTo?.(npc.x, npc.y);
+        } catch (e) {
+            console.warn("[AUTO-SELL] autoGoTo nie powiodło się:", e);
+        }
+
+        const reached = await window.waitFor(() => distToNpc() <= 1, 9000, 120);
+        if (!reached) {
+            console.warn("[AUTO-SELL] Nie udało się podejść do NPC:", npc.nick);
+            return false;
+        }
+    }
+
+    // 2. Poczekaj aż postać całkowicie stanie
+    const fullyStopped = await window.waitFor(() => isStandingStill(), 2500, 80);
+    if (!fullyStopped) {
+        await window.sleep(250);
+    }
+
+    // 3. Kilka prób aktywacji rozmowy
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        // Jeśli dialog już jest, nie klikaj ponownie
+        if (getOpenDialogueNow()) break;
+
+        try {
+            if (typeof Engine?.npcs?.clickNpc === "function") {
+                Engine.npcs.clickNpc(npc.id);
+            } else if (typeof Engine?.communication !== "undefined" && Engine.communication?.send) {
+                Engine.communication.send({ a: "talk", id: npc.id });
+            } else if (typeof window._g === "function") {
+                window._g(`talk&id=${npc.id}`);
+            }
+        } catch (e) {
+            console.warn(`[AUTO-SELL] Próba ${attempt}: clickNpc/talk nieudane`, e);
+        }
+
+        await window.sleep(220);
+
+        try {
+            if (typeof Engine?.interface?.clickTalkNearMob === "function") {
+                Engine.interface.clickTalkNearMob();
+            }
+        } catch (e) {
+            console.warn(`[AUTO-SELL] Próba ${attempt}: clickTalkNearMob nieudane`, e);
+        }
+
+        const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1200, 80);
+        if (opened) break;
+
+        // awaryjnie jeszcze raz, ale już sam talk po id
+        try {
+            if (typeof Engine?.communication !== "undefined" && Engine.communication?.send) {
+                Engine.communication.send({ a: "talk", id: npc.id });
+            } else if (typeof window._g === "function") {
+                window._g(`talk&id=${npc.id}`);
+            }
+        } catch {}
+
+        const openedFallback = await window.waitFor(() => !!getOpenDialogueNow(), 900, 80);
+        if (openedFallback) break;
+
+        await window.sleep(250);
+    }
+
+    // 4. Czekamy na dialog
+    const dialogueOpened = await window.waitFor(() => !!getOpenDialogueNow(), 2500, 80);
+    if (!dialogueOpened) {
+        console.warn("[AUTO-SELL] Dialog z NPC się nie otworzył:", npc.nick);
+        return false;
+    }
+
+    // 5. Czekamy na opcję sklepu
+    const optionReady = await window.waitFor(() => !!findShopOptionNow(), 2500, 80);
+    if (!optionReady) {
+        console.warn("[AUTO-SELL] Nie znaleziono opcji sklepu w dialogu:", npc.nick);
+        return false;
+    }
+
+    // 6. Klik opcji sklepu
+    const shopOption = findShopOptionNow();
+    try {
+        shopOption.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        shopOption.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    } catch {}
+
+    shopOption.click();
+    return true;
+};
 
                 // --- GŁÓWNA LOGIKA KROKU 1 ---
                 if (window.autoSellState.step === 1) {
