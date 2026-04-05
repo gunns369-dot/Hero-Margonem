@@ -7958,7 +7958,7 @@ window.openShopAsync = async (namePart) => {
                         const targetName = (namePart || "").toLowerCase();
                         let npc = null;
 
-                        // KLUCZOWE: Czekamy aż gra wczyta tekstury i postacie po wejściu przez drzwi (max 5 sekund)
+                        // Czekamy aż gra wczyta postacie po wejściu przez drzwi
                         await window.waitFor(() => {
                             const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
                             npc = npcs.find(n => {
@@ -7981,13 +7981,6 @@ window.openShopAsync = async (namePart) => {
                             return Math.max(Math.abs((h.x ?? 0) - npc.x), Math.abs((h.y ?? 0) - npc.y));
                         };
 
-                        const isStandingStill = () => {
-                            const h = hero();
-                            const pathA = h?.path;
-                            const pathB = Engine?.hero?.path;
-                            return (!pathA || pathA.length === 0) && (!pathB || pathB.length === 0);
-                        };
-
                         const getOpenDialogueNow = () => document.querySelector(".dialogue-window.is-open, #dialog, .dialog-window");
 
                         const findShopOptionNow = () => {
@@ -8004,69 +7997,38 @@ window.openShopAsync = async (namePart) => {
 
                             return answers.find(el => {
                                 const txt = (el.innerText || el.textContent || "").toLowerCase().trim();
-                                // Zaimplementowano szersze poszukiwanie z Twojego kodu ("co masz")
-                                return txt.includes("pokaż mi, co masz") || txt.includes("co masz") || txt.includes("sprzedaż") || txt.includes("sprzedaz") || txt.includes("handel") || txt.includes("kup");
+                                return txt.includes("co masz") || txt.includes("sprzedaż") || txt.includes("sprzedaz") || txt.includes("handel") || txt.includes("kup");
                             }) || null;
                         };
 
-                        const clickLikeHuman = (el) => {
-                            if (!el) return false;
-                            try {
-                                el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
-                                el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                                el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                                if (typeof el.click === "function") el.click();
-                                return true;
-                            } catch (e) {
-                                try { el.click(); return true; } catch {}
-                            }
-                            return false;
-                        };
-
-                        // 1. PODEJŚCIE (Z wykorzystaniem Twojej logiki pętli wymuszającej dojście)
+                        // 1. PODEJŚCIE DO NPC (Zgodnie z Twoim kodem)
                         if (distToNpc() > 1) {
                             try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch(e) {}
                             
-                            for (let i = 0; i < 60; i++) { // Max 60 skanów * 150ms = 9 sekund
-                                if (distToNpc() <= 1) break;
-                                
-                                // Ponawiamy komendę co ok. 1 sekundę na wypadek laga / odświeżenia mapy
-                                if (i > 0 && i % 8 === 0) {
-                                    try { Engine?.hero?.autoGoTo?.({x: npc.x, y: npc.y}); } catch(e) {}
-                                }
-                                await window.sleep(150);
-                            }
+                            const reached = await window.waitFor(() => distToNpc() <= 1, 12000, 150);
                             
-                            if (distToNpc() > 1) {
-                                console.warn("[AUTO-SELL/WALK] Cel zablokowany, brak dostępu do:", npc.nick);
+                            if (!reached) {
+                                console.warn("[AUTO-SELL] Nie udało się podejść do NPC:", npc.nick);
                                 return false;
                             }
                         }
 
-                        // 2. ODDECH I ODBLOKOWANIE POSTACI (Twoje genialne rozwiązanie!)
-                        await window.waitFor(() => isStandingStill(), 2500, 80);
-                        await window.sleep(Math.floor(Math.random() * 150) + 150);
-
-                        // KLUCZOWE: Czasem silnik blokuje zmienną 'stop' na true. Odblokowujemy!
+                        // 2. ODBLOKOWANIE RUCHU (Twoje rozwiązanie na blokadę przy ladzie!)
                         if (typeof Engine !== 'undefined' && Engine.hero) {
                             Engine.hero.stop = false;
                         }
-                        
-                        await window.sleep(300); // Twarde opóźnienie z Twojego kodu po odblokowaniu
+                        await window.sleep(300);
 
-                        // Jeśli celem była Elita (type 2), możemy tu przerwać, bo walka zaraz się zacznie sama!
+                        // Jeśli cel to elita, wychodzimy - walka i tak zaraz się włączy
                         if (npc.type === 2 || npc.type === 3) return true;
 
                         // 3. INTERAKCJA Z NPC (Z użyciem Twojego sendRequestToTalk)
-                        for (let attempt = 1; attempt <= 4; attempt++) {
+                        for (let attempt = 1; attempt <= 3; attempt++) {
                             if (getOpenDialogueNow()) break;
 
-                            // Zaznaczenie NPC
                             try { if (typeof Engine?.npcs?.clickNpc === "function") Engine.npcs.clickNpc(npc.id); } catch (e) {}
-                            await window.sleep(Math.floor(Math.random() * 100) + 150);
+                            await window.sleep(200);
 
-                            // Prawdziwe natywne rozpoczęcie dialogu (Bypassuje UI)
                             try {
                                 if (typeof Engine?.hero?.sendRequestToTalk === "function") {
                                     Engine.hero.sendRequestToTalk(npc.id);
@@ -8079,43 +8041,43 @@ window.openShopAsync = async (namePart) => {
                                 }
                             } catch (e) {}
 
-                            const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1500, 80);
+                            const opened = await window.waitFor(() => !!getOpenDialogueNow(), 1500, 100);
                             if (opened) break;
-
-                            await window.sleep(Math.floor(Math.random() * 200) + 200);
                         }
 
-                        const dialogueOpened = await window.waitFor(() => !!getOpenDialogueNow(), 2500, 80);
+                        const dialogueOpened = !!getOpenDialogueNow();
                         if (!dialogueOpened) {
                             console.warn("[AUTO-SELL] Dialog z NPC się nie otworzył:", npc.nick);
                             return false;
                         }
 
-                        // Humanizacja: Udawanie odczytywania powitania przez gracza przed kliknięciem w opcje
-                        await window.sleep(Math.floor(Math.random() * 300) + 250);
+                        await window.sleep(500); // ⏳ Czekaj z Twojego kodu
 
-                        const optionReady = await window.waitFor(() => !!findShopOptionNow(), 2500, 80);
+                        // 4. OTWARCIE SKLEPU
+                        const optionReady = await window.waitFor(() => !!findShopOptionNow(), 3000, 100);
                         if (!optionReady) {
                             console.warn("[AUTO-SELL] Nie znaleziono opcji sklepu w dialogu:", npc.nick);
                             return false;
                         }
 
                         const shopOption = findShopOptionNow();
-                        clickLikeHuman(shopOption);
+                        if (shopOption) {
+                            try { shopOption.click(); } catch(e) {}
+                        }
 
                         const shopOpened = await window.waitFor(() => {
                             return !!(
                                 Engine?.shop?.wnd || Engine?.shop?.getData?.() ||
                                 document.querySelector(".shop-window, .shop, .trade-window, .merchant-window")
                             );
-                        }, 2500, 80);
+                        }, 3000, 100);
 
                         if (!shopOpened) {
                             console.warn("[AUTO-SELL] Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
                             return false;
                         }
                         
-                        await window.sleep(Math.floor(Math.random() * 300) + 300);
+                        await window.sleep(400); // Mały margines na załadowanie Twojego plecaka do systemu
                         return true;
                     };
 } // <--- TEN JEDEN NAWIAS NAPRAWIA CAŁY SKRYPT!
