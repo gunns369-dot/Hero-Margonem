@@ -7897,44 +7897,57 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (Date.now() < window.autoSellState.nextActionTime) return;
                 window.isExpSuspended = true;
                 
-             if (window.autoSellState.step === 1) {
-                    if (!window.autoSellState.failedNPCs) window.autoSellState.failedNPCs = [];
+if (window.autoSellState.step === 1) {
+                    // Inicjalizacja przy pierwszym uruchomieniu
+                    if (!window.autoSellState.failedNPCs) {
+                        window.autoSellState.failedNPCs = [];
+                        window.autoSellState.targetNpc = null; // Czyścimy cache z poprzednich tras
+                    }
                     window.autoSellState.shopWaitStartTime = 0;
 
-                    let kupcy = window.DatabaseModule.kupcy || [];
-                    let validMerchants = kupcy.filter(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n)));
-                    if (validMerchants.length === 0) validMerchants = kupcy;
-                    
-                    if (window.autoSellState.failedNPCs.length > 0) {
-                        validMerchants = validMerchants.filter(k => !window.autoSellState.failedNPCs.includes(k.npc_name));
-                    }
-
-                    if (validMerchants.length === 0) { 
-                        if (window.logHero) window.logHero("❌ Brak dostępnych kupców do sprzedaży!", "#e53935");
-                        window.autoSellState.active = false; 
-                        window.autoSellState.failedNPCs = []; 
-                        window.isExpSuspended = false;
-                        window.isRushing = false;
-                        return; 
-                    }
-
-                    let currMap = Engine.map.d.name;
-                    let bestNpc = null;
-                    let bestDist = Infinity;
-                    validMerchants.forEach(m => {
-                        if (m.map_name === currMap) { bestDist = 0; bestNpc = m; }
-                        else if (bestDist > 0) {
-                            let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, m.map_name) : null;
-                            if (path && path.length < bestDist) { bestDist = path.length; bestNpc = m; }
+                    // OPTYMALIZACJA CPU: Szukamy kupca tylko raz, a nie 10 razy na sekundę!
+                    if (!window.autoSellState.targetNpc) {
+                        let kupcy = window.DatabaseModule.kupcy || [];
+                        let validMerchants = kupcy.filter(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n)));
+                        if (validMerchants.length === 0) validMerchants = kupcy;
+                        
+                        if (window.autoSellState.failedNPCs.length > 0) {
+                            validMerchants = validMerchants.filter(k => !window.autoSellState.failedNPCs.includes(k.npc_name));
                         }
-                    });
-                    
-                    if (!bestNpc) { 
-                        window.autoSellState.active = false; 
-                        return; 
+
+                        if (validMerchants.length === 0) { 
+                            if (window.logHero) window.logHero("❌ Brak dostępnych kupców do sprzedaży!", "#e53935");
+                            window.autoSellState.active = false; 
+                            window.autoSellState.failedNPCs = null; 
+                            window.isExpSuspended = false;
+                            window.isRushing = false;
+                            return; 
+                        }
+
+                        let currMap = Engine.map.d.name;
+                        let bestNpc = null;
+                        
+                        // Ultraszybki skan: Jeśli jakikolwiek kupiec jest z nami na mapie, od razu go bierzemy (pomijamy Dijkstrę!)
+                        bestNpc = validMerchants.find(m => m.map_name === currMap);
+                        
+                        // Jeśli nie ma nikogo na mapie, dopiero wtedy włączamy nawigację do innych miast
+                        if (!bestNpc) {
+                            let bestDist = Infinity;
+                            validMerchants.forEach(m => {
+                                let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, m.map_name) : null;
+                                if (path && path.length < bestDist) { bestDist = path.length; bestNpc = m; }
+                            });
+                        }
+                        
+                        if (!bestNpc) { 
+                            window.autoSellState.active = false; 
+                            return; 
+                        }
+                        window.autoSellState.targetNpc = bestNpc; // ZAPIS DO CACHE
                     }
-                    
-                    window.autoSellState.targetNpc = bestNpc;
+
+                    // Pobieramy kupca z pamięci Cache
+                    let bestNpc = window.autoSellState.targetNpc;
 
                     if (Engine.map.d.name !== bestNpc.map_name) {
                         if (!window.isRushingToShop) {
@@ -7946,35 +7959,30 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                         let dist = Math.abs(Engine.hero.d.x - bestNpc.x) + Math.abs(Engine.hero.d.y - bestNpc.y);
                         let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
 
-                        // 1. Zbyt daleko? Każemy mu iść i przerywamy cykl
                         if (dist > 4) {
                             if (!isMoving) Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); 
                             window.autoSellState.nextActionTime = Date.now() + 300; 
                             return; 
                         }
 
-                        // 2. Jesteśmy blisko, ale postać wciąż stawia kroki? 
-                        // Twarda blokada! Czekamy aż zatrzyma się w 100%.
                         if (isMoving) {
                             window.autoSellState.nextActionTime = Date.now() + 200;
                             return; 
                         }
 
-                       // 3. Postać stoi w miejscu obok kupca - ROZPOCZYNAMY ROZMOWĘ
                         let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+                        let foundNpcInGame = false;
                         for (let i in npcs) {
                             let n = npcs[i].d || npcs[i];
                             let cleanNick = (n.nick || n.name || "").replace(/<[^>]*>?/gm, '').trim();
                             
                             if (cleanNick.includes(bestNpc.npc_name) || bestNpc.npc_name.includes(cleanNick)) {
-                                
-                                // TWOJA FUNKCJA POCIĘTA NA KROKI CZASOWE
+                                foundNpcInGame = true;
                                 if (typeof Engine !== 'undefined' && Engine.npcs && typeof Engine.npcs.clickNpc === 'function') {
-                                    // Krok 1: Wybieramy NPC
                                     Engine.npcs.clickNpc(n.id);
-                                    window.autoSellState.step = 1.5; // Przechodzimy do ukrytego kroku!
+                                    window.autoSellState.step = 1.5; 
                                     window.autoSellState.shopWaitStartTime = Date.now();
-                                    window.autoSellState.nextActionTime = Date.now() + 200; // Twarde 200ms z Twojego kodu
+                                    window.autoSellState.nextActionTime = Date.now() + 200; 
                                 } else if (typeof Engine !== 'undefined' && Engine.communication) {
                                     Engine.communication.send({ "a": "talk", "id": n.id });
                                     window.autoSellState.step = 2;
@@ -7989,16 +7997,21 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                                 break;
                             }
                         }
+                        
+                        // Zabezpieczenie: co jeśli jesteśmy na miejscu, ale NPC zniknął (np. zabił go gracz / zlagowało mapę)?
+                        if (!foundNpcInGame) {
+                            window.autoSellState.failedNPCs.push(bestNpc.npc_name);
+                            window.autoSellState.targetNpc = null; // Czyszczenie pamięci po failu
+                            window.autoSellState.nextActionTime = Date.now() + 500;
+                        }
                     }
                 } else if (window.autoSellState.step === 1.5) {
-                    // Krok 1.5: Inicjacja rozmowy z zaznaczonym NPC
                     if (typeof Engine !== 'undefined' && Engine.interface && typeof Engine.interface.clickTalkNearMob === 'function') {
                         Engine.interface.clickTalkNearMob();
                     }
                     window.autoSellState.step = 2;
-                    window.autoSellState.nextActionTime = Date.now() + 500; // Twarde 500ms z Twojego kodu na wczytanie opcji
+                    window.autoSellState.nextActionTime = Date.now() + 500; 
                 } else if (window.autoSellState.step === 2) {
-                    // Krok 2: Kliknięcie w otwarty już dialog
                     const shopOption = document.querySelector(".dialogue-window.is-open .dialogue-window-answer.line_shop") || 
                                        [...document.querySelectorAll(".dialogue-window.is-open .dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer")]
                                        .find(el => {
@@ -8017,6 +8030,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                              let closeBtn = document.querySelector('.dialogue-window.is-open .close-button, #dialog .close-button, .dialog-window .close-button');
                              if (closeBtn) closeBtn.click();
                              window.autoSellState.failedNPCs.push(window.autoSellState.targetNpc.npc_name);
+                             window.autoSellState.targetNpc = null; // Ważne: Czyszczenie cache po failu!
                              window.autoSellState.step = 1; 
                              window.autoSellState.nextActionTime = Date.now() + 500;
                         }
