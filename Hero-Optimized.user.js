@@ -7955,15 +7955,25 @@ if (isDead) {
                     };
                     
 window.openShopAsync = async (namePart) => {
+                        const sleep = ms => new Promise(r => setTimeout(r, ms));
                         const targetName = (namePart || "").toLowerCase();
-                        let npc = null;
 
-                        // Czekamy na załadowanie NPC
-                        await window.waitFor(() => {
-                            const npcs = Object.values(Engine.npcs?.check?.() || Engine.npcs?.d || {}).map(n => n?.d || n);
-                            npc = npcs.find(n => (n?.nick || n?.name || "").replace(/<[^>]*>?/gm, '').toLowerCase().includes(targetName));
-                            return !!npc;
-                        }, 5000, 150);
+                        // 1. ZABEZPIECZENIE: Czekamy, aż zniknie ekran ładowania mapy
+                        while (Engine.map?.isLoading) {
+                            await sleep(100);
+                        }
+                        await sleep(500); // Twardy oddech po załadowaniu mapy (żeby zespawniło NPC)
+
+                        // 2. SZUKAMY NPC (Wg Twojego schematu)
+                        let npc = null;
+                        for (let k = 0; k < 50; k++) {
+                            npc = Object.values(Engine.npcs?.check?.() || {})
+                                .map(n => n?.d || n)
+                                .find(n => (n.nick || "").toLowerCase().includes(targetName));
+                            
+                            if (npc) break;
+                            await sleep(100);
+                        }
 
                         if (!npc) {
                             console.warn("❌ brak NPC:", namePart);
@@ -7972,76 +7982,76 @@ window.openShopAsync = async (namePart) => {
 
                         console.log(`🚶 Idę do ${npc.nick}...`);
 
+                        // 🔑 poprawne wywołanie
                         try { Engine.hero.autoGoTo({x: npc.x, y: npc.y}); } catch(e){}
 
-                        // ⏳ czekaj aż podejdzie (Twoja pętla)
-                        for (let i = 0; i < 60; i++) {
-                            const h = Engine.hero.d;
+                        // ⏳ czekaj aż podejdzie
+                        for (let i = 0; i < 40; i++) {
+                            const h = Engine.hero?.d || Engine.hero;
+                            if (!h) continue;
                             const dist = Math.max(Math.abs(h.x - npc.x), Math.abs(h.y - npc.y));
 
                             if (dist <= 1) break;
                             
-                            if (i % 10 === 0 && dist > 1) {
-                                try { Engine.hero.autoGoTo({x: npc.x, y: npc.y}); } catch(e) {}
+                            // Ponawiamy komendę co 1 sekundę na wypadek zgubienia ścieżki
+                            if (i > 0 && i % 10 === 0 && dist > 1) { 
+                                try { Engine.hero.autoGoTo({x: npc.x, y: npc.y}); } catch(e){}
                             }
-                            await window.sleep(100);
+                            
+                            await sleep(100);
                         }
 
                         console.log("🛑 Odblokowuję stop...");
                         if (Engine.hero) Engine.hero.stop = false;
 
-                        await window.sleep(300);
-                        
+                        await sleep(300);
+
+                        // Jeżeli cel to Elita (nie sprzedawca), kończymy tu pracę, zaraz zacznie się walka
                         if (npc.type === 2 || npc.type === 3) return true;
 
                         console.log("💬 Rozmowa...");
 
-                        // --- 1:1 TWÓJ KOD ROZMOWY ---
                         try { Engine.npcs?.clickNpc?.(npc.id); } catch(e) {}
-                        await window.sleep(200);
+                        await sleep(200);
 
-                        try { 
-                            Engine.hero?.sendRequestToTalk?.(npc.id); 
-                        } catch(e) {
-                            // Zapas tylko i wyłącznie, jakby grało się na starym interfejsie (SI)
-                            if (typeof window._g === 'function') window._g(`talk&id=${npc.id}`);
-                        }
+                        try { Engine.hero?.sendRequestToTalk?.(npc.id); } catch(e) {}
+                        
+                        // Zapas awaryjny (do wstecznej kompatybilności)
+                        try { if (typeof window._g === 'function') window._g(`talk&id=${npc.id}`); } catch(e) {}
 
-                        await window.sleep(500);
+                        await sleep(500);
 
-                        // Czekamy na pojawienie się opcji sklepu (oparte na Twoim kodzie)
+                        // 🛒 SZUKAMY PRZYCISKU SKLEPU
                         let shopBtn = null;
-                        for (let j = 0; j < 15; j++) {
-                            shopBtn = [...document.querySelectorAll(".dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer")]
+                        for (let i = 0; i < 20; i++) {
+                            shopBtn = [...document.querySelectorAll(".dialogue-window-answer, .dialog-custom-scroll .answer, .dialog-window .answer, #dialog li")]
                                 .find(el => {
-                                    let txt = (el.innerText || "").toLowerCase();
+                                    let txt = (el.innerText || el.textContent || "").toLowerCase();
                                     return txt.includes("co masz") || txt.includes("sprzeda") || txt.includes("handel") || txt.includes("kup");
                                 });
                             if (shopBtn) break;
-                            await window.sleep(200); // bufor na lagi serwera
+                            await sleep(150);
                         }
 
                         if (!shopBtn) {
-                            console.warn("❌ brak opcji sklepu u NPC:", npc.nick);
+                            console.warn("❌ brak opcji sklepu u:", npc.nick);
                             return false;
                         }
 
                         console.log("🛒 Otwieram sklep...");
-                        try { shopBtn.click(); } catch (e) {}
+                        try { shopBtn.click(); } catch(e){}
 
-                        const shopOpened = await window.waitFor(() => {
-                            return !!(
+                        // ⏳ Czekamy na załadowanie interfejsu sklepu
+                        for (let i = 0; i < 30; i++) {
+                            let shopOpened = !!(
                                 Engine?.shop?.wnd || Engine?.shop?.getData?.() ||
                                 document.querySelector(".shop-window, .shop, .trade-window, .merchant-window")
                             );
-                        }, 3000, 100);
-
-                        if (!shopOpened) {
-                            console.warn("❌ Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
-                            return false;
+                            if (shopOpened) break;
+                            await sleep(100);
                         }
-                        
-                        await window.sleep(400);
+
+                        await sleep(400); // Ostatni margines czasu na zsynchronizowanie plecaka
                         return true;
                     };
 } // <--- TEN JEDEN NAWIAS NAPRAWIA CAŁY SKRYPT!
