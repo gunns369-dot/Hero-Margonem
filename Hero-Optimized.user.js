@@ -7373,6 +7373,57 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
         observer.observe(document.body, { childList: true, subtree: true });
     }
+    // --- DAEMON: DEATH TIMER WATCHDOG (Zabezpieczenie przed zaciętym zegarem) ---
+    if (!window.__deathTimerWatchdogInstalled) {
+        window.__deathTimerWatchdogInstalled = true;
+        window.__lastParsedSeconds = null;
+        window.__stuckTimerCount = 0;
+
+        setInterval(() => {
+            // Uruchamiamy sprawdzanie zegara TYLKO gdy postać nie żyje (zmienna z Mutation Observera)
+            if (!window.__unconscious) {
+                window.__lastParsedSeconds = null;
+                window.__stuckTimerCount = 0;
+                return;
+            }
+
+            // Używamy textContent dla wydajności
+            const text = document.body.textContent; 
+            let seconds = null;
+
+            // Sprytny Regex łapiący zarówno "1min 15s" jak i samo "45s"
+            const match = text.match(/(?:(\d+)\s*min\s*)?(\d+)\s*s/);
+            
+            if (match) {
+                let m = parseInt(match[1]) || 0;
+                let s = parseInt(match[2]) || 0;
+                seconds = m * 60 + s;
+            }
+
+            if (seconds !== null) {
+                // Jeśli sekundy się nie zmieniły od ostatniego sprawdzenia, nabijamy licznik zacięcia
+                if (window.__lastParsedSeconds === seconds) {
+                    window.__stuckTimerCount++;
+                } else {
+                    window.__lastParsedSeconds = seconds;
+                    window.__stuckTimerCount = 0; // Zegar działa poprawnie, resetujemy
+                }
+
+                // Jeśli zegar stoi na tej samej wartości przez pełne 5 sekund...
+                if (window.__stuckTimerCount >= 5) {
+                    if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Odświeżam grę...`, "#ffb300");
+                    else console.warn(`🔄 Zegar zamarzł na ${seconds}s. Odświeżam...`);
+                    
+                    window.__stuckTimerCount = -999; // Zabezpieczenie przed spamem
+                    
+                    // Twardy reload strony
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                }
+            }
+        }, 1000);
+    }
 // --- DAEMON: AUTOHEAL (Logika: Start poniżej progu -> Koniec przy 100%) ---
     if (!window.autoHealDaemonInstalled) {
         window.autoHealDaemonInstalled = true;
