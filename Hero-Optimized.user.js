@@ -8213,8 +8213,11 @@ if (isDead) {
                         window.autoSellState.step = 4;
                         window.autoSellState.nextActionTime = Date.now() + 1000;
                     }
-                } else if (window.autoSellState.step === 4) {
-                    let stats = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99 };
+                             } else if (window.autoSellState.step === 4) {
+                    let stats = typeof window.getBagStats === 'function'
+                        ? window.getBagStats()
+                        : { freeSlots: 99 };
+
                     if (stats.freeSlots > window.autoSellState.lastFreeSlots) {
                         window.autoSellState.lastFreeSlots = stats.freeSlots;
                         window.autoSellState.bagToSell = 1;
@@ -8222,27 +8225,33 @@ if (isDead) {
                         window.autoSellState.nextActionTime = Date.now() + 500;
                     } else {
                         let profit = Engine.hero.d.gold - window.autoSellState.oldGold;
+
                         if (profit > 0) {
                             let msg = `✅ Opróżnianie zakończone! Zarobek: ${profit.toLocaleString()} zł. Wracam do pracy.`;
                             if (window.logHero) window.logHero(msg, "#4caf50");
                             if (window.logExp) window.logExp(msg, "#4caf50");
                         }
-                        
-                        // Pełny Reset po zakończeniu (Kasuje też listę zablokowanych kupców na przyszłość!)
+
+                        // Pełny Reset po zakończeniu
                         window.autoSellState.active = false;
                         window.autoSellState.failedNPCs = [];
+                        window.autoSellState.targetNpc = null;
+                        window.autoSellState.isAsyncRunning = false;
                         window.isExpSuspended = false;
                         window.isRushing = false;
                         window.isRushingToShop = false;
-                        if (typeof Engine.shop.close === 'function') Engine.shop.close();
+
+                        if (typeof Engine.shop?.close === 'function') Engine.shop.close();
+
                         let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                         if (closeBtn) closeBtn.click();
+
                         window.lastExpMap = null;
                     }
+                }
             }
         }, 300);
     }
-
 // --- DAEMON: DETEKCJA ZAPADKI (ALARM + HUMAN STOP) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
