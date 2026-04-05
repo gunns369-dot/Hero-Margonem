@@ -7869,7 +7869,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (Date.now() < window.autoSellState.nextActionTime) return;
                 window.isExpSuspended = true;
                 
-              if (window.autoSellState.step === 1) {
+             if (window.autoSellState.step === 1) {
                     if (!window.autoSellState.failedNPCs) window.autoSellState.failedNPCs = [];
                     window.autoSellState.shopWaitStartTime = 0;
 
@@ -7914,47 +7914,55 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                             if (typeof window.rushToMap === 'function') window.rushToMap(bestNpc.map_name, bestNpc.x, bestNpc.y);
                         }
                     } else {
+                        window.isRushingToShop = false;
                         let dist = Math.abs(Engine.hero.d.x - bestNpc.x) + Math.abs(Engine.hero.d.y - bestNpc.y);
-                        
-                        if (dist <= 4) {
-                            window.isRushingToShop = false;
-                            let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-                            for (let i in npcs) {
-                                let n = npcs[i].d || npcs[i];
-                                let cleanNick = (n.nick || n.name || "").replace(/<[^>]*>?/gm, '').trim();
+                        let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+
+                        // 1. Zbyt daleko? Każemy mu iść i przerywamy cykl
+                        if (dist > 4) {
+                            if (!isMoving) Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); 
+                            window.autoSellState.nextActionTime = Date.now() + 300; 
+                            return; 
+                        }
+
+                        // 2. Jesteśmy blisko, ale postać wciąż stawia kroki? 
+                        // Twarda blokada! Czekamy aż zatrzyma się w 100%.
+                        if (isMoving) {
+                            window.autoSellState.nextActionTime = Date.now() + 200;
+                            return; 
+                        }
+
+                        // 3. Postać stoi w miejscu obok kupca - ROZPOCZYNAMY ROZMOWĘ
+                        let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+                        for (let i in npcs) {
+                            let n = npcs[i].d || npcs[i];
+                            let cleanNick = (n.nick || n.name || "").replace(/<[^>]*>?/gm, '').trim();
+                            
+                            if (cleanNick.includes(bestNpc.npc_name) || bestNpc.npc_name.includes(cleanNick)) {
                                 
-                                if (cleanNick.includes(bestNpc.npc_name) || bestNpc.npc_name.includes(cleanNick)) {
+                                if (typeof Engine !== 'undefined' && Engine.npcs && typeof Engine.npcs.clickNpc === 'function') {
+                                    Engine.npcs.clickNpc(n.id);
                                     
-                                    // TWOJA POPRAWKA: Natywna inicjacja dialogu z Nowego Interfejsu (NI)
-                                    if (typeof Engine !== 'undefined' && Engine.npcs && typeof Engine.npcs.clickNpc === 'function') {
-                                        Engine.npcs.clickNpc(n.id);
-                                        setTimeout(() => {
-                                            if (Engine.interface && typeof Engine.interface.clickTalkNearMob === 'function') {
-                                                Engine.interface.clickTalkNearMob();
-                                            }
-                                        }, 200);
-                                    } else if (typeof Engine !== 'undefined' && Engine.communication) {
-                                        Engine.communication.send({ "a": "talk", "id": n.id });
-                                    } else {
-                                        window._g(`talk&id=${n.id}`);
-                                    }
-                                    
-                                    window.autoSellState.step = 2;
-                                    window.autoSellState.shopWaitStartTime = Date.now();
-                                    window.autoSellState.nextActionTime = Date.now() + 800; // Czekamy chwilę na render okna
-                                    break;
+                                    // Pół sekundy opóźnienia, by dać serwerowi czas na "połączenie" z NPC
+                                    setTimeout(() => {
+                                        if (Engine.interface && typeof Engine.interface.clickTalkNearMob === 'function') {
+                                            Engine.interface.clickTalkNearMob();
+                                        }
+                                    }, 400);
+                                } else if (typeof Engine !== 'undefined' && Engine.communication) {
+                                    Engine.communication.send({ "a": "talk", "id": n.id });
+                                } else {
+                                    window._g(`talk&id=${n.id}`);
                                 }
-                            }
-                        } else if (!window.isRushingToShop) {
-                            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-                            if (!isMoving) { 
-                                Engine.hero.autoGoTo({x: bestNpc.x, y: bestNpc.y}); 
-                                window.autoSellState.nextActionTime = Date.now() + 500; 
-                            } else { 
-                                window.autoSellState.nextActionTime = Date.now() + 300; 
+                                
+                                window.autoSellState.step = 2;
+                                window.autoSellState.shopWaitStartTime = Date.now();
+                                window.autoSellState.nextActionTime = Date.now() + 1200; // Bezpieczny czas na wczytanie okienka
+                                break;
                             }
                         }
                     }
+                }
                 } else if (window.autoSellState.step === 2) {
                     // TWOJA POPRAWKA: Precyzyjne wyszukiwanie opcji handlu (w tym klasa .line_shop)
                     const shopOption = document.querySelector(".dialogue-window.is-open .dialogue-window-answer.line_shop") || 
