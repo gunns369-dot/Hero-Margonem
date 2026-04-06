@@ -17,12 +17,12 @@
         // ==========================================
         if (!window.__antiThrottleInstalled) {
     window.__antiThrottleInstalled = true;
-            
+
             // 1. OSZUKIWANIE PRZEGLĄDARKI (Główny powód zamrażania Margonem)
             // Wycinamy grze możliwość sprawdzenia, czy karta jest zminimalizowana
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
-            
+
             // Blokujemy eventy usypiające - gra nigdy nie dostanie sygnału "straciłem focus"
             const blockEvent = (e) => e.stopImmediatePropagation();
             document.addEventListener('visibilitychange', blockEvent, true);
@@ -48,24 +48,24 @@
                 };
             `;
             const worker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
-            
+
             const callbacks = {};
             let timerId = 1;
-            
+
             worker.onmessage = function(e) {
                 if (callbacks[e.data.id]) {
                     callbacks[e.data.id]();
                     if (e.data.type === 'timeout') delete callbacks[e.data.id];
                 }
             };
-            
+
             window.originalSetInterval = window.setInterval;
             window.originalClearInterval = window.clearInterval;
             window.originalSetTimeout = window.setTimeout;
             window.originalClearTimeout = window.clearTimeout;
             window.originalRequestAnimationFrame = window.requestAnimationFrame;
             window.originalCancelAnimationFrame = window.cancelAnimationFrame;
-            
+
             window.setInterval = function(cb, timeout, ...args) {
                 let id = timerId++; callbacks[id] = () => cb(...args);
                 worker.postMessage({ command: 'setInterval', id: id, timeout: timeout }); return id;
@@ -80,19 +80,19 @@
             // 3. WYMUSZANIE KLATEK ANIMACJI (Oszukiwanie silnika graficznego)
             let rafCounter = 0;
             let rafMap = new Map();
-            
+
             window.requestAnimationFrame = function(cb) {
                 let id = ++rafCounter;
                 // Rzucamy własne, niezabijalne (dzięki Workerowi) klatki animacji co 16ms (~60 FPS)
                 // Używamy performance.now(), bo silnik Margonem używa tego do obliczania płynności chodu
                 let timeoutId = window.setTimeout(() => {
                     rafMap.delete(id);
-                    cb(performance.now()); 
-                }, 16); 
+                    cb(performance.now());
+                }, 16);
                 rafMap.set(id, timeoutId);
                 return id;
             };
-            
+
             window.cancelAnimationFrame = function(id) {
                 let timeoutId = rafMap.get(id);
                 if (timeoutId) {
@@ -1177,7 +1177,7 @@ function loadData() {
     // --- SILNIK MARGONEURO: DISCORD WEBHOOK ---
     window.sendDiscordWebhook = function(title, description, colorHex = 16753920) {
         if (!botSettings.discord || !botSettings.discord.enabled || !botSettings.discord.url) return;
-        
+
         let payload = {
             username: "MargoNeuro",
             avatar_url: "https://www.margonem.pl/favicon.ico",
@@ -1591,13 +1591,13 @@ let attackInterval = null;
 
                     let foundName = nData.nick ? nData.nick.replace(/<[^>]*>?/gm, '') : targetHero;
                     showHeroAlertBanner(foundName);
-                    
+
            // PUSH NA DISCORD
                     if (botSettings.discord?.alerts?.hero) {
                         let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : lastMapName;
                         window.sendDiscordWebhook(
-                            "🚨 WYKRYTO CEL NA RADARZE!", 
-                            `**Znalazłem:** ${foundName}\n**Lokalizacja:** ${mapName} [X: ${nData.x}, Y: ${nData.y}]`, 
+                            "🚨 WYKRYTO CEL NA RADARZE!",
+                            `**Znalazłem:** ${foundName}\n**Lokalizacja:** ${mapName} [X: ${nData.x}, Y: ${nData.y}]`,
                             16753920 // Złoty kolor
                         );
                     }
@@ -2118,7 +2118,7 @@ function autoDetectEngineData() {
         if (currentSysMap === rushTarget) {
             isRushing = false;
             window.isRushing = false;
-            window._lastRushNextMap = null; 
+            window._lastRushNextMap = null;
             window._lastRushTargetLog = null;
             let btn = document.getElementById('btnStartStop');
             if (btn) { btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>'; btn.style.color = "#4caf50"; btn.style.borderColor = "#4caf50"; }
@@ -2126,7 +2126,7 @@ function autoDetectEngineData() {
             if (rushTargetX !== null && rushTargetY !== null) {
                 setTimeout(() => safeGoTo(rushTargetX, rushTargetY, false), 500);
             }
-            
+
             if (window.resumePatrolAfterRush) {
                 window.resumePatrolAfterRush = false;
                 isPatrolling = true;
@@ -2145,11 +2145,11 @@ function autoDetectEngineData() {
         let tps = window.getAvailableTeleports();
         let bestTp = null;
         // Wymagamy skrócenia trasy przynajmniej o 1 mapę, żeby opłacało się zużyć zwój (np. z 4 map na 2)
-        let bestDist = currentDistance - 1; 
+        let bestDist = currentDistance - 1;
 
         for (let tp of tps) {
             if (tp.map === currentSysMap) continue; // Nie używaj zwoju na mapę, na której stoisz
-            
+
             let tpPath = typeof getShortestPath === 'function' ? getShortestPath(tp.map, rushTarget) : null;
             if (tpPath && tpPath.length < bestDist) {
                 bestDist = tpPath.length;
@@ -2228,7 +2228,7 @@ function autoDetectEngineData() {
             window.rushLastX = Engine.hero.d.x;
             window.rushLastY = Engine.hero.d.y;
             stuckCount = 0;
-            window.rushGatewayArrivalTime = 0; 
+            window.rushGatewayArrivalTime = 0;
 
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
@@ -2255,12 +2255,12 @@ function autoDetectEngineData() {
 
         if (dist > 1) {
             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-            window.rushGatewayArrivalTime = 0; 
-            
+            window.rushGatewayArrivalTime = 0;
+
             if (!isMoving) {
                 if (cx === window.rushLastX && cy === window.rushLastY) {
                     stuckCount++;
-                    if (stuckCount > 6) { 
+                    if (stuckCount > 6) {
                         safeGoTo(door.x, door.y, false);
                         stuckCount = 0;
                     }
@@ -2274,22 +2274,22 @@ function autoDetectEngineData() {
         } else {
             // --- FIZYCZNIE STOIMY NA BRAMIE LUB OBOK NIEJ ---
             if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
-            
+
             // SKRÓCONY CZAS: Reaguje błyskawicznie po 3.5 sekundach!
             if (Date.now() - window.rushGatewayArrivalTime > 3500) {
                 if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
                 if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
-                    
+
                 // ZAKŁADAMY KAGANIEC: Blokujemy silnik Rusha na 1.5 sekundy!
-                window.__movementLock = Date.now() + 1500; 
-                    
+                window.__movementLock = Date.now() + 1500;
+
                 // Resetujemy licznik, żeby nie spamowało komunikatu
-                if (typeof window.lastMapChange !== 'undefined') window.lastMapChange = Date.now(); 
+                if (typeof window.lastMapChange !== 'undefined') window.lastMapChange = Date.now();
                 if (typeof window.lastGatewayAttempt !== 'undefined') window.lastGatewayAttempt = Date.now();
-                    
+
                 let hx = parseInt(Engine.hero.d.x);
                 let hy = parseInt(Engine.hero.d.y);
-                    
+
                 // Mądry krok w tył: bot szuka dookoła siebie wolnej kratki, żeby nie wejść w ścianę
                 let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
                 for (let d of dirs) {
@@ -2303,7 +2303,7 @@ function autoDetectEngineData() {
                 }
             } // Koniec mechaniki kroku w tył
         } // Koniec warunku stania na bramie
-        
+
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
 
@@ -2312,31 +2312,31 @@ function autoDetectEngineData() {
     // ==========================================
     function getShortestPath(start, end) {
         if (start === end) return [start];
-        
+
         let distances = {};
         let previous = {};
         let queue = [];
-        
+
         distances[start] = 0;
         queue.push({node: start, dist: 0});
-        
+
         let visited = new Set();
 
         while (queue.length > 0) {
             queue.sort((a, b) => a.dist - b.dist);
             let current = queue.shift();
             let u = current.node;
-            
+
             if (u === end) {
                 let path = [];
                 let curr = end;
                 while (curr) { path.unshift(curr); curr = previous[curr]; }
                 return path;
             }
-            
+
             if (visited.has(u)) continue;
             visited.add(u);
-            
+
             if (globalGateways[u]) {
                 for (let v in globalGateways[u]) {
                     // --- NOWOŚĆ: SPRAWDZENIE CZARNEJ LISTY ---
@@ -2344,23 +2344,23 @@ function autoDetectEngineData() {
                         continue; // Brama jest uszkodzona/zamknięta - udajemy, że jej nie ma!
                     }
 
-                    let penalty = 1; 
+                    let penalty = 1;
                     let vLower = v.toLowerCase();
                     if (v !== end && (vLower.includes(" p.") || vLower.includes(" s.") || vLower.includes(" - ") || vLower.includes("dom ") || vLower.includes("młyn") || vLower.includes("jaskinia") || vLower.includes("grota") || vLower.includes("kopalnia"))) {
-                        penalty = 50; 
+                        penalty = 50;
                     }
-                    
+
                     let alt = distances[u] + penalty;
                     if (distances[v] === undefined || alt < distances[v]) {
                         distances[v] = alt; previous[v] = u; queue.push({node: v, dist: alt});
                     }
                 }
             }
-            
+
             if (botSettings.useTeleports && ZAKONNICY[u]) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
-                        let alt = distances[u] + 2; 
+                        let alt = distances[u] + 2;
                         if (distances[tpMap] === undefined || alt < distances[tpMap]) {
                             distances[tpMap] = alt; previous[tpMap] = u; queue.push({node: tpMap, dist: alt});
                         }
@@ -2368,7 +2368,7 @@ function autoDetectEngineData() {
                 }
             }
         }
-        return null; 
+        return null;
     }
 window.handleTeleportNPC = function(targetMap) {
         if (!isRushing && !isPatrolling && !window.isExping) return;
@@ -2503,7 +2503,7 @@ window.runRoutingAlgorithm = function(hero, targets, startMap) {
         let unvisited = new Set(targets);
         let currentMap = startMap;
         let finalRoute = [currentMap];
-        
+
         if (unvisited.has(currentMap)) unvisited.delete(currentMap);
 
         // Do kalkulacji odległości śledzimy naszą fizyczną pozycję X, Y
@@ -2603,12 +2603,12 @@ window.runRoutingAlgorithm = function(hero, targets, startMap) {
                     for (let i = 0; i < originalCoords.length; i++) {
                         let pt = originalCoords[i];
                         let distToPt = Math.abs(currX - pt[0]) + Math.abs(currY - pt[1]);
-                        
+
                         let distToExit = 0;
                         if (exitGw) distToExit = Math.abs(pt[0] - exitGw.x) + Math.abs(pt[1] - exitGw.y);
 
                         // Im mniejszy dystans tym lepiej. Odpychamy punkty, które leżą blisko wyjścia (zostawiamy je na koniec)
-                        let score = distToPt - (distToExit * 0.4); 
+                        let score = distToPt - (distToExit * 0.4);
 
                         if (score < bestScore) {
                             bestScore = score;
@@ -2644,7 +2644,7 @@ window.runRoutingAlgorithm = function(hero, targets, startMap) {
         heroMapOrder[hero] = finalRoute;
         saveMapOrder();
         currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); checkedMapsThisSession.clear(); saveCheckedMaps(); updateUI();
-        
+
         heroAlert("🧠 Zainstalowano MargoNeuro Smart-Route V2!\n\nTrasa została obliczona uwzględniając:\n1. Koszty wejścia na mapy.\n2. Optymalizację ścieżek bezpośrednio między mobami na mapach.\n3. Płynne wyprowadzenie postaci idealnie pod drzwi wyjściowe.");
     };
 
@@ -2845,7 +2845,7 @@ function initGUI() {
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                         </div>
-                        
+
                         <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
                             <button id="btnOpenBrowserAlertsModule" class="btn-sepia" style="background:#ff9800; border-color:#f57c00; width:100%; margin-top:2px; padding:6px; font-weight:bold; font-size:11px;">🔔 POWIADOMIENIA PRZEGLĄDARKI</button>
                             <button id="btnOpenDiscordModule" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; margin-top:2px; padding:6px; font-weight:bold; font-size:11px;">💬 KONFIGURACJA DISCORD</button>
@@ -2921,19 +2921,19 @@ function initGUI() {
                     <p style="margin:0 0 5px 0; font-size:10px; color:#aaa; text-align:justify;">1. Stwórz prywatny serwer na Discordzie.<br>2. Wejdź w Ustawienia kanału -> Integracje -> Tworzenie Webhooka.<br>3. Skopiuj <b>URL Webhooka</b> i wklej go poniżej. <a href="https://support.discord.com/hc/pl/articles/228383668-Wst%C4%99p-do-Webhook%C3%B3w" target="_blank" style="color:#5865F2;">[Instrukcja]</a></p>
                     <input type="text" id="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/..." value="${botSettings.discord?.url || ''}" style="width:100%; padding:5px; font-size:10px; background:#0f0f0f; color:#fff; border:1px solid #5865F2; border-radius:2px; box-sizing:border-box;">
                 </div>
-                
+
                 <div style="background:#1a1a1a; padding:6px; border:1px solid #444; border-radius:3px;">
                     <p style="margin:0 0 5px 0; font-size:10px; color:#aaa;">Oznaczanie na telefonie (Opcjonalne):<br>Aby dostać powiadomienie Push z dzwiękiem tak jak przy wiadomości DM, wklej tu swój <b>ID Użytkownika Discord</b>.</p>
                     <input type="text" id="discordUserId" placeholder="Np. 123456789012345678" value="${botSettings.discord?.userId || ''}" style="width:100%; padding:5px; font-size:10px; background:#0f0f0f; color:#fff; border:1px solid #333; border-radius:2px; box-sizing:border-box;">
                 </div>
-                
+
                 <div style="border-top:1px solid #444; padding-top:8px;">
                     <label style="color:#e0d8c0; font-size:11px; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Hero" ${botSettings.discord?.alerts?.hero ? 'checked' : ''}> Powiadomienia z Radaru (Herosi/E2)</label>
                     <label style="color:#e0d8c0; font-size:11px; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Player" ${botSettings.discord?.alerts?.player ? 'checked' : ''}> Powiadomienia o graczach na mapie</label>
                     <label style="color:#e0d8c0; font-size:11px; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Chat" ${botSettings.discord?.alerts?.chat ? 'checked' : ''}> Prywatne wiadomości na czacie (DM)</label>
                     <label style="color:#ff5252; font-size:11px; font-weight:bold; display:flex; align-items:center; gap:5px; margin-bottom:5px; cursor:pointer;"><input type="checkbox" id="discordAlert_Captcha" ${botSettings.discord?.alerts?.captcha ? 'checked' : ''}> 🚨 ALARM ZAPADKI (BARDZO WAŻNE)</label>
                 </div>
-                
+
                 <button id="btnSaveDiscord" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; padding:8px; margin-top:auto;">💾 ZAPISZ DISCORDA I WYŚLIJ TEST</button>
             </div>
         `;
@@ -2965,7 +2965,7 @@ function initGUI() {
                     </div>
                </div>
             </div>`;
-            
+
         const goToGui = document.createElement('div');
         goToGui.id = 'heroGoToGUI';
         goToGui.className = 'hero-window';
@@ -3018,7 +3018,7 @@ function initGUI() {
             </div>
         `;
         document.body.appendChild(expRecGui);
-        
+
         setupModals(); setupMultiDrag(); setupGearDrag(); setupLogic();
     }
 
@@ -3086,7 +3086,7 @@ function initGUI() {
             </div>
         `;
         document.body.appendChild(discordGui);
-    
+
     function setupModals() {
 
         window.heroModal = function(type, msg, defaultVal, callback) {
@@ -3277,43 +3277,43 @@ if (!botSettings.berserk) {
             saveSettings();
         }
         if (botSettings.berserk.userEnabled === undefined) botSettings.berserk.userEnabled = botSettings.berserk.enabled;
-        
+
         if (!botSettings.autoheal) { botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" }; saveSettings(); }
         if (!botSettings.autopot) { botSettings.autopot = { enabled: false, stacks: 14 }; saveSettings(); }
         if (botSettings.exp.autoChangeRoute === undefined) { botSettings.exp.autoChangeRoute = false; saveSettings(); }
       if (botSettings.exp.captchaAlert === undefined) { botSettings.exp.captchaAlert = true; saveSettings(); }
         bindChange('captchaAlert', (e) => { botSettings.exp.captchaAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
-        
+
         if (botSettings.exp.playerAlert === undefined) { botSettings.exp.playerAlert = false; saveSettings(); }
         bindChange('playerAlert', (e) => { botSettings.exp.playerAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
 
         if (botSettings.exp.playerAlertStopBot === undefined) { botSettings.exp.playerAlertStopBot = false; saveSettings(); }
         bindChange('playerAlertStopBot', (e) => { botSettings.exp.playerAlertStopBot = e.target.checked; saveSettings(); });
-        
+
         if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
         if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
         bindChange('chatAlert', (e) => { botSettings.exp.chatAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
         bindChange('chatAlertStopBot', (e) => { botSettings.exp.chatAlertStopBot = e.target.checked; saveSettings(); });
 
         // PRZYCISKI OTWIERAJĄCE MENU POWIADOMIEŃ
-        bindClick('btnOpenBrowserAlertsModule', () => { 
-            let p = document.getElementById('browserAlertsSettingsGUI'); 
-            p.style.display = p.style.display === 'none' ? 'flex' : 'none'; 
+        bindClick('btnOpenBrowserAlertsModule', () => {
+            let p = document.getElementById('browserAlertsSettingsGUI');
+            p.style.display = p.style.display === 'none' ? 'flex' : 'none';
         });
-        bindClick('btnOpenDiscordModule', () => { 
-            let p = document.getElementById('discordSettingsGUI'); 
-            p.style.display = p.style.display === 'none' ? 'flex' : 'none'; 
+        bindClick('btnOpenDiscordModule', () => {
+            let p = document.getElementById('discordSettingsGUI');
+            p.style.display = p.style.display === 'none' ? 'flex' : 'none';
         });
 
         // INICJALIZACJA DISCORDA Z NOWYMI BLOKADAMI
         if (!botSettings.discord) { botSettings.discord = { enabled: true, url: '', userId: '', alerts: { hero: true, player: true, chat: true, captcha: true }, stop: { hero: true, player: false, chat: false, captcha: true } }; saveSettings(); }
         if (!botSettings.discord.stop) { botSettings.discord.stop = { hero: true, player: false, chat: false, captcha: true }; saveSettings(); }
-        
+
         bindClick('btnSaveDiscord', () => {
             botSettings.discord.url = document.getElementById('discordWebhookUrl').value.trim();
             botSettings.discord.userId = document.getElementById('discordUserId').value.trim();
             botSettings.discord.enabled = botSettings.discord.url.length > 10;
-            
+
             botSettings.discord.alerts.hero = document.getElementById('discordAlert_Hero').checked;
             botSettings.discord.alerts.player = document.getElementById('discordAlert_Player').checked;
             botSettings.discord.alerts.chat = document.getElementById('discordAlert_Chat').checked;
@@ -3323,9 +3323,9 @@ if (!botSettings.berserk) {
             botSettings.discord.stop.player = document.getElementById('discordStop_Player').checked;
             botSettings.discord.stop.chat = document.getElementById('discordStop_Chat').checked;
             botSettings.discord.stop.captcha = document.getElementById('discordStop_Captcha').checked;
-            
+
             saveSettings();
-            
+
             if(botSettings.discord.enabled) {
                 window.sendDiscordWebhook("🟢 MARGONEURO ZSYNCHRONIZOWANE", "Powiadomienia Discord zostały skonfigurowane poprawnie i działają niezależnie od przeglądarki!\nOd teraz to okno jest gotowe do odbierania sygnałów.", 5763719);
                 heroAlert("Ustawienia Discord zostały zapisane.\nWysłano wiadomość testową na Twój kanał!");
@@ -3367,10 +3367,10 @@ if (!botSettings.berserk) {
            if(p) {
                 botSettings.exp.activeProfileName = p.name;
                 botSettings.exp.mapOrder = [...p.maps];
-                
+
                 // AUTOMATYCZNA OPTYMALIZACJA PO ZAŁADOWANIU NOWEJ BAZY
                 if (typeof window.optimizeExpRoute === 'function') window.optimizeExpRoute(true);
-                
+
                 localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
                 if(lvlMatch && lvlMatch[1]) {
@@ -3648,10 +3648,10 @@ selHero.addEventListener('change', (e) => {
         function updateWindowsBackground(opacityValue) {
             document.querySelectorAll('.hero-window').forEach(w => {
                 // Usuwamy starą metodę (na wszelki wypadek)
-                w.style.opacity = '1'; 
+                w.style.opacity = '1';
                 // Wymuszamy pełną czytelność tekstu
-                w.style.color = '#ffffff'; 
-                
+                w.style.color = '#ffffff';
+
                 // Ustawiamy przezroczystość TYLKO dla tła (używamy rgba)
                 // Zakładamy podstawowy kolor okna jako ciemnoszary: #202020 (czyli 32, 32, 32 w RGB)
                 w.style.backgroundColor = `rgba(32, 32, 32, ${opacityValue})`;
@@ -3664,7 +3664,7 @@ selHero.addEventListener('change', (e) => {
             let savedOpacity = localStorage.getItem('hero_opacity_v64') || 0.95;
             opacitySlider.value = savedOpacity;
             updateWindowsBackground(savedOpacity);
-            
+
             // Reagowanie na poruszanie suwakiem w czasie rzeczywistym
             opacitySlider.addEventListener('input', (e) => {
                 let val = e.target.value;
@@ -3945,7 +3945,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
                     // Wyrzucenie duplikatów i automatyczne zoptymalizowanie nowej grupy map
                     botSettings.exp.mapOrder = [...new Set(botSettings.exp.mapOrder)];
                     if (typeof window.optimizeExpRoute === 'function') window.optimizeExpRoute(true);
-                    
+
                     localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
 
                     if(minL !== 9999) {
@@ -3997,7 +3997,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
         // Wymuszenie wczytania wpisanych linków do okienek
         let inpUrl = document.getElementById('discordWebhookUrl');
         if(inpUrl && botSettings.discord.url) inpUrl.value = botSettings.discord.url;
-        
+
         let inpId = document.getElementById('discordUserId');
         if(inpId && botSettings.discord.userId) inpId.value = botSettings.discord.userId;
 
@@ -4020,11 +4020,11 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
 
             newBtnSaveDiscord.addEventListener('click', (e) => {
                 e.preventDefault(); e.stopPropagation();
-                
+
                 botSettings.discord.url = document.getElementById('discordWebhookUrl').value.trim();
                 botSettings.discord.userId = document.getElementById('discordUserId').value.trim();
                 botSettings.discord.enabled = botSettings.discord.url.length > 10;
-                
+
                 botSettings.discord.alerts.hero = document.getElementById('discordAlert_Hero').checked;
                 botSettings.discord.alerts.player = document.getElementById('discordAlert_Player').checked;
                 botSettings.discord.alerts.chat = document.getElementById('discordAlert_Chat').checked;
@@ -4034,9 +4034,9 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
                 botSettings.discord.stop.player = document.getElementById('discordStop_Player').checked;
                 botSettings.discord.stop.chat = document.getElementById('discordStop_Chat').checked;
                 botSettings.discord.stop.captcha = document.getElementById('discordStop_Captcha').checked;
-                
+
                 saveSettings();
-                
+
                 if(botSettings.discord.enabled) {
                     window.sendDiscordWebhook("🟢 MARGONEURO ZSYNCHRONIZOWANE", "Powiadomienia Discord zostały skonfigurowane poprawnie i działają niezależnie od przeglądarki!", 5763719);
                     heroAlert("Ustawienia Discord zostały zapisane.\nWysłano wiadomość testową na Twój kanał!");
@@ -4045,7 +4045,7 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
                 }
             });
         }
-        
+
     } // <--- TO JEST ZAMKNIĘCIE FUNKCJI setupLogic, KTÓRE SIĘ ZEPSUŁO!
 
     // ==========================================
@@ -4477,14 +4477,14 @@ function optimizeRoute() {
 
 
 
-function stopPatrol(hardStop = true) { 
+function stopPatrol(hardStop = true) {
         let wasMoving = isPatrolling || isRushing;
         isPatrolling = false;
         isRushing = false;
         window.isRushing = false;
         window.isRushingToShop = false;
         window.resumePatrolAfterRush = false; // KRYTYCZNA POPRAWKA: Blokuje auto-wznawianie po ręcznym zatrzymaniu!
-        
+
         clearTimeout(rushInterval);
         clearTimeout(smoothPatrolInterval);
 
@@ -4494,7 +4494,7 @@ function stopPatrol(hardStop = true) {
             btn.style.color = "#4caf50";
             btn.style.borderColor = "#4caf50";
         }
-        
+
         // Nie czyścimy checkedPoints tutaj, żeby bot pamiętał co sprawdził, jeśli wznowisz patrol!
         renderCordsList(-1);
 
@@ -4564,34 +4564,34 @@ function executePatrolStep() {
         // Jeśli wszystkie punkty na mapie sprawdzone LUB mapa nie ma w ogóle punktów
         if (patrolIndex === -1 || currentCordsList.length === 0) {
             clearTimeout(smoothPatrolInterval);
-            
-            if (!checkedMapsThisSession.has(currentSysMap)) { 
-                checkedMapsThisSession.add(currentSysMap); 
-                saveCheckedMaps(); 
+
+            if (!checkedMapsThisSession.has(currentSysMap)) {
+                checkedMapsThisSession.add(currentSysMap);
+                saveCheckedMaps();
                 if (window.logHero) window.logHero(`Odhaczono wszystkie kordy na: ${currentSysMap}`, "#8bc34a");
             }
 
             if(hero && heroMapOrder[hero] && heroMapOrder[hero].length > 0) {
                 let mapList = heroMapOrder[hero];
-                
+
                 // --- ZAKOŃCZENIE PATROLU PO OSTATNIEJ MAPIE ---
                 let nextRouteIndex = currentRouteIndex + 1;
-                
+
                 if (nextRouteIndex >= mapList.length) {
-                    checkedMapsThisSession.clear(); 
-                    saveCheckedMaps(); 
-                    currentRouteIndex = -1; 
-                    sessionStorage.removeItem('hero_route_index'); 
-                    
+                    checkedMapsThisSession.clear();
+                    saveCheckedMaps();
+                    currentRouteIndex = -1;
+                    sessionStorage.removeItem('hero_route_index');
+
                     stopPatrol(true);
                     if (window.logHero) window.logHero(`✅ CAŁY PATROL ZAKOŃCZONY!`, "#4caf50");
-                    if (typeof heroAlert === 'function') heroAlert("✅ Trasa Herosa sprawdzona w całości! Patrol zatrzymany."); 
+                    if (typeof heroAlert === 'function') heroAlert("✅ Trasa Herosa sprawdzona w całości! Patrol zatrzymany.");
                     return;
                 }
 
                 let finalDestinationMap = mapList[nextRouteIndex];
                 if (window.logHero) window.logHero(`Zmieniam mapę. Obieram kurs na: [${finalDestinationMap}]`, "#00acc1");
-                
+
                 // Używamy niezawodnego silnika Rush do pokonania trasy
                 if (typeof window.rushToMap === 'function') {
                     window.rushToMap(finalDestinationMap, null, null, null, true);
@@ -4600,7 +4600,7 @@ function executePatrolStep() {
             }
 
             // Awaryjny Stop
-            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index'); 
+            checkedMapsThisSession.clear(); saveCheckedMaps(); currentRouteIndex = -1; sessionStorage.removeItem('hero_route_index');
             stopPatrol(true);
             if (window.logHero) window.logHero(`✅ Koniec trasy!`, "#4caf50");
             return;
@@ -4642,17 +4642,17 @@ function executePatrolStep() {
             setTimeout(executePatrolStep, waitDelay);
         } else {
             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-            
+
             if (!isMoving) {
                 if (cx === lastX && cy === lastY) {
                     stuckCount++;
-                    
+
                     // Po ~1.5 sekundy stania w miejscu ponawiamy próbę kliknięcia (BEZ LOSOWOŚCI)
                     if (stuckCount === 6) {
                         if (window.logHero) window.logHero(`Ponawiam próbę dojścia do [${target[0]}, ${target[1]}]...`, "#ffb300");
                         safeGoTo(target[0], target[1], false); // false = omija losowe kratki, idzie dokładnie w punkt!
                     }
-                    
+
                     // Dopiero po ~4.5 sekundach (15 tyknięć) uznaje, że fizycznie się nie da wejść
                     if (stuckCount > 15) {
                         clearTimeout(smoothPatrolInterval);
@@ -5346,19 +5346,19 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
    // Zmienna z Mutation Observera ma absolutne pierwszeństwo!
    let isDead = isUnconsciousNow() || window.__unconscious;
-      
+
     if (isDead) {
         if (window._lastDeadLog !== Math.floor(now / 5000)) {
             window.logExp("💀 Jesteś nieprzytomny (Wykryto 1 HP). Pauza i powrót do miasta...", "#e53935");
             window._lastDeadLog = Math.floor(now / 5000);
-            
+
             setTimeout(() => {
                 if (typeof window._g === 'function') {
-                    window._g('deadresp'); 
+                    window._g('deadresp');
                 } else if (typeof Engine !== 'undefined' && Engine.communication) {
-                    Engine.communication.send({ "a": "deadresp" }); 
+                    Engine.communication.send({ "a": "deadresp" });
                 }
-                
+
                 let reviveBtn = Array.from(document.querySelectorAll('button, .button, .btn, .dialog-button')).find(el => {
                     let txt = (el.innerText || el.textContent || "").toLowerCase();
                     return txt.includes('wróć do miasta') || txt.includes('ożyw') || txt.includes('zmartwychwstań');
@@ -5369,12 +5369,12 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 }
             }, 1500);
         }
-        
+
         expCurrentTargetId = null;
         window.expTargetLockTime = 0;
-        window.expLastMoveTx = -1; 
+        window.expLastMoveTx = -1;
         window.expLastMoveTy = -1;
-        
+
         expLastActionTime = now + 2000;
         return;
     }
@@ -5387,14 +5387,14 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             window.logExp(`🩸 Szybkie pompowanie mikstur... Czekam na 100% HP.`, "#e53935");
             window._waitingForHeal = true;
         }
-        
+
         // Zatrzymujemy postać w miejscu, żeby przypadkiem nie weszła w moba i nie przerwała leczenia
         if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') {
             Engine.hero.stop();
         }
-        
+
         expLastActionTime = now + 500;
-        return; 
+        return;
     } else {
         window._waitingForHeal = false;
     }
@@ -5407,8 +5407,8 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             expEmptyScans = 0;
             expAttackLockUntil = 0;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-            window.expWasInBattle = true; 
-            
+            window.expWasInBattle = true;
+
             let quitBtn = Array.from(document.querySelectorAll('button, .button, div')).find(el => el.innerText && el.innerText.includes('Opuść walkę'));
             if (quitBtn) {
                 quitBtn.click();
@@ -5442,7 +5442,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
         window.expUnreachableMobs.clear();
-        
+
         // KLUCZOWA POPRAWKA: Twarde formatowanie mózgu z potworów po przejściu bramy!
         if (window.expMonsterCache) window.expMonsterCache.clear();
 
@@ -5490,7 +5490,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         let npcObj = npcsData[key];
         let n = npcObj?.d || npcObj;
         if (n) {
-            n.id = n.id || key; 
+            n.id = n.id || key;
             currentVisibleNpcs.push(n);
         }
     }
@@ -5540,7 +5540,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
     let validMobs = [];
     arr.forEach(n => {
         let coordKey = n.x + "_" + n.y;
-        if (window.expUnreachableMobs.has(coordKey)) return; 
+        if (window.expUnreachableMobs.has(coordKey)) return;
 
         let lvl = parseInt(n.lvl, 10);
         if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
@@ -5581,7 +5581,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
         groupsCount[key] = (groupsCount[key] || 0) + 1;
     });
-    
+
     validMobs.forEach(m => {
         let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
         let size = groupsCount[key];
@@ -5611,7 +5611,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
         // Główna zasada: Bije to, co jest najbliżej (niezależnie czy to Elita, czy zwykły mob)
         if (a.dist !== b.dist) return a.dist - b.dist;
-        
+
         // Zabezpieczenie przed kręceniem się w miejscu
         return String(a.id).localeCompare(String(b.id));
     });
@@ -5637,22 +5637,22 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 if (expCurrentTargetId !== target.id) {
                     window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
-                    
-                    // LOSOWY LOCK: Trzyma cel od 3 do 5 sekund. 
+
+                    // LOSOWY LOCK: Trzyma cel od 3 do 5 sekund.
                     // Po tym czasie bot "przejrzy na oczy" i jeśli inny mob będzie bliżej, zmieni trasę.
                     let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
-                    window.expTargetLockTime = now + randomLockSeconds; 
+                    window.expTargetLockTime = now + randomLockSeconds;
                 }
 
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.groupLabel}`;
-                
+
                 Engine.hero.autoGoTo({ x: target.x, y: target.y });
-                nextAllowedClickTime = now + 350; 
+                nextAllowedClickTime = now + 350;
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
                 window.expPursuitLastX = hx; window.expPursuitLastY = hy;
                 window.expTargetPursuitStart = now;
-                window.expMoveLockUntil = now + 800; 
+                window.expMoveLockUntil = now + 800;
             } else {
                 if (now > window.expMoveLockUntil) {
                     if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
@@ -5672,11 +5672,11 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                         window.expTargetLockTime = 0; // Reset locka po zacięciu
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                        
+
                         let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                         let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
                         Engine.hero.autoGoTo({ x: rx, y: ry });
-                        
+
                         expLastActionTime = now + 1000;
                         return;
                     }
@@ -6173,7 +6173,7 @@ window.clearExpMaps = () => {
 
         let unvisited = new Set(maps);
         let sysMap = typeof Engine !== 'undefined' && Engine.map && Engine.map.d ? Engine.map.d.name : lastMapName;
-        
+
         // Zaczynamy od mapy, na której aktualnie stoimy (jeśli jest na liście), lub od pierwszej z brzegu
         let currentMap = unvisited.has(sysMap) ? sysMap : maps[0];
         let finalRoute = [currentMap];
@@ -6206,7 +6206,7 @@ window.clearExpMaps = () => {
                     finalRoute.push(bestPath[i]);
                 }
             }
-            
+
             unvisited.delete(bestTarget);
             currentMap = bestTarget;
         }
@@ -6230,7 +6230,7 @@ window.clearExpMaps = () => {
         botSettings.exp.mapOrder = cleanRoute;
         localStorage.setItem('exp_map_order_v64', JSON.stringify(cleanRoute));
         if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
-        
+
         if (!silent) heroAlert(`✅ Trasa połączona!\nBot dodał mapy przejściowe do głównej listy. Jeśli podczas biegu przez korytarz lub las spotka potwory, wyhamuje, normalnie je wybije i po zrobieniu czystki zapisze tę mapę w pamięci!`);
     };
     window.renderMapOrderList = () => {
@@ -7390,7 +7390,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
   function isUnconsciousNow() {
         // 1. Sprawdzamy DOM Twoją dokładną funkcją
         const domState = getUnconsciousState();
-        
+
         // 2. Twarde sprawdzenie w silniku gry (Zabezpieczenie)
         const hero = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d : null;
 
@@ -7424,7 +7424,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.__stuckTimerCount = 0;
                     window.__lastParsedSeconds = null;
                     if (window.logExp) window.logExp("✅ [STRAŻNIK] Ożyłeś. Wracamy do akcji!", "#4caf50");
-                    
+
                     // WYMUSZENIE STATUSU LECZENIA (Działa niezależnie od expienia, wystarczy włączony autoheal)
                     if (botSettings && botSettings.autoheal && botSettings.autoheal.enabled) {
                         window.isRegeneratingToFull = true;
@@ -7436,7 +7436,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         // WATCHDOG: Wykrywanie ZAMROŻONEGO zegara z pomocą Twojego obiektu!
         if (window.__unconscious && state.timerSeconds !== null) {
             let seconds = state.timerSeconds;
-            
+
             if (window.__lastParsedSeconds === seconds) {
                 window.__stuckTimerCount++;
             } else {
@@ -7484,7 +7484,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
             let statStr = String(itemData.stat || itemData.stats || "").toLowerCase();
             if (statStr.includes('fullheal') || statStr.includes('całe życie') || statStr.includes('całą energię')) return 999999;
-            if (statStr.includes('hot=')) return 0; 
+            if (statStr.includes('hot=')) return 0;
             statStr = statStr.replace(/(\d)\s+(\d)/g, '$1$2');
             let match = statStr.match(/(?:leczy|przywraca)[^\d]*(\d+)/);
             if (match) return parseInt(match[1]);
@@ -7505,14 +7505,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 window.isHealLocked = false;
             }
             if (window.isHealLocked) return;
-            
+
             if (!botSettings.autoheal || !botSettings.autoheal.enabled) {
                 window.isRegeneratingToFull = false;
                 return;
             }
-            
+
             if (Engine.battle && Engine.battle.show) return;
-            
+
       let isDead = isUnconsciousNow() || window.__unconscious;
 if (isDead) {
     window.isRegeneratingToFull = false;
@@ -7548,7 +7548,7 @@ if (isDead) {
                 let items = [];
                 if (Engine.items && Engine.items.d) items = Object.values(Engine.items.d);
                 else if (Engine.heroEquipment && typeof Engine.heroEquipment.getHItems === 'function') items = Object.values(Engine.heroEquipment.getHItems());
-                
+
                 let ignoreList = (botSettings.autoheal.ignoreItems || "").toLowerCase().split('\n').map(s => s.trim()).filter(s => s.length > 0);
                 let unidList = (botSettings.autoheal.unidItems || "").toLowerCase().split('\n').map(s => s.trim()).filter(s => s.length > 0);
 
@@ -7562,10 +7562,10 @@ if (isDead) {
 
                     let potName = String(itemData.name || i._cachedStats?.name || "").toLowerCase();
                     let statStr = String(itemData.stat || i._cachedStats?.stat || "").toLowerCase();
-                    
+
                     if (ignoreList.some(ig => potName.includes(ig))) return;
                     if (unidList.some(un => potName.includes(un))) return;
-                    if (statStr.includes('unid')) return; 
+                    if (statStr.includes('unid')) return;
 
                     let reqLvlMatch = statStr.match(/reqlvl[=:](\d+)/) || statStr.match(/wymagany poziom:\s*(\d+)/);
                     if (reqLvlMatch) {
@@ -7579,11 +7579,11 @@ if (isDead) {
                 if (validPotions.length > 0) {
                     window.isHealLocked = true;
                     let missingHp = maxhp - hp;
-                    
+
                     // Wybór najlepszej mikstury do wyleczenia braku
                     validPotions.sort((a, b) => Math.abs(a.heal - missingHp) - Math.abs(b.heal - missingHp));
                     let bestPot = validPotions[0];
-                    
+
                     // Wypicie potki
                     if (typeof Engine.heroEquipment !== 'undefined' && typeof Engine.heroEquipment.sendUseRequest === 'function') {
                         Engine.heroEquipment.sendUseRequest(bestPot.pot);
@@ -7592,14 +7592,14 @@ if (isDead) {
                     } else {
                         window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
-                    
+
                     // KLUCZOWA ŁATKA: Symulujemy zjedzenie potki lokalnie.
                     // Dzięki temu bot od razu widzi, że ma 100% HP i nie spamuje potkami w oczekiwaniu na serwer!
                     if (Engine.hero.d.hp !== undefined) Engine.hero.d.hp = Math.min(maxhp, hp + bestPot.heal);
                     if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + bestPot.heal);
-                    
+
                     // Szybkie leczenie z odpowiednim marginesem błędu
-                    window.lastHealTime = Date.now() + 350; 
+                    window.lastHealTime = Date.now() + 350;
                     setTimeout(() => { window.isHealLocked = false; }, 300);
                 } else {
                     window.isRegeneratingToFull = false;
@@ -7634,7 +7634,7 @@ if (isDead) {
                 }
             }
             // ------------------------------------
-            
+
             if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {}).filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null).reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
                 if (potCount <= 0) {
@@ -7660,11 +7660,11 @@ if (isDead) {
                     let currentLvl = Engine.hero.d.lvl || 1;
                     let targetHeal = Math.floor(maxhp * 0.30);
                     let minAcceptableHeal = targetHeal * 0.15; // Potka musi leczyć chociaż 15% tego co chcemy
-                    
+
                     let currMap = Engine.map.d.name;
                     let availablePotions = [];
                     let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
-                    
+
                     healers.forEach(k => {
                         let dist = Infinity;
                         if (k.map_name === currMap) {
@@ -7673,7 +7673,7 @@ if (isDead) {
                             let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name) : null;
                             if (path && path.length > 0) dist = path.length;
                         }
-                        
+
                         if (dist !== Infinity && k.items) {
                             k.items.forEach(i => {
                                 let statString = (i.stat || i.stats || i.tooltip_text || i.raw_detected_text || i.name || "").toLowerCase();
@@ -7681,11 +7681,11 @@ if (isDead) {
                                 let lvlMatch = statString.match(/reqlvl[=:](\d+)/) || statString.match(/poziom:\s*(\d+)/);
                                 if (lvlMatch) itemLvl = parseInt(lvlMatch[1]);
                                 if (itemLvl > currentLvl) return;
-                                
+
                                 let healAmount = 0;
                                 let healMatch = statString.match(/leczy[=:](\d+)/) || statString.match(/leczy\s+([0-9\s]+)\s+punkt/);
                                 if (healMatch) healAmount = parseInt(healMatch[1].replace(/\s/g, ''));
-                                
+
                                 if (healAmount > 0) {
                                     availablePotions.push({ npc: k, itemName: i.name.split('Typ:')[0].trim(), heal: healAmount, distance: dist });
                                 }
@@ -7698,14 +7698,14 @@ if (isDead) {
                         availablePotions.sort((a, b) => {
                             let aAcceptable = a.heal >= minAcceptableHeal;
                             let bAcceptable = b.heal >= minAcceptableHeal;
-                            
+
                             // Odrzucamy śmieci, chyba że nie mamy wyjścia
                             if (aAcceptable && !bAcceptable) return -1;
                             if (!aAcceptable && bAcceptable) return 1;
-                            
+
                             // Najważniejszy warunek: kto jest bliżej?
                             if (a.distance !== b.distance) return a.distance - b.distance;
-                            
+
                             // Jeśli dystans ten sam, bierzemy potkę, która lepiej pasuje
                             return Math.abs(a.heal - targetHeal) - Math.abs(b.heal - targetHeal);
                         });
@@ -7716,7 +7716,7 @@ if (isDead) {
                         window.autoPotState.step = 1;
                         window.autoPotState.nextActionTime = Date.now() + 500;
                         window.isRushing = true;
-                        
+
                         let msg = `🧪 Analiza... Szukam potki na ~${targetHeal} HP. Wybrano: ${bestChoice.itemName} (${bestChoice.heal} HP) od ${bestChoice.npc.npc_name} (Dystans: ${bestChoice.distance} map).`;
                         if (window.logHero) window.logHero(msg, "#e91e63");
                         if (window.logExp) window.logExp(msg, "#e91e63");
@@ -7860,7 +7860,7 @@ if (isDead) {
         setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
-            
+
       if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
                 // Odczyt blokady z pamięci przeglądarki (Przeżyje odświeżenie F5)
                 let savedIgnore = parseInt(sessionStorage.getItem('hero_autosell_ignore') || 0);
@@ -7889,17 +7889,17 @@ if (isDead) {
                     if (window.logExp) window.logExp(msg, "#ffb300");
                 }
             }
-            
+
             if (window.autoSellState.active) {
                 if (Date.now() < window.autoSellState.nextActionTime) return;
                 window.isExpSuspended = true;
-                
+
 // --- DEFINICJA TWOICH ASYNCHRONICZNYCH FUNKCJI ---
                 if (!window.__asyncShopHelpersInstalled) {
                     window.__asyncShopHelpersInstalled = true;
-                    
+
                     window.sleep = ms => new Promise(r => setTimeout(r, ms));
-                    
+
                     window.waitFor = async (cond, timeout = 5000, interval = 100) => {
                         let start = Date.now();
                         while (Date.now() - start < timeout) {
@@ -7908,9 +7908,9 @@ if (isDead) {
                         }
                         return false;
                     };
-                    
+
                     window.getOpenDialogue = () => document.querySelector(".dialogue-window.is-open, #dialog");
-                    
+
                     window.findShopDialogueOption = () => {
                         const byClass = document.querySelector(".dialogue-window.is-open .dialogue-window-answer.line_shop");
                         if (byClass) return byClass;
@@ -7920,7 +7920,7 @@ if (isDead) {
                             return txt.includes("pokaż mi, co masz na sprzedaż") || txt.includes("co masz na sprzedaż") || txt.includes("sprzedaż") || txt.includes("sprzedaz") || txt.includes("handel") || txt.includes("kup");
                         }) || null;
                     };
-                    
+
 window.openShopAsync = async (namePart) => {
                         const sleep = ms => new Promise(r => setTimeout(r, ms));
                         // KLUCZOWE: Odcinamy "(elita)" lub inne dopiski z bazy danych!
@@ -7933,7 +7933,7 @@ window.openShopAsync = async (namePart) => {
                             await sleep(100);
                         }
                         // Twardy oddech po wejściu na mapę (moby muszą się pojawić, a blokady ruchu wygasnąć)
-                        await sleep(800); 
+                        await sleep(800);
 
                         // 2. ZNALEZIENIE NPC (Wg Twojego schematu)
                         let npc = null;
@@ -7941,7 +7941,7 @@ window.openShopAsync = async (namePart) => {
                             npc = Object.values(Engine.npcs?.check?.() || {})
                                 .map(n => n?.d || n)
                                 .find(n => (n.nick || "").toLowerCase().includes(targetName));
-                            
+
                             if (npc) break;
                             await sleep(100);
                         }
@@ -7957,29 +7957,29 @@ window.openShopAsync = async (namePart) => {
                         let reached = false;
                         for (let i = 0; i < 60; i++) { // 6 sekund
                             // NATYCHMIASTOWE PRZERWANIE BIEGU, JEŚLI WCIŚNIESZ ANULUJ
-                            if (window.autoSellState && window.autoSellState.active === false) return false; 
+                            if (window.autoSellState && window.autoSellState.active === false) return false;
 
                             const h = Engine.hero?.d || Engine.hero;
                             if (!h) { await sleep(100); continue; }
-                            
+
                             const dist = Math.max(Math.abs(h.x - npc.x), Math.abs(h.y - npc.y));
 
                             if (dist <= 1) {
                                 reached = true;
                                 break;
                             }
-                            
+
                             // Agresywne ponawianie ruchu (omijamy wewnętrzne blokady anti-stuck bota!)
-                            if (i % 10 === 0) { 
+                            if (i % 10 === 0) {
                                 try {
                                     if (typeof window.originalAutoWalk === 'function') {
                                         window.originalAutoWalk.call(Engine.hero, npc.x, npc.y);
                                     } else {
-                                        Engine.hero.autoGoTo({x: npc.x, y: npc.y}); 
+                                        Engine.hero.autoGoTo({x: npc.x, y: npc.y});
                                     }
                                 } catch(e){}
                             }
-                            
+
                             await sleep(100);
                         }
 
@@ -8003,8 +8003,8 @@ window.openShopAsync = async (namePart) => {
                         try { Engine.npcs?.clickNpc?.(npc.id); } catch(e) {}
                         await sleep(200);
 
-                        try { 
-                            if (typeof Engine.hero?.sendRequestToTalk === 'function') Engine.hero.sendRequestToTalk(npc.id); 
+                        try {
+                            if (typeof Engine.hero?.sendRequestToTalk === 'function') Engine.hero.sendRequestToTalk(npc.id);
                             else if (typeof window._g === 'function') window._g(`talk&id=${npc.id}`);
                         } catch(e) {}
 
@@ -8062,13 +8062,13 @@ window.openShopAsync = async (namePart) => {
 
                    if (!window.autoSellState.targetNpc) {
                         let kupcy = window.DatabaseModule.kupcy || [];
-                        
+
                         // Wybór listy dozwolonych kupców w zależności od Checkboxa
                         let allowedNames = ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'];
                         if (botSettings.autosell && botSettings.autosell.onlyTunia) {
                             allowedNames = ['Tuni']; // Ograniczamy listę wyłącznie do Tunii
                         }
-                        
+
                         let validMerchants = kupcy.filter(k => allowedNames.some(n => k.npc_name.includes(n)));
                         if (validMerchants.length === 0 && allowedNames.length > 1) validMerchants = kupcy;
 
@@ -8087,7 +8087,7 @@ window.openShopAsync = async (namePart) => {
                             let msg = "❌ Brak kupców! (Wstrzymuję auto-sprzedaż na 3 minuty)";
                             if (window.logHero) window.logHero(msg, "#e53935");
                             if (window.logExp) window.logExp(msg, "#e53935");
-                            
+
                             window.autoSellState.active = false;
                             window.autoSellState.ignoreUntil = Date.now() + 180000;
                             sessionStorage.setItem('hero_autosell_ignore', window.autoSellState.ignoreUntil); // Twardy zapis blokady
@@ -8173,7 +8173,7 @@ window.openShopAsync = async (namePart) => {
                         let currentGold = parseInt(Engine.hero.d.gold || 0);
                         let oldGold = parseInt(window.autoSellState.oldGold || 0);
                         let profit = currentGold - oldGold;
-                        
+
                         // Zabezpieczenie przed błędnym wyliczeniem
                         if (oldGold === 0 || profit === currentGold || profit < 0) profit = 0;
 
@@ -8191,10 +8191,10 @@ window.openShopAsync = async (namePart) => {
                         window.lastExpMap = null;
 
                         if (typeof Engine !== 'undefined' && Engine.shop && typeof Engine.shop.close === 'function') Engine.shop.close();
-                        
+
                         let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                         if (closeBtn) closeBtn.click();
-                        
+
                         // Awaryjnie upewniamy się, że bieg Exp zostanie wznowiony, jeśli był wcześniej aktywny
                         if (window.autoSellState.wasBerserkOn) {
                              botSettings.berserk.enabled = true;
@@ -8205,7 +8205,7 @@ window.openShopAsync = async (namePart) => {
                     }
                 }
             } // Tutaj zamykamy warunki czasu i active
-        }, 1000); 
+        }, 1000);
     }
 // --- DAEMON: DETEKCJA ZAPADKI (AUTO-SOLVER + ALARM) ---
     if (!window.captchaDaemonInstalled) {
@@ -8213,19 +8213,29 @@ window.openShopAsync = async (namePart) => {
         window.playerAlertTriggered = false;
         window.lastChatLength = 0;
 
-        window.__captchaPhase = "none"; 
-        window.__captchaLock = false; 
+        window.__captchaPhase = "none";
+        window.__captchaLock = false;
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
 
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-        
+
+        // SYMULATOR FIZYCZNEGO KLIKNIĘCIA
+        function humanClick(el) {
+            if (!el) return;
+            ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
+            });
+            if (typeof el.click === 'function') el.click();
+            if (window.jQuery) jQuery(el).trigger('click');
+        }
+
         function getPreCaptcha() {
             const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
             if (preEl && preEl.offsetParent !== null) {
                 const text = (preEl.innerText || preEl.textContent || "").trim();
-                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) return preEl; 
+                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) return preEl;
             }
             return null;
         }
@@ -8253,11 +8263,11 @@ window.openShopAsync = async (namePart) => {
 
             if (!fullWin && !preWin) {
                 if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting") {
-                    window.__captchaPhase = "resuming"; 
-                    let delay = randomDelay(1000, 2500); 
+                    window.__captchaPhase = "resuming";
+                    let delay = randomDelay(1000, 2500);
                     if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
-                    
+
                     setTimeout(() => {
                         if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                             let btn = document.getElementById('btnStartExp');
@@ -8276,26 +8286,19 @@ window.openShopAsync = async (namePart) => {
                 window.__captchaPhase = "pre";
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
-                
+
                 if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
                 if (typeof stopPatrol === 'function') stopPatrol(true);
 
                 if (window.logExp) window.logExp("🚨 [Zapadka] Rozpoczynam auto-rozwiązywanie...", "#ffeb3b");
                 if (window.logHero) window.logHero("🚨 [Zapadka] Rozpoczynam auto-rozwiązywanie...", "#ffeb3b");
-                
+
                 window.__captchaLock = true;
                 await sleep(randomDelay(800, 1500));
-                
-                // Wywołanie natywne! (Omija ewentualny błąd UI)
+
                 let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                if (btn) {
-                    btn.click();
-                    if (window.jQuery) window.jQuery(btn).click();
-                } else if (typeof Engine !== 'undefined' && Engine.captcha) {
-                     // Wywołaj bezpośrednio z silnika
-                     if (typeof Engine.captcha.showCaptcha === 'function') Engine.captcha.showCaptcha();
-                }
-                
+                if (btn) humanClick(btn);
+
                 window.__captchaLock = false;
                 return;
             }
@@ -8332,8 +8335,7 @@ window.openShopAsync = async (namePart) => {
 
                     buttons.forEach(b => {
                         if (b.textContent.includes(targetSymbol)) {
-                            b.click();
-                            if (window.jQuery) window.jQuery(b).click();
+                            humanClick(b);
                             clicked = true;
                         }
                     });
@@ -8341,15 +8343,7 @@ window.openShopAsync = async (namePart) => {
                     if (clicked) {
                         await sleep(randomDelay(600, 1200));
                         let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
-                        if (confirmBtn) {
-                             confirmBtn.click();
-                             if (window.jQuery) window.jQuery(confirmBtn).click();
-                        } else if (typeof window._g === 'function') {
-                             // Ratunkowe wysłanie odpowiedzi do serwera gdyby nie było guzika
-                             let selectedIdx = -1;
-                             buttons.forEach((b, i) => { if (b.classList.contains('active') || b.textContent.includes(targetSymbol)) selectedIdx = i; });
-                             if (selectedIdx !== -1) window._g(`zapadka&a=confirm&id=${selectedIdx}`);
-                        }
+                        if (confirmBtn) humanClick(confirmBtn);
                     } else {
                         if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem w odpowiedziach symbolu: " + targetSymbol, "#ff9800");
                         window.__captchaPhase = "manual_waiting";
@@ -8369,7 +8363,7 @@ window.openShopAsync = async (namePart) => {
 
         setInterval(() => {
             let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
-            
+
 let checkBrowser = botSettings.exp?.playerAlert;
             let checkDiscord = botSettings.discord?.alerts?.player;
 
@@ -8392,7 +8386,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                     let msgTitle = newPlayers.length === 1 ? `👁️ Wykryto Gracza!` : `👁️ Wykryto Graczy (${newPlayers.length})!`;
                     let msgBody = newPlayers.map(p => `- ${p.nick} (${p.lvl} lvl)`).join('\n');
                     let logBody = newPlayers.map(p => `${p.nick} (${p.lvl} lvl)`).join('<br> &nbsp;&nbsp;&nbsp; ↳ ');
-                    
+
                     // Niezależna Przeglądarka
                     if (checkBrowser) {
                         if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
@@ -8407,7 +8401,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
 
                     // Niezależne zablokowanie bota (wystarczy, że jedno z nich jest zaznaczone)
                     if (botSettings.exp.playerAlertStopBot || botSettings.discord?.stop?.player) {
-                        if (typeof stopPatrol === 'function') stopPatrol(true); 
+                        if (typeof stopPatrol === 'function') stopPatrol(true);
                         if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
                         if (window.logExp) window.logExp(`🛑 Zatrzymano bota, ponieważ wykryto intruzów!`, "#f44336");
                     }
@@ -8416,7 +8410,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 window.alertedPlayersList.clear();
             }
         }, 1000);
-    }
+
     // --- CZĘŚĆ 3: OBSERWATOR CZATU PRYWATNEGO (MutationObserver) ---
         window.__chatDomObserver?.disconnect?.();
         window.__seenPrivs = window.__seenPrivs || new Set();
@@ -8520,10 +8514,10 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 window.stuckIdleCount = 0;
                 return;
             }
-            if (Engine.battle && Engine.battle.show) return; 
-            if (Engine.dead || Engine.hero.d.dead) return; 
-            if (window.isHealLocked || window.isRegeneratingToFull) return; 
-            if (window.__captchaPhase && window.__captchaPhase !== "none") return; 
+            if (Engine.battle && Engine.battle.show) return;
+            if (Engine.dead || Engine.hero.d.dead) return;
+            if (window.isHealLocked || window.isRegeneratingToFull) return;
+            if (window.__captchaPhase && window.__captchaPhase !== "none") return;
             // ZABEZPIECZENIE: Nie wykonuj mikroruchów, jeśli celowo czekamy na respawn (45 sekund)
             if (window.isExping && window.expMapTransitionCooldown && Date.now() < window.expMapTransitionCooldown) {
                 window.stuckIdleCount = 0;
@@ -8536,16 +8530,16 @@ let checkBrowser = botSettings.exp?.playerAlert;
             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
 
             if (!isMoving) {
-                if (window.lastStuckCheckPos.x === currentX && 
-                    window.lastStuckCheckPos.y === currentY && 
+                if (window.lastStuckCheckPos.x === currentX &&
+                    window.lastStuckCheckPos.y === currentY &&
                     window.lastStuckCheckPos.map === currentMap) {
-                    
+
                     window.stuckIdleCount++;
-                    
+
                     // ZMNIEJSZONY CZAS: Interweniuje po 5 sekundach zamiast 8!
                     if (window.stuckIdleCount >= 5) {
                         if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Lekko odskakuję...", "#00e5ff");
-                        
+
                         // ZAMIAST klikać pod siebie (co nic nie daje w drzwiach), robi realny krok w bok
                         let stepX = Math.max(0, currentX + (Math.random() > 0.5 ? 1 : -1));
                         let stepY = Math.max(0, currentY + (Math.random() > 0.5 ? 1 : -1));
@@ -8558,8 +8552,8 @@ let checkBrowser = botSettings.exp?.playerAlert;
                         } else if (window.isExping && typeof window.expMainLoop === 'function') {
                             setTimeout(() => window.expMainLoop(), 1500);
                         }
-                        
-                        window.stuckIdleCount = 0; 
+
+                        window.stuckIdleCount = 0;
                     }
                 } else {
                     window.stuckIdleCount = 1;
@@ -8574,40 +8568,40 @@ let checkBrowser = botSettings.exp?.playerAlert;
   // --- DAEMON: ZABEZPIECZENIE PRZED WYBIEGNIĘCIEM POZA LISTĘ (UNDEFINED FIX) ---
         if (!window.undefinedMapFixInstalled) {
             window.undefinedMapFixInstalled = true;
-            
+
             // Zapisujemy w pamięci oryginalną funkcję biegania
             const originalRushToMap = window.rushToMap;
-            
+
             if (typeof originalRushToMap === 'function') {
                 // Nadpisujemy ją naszą mądrzejszą wersją - TERAZ PRZYJMUJE WSZYSTKIE ARGUMENTY
                 window.rushToMap = function(targetMap, tgtX, tgtY, fullPath, resumePatrol) {
-                    
+
                     // Jeśli bot zgłupieje i spróbuje wziąć cel spoza listy
                     if (!targetMap || String(targetMap).trim() === 'undefined' || String(targetMap).trim() === 'null') {
-                        
+
                         if (window.logHero) window.logHero("🔄 Zakończono pętlę. Wracam na pierwszą mapę z trasy!", "#00e5ff");
-                        
+
                         // Awaryjne resetowanie liczników, niezależnie jakiej zmiennej używa reszta skryptu
                         if (typeof window.patrolIndex !== 'undefined') window.patrolIndex = 0;
                         if (typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex = 0;
                         if (typeof window.rushIndex !== 'undefined') window.rushIndex = 0;
-                        
+
                         // Pobranie pierwszej mapy z pamięci bota
                         let firstMap = null;
                         if (window.rushFullPath && window.rushFullPath.length > 0) firstMap = window.rushFullPath[0];
                         else if (window.patrolPath && window.patrolPath.length > 0) firstMap = window.patrolPath[0];
                         else if (window.patrolMaps && window.patrolMaps.length > 0) firstMap = window.patrolMaps[0];
-                        
+
                         if (firstMap) {
                             targetMap = firstMap; // Zastępujemy 'undefined' poprawną mapą!
                         } else {
                             // Twardy stop, jeśli tablice są całkowicie puste
                             if (window.logHero) window.logHero("❌ Brak map do patrolowania! Zatrzymuję bota.", "#f44336");
                             if (typeof stopPatrol === 'function') stopPatrol(true);
-                            return; 
+                            return;
                         }
                     }
-                    
+
                     // KLUCZOWE: Odpalamy prawdziwy bieg z już NAPRAWIONYM celem i PRZEKAZUJEMY FLAGĘ WZNOWIENIA PATROLU!
                     return originalRushToMap(targetMap, tgtX, tgtY, fullPath, resumePatrol);
                 };
@@ -8631,7 +8625,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
         // 2. Kuloodporne podpięcie kliknięć (Nadpisuje stare, zepsute eventy)
         document.addEventListener('click', (e) => {
             if (e.target && e.target.closest('#btnOpenBrowserAlertsModule')) {
-                e.stopPropagation(); 
+                e.stopPropagation();
                 let p = document.getElementById('browserAlertsSettingsGUI');
                 if (p) p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
             }
@@ -8661,7 +8655,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
         setTimeout(() => {
             // 1. Kasujemy "Duchy" - usuwamy okna z klasą 'hero-window' które wiszą luzem
             document.querySelectorAll('body > .hero-window#heroTeleportsGUI').forEach(el => el.remove());
-            
+
             const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI', 'browserAlertsSettingsGUI', 'discordSettingsGUI', 'heroTeleportsGUI'];
             windowsToClean.forEach(id => {
                 let copies = document.querySelectorAll('#' + id);
@@ -8669,18 +8663,18 @@ let checkBrowser = botSettings.exp?.playerAlert;
                     for (let i = 0; i < copies.length - 1; i++) copies[i].remove();
                 }
             });
-            
+
             // 2. Naprawiamy przycisk Teleportów (Wyświetlanie w dobrej zakładce)
             let properTpContainer = document.querySelector('#teleportsContainer #heroTeleportsGUI');
             let btnTp = document.getElementById('btnOpenTeleports');
-            
+
             if (btnTp && properTpContainer) {
                 // Nadpisujemy oryginalną funkcję rysującą, by na pewno trafiała do dobrego diva
                 window.renderTeleportList = function() {
                     let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"];
                     let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
                     let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div><div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height: 250px;">`;
-                    
+
                     tpList.forEach(map => {
                         let isChecked = (botSettings.unlockedTeleports && botSettings.unlockedTeleports[map]) ? 'checked' : '';
                         html += `<label style="display:flex; align-items:center; background:#1a1a1a; padding:4px; border:1px solid #333; cursor:pointer; color:#d4af37; font-size:11px; margin-bottom: 2px; border-left: 2px solid #00838f;"><input type="checkbox" class="chk-teleport" data-map="${map}" ${isChecked} style="margin-right:8px; cursor:pointer;"><b>${map}</b></label>`;
@@ -8692,7 +8686,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 // Usuwamy stare eventy i dodajemy mocny listener
                 let newBtnTp = btnTp.cloneNode(true);
                 btnTp.parentNode.replaceChild(newBtnTp, btnTp);
-                
+
                 newBtnTp.addEventListener('click', (e) => {
                     e.preventDefault(); e.stopPropagation();
                     // Ukrywamy inne listy
@@ -8700,7 +8694,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                         let el = document.getElementById(id);
                         if (el) el.style.display = 'none';
                     });
-                    
+
                     properTpContainer.style.display = properTpContainer.style.display === 'flex' ? 'none' : 'flex';
                     if (properTpContainer.style.display === 'flex') window.renderTeleportList();
                 });
@@ -8714,7 +8708,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                     style.id = 'dynamic-bg-opacity';
                     document.head.appendChild(style);
                 }
-                
+
                 document.querySelectorAll('.hero-window').forEach(w => w.style.opacity = '1'); // Tekst zawsze w 100% widoczny!
 
                 style.innerHTML = `
@@ -8770,16 +8764,16 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 // Klonujemy przycisk, żeby usunąć z niego stare, zepsute eventy (kradnące kliknięcia)
                 let newBtn = btnTp.cloneNode(true);
                 btnTp.parentNode.replaceChild(newBtn, btnTp);
-                
+
                 newBtn.addEventListener('click', (e) => {
                     e.preventDefault(); e.stopPropagation();
-                    
+
                     // Ukryj resztę zakładek (Eq, Potki, Sklepy), jeśli są włączone
                     ['recommendedEqList', 'potionsList', 'shopsSearchWrapper'].forEach(id => {
                         let el = document.getElementById(id);
                         if (el) el.style.display = 'none';
                     });
-                    
+
                     // Znajdź i przełącz właściwy, wewnętrzny kontener
                     let innerContainer = document.querySelector('#teleportsContainer #heroTeleportsGUI');
                     if (innerContainer) {
@@ -8800,7 +8794,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             window.__movementGuardInstalled = true;
             window.originalAutoWalk = Engine.hero.autoWalk;
             Engine.hero.autoWalk = function(x, y, ...args) {
-                if (window.__movementLock && Date.now() < window.__movementLock) return false; 
+                if (window.__movementLock && Date.now() < window.__movementLock) return false;
                 return window.originalAutoWalk.call(this, x, y, ...args);
             };
         }
@@ -8854,7 +8848,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 {id: 'discordStop_Chat', val: botSettings.discord.stop.chat},
                 {id: 'discordAlert_Captcha', val: botSettings.discord.alerts.captcha},
                 {id: 'discordStop_Captcha', val: botSettings.discord.stop.captcha},
-                
+
                 {id: 'captchaAlert', val: botSettings.exp.captchaAlert},
                 {id: 'playerAlert', val: botSettings.exp.playerAlert},
                 {id: 'playerAlertStopBot', val: botSettings.exp.playerAlertStopBot},
@@ -8866,7 +8860,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 if (el) el.checked = c.val;
             });
 
-            // 3. TWARDE AUTO-ZAPISYWANIE PRZEGLĄDARKI 
+            // 3. TWARDE AUTO-ZAPISYWANIE PRZEGLĄDARKI
             document.querySelectorAll('#browserAlertsSettingsGUI input[type="checkbox"]').forEach(chk => {
                 chk.addEventListener('change', (e) => {
                     let id = e.target.id;
@@ -8890,7 +8884,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 { id: 'discordAlert_Captcha', type: 'alerts', key: 'captcha' },
                 { id: 'discordStop_Captcha', type: 'stop', key: 'captcha' }
             ];
-            
+
             discordMap.forEach(cfg => {
                 let el = document.getElementById(cfg.id);
                 if (el) {
@@ -8903,16 +8897,16 @@ let checkBrowser = botSettings.exp?.playerAlert;
 
             // Reagowanie na tekst (link / ID) w czasie rzeczywistym
             if (urlInput) {
-                urlInput.addEventListener('input', (e) => { 
-                    botSettings.discord.url = e.target.value.trim(); 
+                urlInput.addEventListener('input', (e) => {
+                    botSettings.discord.url = e.target.value.trim();
                     botSettings.discord.enabled = botSettings.discord.url.length > 10;
-                    saveSettings(); 
+                    saveSettings();
                 });
             }
             if (idInput) {
-                idInput.addEventListener('input', (e) => { 
-                    botSettings.discord.userId = e.target.value.trim(); 
-                    saveSettings(); 
+                idInput.addEventListener('input', (e) => {
+                    botSettings.discord.userId = e.target.value.trim();
+                    saveSettings();
                 });
             }
 
@@ -8921,7 +8915,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             if (btnSaveDiscord) {
                 let freshSaveBtn = btnSaveDiscord.cloneNode(true);
                 btnSaveDiscord.parentNode.replaceChild(freshSaveBtn, btnSaveDiscord);
-                
+
                 freshSaveBtn.innerText = "🚀 WYŚLIJ WIADOMOŚĆ TESTOWĄ";
 
                 freshSaveBtn.addEventListener('click', (e) => {
@@ -8941,7 +8935,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             window.__movementGuardInstalled = true;
             window.originalAutoWalk = Engine.hero.autoWalk;
             Engine.hero.autoWalk = function(x, y, ...args) {
-                if (window.__movementLock && Date.now() < window.__movementLock) return false; 
+                if (window.__movementLock && Date.now() < window.__movementLock) return false;
                 return window.originalAutoWalk.call(this, x, y, ...args);
             };
         }
