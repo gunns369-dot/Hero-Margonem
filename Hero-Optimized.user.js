@@ -8207,30 +8207,25 @@ window.openShopAsync = async (namePart) => {
             } // Tutaj zamykamy warunki czasu i active
         }, 1000); 
     }
-// --- DAEMON: DETEKCJA ZAPADKI (ALARM + HUMAN STOP) ---
+// --- DAEMON: DETEKCJA ZAPADKI (AUTO-SOLVER + ALARM) ---
     if (!window.captchaDaemonInstalled) {
         window.captchaDaemonInstalled = true;
         window.playerAlertTriggered = false;
         window.lastChatLength = 0;
 
-        // Zmienne stanu
         window.__captchaPhase = "none"; 
         window.__captchaLock = false; 
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
 
-        // --- FUNKCJE HUMANIZUJĄCE ---
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-        // --- DETEKCJA OKIEN ---
         function getPreCaptcha() {
             const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
             if (preEl && preEl.offsetParent !== null) {
                 const text = (preEl.innerText || preEl.textContent || "").trim();
-                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) {
-                    return preEl; 
-                }
+                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) return preEl; 
             }
             return null;
         }
@@ -8239,104 +8234,133 @@ window.openShopAsync = async (namePart) => {
             const win = document.querySelector('.captcha, .c-window.border-window.captcha-window, .margo-window[data-wnd="zapadka"]');
             if (win && win.offsetParent !== null) {
                 const text = (win.innerText || win.textContent || "").trim();
-                if (text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("pozostałych prób")) {
-                    return win;
-                }
+                if (text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("pozostałych prób")) return win;
             }
             return null;
         }
 
-// --- ZSYNCHRONIZOWANA PĘTLA STRAŻNIKA (Z AUTO-WZNOWIENIEM) ---
+        // Słownik do tłumaczenia pytań na fizyczne symbole z gry
+        const symbolMap = {
+            "gwiazdk": "*", "tyld": "~", "kratk": "#", "daszek": "^",
+            "wykrzyknik": "!", "dolar": "$", "małp": "@", "procent": "%",
+            "ampersand": "&", "plus": "+", "minus": "-", "zapytani": "?", "równa": "="
+        };
+
         setInterval(async () => {
             if (window.__captchaLock) return;
 
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // Sytuacja 1: Zapadki brak (Czysto lub właśnie ją rozwiązałeś)
+            // 1. Zapadki brak (Czysto lub właśnie rozwiązana)
             if (!fullWin && !preWin) {
-                if (window.__captchaPhase === "manual_waiting") {
-                    window.__captchaPhase = "resuming"; // Blokujemy wielokrotne wznowienie
-                    
-                    let delay = randomDelay(500, 2000); // Losujemy czas od 0.5s do 2s
+                if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting") {
+                    window.__captchaPhase = "resuming"; 
+                    let delay = randomDelay(1000, 2500); 
                     if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     
                     setTimeout(() => {
-                        // Wznawianie Expienia
                         if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                             let btn = document.getElementById('btnStartExp');
                             if (btn) btn.click();
                         }
-                        
-                        // Wznawianie Patrolu za Herosem (Działa nawet jeśli bot był w trakcie zmiany mapy!)
                         if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
                             if (typeof startPatrol === 'function') startPatrol();
                         }
-                        
                         window.__captchaPhase = "none";
                     }, delay);
                 }
                 return;
             }
 
-          // Sytuacja 2: Zapadka pojawiła się pierwszy raz
-            if (window.__captchaPhase === "none") {
-                // Ignorujemy, jeśli bot stoi w miejscu wyłączony
-                if (!window.isExping && !window.isPatrolling && !window.isRushing) return;
-
-                window.__captchaLock = true; // ZAKŁADAMY KŁÓDKĘ
-                window.__captchaPhase = "manual_waiting";
-                
-                // KRYTYCZNA POPRAWKA: Bot zapisuje, czy patrolował LUB czy akurat zmieniał mapę (Rushing)
+            // 2. Pojawia się okienko wstępne ("Rozwiąż teraz")
+            if (preWin && !fullWin && window.__captchaPhase === "none") {
+                window.__captchaPhase = "pre";
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
+                
+                if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
+                if (typeof stopPatrol === 'function') stopPatrol(true);
 
-             // Alarm dźwiękowy i powiadomienie (Z BLOKADĄ PRZED DUBLOWANIEM SPAMU)
-                let checkBrowserCaptcha = botSettings.exp?.captchaAlert;
-                let checkDiscordCaptcha = botSettings.discord?.alerts?.captcha;
+                if (window.logExp) window.logExp("🚨 [Zapadka] Rozpoczynam auto-rozwiązywanie...", "#ffeb3b");
+                if (window.logHero) window.logHero("🚨 [Zapadka] Rozpoczynam auto-rozwiązywanie...", "#ffeb3b");
+                
+                window.__captchaLock = true;
+                await sleep(randomDelay(800, 1500)); // Udajemy ludzki czas reakcji
+                
+                let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
+                if (btn) {
+                    if (window.jQuery) jQuery(btn).trigger('click');
+                    btn.click();
+                }
+                
+                window.__captchaLock = false;
+                return;
+            }
 
-                if (checkBrowserCaptcha || checkDiscordCaptcha) {
+            // 3. Pojawia się główne okno Captchy (Obrazek + Przyciski)
+            if (fullWin && window.__captchaPhase !== "solving") {
+                window.__captchaPhase = "solving";
+                window.__captchaLock = true;
+
+                // Odgrywamy alarm dźwiękowy z ustawień (jeśli jest on zaznaczony)
+                if (botSettings.exp?.captchaAlert || botSettings.discord?.alerts?.captcha) {
                     if (!window.__lastCaptchaNotif || Date.now() - window.__lastCaptchaNotif > 15000) {
                         window.__lastCaptchaNotif = Date.now();
-
-                        // PUSH DISCORD O ZAPADCE (W 100% NIEZALEŻNY!)
-                        if (checkDiscordCaptcha) {
-                            window.sendDiscordWebhook("🚨 [ZAPADKA] Wykryto Captcha!", "Gra wymaga Twojej uwagi! Zatrzymano bota.", 16711680);
-                        }
-
-                        // ALARM DŹWIĘKOWY I POWIADOMIENIE PRZEGLĄDARKI (W 100% NIEZALEŻNE!)
-                        if (checkBrowserCaptcha) {
-                            try {
-                                let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
-                                audio.play();
-                                setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 2000);
-                            } catch(e) {}
-
-                            window.focus();
-                            if (Notification.permission === "granted") {
-                                let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
-                                notif.onclick = function() { window.focus(); this.close(); };
-                            }
+                        if (botSettings.discord?.alerts?.captcha) window.sendDiscordWebhook("🚨 [ZAPADKA] Wykryto Captcha!", "Bot próbuje ją właśnie rozwiązać...", 16711680);
+                        if (botSettings.exp?.captchaAlert) {
+                            try { let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); audio.play(); setTimeout(()=>audio.pause(), 2000); } catch(e){}
                         }
                     }
                 }
-                
-                if (window.logExp) window.logExp("🚨 [Zapadka] Wyskoczyła zapadka! Odtwarzam alarm...", "#ff5252");
-                if (window.logHero) window.logHero("🚨 Wyskoczyła zapadka! Zatrzymuję bota na czas rozwiązania.", "#ff5252");
 
-                // Hamulec awaryjny
-                if (window.isExping) {
-                    let btn = document.getElementById('btnStartExp');
-                    if (btn) btn.click();
+                await sleep(randomDelay(1000, 2000)); // Czas na "przeczytanie" polecenia
+
+                let questionEl = fullWin.querySelector(".captcha__question");
+                if (!questionEl) { window.__captchaLock = false; return; }
+
+                let qText = questionEl.textContent.toLowerCase();
+                let targetSymbol = null;
+
+                for (let key in symbolMap) {
+                    if (qText.includes(key)) { targetSymbol = symbolMap[key]; break; }
                 }
-                if (typeof stopPatrol === 'function') stopPatrol(true);
-                
-                window.__captchaLock = false; // ŚCIĄGAMY KŁÓDKĘ
+
+                if (targetSymbol) {
+                    let buttons = fullWin.querySelectorAll(".captcha__buttons button, .captcha__buttons .button");
+                    let clicked = false;
+
+                    buttons.forEach(b => {
+                        if (b.textContent.includes(targetSymbol)) {
+                            // Używamy jQuery jako twardego zabezpieczenia symulującego prawdziwe kliknięcie UI
+                            if (window.jQuery) jQuery(b).trigger('click');
+                            b.click();
+                            clicked = true;
+                        }
+                    });
+
+                    if (clicked) {
+                        await sleep(randomDelay(600, 1200));
+                        let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
+                        if (confirmBtn) {
+                            if (window.jQuery) jQuery(confirmBtn).trigger('click');
+                            confirmBtn.click();
+                        }
+                    } else {
+                        if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem w odpowiedziach symbolu: " + targetSymbol, "#ff9800");
+                        window.__captchaPhase = "manual_waiting";
+                    }
+                } else {
+                    if (window.logExp) window.logExp("⚠️ Nie rozpoznano pytania w zapadce. Rozwiąż ręcznie!", "#ff9800");
+                    window.__captchaPhase = "manual_waiting"; // Przechodzimy w tryb ręczny
+                }
+
+                window.__captchaLock = false;
             }
 
         }, 500);
-
+    }
   // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar - Zbiorczy) ---
         window.alertedPlayersList = window.alertedPlayersList || new Set();
 
