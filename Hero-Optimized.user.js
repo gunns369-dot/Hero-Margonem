@@ -5264,19 +5264,34 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
     const isExpMap = isMapInSelectedExpowisko(currMap);
     setExpBerserkState(isExpMap);
 
-    // --- 2. RUCH NA EXPOWISKO ---
+  // --- 2. RUCH NA EXPOWISKO ORAZ PAMIĘĆ MAP ---
     let mapOrder = botSettings.exp.mapOrder || [];
     let targetExpMap = currMap;
 
+    if (!window.mapClearTimes) window.mapClearTimes = {};
+
     if (mapOrder.length > 0) {
-        if (mapOrder.includes(currMap)) {
+        if (mapOrder.includes(currMap) && !window.mapClearTimes[currMap]) {
+            // Jesteśmy na mapie docelowej i jeszcze jej nie wyczyściliśmy
             targetExpMap = currMap;
         } else {
-            let closestObj = typeof getClosestExpMapPath === 'function' ? getClosestExpMapPath(currMap) : null;
-            if (closestObj && closestObj.targetMap) {
-                targetExpMap = closestObj.targetMap;
+            // Szukamy następnej mapy do czyszczenia zgodnie z ułożoną kolejnością!
+            let currIdx = mapOrder.indexOf(currMap);
+            let nextMap = null;
+
+            for (let i = 1; i <= mapOrder.length; i++) {
+                let checkIdx = (currIdx !== -1 ? currIdx + i : i - 1) % mapOrder.length;
+                let checkMap = mapOrder[checkIdx];
+                if (!window.mapClearTimes[checkMap]) {
+                    nextMap = checkMap;
+                    break;
+                }
+            }
+
+            if (nextMap) {
+                targetExpMap = nextMap;
             } else {
-                targetExpMap = mapOrder[0];
+                targetExpMap = currMap; // Pętla skończona, czekamy na respawn
             }
         }
     }
@@ -5670,7 +5685,7 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
         return;
     }
-// --- ZAAWANSOWANY SMART ROAM: PĘTLE BRAM I TUNELI ---
+// --- ZAAWANSOWANY SMART ROAM: ZAPISANIE W PAMIĘCI ---
     if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
 
     expEmptyScans++;
@@ -5685,9 +5700,14 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         return;
     }
 
+    // Zapamiętujemy, że obecna mapa jest wyczyszczona
+    if (!window.mapClearTimes) window.mapClearTimes = {};
     window.mapClearTimes[currMap] = now;
-    let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m] && m !== currMap);
+    if (window.logExp) window.logExp(`🗺️ Mapa [${currMap}] pusta! Zapisano w pamięci. Biegne do kolejnej!`, "#ba68c8");
 
+    let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m]);
+
+    // Jeśli nie ma już żadnych map do sprawdzenia
     if (uncheckedMaps.length === 0) {
         if (Engine.map.d.pvp === 2 && mapsPool.length > 1) {
             window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
@@ -5699,145 +5719,16 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 return;
             }
         }
-        window.logExp("⏳ Wszystkie mapy w pętli wyczyszczone. Czekam 45s na resp...", "#ffb300");
+        window.logExp("⏳ Pętla ukończona (Wszystkie mapy z listy wyczyszczone). Czekam 45 sekund na respawn...", "#ffb300");
         expMapTransitionCooldown = now + 45000;
-        window.mapClearTimes = {};
+        window.mapClearTimes = {}; // Resetujemy pamięć po odczekaniu, żeby bot poleciał pętlę od nowa!
         return;
     }
 
-    let gateways = globalGateways[currMap] || {};
-    let nextStepMap = null;
-    let targetGateway = null;
-    let bestGraphPathLen = Infinity;
-    let bestDistToDoor = Infinity;
-
-    let directGateways = [];
-    for (let targetMap in gateways) {
-        if (uncheckedMaps.includes(targetMap)) {
-            directGateways.push({ map: targetMap, gw: gateways[targetMap], dist: Math.abs(gateways[targetMap].x - hx) + Math.abs(gateways[targetMap].y - hy) });
-        }
-    }
-
-    if (directGateways.length > 0) {
-        directGateways.sort((a, b) => a.dist - b.dist);
-        nextStepMap = directGateways[0].map;
-        targetGateway = directGateways[0].gw;
-    } else {
-        for (let targetMap in gateways) {
-            let gw = gateways[targetMap];
-            for (let unvisitedMap of uncheckedMaps) {
-                let path = getShortestPath(targetMap, unvisitedMap);
-                if (path) {
-                    let dist = Math.abs(gw.x - hx) + Math.abs(gw.y - hy);
-                    if (path.length < bestGraphPathLen) {
-                        bestGraphPathLen = path.length;
-                        bestDistToDoor = dist;
-                        nextStepMap = targetMap;
-                        targetGateway = gw;
-                    } else if (path.length === bestGraphPathLen && dist < bestDistToDoor) {
-                        bestDistToDoor = dist;
-                        nextStepMap = targetMap;
-                        targetGateway = gw;
-                    }
-                }
-            }
-        }
-    }
-
-    if (!nextStepMap) {
-        window.logExp(`Brak dojścia do jakiejkolwiek bramy na ścieżce.`, "#e53935");
-        expMapTransitionCooldown = now + 4000;
-        return;
-    }
-
-    if (targetGateway) {
-        let dx = targetGateway.x; let dy = targetGateway.y;
-        let distToDoor = Math.max(Math.abs(dx - hx), Math.abs(dy - hy));
-
-        let tp = ZAKONNICY[currMap];
-        let isFakeDoor = tp && Math.abs(dx - tp.x) <= 2 && Math.abs(dy - tp.y) <= 2;
-        let isTeleport = tp && (botSettings.unlockedTeleports[nextStepMap] || isFakeDoor);
-
-        if (isTeleport) {
-            if (displayTarget) displayTarget.innerText = `Teleport do: ${nextStepMap}`;
-            if (!isHeroMoving || now >= expGatewayLockUntil) {
-                window.logExp(`🚀 Teleportuję do: ${nextStepMap}`, "#00acc1");
-                expGatewayLockUntil = now + 4000; expMapTransitionCooldown = now + 4000; expLastActionTime = now + 500;
-                if (typeof window.handleTeleportNPC === 'function') window.handleTeleportNPC(nextStepMap);
-            }
-            return;
-        }
-
-        if (distToDoor > 0) {
-            if (displayTarget) displayTarget.innerText = `Przejście do: ${nextStepMap}`;
-            let isNewDoorDest = (window.expLastMoveTx !== dx || window.expLastMoveTy !== dy);
-            
-            if (isNewDoorDest) {
-                window.logExp(`🚪 Idę do: ${nextStepMap}`, "#ba68c8");
-                Engine.hero.autoGoTo({ x: dx, y: dy });
-                window.expLastMoveTx = dx; window.expLastMoveTy = dy;
-                window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-                window.expTargetPursuitStart = now;
-                window.expMoveLockUntil = now + 1000;
-            } else if (now > window.expMoveLockUntil) {
-                if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
-                    window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-                    window.expTargetPursuitStart = now;
-                }
-                let timeStandingStill = now - window.expTargetPursuitStart;
-
-                if (timeStandingStill > 2500) {
-                    window.logExp(`🚨 Brama na [${dx}, ${dy}] (do ${nextStepMap}) jest zablokowana! Pomijam tę mapę.`, "#ff5252");
-                    window.mapClearTimes[nextStepMap] = now;
-                    expMapTransitionCooldown = now + 500; 
-                    window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                    return;
-                }
-                if (timeStandingStill > 1500 && (now % 1500 < 150)) Engine.hero.autoGoTo({ x: dx, y: dy });
-            }
-            expLastActionTime = now + 100;
-            return;
-        }
-
-        // --- FIZYCZNE WEJŚCIE W BRAMĘ (STOIMY NA BRAMIE) ---
-        if (now > expGatewayLockUntil) {
-            if (!window.expGatewayArrivalTime) window.expGatewayArrivalTime = Date.now();
-
-            // Czekamy 12 sekund na przejście
-            if (Date.now() - window.expGatewayArrivalTime > 12000) {
-                if (window.logHero) window.logHero("❌ Brama zamknięta lub uszkodzona! Blokuję wejście na 5 minut i idę dalej...", "#ff5252");
-                if (window.logExp) window.logExp("❌ Brama zablokowana! Zmieniam plany...", "#ff5252");
-                
-                if (!window.__bannedMaps) window.__bannedMaps = {};
-                window.__bannedMaps[nextStepMap] = Date.now() + 300000; 
-
-                if (typeof window.nextExpMapIndex !== 'undefined') window.nextExpMapIndex++;
-                if (typeof window.currentPatrolIndex !== 'undefined') window.currentPatrolIndex++;
-
-                window.__movementLock = Date.now() + 2000; 
-                window.lastMapChange = Date.now(); 
-                window.lastGatewayAttempt = Date.now();
-                window.currentPath = null; 
-                window.mapClearTimes[nextStepMap] = now; // Pomijamy na teraz
-
-                let hx = parseInt(Engine.hero.d.x);
-                let hy = parseInt(Engine.hero.d.y);
-                let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
-                for (let d of dirs) {
-                    let nx = hx + d[0], ny = hy + d[1];
-                    if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
-                        if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
-                        else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
-                        else window._g(`walk=${nx},${ny}`);
-                        break;
-                    }
-                }
-                window.expGatewayArrivalTime = 0;
-            }
-        }
-    }
+    // Przekazujemy kontrolę wyżej w następnym cyklu - bot ułoży cel na nową jaskinię i od razu do niej pobiegnie.
+    expLastActionTime = now + 200;
+    return;
 } // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
-
 setInterval(runExpLogic, 150);
     // --- BAZA DANYCH PROFILI EXPOWISK ---
 
