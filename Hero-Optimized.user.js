@@ -8220,26 +8220,32 @@ window.openShopAsync = async (namePart) => {
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
 
-                // Alarm dźwiękowy i powiadomienie (Z BLOKADĄ PRZED DUBLOWANIEM SPAMU)
-                if (botSettings.exp && botSettings.exp.captchaAlert) {
+             // Alarm dźwiękowy i powiadomienie (Z BLOKADĄ PRZED DUBLOWANIEM SPAMU)
+                let checkBrowserCaptcha = botSettings.exp?.captchaAlert;
+                let checkDiscordCaptcha = botSettings.discord?.alerts?.captcha;
+
+                if (checkBrowserCaptcha || checkDiscordCaptcha) {
                     if (!window.__lastCaptchaNotif || Date.now() - window.__lastCaptchaNotif > 15000) {
                         window.__lastCaptchaNotif = Date.now();
 
-                        // PUSH DISCORD O ZAPADCE
-                        if (botSettings.discord?.alerts?.captcha) {
+                        // PUSH DISCORD O ZAPADCE (W 100% NIEZALEŻNY!)
+                        if (checkDiscordCaptcha) {
                             window.sendDiscordWebhook("🚨 [ZAPADKA] Wykryto Captcha!", "Gra wymaga Twojej uwagi! Zatrzymano bota.", 16711680);
                         }
-                        
-                        try { 
-                            let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg'); 
-                            audio.play(); 
-                            setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 2000); 
-                        } catch(e) {}
-                        
-                        window.focus();
-                        if (Notification.permission === "granted") {
-                            let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
-                            notif.onclick = function() { window.focus(); this.close(); };
+
+                        // ALARM DŹWIĘKOWY I POWIADOMIENIE PRZEGLĄDARKI (W 100% NIEZALEŻNE!)
+                        if (checkBrowserCaptcha) {
+                            try {
+                                let audio = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
+                                audio.play();
+                                setTimeout(() => { try{audio.pause(); audio.currentTime=0;}catch(e){} }, 2000);
+                            } catch(e) {}
+
+                            window.focus();
+                            if (Notification.permission === "granted") {
+                                let notif = new Notification("🚨 ALARM: ZAPADKA!", { body: "Ktoś Cię sprawdza! Kliknij, aby otworzyć grę.", requireInteraction: true });
+                                notif.onclick = function() { window.focus(); this.close(); };
+                            }
                         }
                     }
                 }
