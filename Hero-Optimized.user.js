@@ -2825,7 +2825,10 @@ function initGUI() {
                         <div style="border-top:1px solid #333; margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
                             <label style="color:#ffb300; font-weight:bold; display:flex; align-items:center; gap:5px; cursor: pointer; margin:0;"><input type="checkbox" id="autosellEnabled" ${botSettings.autosell?.enabled ? 'checked' : ''}> Auto-Sprzedaż</label>
                             <div style="display:flex; align-items:center; gap:5px;">
-                                <span style="color:#a99a75; font-size:10px; margin:0;">Wolne miejsce: <b id="autosellCapacityDisplay" style="color:#4caf50;">?</b></span>
+                              <span style="color:#a99a75; font-size:10px; margin:0;">Wolne miejsce: <b id="autosellCapacityDisplay" style="color:#4caf50;">?</b></span>
+                                <label style="color:#e0d8c0; font-size:10px; display:flex; align-items:center; gap:3px; cursor:pointer; margin:0 4px;" title="Zmusza bota do sprzedawania wyłącznie u Tunii">
+                                    <input type="checkbox" id="autosellOnlyTunia" ${botSettings.autosell?.onlyTunia ? 'checked' : ''}> Tunia
+                                </label>
                                 <button id="btnForceSell" class="btn-sepia" style="background:#e65100; font-weight:bold; padding:2px 6px; border-color:#bf360c;">🏃 OPRÓŻNIJ TERAZ</button>
                             </div>
                         </div>
@@ -3490,8 +3493,10 @@ if (!botSettings.berserk) {
             } catch(e) {}
         };
 
+        if (botSettings.autosell && typeof botSettings.autosell.onlyTunia === 'undefined') { botSettings.autosell.onlyTunia = false; saveSettings(); }
         bindChange('autosellEnabled', (e) => { botSettings.autosell.enabled = e.target.checked; saveSettings(); });
         bindChange('autosellCapacity', (e) => { botSettings.autosell.maxCapacity = parseInt(e.target.value) || 42; saveSettings(); });
+        bindChange('autosellOnlyTunia', (e) => { botSettings.autosell.onlyTunia = e.target.checked; saveSettings(); });
 
         bindChange('berserkEnabled', (e) => { botSettings.berserk.userEnabled = e.target.checked; botSettings.berserk.enabled = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
         bindChange('berserkCommon', (e) => { botSettings.berserk.common = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
@@ -8032,10 +8037,24 @@ window.openShopAsync = async (namePart) => {
                         window.autoSellState.isAsyncRunning = false;
                     }
 
-                    if (!window.autoSellState.targetNpc) {
+                   if (!window.autoSellState.targetNpc) {
                         let kupcy = window.DatabaseModule.kupcy || [];
-                        let validMerchants = kupcy.filter(k => ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'].some(n => k.npc_name.includes(n)));
-                        if (validMerchants.length === 0) validMerchants = kupcy;
+                        
+                        // Wybór listy dozwolonych kupców w zależności od Checkboxa
+                        let allowedNames = ['Flineks', 'Makin', 'Rozen', 'Tuni', 'Unil', 'Aukcjoner', 'Syntia', 'Jemen'];
+                        if (botSettings.autosell && botSettings.autosell.onlyTunia) {
+                            allowedNames = ['Tuni']; // Ograniczamy listę wyłącznie do Tunii
+                        }
+                        
+                        let validMerchants = kupcy.filter(k => allowedNames.some(n => k.npc_name.includes(n)));
+                        if (validMerchants.length === 0 && allowedNames.length > 1) validMerchants = kupcy;
+
+                        // NAPRAWA BŁĘDU LOKALIZACJI Z BAZY DANYCH
+                        validMerchants.forEach(m => {
+                            if (m.npc_name.includes("Tuni") && m.map_name !== "Dom Tunii") {
+                                m.map_name = "Dom Tunii";
+                            }
+                        });
 
                         if (window.autoSellState.failedNPCs.length > 0) {
                             validMerchants = validMerchants.filter(k => !window.autoSellState.failedNPCs.includes(k.npc_name));
