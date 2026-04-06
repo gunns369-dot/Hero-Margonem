@@ -6489,7 +6489,6 @@ window.toggleTeleportLock = function(city, isChecked) {
                 if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
                 if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
             }
-        }
 // 2. POKAŻ POLECANE EQ (Z filtrowaniem, Porównywaniem i Podwójnym Tooltipem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
