@@ -8074,9 +8074,10 @@ window.openShopAsync = async (namePart) => {
 
                             window.openShopAsync(bestNpc.npc_name).then(success => {
                                 if (success) {
-                                    if (window.logExp) window.logExp(`✅ Otwieram sklep u: ${bestNpc.npc_name}`, "#ffb300");
-                                    window.autoSellState.step = 3; // Sukces - przechodzimy do sprzedaży!
-                                    window.autoSellState.nextActionTime = Date.now() + 1000;
+                                   if (window.logExp) window.logExp(`✅ Otwieram sklep u: ${bestNpc.npc_name}`, "#ffb300");
+                                            window.autoSellState.oldGold = parseInt(Engine.hero.d.gold || 0); // <--- ZAPIS PIENIĘDZY PRZED SPRZEDAŻĄ
+                                            window.autoSellState.step = 3; // Sukces - przechodzimy do sprzedaży!
+                                            window.autoSellState.nextActionTime = Date.now() + 1000;
                                 } else {
                                     if (window.logHero) window.logHero(`⚠️ Problem z otwarciem sklepu u: ${bestNpc.npc_name}. Szukam innego...`, "#ff9800");
                                     let closeBtn = document.querySelector('.dialogue-window.is-open .close-button, #dialog .close-button, .dialog-window .close-button');
@@ -8109,9 +8110,14 @@ window.openShopAsync = async (namePart) => {
                         window.autoSellState.step = 3;
                         window.autoSellState.nextActionTime = Date.now() + 500;
                     } else {
-                        let profit = Engine.hero.d.gold - window.autoSellState.oldGold;
+                        let currentGold = parseInt(Engine.hero.d.gold || 0);
+                        let oldGold = parseInt(window.autoSellState.oldGold || 0);
+                        let profit = currentGold - oldGold;
+                        
+                        // Zabezpieczenie przed błędnym wyliczeniem
+                        if (oldGold === 0 || profit === currentGold || profit < 0) profit = 0;
 
-                        if (profit > 0) {
+                        if (profit >= 0) {
                             let msg = `✅ Opróżnianie zakończone! Zarobek: ${profit.toLocaleString()} zł. Wracam do pracy.`;
                             if (window.logHero) window.logHero(msg, "#4caf50");
                             if (window.logExp) window.logExp(msg, "#4caf50");
