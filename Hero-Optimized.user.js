@@ -8276,14 +8276,35 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-        // SYMULATOR FIZYCZNEGO KLIKNIĘCIA
+     // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON)
         function humanClick(el) {
             if (!el) return;
-            ['mousedown', 'mouseup', 'click'].forEach(eventType => {
-                el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
-            });
-            if (typeof el.click === 'function') el.click();
-            if (window.jQuery) jQuery(el).trigger('click');
+            
+            // 1. Obliczanie absolutnej pozycji elementu na fizycznym monitorze
+            let rect = el.getBoundingClientRect();
+            
+            // Szacowanie ramek przeglądarki (żeby trafiało idealnie niezależnie od zakładek na górze)
+            let borderX = (window.outerWidth - window.innerWidth) / 2;
+            let borderY = window.outerHeight - window.innerHeight - borderX; 
+            
+            let absX = window.screenX + borderX + rect.left + (rect.width / 2);
+            let absY = window.screenY + borderY + rect.top + (rect.height / 2);
+
+            // 2. Wysłanie rozkazu do Twojego serwera Python w tle
+            fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`)
+                .then(res => {
+                    if(window.logExp) window.logExp("🤖 Python przejął myszkę i rozwiązał zapadkę!", "#e040fb");
+                })
+                .catch(err => {
+                    // FALLBACK AWARYJNY: Jeśli zapomnisz włączyć skryptu Python, bot ratuje się kliknięciem JS
+                    if(window.logExp) window.logExp("⚠️ Brak połączenia z Pythonem! Ratuję się wirtualnym kliknięciem.", "#ff9800");
+                    ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                        el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
+                    });
+                    if (typeof el.click === 'function') el.click();
+                    if (window.jQuery) window.jQuery(el).trigger('click');
+                    el.classList.add('pressed', 'active');
+                });
         }
 
         function getPreCaptcha() {
