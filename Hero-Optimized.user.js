@@ -2830,7 +2830,7 @@ function initGUI() {
                     <div id="accRouteContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #009688; border-top: none; margin-bottom: 5px;">
                         <label style="color:#00e5ff; font-size:10px; cursor:pointer; font-weight:bold; margin-bottom:6px; display:block;"><input type="checkbox" id="autoChangeExpRoute" ${botSettings.exp.autoChangeRoute ? 'checked' : ''}> 🔄 Automatyczna zmiana Expowiska</label>
                         <input type="hidden" id="expRange" value="999">
-                        <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between;">Kolejność map: <span onclick="clearExpMaps()" style="color:#e53935; cursor:pointer;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></label>
+                       <label style="color:#a99a75; font-size:11px; margin-top:2px; display:flex; justify-content:space-between; align-items:center;">Kolejność map: <div style="display:flex; gap:8px;"><span onclick="window.optimizeExpRoute()" style="color:#00e5ff; cursor:pointer; font-weight:bold;" title="Automatycznie ułóż i połącz mapy w pętlę">🔀 Optymalizuj</span><span onclick="window.clearExpMaps()" style="color:#e53935; cursor:pointer; font-weight:bold;" title="Wyczyść całą trasę">🗑️ Wyczyść</span></div></label>
                         <div id="expMapList" style="border:1px solid #3a3020; background:#000; overflow-y:auto; min-height:80px; max-height:160px; padding:2px;"></div>
                         <div style="display:flex; gap:4px; margin-top:6px;">
                             <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
@@ -6238,6 +6238,60 @@ window.clearExpMaps = () => {
         botSettings.exp.mapOrder = [];
         localStorage.setItem('exp_map_order_v64', '[]');
         if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
+    };
+
+    window.optimizeExpRoute = function() {
+        let maps = botSettings.exp.mapOrder;
+        if (!maps || maps.length < 2) return heroAlert("Dodaj co najmniej 2 mapy do listy, aby bot mógł je połączyć i zoptymalizować!");
+
+        let unvisited = new Set(maps);
+        let sysMap = typeof Engine !== 'undefined' && Engine.map && Engine.map.d ? Engine.map.d.name : lastMapName;
+        
+        // Zaczynamy od mapy, na której aktualnie stoimy (jeśli jest na liście), lub od pierwszej z brzegu
+        let currentMap = unvisited.has(sysMap) ? sysMap : maps[0];
+
+        let finalRoute = [currentMap];
+        unvisited.delete(currentMap);
+
+        while(unvisited.size > 0) {
+            let bestPath = null;
+            let bestTarget = null;
+            let minLen = Infinity;
+
+            for (let target of unvisited) {
+                let path = typeof getShortestPath === 'function' ? getShortestPath(currentMap, target) : null;
+                if (path && path.length < minLen) {
+                    minLen = path.length;
+                    bestPath = path;
+                    bestTarget = target;
+                }
+            }
+
+            if (!bestPath) {
+                return heroAlert(`🚨 Błąd! Bot nie potrafi dojść z [${currentMap}] do innych map na liście. Upewnij się, że masz nagrane przejścia w bazie (wystarczy przejść przez bramę ręcznie z włączonym botem)!`);
+            }
+
+            // Dodajemy mapy przejściowe oraz mapę docelową
+            for (let i = 1; i < bestPath.length; i++) {
+                finalRoute.push(bestPath[i]);
+            }
+            unvisited.delete(bestTarget);
+            currentMap = bestTarget;
+        }
+
+        // Zamknięcie pętli (powrót z ostatniej mapy na początkową, by expienie trwało w nieskończoność)
+        let returnPath = typeof getShortestPath === 'function' ? getShortestPath(currentMap, finalRoute[0]) : null;
+        if (returnPath && returnPath.length > 1) {
+            for (let i = 1; i < returnPath.length - 1; i++) {
+                finalRoute.push(returnPath[i]);
+            }
+        }
+
+        botSettings.exp.mapOrder = finalRoute;
+        localStorage.setItem('exp_map_order_v64', JSON.stringify(finalRoute));
+        if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+        
+        heroAlert(`✅ Trasa zoptymalizowana!\nAlgorytm ułożył mapy w najkrótszej, logicznej kolejności i dopisał brakujące mapy przejściowe. Gotowe do pracy!`);
     };
 
     window.renderMapOrderList = () => {
