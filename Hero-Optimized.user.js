@@ -7373,23 +7373,20 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         };
     }
 
-    function isUnconsciousNow() {
+  function isUnconsciousNow() {
         // 1. Sprawdzamy DOM Twoją dokładną funkcją
         const domState = getUnconsciousState();
         
         // 2. Twarde sprawdzenie w silniku gry (Zabezpieczenie)
         const hero = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) ? Engine.hero.d : null;
-        const hp = hero ? parseInt(hero.hp ?? hero.warrior_stats?.hp ?? 0) : 0;
-        const maxhp = hero ? parseInt(hero.maxhp ?? hero.warrior_stats?.maxhp ?? 0) : 0;
 
         const engineDead = !!(
             (typeof Engine !== 'undefined' && Engine.dead) ||
             (hero && (hero.dead === true || hero.dead === 1 || hero.dead === "1"))
         );
 
-        const hpSuggestsDeath = maxhp > 1 && hp <= 1;
-
-        return domState.unconscious || engineDead || hpSuggestsDeath;
+        // USUNIĘTO BŁĘDNY WARUNEK "hp <= 1". Teraz ożywienie z 1 HP zostanie natychmiast wykryte!
+        return domState.unconscious || engineDead;
     }
 
     // --- PĘTLA STRAŻNIKA ŚMIERCI ---
@@ -7413,6 +7410,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     window.__stuckTimerCount = 0;
                     window.__lastParsedSeconds = null;
                     if (window.logExp) window.logExp("✅ [STRAŻNIK] Ożyłeś. Wracamy do akcji!", "#4caf50");
+                    
+                    // WYMUSZENIE STATUSU LECZENIA (Działa niezależnie od expienia, wystarczy włączony autoheal)
+                    if (botSettings && botSettings.autoheal && botSettings.autoheal.enabled) {
+                        window.isRegeneratingToFull = true;
+                    }
                 }
             }, 1200);
         }
