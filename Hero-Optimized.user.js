@@ -8220,6 +8220,16 @@ window.openShopAsync = async (namePart) => {
 
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+        
+        // SYMULATOR FIZYCZNEGO KLIKNIĘCIA
+        function humanClick(el) {
+            if (!el) return;
+            ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
+            });
+            if (typeof el.click === 'function') el.click();
+            if (window.jQuery) jQuery(el).trigger('click');
+        }
 
         function getPreCaptcha() {
             const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
@@ -8239,7 +8249,6 @@ window.openShopAsync = async (namePart) => {
             return null;
         }
 
-        // Słownik do tłumaczenia pytań na fizyczne symbole z gry
         const symbolMap = {
             "gwiazdk": "*", "tyld": "~", "kratk": "#", "daszek": "^",
             "wykrzyknik": "!", "dolar": "$", "małp": "@", "procent": "%",
@@ -8252,7 +8261,6 @@ window.openShopAsync = async (namePart) => {
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // 1. Zapadki brak (Czysto lub właśnie rozwiązana)
             if (!fullWin && !preWin) {
                 if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting") {
                     window.__captchaPhase = "resuming"; 
@@ -8274,7 +8282,6 @@ window.openShopAsync = async (namePart) => {
                 return;
             }
 
-            // 2. Pojawia się okienko wstępne ("Rozwiąż teraz")
             if (preWin && !fullWin && window.__captchaPhase === "none") {
                 window.__captchaPhase = "pre";
                 window.__wasExpingBeforeCaptcha = window.isExping;
@@ -8287,24 +8294,19 @@ window.openShopAsync = async (namePart) => {
                 if (window.logHero) window.logHero("🚨 [Zapadka] Rozpoczynam auto-rozwiązywanie...", "#ffeb3b");
                 
                 window.__captchaLock = true;
-                await sleep(randomDelay(800, 1500)); // Udajemy ludzki czas reakcji
+                await sleep(randomDelay(800, 1500));
                 
                 let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                if (btn) {
-                    if (window.jQuery) jQuery(btn).trigger('click');
-                    btn.click();
-                }
+                if (btn) humanClick(btn);
                 
                 window.__captchaLock = false;
                 return;
             }
 
-            // 3. Pojawia się główne okno Captchy (Obrazek + Przyciski)
             if (fullWin && window.__captchaPhase !== "solving") {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
 
-                // Odgrywamy alarm dźwiękowy z ustawień (jeśli jest on zaznaczony)
                 if (botSettings.exp?.captchaAlert || botSettings.discord?.alerts?.captcha) {
                     if (!window.__lastCaptchaNotif || Date.now() - window.__lastCaptchaNotif > 15000) {
                         window.__lastCaptchaNotif = Date.now();
@@ -8315,7 +8317,7 @@ window.openShopAsync = async (namePart) => {
                     }
                 }
 
-                await sleep(randomDelay(1000, 2000)); // Czas na "przeczytanie" polecenia
+                await sleep(randomDelay(1000, 2000));
 
                 let questionEl = fullWin.querySelector(".captcha__question");
                 if (!questionEl) { window.__captchaLock = false; return; }
@@ -8333,9 +8335,7 @@ window.openShopAsync = async (namePart) => {
 
                     buttons.forEach(b => {
                         if (b.textContent.includes(targetSymbol)) {
-                            // Używamy jQuery jako twardego zabezpieczenia symulującego prawdziwe kliknięcie UI
-                            if (window.jQuery) jQuery(b).trigger('click');
-                            b.click();
+                            humanClick(b);
                             clicked = true;
                         }
                     });
@@ -8343,17 +8343,14 @@ window.openShopAsync = async (namePart) => {
                     if (clicked) {
                         await sleep(randomDelay(600, 1200));
                         let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
-                        if (confirmBtn) {
-                            if (window.jQuery) jQuery(confirmBtn).trigger('click');
-                            confirmBtn.click();
-                        }
+                        if (confirmBtn) humanClick(confirmBtn);
                     } else {
                         if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem w odpowiedziach symbolu: " + targetSymbol, "#ff9800");
                         window.__captchaPhase = "manual_waiting";
                     }
                 } else {
                     if (window.logExp) window.logExp("⚠️ Nie rozpoznano pytania w zapadce. Rozwiąż ręcznie!", "#ff9800");
-                    window.__captchaPhase = "manual_waiting"; // Przechodzimy w tryb ręczny
+                    window.__captchaPhase = "manual_waiting";
                 }
 
                 window.__captchaLock = false;
