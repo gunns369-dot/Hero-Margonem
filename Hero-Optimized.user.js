@@ -6427,8 +6427,9 @@ window.toggleTeleportLock = function(city, isChecked) {
             if (!window.autoSellState) window.autoSellState = { active: false };
 
             if (window.autoSellState.active) {
-                // --- ANULOWANIE SPRZEDAŻY ---
+              // --- ANULOWANIE SPRZEDAŻY ---
                 window.autoSellState.active = false;
+                window.autoSellState.ignoreUntil = Date.now() + 180000; // 3 minuty "ciszy" od bota na ogarnięcie plecaka!
                 window.isRushing = false;
                 window.isRushingToShop = false;
                 if (window.rushInterval) clearTimeout(window.rushInterval);
@@ -7849,7 +7850,10 @@ if (isDead) {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
             
-            if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
+       if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
+                // Jeśli użytkownik anulował sprzedaż ręcznie, ignoruj pełny plecak przez wyznaczony czas
+                if (window.autoSellState.ignoreUntil && Date.now() < window.autoSellState.ignoreUntil) return;
+
                 const s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
                 if (s.freeSlots <= 0 && s.totalCapacity > 0) {
                     if (typeof stopPatrol === 'function') stopPatrol(true);
