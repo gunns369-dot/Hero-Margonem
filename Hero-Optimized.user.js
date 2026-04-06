@@ -2907,8 +2907,10 @@ function initGUI() {
                 <div class="nav-row"><label>Zasięg widoczności (Domyślnie 7):</label><input type="number" id="inpVisionRange" value="${botSettings.visionRange}" min="1" max="15"></div>
                 <div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
 
-                <button id="btnSaveSettings" class="btn btn-go-sepia">💾 ZAPISZ USTAWIENIA</button>
-            </div>
+                <div style="display:flex; gap:4px;">
+                    <button id="btnSaveSettings" class="btn btn-go-sepia" style="flex:1;">💾 ZAPISZ USTAWIENIA</button>
+                    <button id="btnExportImport" class="btn btn-sepia" style="flex:1; background:#00838f; border-color:#00acc1;">🔄 EXPORT / IMPORT BAZY</button>
+                </div>
         `;
         document.body.appendChild(settingsGui);
 
@@ -3675,6 +3677,31 @@ selHero.addEventListener('change', (e) => {
 
 
 
+        // --- MODUŁ EXPORTU / IMPORTU BAZY ---
+        document.getElementById('btnExportImport').addEventListener('click', () => {
+            let keysToSave = ['hero_global_gateways_v20', 'hero_map_order_v20', 'hero_settings_db_v64', 'exp_profiles_v64_4', 'hero_boss_coords_v64', 'hero_teleports_by_nick_v64'];
+            let backup = {};
+            
+            keysToSave.forEach(k => { 
+                if(localStorage.getItem(k)) backup[k] = localStorage.getItem(k); 
+            });
+            let backupStr = JSON.stringify(backup);
+            
+            heroPrompt("ABY SKLONOWAĆ BOTA: Skopiuj ten kod (CTRL+A, CTRL+C) i prześlij na inny komputer.<br><br>ABY WGRAĆ BAZĘ: Usuń ten tekst, wklej tu kod z innej przeglądarki i kliknij OK.", backupStr, (res) => {
+                if(res && res !== backupStr && res.length > 20) {
+                    try {
+                        let parsed = JSON.parse(res);
+                        for(let k in parsed) { 
+                            localStorage.setItem(k, parsed[k]); 
+                        }
+                        heroAlert("✅ Zainstalowano nową bazę danych!\nZaraz nastąpi automatyczne odświeżenie gry...");
+                        setTimeout(() => window.location.reload(), 2000);
+                    } catch(e) { 
+                        heroAlert("❌ Błąd: Nieprawidłowy kod zapisu! Upewnij się, że skopiowałeś całość."); 
+                    }
+                }
+            });
+        });
 
         document.getElementById('btnSaveSettings').addEventListener('click', () => {
 
