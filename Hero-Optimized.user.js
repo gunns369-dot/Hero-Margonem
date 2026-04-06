@@ -3914,7 +3914,11 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
                     }
                 });
 
-                if(addedCount > 0) {
+               if(addedCount > 0) {
+                    // Wyrzucenie duplikatów i automatyczne zoptymalizowanie nowej grupy map
+                    botSettings.exp.mapOrder = [...new Set(botSettings.exp.mapOrder)];
+                    if (typeof window.optimizeExpRoute === 'function') window.optimizeExpRoute(true);
+                    
                     localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
 
                     if(minL !== 9999) {
