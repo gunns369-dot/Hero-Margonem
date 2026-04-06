@@ -6473,27 +6473,7 @@ window.toggleTeleportLock = function(city, isChecked) {
                 if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
             }
         }
-            if (typeof stopPatrol === 'function') stopPatrol(true); // Zatrzymuje szukanie herosów i ruch expa
-
-            if (window.logHero) window.logHero("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
-            if (window.logExp) window.logExp("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
-
-            window.autoSellState.active = true;
-            window.autoSellState.step = 1;
-            window.autoSellState.nextActionTime = 0;
-            window.isRushingToShop = false;
-            window.isRushing = true;
-
-            // --- NAPRAWA: Wyłączenie Berserka przy ręcznym uruchomieniu ---
-            window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
-            if (window.autoSellState.wasBerserkOn) {
-                botSettings.berserk.enabled = false;
-                let chkBerserk = document.getElementById('berserkEnabled');
-                if (chkBerserk) chkBerserk.checked = false;
-                if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-                if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
-            }
-// 2. POKAŻ POLECANE EQ (Z filtrowaniem, Porównywaniem i Podwójnym Tooltipem)
+           // 2. POKAŻ POLECANE EQ (Z filtrowaniem, Porównywaniem i Podwójnym Tooltipem)
         if (e.target && e.target.closest('#btnShowRecommendedEq')) {
             hideAllTabs(); if (eqList) eqList.style.display = 'flex';
             if (!window.DatabaseModule || window.DatabaseModule.ekwipunek.length === 0) { eqList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return; }
