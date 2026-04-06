@@ -8143,25 +8143,29 @@ window.openShopAsync = async (namePart) => {
                             if (window.logExp) window.logExp(msg, "#4caf50");
                         }
 
-                        // Pełny Reset po zakończeniu
-                        window.autoSellState.active = false;
-                        window.autoSellState.failedNPCs = [];
-                        window.autoSellState.targetNpc = null;
-                        window.autoSellState.isAsyncRunning = false;
+      // Pełny, bezwarunkowy Reset po zakończeniu sprzedaży
+                        window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0, failedNPCs: [], shopWaitStartTime: 0, targetNpc: null };
                         window.isExpSuspended = false;
                         window.isRushing = false;
                         window.isRushingToShop = false;
+                        window.lastExpMap = null;
 
-                        if (typeof Engine.shop?.close === 'function') Engine.shop.close();
-
+                        if (typeof Engine !== 'undefined' && Engine.shop && typeof Engine.shop.close === 'function') Engine.shop.close();
+                        
                         let closeBtn = document.querySelector('.shop-close-btn, .close-button, .window-close, .close-cross');
                         if (closeBtn) closeBtn.click();
-
-                        window.lastExpMap = null;
+                        
+                        // Awaryjnie upewniamy się, że bieg Exp zostanie wznowiony, jeśli był wcześniej aktywny
+                        if (window.autoSellState.wasBerserkOn) {
+                             botSettings.berserk.enabled = true;
+                             let chkBerserk = document.getElementById('berserkEnabled');
+                             if (chkBerserk) chkBerserk.checked = true;
+                             if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                        }
                     }
                 }
             } // Tutaj zamykamy warunki czasu i active
-        }, 1000); // POPRAWIONE ZAMKNIĘCIE PĘTLI Z PRZECINKIEM! Zmieniłem na 1000ms zgodnie z oryginałem.
+        }, 1000); 
     }
 // --- DAEMON: DETEKCJA ZAPADKI (ALARM + HUMAN STOP) ---
     if (!window.captchaDaemonInstalled) {
