@@ -1111,10 +1111,32 @@ let opacityValue = 0.95;
             setInterval(autoDetectEngineData, 800);
             setInterval(heroPositionTracker, 100);
             setInterval(radarLoop, 150);
-            document.addEventListener('keydown', handleGlobalKeydown);
-            setupMapClickListener();
-        }
-    }, 2000);
+           document.addEventListener('keydown', handleGlobalKeydown);
+                setupMapClickListener();
+
+                // --- AUTO-WZNAWIANIE BOTA PO REFRESHU (F5 / RELOAD) ---
+                window.addEventListener('beforeunload', () => {
+                    // Zapisujemy, czy bot był włączony tuż przed zniknięciem strony
+                    if (window.isExping) sessionStorage.setItem('hero_resume_exp', 'true');
+                    else sessionStorage.removeItem('hero_resume_exp');
+
+                    if (typeof isPatrolling !== 'undefined' && isPatrolling) sessionStorage.setItem('hero_resume_patrol', 'true');
+                    else sessionStorage.removeItem('hero_resume_patrol');
+                });
+
+                setTimeout(() => {
+                    if (sessionStorage.getItem('hero_resume_exp') === 'true') {
+                        let btn = document.getElementById('btnStartExp');
+                        if (btn && !window.isExping) btn.click();
+                        if (window.logExp) window.logExp("🔄 Automatycznie wznowiono Expa po odświeżeniu gry!", "#4caf50");
+                    } else if (sessionStorage.getItem('hero_resume_patrol') === 'true') {
+                        let btn = document.getElementById('btnStartStop');
+                        if (btn && typeof isPatrolling !== 'undefined' && !isPatrolling) btn.click();
+                        if (window.logHero) window.logHero("🔄 Automatycznie wznowiono Patrol po odświeżeniu gry!", "#4caf50");
+                    }
+                }, 1500); // 1.5 sekundy opóźnienia, żeby gra "odetchnęła" po wczytaniu
+            }
+        }, 2000);
 
     // Zabezpieczenie brakującej funkcji, naprawia krytyczny CRASH!
     function setupMapClickListener() {
@@ -6400,15 +6422,53 @@ window.toggleTeleportLock = function(city, isChecked) {
             }
         }
         // -----------------------------------
-// WYMUSZENIE RĘCZNEJ SPRZEDAŻY
+// WYMUSZENIE RĘCZNEJ SPRZEDAŻY ORAZ ANULOWANIE
         if (e.target && e.target.closest('#btnForceSell')) {
             if (!window.autoSellState) window.autoSellState = { active: false };
 
             if (window.autoSellState.active) {
-                if (window.logHero) window.logHero("⚠️ Zlecenie sprzedaży jest już w toku!", "#ffb300");
-                if (window.logExp) window.logExp("⚠️ Zlecenie sprzedaży jest już w toku!", "#ffb300");
+                // --- ANULOWANIE SPRZEDAŻY ---
+                window.autoSellState.active = false;
+                window.isRushing = false;
+                window.isRushingToShop = false;
+                if (window.rushInterval) clearTimeout(window.rushInterval);
+                if (typeof stopPatrol === 'function') stopPatrol(true); // Twardy stop bota i postaci
+
+                // Jeśli bot sam wyłączył Ci Berserka na czas powrotu - przywracamy go!
+                if (window.autoSellState.wasBerserkOn) {
+                    botSettings.berserk.enabled = true;
+                    let chkBerserk = document.getElementById('berserkEnabled');
+                    if (chkBerserk) chkBerserk.checked = true;
+                    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                    if (window.logExp) window.logExp("🛡️ Przywrócono Berserka.", "#ff9800");
+                }
+
+                if (window.logHero) window.logHero("🛑 Przerwano pójście do sklepu!", "#f44336");
+                if (window.logExp) window.logExp("🛑 Przerwano pójście do sklepu!", "#f44336");
                 return;
             }
+
+            if (typeof stopPatrol === 'function') stopPatrol(true); // Zatrzymuje szukanie herosów i ruch expa
+
+            if (window.logHero) window.logHero("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
+            if (window.logExp) window.logExp("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
+
+            window.autoSellState.active = true;
+            window.autoSellState.step = 1;
+            window.autoSellState.nextActionTime = 0;
+            window.autoSellState.oldGold = parseInt(Engine.hero.d.gold || 0); // Zapis przed startem
+            window.isRushingToShop = false;
+            window.isRushing = true;
+
+            window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+            if (window.autoSellState.wasBerserkOn) {
+                botSettings.berserk.enabled = false;
+                let chkBerserk = document.getElementById('berserkEnabled');
+                if (chkBerserk) chkBerserk.checked = false;
+                if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
+            }
+        }
             if (typeof stopPatrol === 'function') stopPatrol(true); // Zatrzymuje szukanie herosów i ruch expa
 
             if (window.logHero) window.logHero("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
@@ -7541,12 +7601,30 @@ if (isDead) {
     if (!window.autoPotDaemonInstalled) {
         window.autoPotDaemonInstalled = true;
         window.autoPotState = { active: false, step: 0, nextActionTime: 0, targetNpc: null, targetItem: null };
-        setInterval(() => {
+       setInterval(() => {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
-            if (window.autoSellState && window.autoSellState.active) return;
+
+            // --- DYNAMICZNY PRZYCISK ANULOWANIA ---
+            let btnForce = document.getElementById('btnForceSell');
+            if (btnForce) {
+                if (window.autoSellState.active) {
+                    if (btnForce.innerText !== "🛑 ANULUJ SPRZEDAŻ") {
+                        btnForce.innerHTML = "🛑 ANULUJ SPRZEDAŻ";
+                        btnForce.style.background = "#d32f2f";
+                        btnForce.style.borderColor = "#b71c1c";
+                    }
+                } else {
+                    if (btnForce.innerText !== "🏃 OPRÓŻNIJ TERAZ") {
+                        btnForce.innerHTML = "🏃 OPRÓŻNIJ TERAZ";
+                        btnForce.style.background = "#e65100";
+                        btnForce.style.borderColor = "#bf360c";
+                    }
+                }
+            }
+            // ------------------------------------
             
-            if (!window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
+            if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
                 let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {}).filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null).reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
                 if (potCount <= 0) {
                     if (typeof stopPatrol === 'function') stopPatrol(true);
