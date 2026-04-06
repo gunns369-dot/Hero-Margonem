@@ -8940,4 +8940,39 @@ let checkBrowser = botSettings.exp?.playerAlert;
             };
         }
     }, 3000);
+    // --- DAEMON: AUTO-ZAMYKANIE WALKI PO PRZEGRANEJ ---
+    if (!window.autoCloseLostFightInstalled) {
+        window.autoCloseLostFightInstalled = true;
+        let lastLostCloseTime = 0;
+
+        setInterval(() => {
+            // 1. Sprawdzamy, czy w ogóle jesteśmy w trakcie wyświetlanej walki
+            if (typeof Engine === 'undefined' || !Engine.battle || !Engine.battle.show) return;
+
+            // 2. Pobieramy tekst z logów walki
+            const battleLogs = document.querySelector(".left-column, .battle-content, .logbox, .battle-log");
+            if (!battleLogs) return;
+
+            const text = battleLogs.innerText || battleLogs.textContent || "";
+
+            // 3. Jeśli padliśmy, szukamy przycisku opuszczenia
+            if (/Poległ/i.test(text)) {
+                const now = Date.now();
+                if (now - lastLostCloseTime < 1500) return; // Cooldown na kliknięcie
+
+                const btn = document.querySelector("div.button.green.close-battle-ground.small, .close-battle-btn, .battle-close-button");
+                
+                if (btn && getComputedStyle(btn).display !== "none" && getComputedStyle(btn).visibility !== "hidden") {
+                    lastLostCloseTime = now;
+                    
+                    // Podwójne, bezpieczne kliknięcie
+                    if (window.jQuery) jQuery(btn).trigger('click');
+                    if (typeof btn.click === 'function') btn.click();
+                    
+                    if (window.logExp) window.logExp("💀 Przegrana walka! Automatycznie opuszczam pole bitwy...", "#e53935");
+                    else if (window.logHero) window.logHero("💀 Przegrana walka! Zamykam...", "#e53935");
+                }
+            }
+        }, 500);
+    }
 })(); // Koniec kodu
