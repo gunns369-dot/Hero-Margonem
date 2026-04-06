@@ -7941,9 +7941,12 @@ window.openShopAsync = async (namePart) => {
 
                         console.log(`🚶 [AUTO-SELL] Idę do ${npc.nick} (X: ${npc.x}, Y: ${npc.y})...`);
 
-                        // 3. DOJŚCIE DO NPC
+                      // 3. DOJŚCIE DO NPC
                         let reached = false;
                         for (let i = 0; i < 60; i++) { // 6 sekund
+                            // NATYCHMIASTOWE PRZERWANIE BIEGU, JEŚLI WCIŚNIESZ ANULUJ
+                            if (window.autoSellState && window.autoSellState.active === false) return false; 
+
                             const h = Engine.hero?.d || Engine.hero;
                             if (!h) { await sleep(100); continue; }
                             
@@ -8054,12 +8057,18 @@ window.openShopAsync = async (namePart) => {
                             validMerchants = validMerchants.filter(k => !window.autoSellState.failedNPCs.includes(k.npc_name));
                         }
 
-                        if (validMerchants.length === 0) {
-                            if (window.logHero) window.logHero("❌ Brak dostępnych kupców do sprzedaży!", "#e53935");
+                    if (validMerchants.length === 0) {
+                            let msg = "❌ Brak kupców! (Wstrzymuję auto-sprzedaż na 3 minuty)";
+                            if (window.logHero) window.logHero(msg, "#e53935");
+                            if (window.logExp) window.logExp(msg, "#e53935");
+                            
                             window.autoSellState.active = false;
-                            window.autoSellState.failedNPCs = null;
+                            window.autoSellState.ignoreUntil = Date.now() + 180000; // 3 MINUTY CISZY OMIJAJĄCEJ PEŁNY PLECAK
+                            window.autoSellState.failedNPCs = [];
+                            window.autoSellState.targetNpc = null;
                             window.isExpSuspended = false;
                             window.isRushing = false;
+                            window.isRushingToShop = false;
                             return;
                         }
 
