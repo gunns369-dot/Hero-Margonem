@@ -2907,9 +2907,10 @@ function initGUI() {
                 <div class="nav-row"><label>Zasięg widoczności (Domyślnie 7):</label><input type="number" id="inpVisionRange" value="${botSettings.visionRange}" min="1" max="15"></div>
                 <div class="nav-row"><label>Skrót klawiszowy (Chowaj/Pokaż bota):</label><input type="text" id="inpToggleKey" value="${botSettings.toggleKey || 'Kliknij i wciśnij klawisz...'}" readonly style="cursor:pointer; text-align:center;"></div>
 
-                <div style="display:flex; gap:4px;">
-                    <button id="btnSaveSettings" class="btn btn-go-sepia" style="flex:1;">💾 ZAPISZ USTAWIENIA</button>
-                    <button id="btnExportImport" class="btn btn-sepia" style="flex:1; background:#00838f; border-color:#00acc1;">🔄 EXPORT / IMPORT BAZY</button>
+              <div style="display:flex; gap:4px;">
+                    <button id="btnSaveSettings" class="btn btn-go-sepia" style="flex:1; padding:6px 2px; font-size:9px;">💾 ZAPISZ OPCJE</button>
+                    <button id="btnExportFile" class="btn btn-sepia" style="flex:1; padding:6px 2px; font-size:9px; background:#00838f; border-color:#00acc1;" title="Zapisuje bazę do pliku na dysk">📥 POBIERZ PLIK</button>
+                    <button id="btnImportFile" class="btn btn-sepia" style="flex:1; padding:6px 2px; font-size:9px; background:#e65100; border-color:#ef6c00;" title="Wczytuje bazę z pliku">📂 WGRAJ PLIK</button>
                 </div>
         `;
         document.body.appendChild(settingsGui);
@@ -3677,32 +3678,59 @@ selHero.addEventListener('change', (e) => {
 
 
 
-        // --- MODUŁ EXPORTU / IMPORTU BAZY ---
-        document.getElementById('btnExportImport').addEventListener('click', () => {
-            let keysToSave = ['hero_global_gateways_v20', 'hero_map_order_v20', 'hero_settings_db_v64', 'exp_profiles_v64_4', 'hero_boss_coords_v64', 'hero_teleports_by_nick_v64'];
-            let backup = {};
-            
-            keysToSave.forEach(k => { 
-                if(localStorage.getItem(k)) backup[k] = localStorage.getItem(k); 
+      // --- MODUŁ EXPORTU / IMPORTU DO PLIKU ---
+        let keysToSave = ['hero_global_gateways_v20', 'hero_map_order_v20', 'hero_settings_db_v64', 'exp_profiles_v64_4', 'hero_boss_coords_v64', 'hero_teleports_by_nick_v64'];
+        
+        let btnExport = document.getElementById('btnExportFile');
+        if (btnExport) {
+            btnExport.addEventListener('click', () => {
+                let backup = {};
+                keysToSave.forEach(k => { if(localStorage.getItem(k)) backup[k] = localStorage.getItem(k); });
+                
+                // Tworzenie wirtualnego pliku JSON
+                let blob = new Blob([JSON.stringify(backup, null, 2)], {type: "application/json"});
+                let url = URL.createObjectURL(blob);
+                
+                // Wymuszenie pobrania
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = `MargoNeuro_Baza_${new Date().toISOString().slice(0,10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                heroAlert("✅ Plik z zapisaną pamięcią bota został pomyślnie wygenerowany i pobrany na Twój komputer!");
             });
-            let backupStr = JSON.stringify(backup);
-            
-            heroPrompt("ABY SKLONOWAĆ BOTA: Skopiuj ten kod (CTRL+A, CTRL+C) i prześlij na inny komputer.<br><br>ABY WGRAĆ BAZĘ: Usuń ten tekst, wklej tu kod z innej przeglądarki i kliknij OK.", backupStr, (res) => {
-                if(res && res !== backupStr && res.length > 20) {
-                    try {
-                        let parsed = JSON.parse(res);
-                        for(let k in parsed) { 
-                            localStorage.setItem(k, parsed[k]); 
-                        }
-                        heroAlert("✅ Zainstalowano nową bazę danych!\nZaraz nastąpi automatyczne odświeżenie gry...");
-                        setTimeout(() => window.location.reload(), 2000);
-                    } catch(e) { 
-                        heroAlert("❌ Błąd: Nieprawidłowy kod zapisu! Upewnij się, że skopiowałeś całość."); 
-                    }
-                }
-            });
-        });
+        }
 
+        let btnImport = document.getElementById('btnImportFile');
+        if (btnImport) {
+            btnImport.addEventListener('click', () => {
+                // Wywołanie systemowego okna wyboru pliku
+                let input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = e => {
+                    let file = e.target.files[0];
+                    if (!file) return;
+                    
+                    let reader = new FileReader();
+                    reader.onload = function(ev) {
+                        try {
+                            let parsed = JSON.parse(ev.target.result);
+                            for(let k in parsed) { localStorage.setItem(k, parsed[k]); }
+                            heroAlert("✅ Sukces! Odczytano plik i zainstalowano nową bazę!\nZaraz nastąpi automatyczne odświeżenie gry...");
+                            setTimeout(() => window.location.reload(), 2500);
+                        } catch(err) {
+                            heroAlert("❌ Błąd: Wybrany plik jest uszkodzony lub nie należy do bota MargoNeuro!");
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+        }
         document.getElementById('btnSaveSettings').addEventListener('click', () => {
 
             botSettings.mapLoadMin = parseInt(document.getElementById('inpLoadMin').value) || 1000;
