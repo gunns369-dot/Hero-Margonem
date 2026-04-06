@@ -3339,11 +3339,14 @@ if (!botSettings.berserk) {
 // Pętla milczącego ładownia profili (dla Auto-Expowiska)
         window.autoLoadExpProfile = function(index) {
             let p = botSettings.expProfiles[index];
-            if(p) {
+           if(p) {
                 botSettings.exp.activeProfileName = p.name;
                 botSettings.exp.mapOrder = [...p.maps];
+                
+                // AUTOMATYCZNA OPTYMALIZACJA PO ZAŁADOWANIU NOWEJ BAZY
+                if (typeof window.optimizeExpRoute === 'function') window.optimizeExpRoute(true);
+                
                 localStorage.setItem('exp_map_order_v64', JSON.stringify(botSettings.exp.mapOrder));
-
                 let lvlMatch = p.name.match(/\((\d+)\s*lvl\)/i);
                 if(lvlMatch && lvlMatch[1]) {
                     let baseLvl = parseInt(lvlMatch[1]);
@@ -6233,67 +6236,58 @@ setInterval(runExpLogic, 150);
 
     };
 
-
 window.clearExpMaps = () => {
         botSettings.exp.mapOrder = [];
         localStorage.setItem('exp_map_order_v64', '[]');
         if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
     };
 
-    window.optimizeExpRoute = function() {
+    window.optimizeExpRoute = function(silent = false) {
         let maps = botSettings.exp.mapOrder;
-        if (!maps || maps.length < 2) return heroAlert("Dodaj co najmniej 2 mapy do listy, aby bot mógł je połączyć i zoptymalizować!");
+        if (!maps || maps.length < 2) {
+            if (!silent) heroAlert("Dodaj co najmniej 2 mapy do listy, aby bot mógł je zoptymalizować!");
+            return;
+        }
 
         let unvisited = new Set(maps);
         let sysMap = typeof Engine !== 'undefined' && Engine.map && Engine.map.d ? Engine.map.d.name : lastMapName;
         
         // Zaczynamy od mapy, na której aktualnie stoimy (jeśli jest na liście), lub od pierwszej z brzegu
         let currentMap = unvisited.has(sysMap) ? sysMap : maps[0];
-
         let finalRoute = [currentMap];
         unvisited.delete(currentMap);
 
+        // Sortowanie najbliższego sąsiada (TSP)
         while(unvisited.size > 0) {
-            let bestPath = null;
             let bestTarget = null;
             let minLen = Infinity;
 
             for (let target of unvisited) {
                 let path = typeof getShortestPath === 'function' ? getShortestPath(currentMap, target) : null;
-                if (path && path.length < minLen) {
-                    minLen = path.length;
-                    bestPath = path;
+                let dist = path ? path.length : 999;
+                if (dist < minLen) {
+                    minLen = dist;
                     bestTarget = target;
                 }
             }
 
-            if (!bestPath) {
-                return heroAlert(`🚨 Błąd! Bot nie potrafi dojść z [${currentMap}] do innych map na liście. Upewnij się, że masz nagrane przejścia w bazie (wystarczy przejść przez bramę ręcznie z włączonym botem)!`);
+            if (!bestTarget || minLen === 999) {
+                let remaining = Array.from(unvisited);
+                bestTarget = remaining[0];
             }
 
-            // Dodajemy mapy przejściowe oraz mapę docelową
-            for (let i = 1; i < bestPath.length; i++) {
-                finalRoute.push(bestPath[i]);
-            }
+            // Dodajemy TYLKO główną mapę! Bot sam przejdzie przez korytarze dzięki wbudowanemu GPS.
+            finalRoute.push(bestTarget);
             unvisited.delete(bestTarget);
             currentMap = bestTarget;
-        }
-
-        // Zamknięcie pętli (powrót z ostatniej mapy na początkową, by expienie trwało w nieskończoność)
-        let returnPath = typeof getShortestPath === 'function' ? getShortestPath(currentMap, finalRoute[0]) : null;
-        if (returnPath && returnPath.length > 1) {
-            for (let i = 1; i < returnPath.length - 1; i++) {
-                finalRoute.push(returnPath[i]);
-            }
         }
 
         botSettings.exp.mapOrder = finalRoute;
         localStorage.setItem('exp_map_order_v64', JSON.stringify(finalRoute));
         if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
         
-        heroAlert(`✅ Trasa zoptymalizowana!\nAlgorytm ułożył mapy w najkrótszej, logicznej kolejności i dopisał brakujące mapy przejściowe. Gotowe do pracy!`);
+        if (!silent) heroAlert(`✅ Trasa zoptymalizowana!\nAlgorytm ułożył mapy w idealną pętlę. Bot sam odnajdzie przejścia między nimi i wyłączy Berserka w trakcie biegu.`);
     };
-
     window.renderMapOrderList = () => {
         let c = document.getElementById('heroMapListContainer');
         if (!c) return;
