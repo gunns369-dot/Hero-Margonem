@@ -8221,16 +8221,6 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
         
-        // SYMULATOR FIZYCZNEGO KLIKNIĘCIA
-        function humanClick(el) {
-            if (!el) return;
-            ['mousedown', 'mouseup', 'click'].forEach(eventType => {
-                el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
-            });
-            if (typeof el.click === 'function') el.click();
-            if (window.jQuery) jQuery(el).trigger('click');
-        }
-
         function getPreCaptcha() {
             const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
             if (preEl && preEl.offsetParent !== null) {
@@ -8296,8 +8286,15 @@ window.openShopAsync = async (namePart) => {
                 window.__captchaLock = true;
                 await sleep(randomDelay(800, 1500));
                 
+                // Wywołanie natywne! (Omija ewentualny błąd UI)
                 let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                if (btn) humanClick(btn);
+                if (btn) {
+                    btn.click();
+                    if (window.jQuery) window.jQuery(btn).click();
+                } else if (typeof Engine !== 'undefined' && Engine.captcha) {
+                     // Wywołaj bezpośrednio z silnika
+                     if (typeof Engine.captcha.showCaptcha === 'function') Engine.captcha.showCaptcha();
+                }
                 
                 window.__captchaLock = false;
                 return;
@@ -8335,7 +8332,8 @@ window.openShopAsync = async (namePart) => {
 
                     buttons.forEach(b => {
                         if (b.textContent.includes(targetSymbol)) {
-                            humanClick(b);
+                            b.click();
+                            if (window.jQuery) window.jQuery(b).click();
                             clicked = true;
                         }
                     });
@@ -8343,7 +8341,15 @@ window.openShopAsync = async (namePart) => {
                     if (clicked) {
                         await sleep(randomDelay(600, 1200));
                         let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
-                        if (confirmBtn) humanClick(confirmBtn);
+                        if (confirmBtn) {
+                             confirmBtn.click();
+                             if (window.jQuery) window.jQuery(confirmBtn).click();
+                        } else if (typeof window._g === 'function') {
+                             // Ratunkowe wysłanie odpowiedzi do serwera gdyby nie było guzika
+                             let selectedIdx = -1;
+                             buttons.forEach((b, i) => { if (b.classList.contains('active') || b.textContent.includes(targetSymbol)) selectedIdx = i; });
+                             if (selectedIdx !== -1) window._g(`zapadka&a=confirm&id=${selectedIdx}`);
+                        }
                     } else {
                         if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem w odpowiedziach symbolu: " + targetSymbol, "#ff9800");
                         window.__captchaPhase = "manual_waiting";
