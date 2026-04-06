@@ -6427,9 +6427,10 @@ window.toggleTeleportLock = function(city, isChecked) {
             if (!window.autoSellState) window.autoSellState = { active: false };
 
             if (window.autoSellState.active) {
-              // --- ANULOWANIE SPRZEDAŻY ---
+             // --- ANULOWANIE SPRZEDAŻY ---
                 window.autoSellState.active = false;
-                window.autoSellState.ignoreUntil = Date.now() + 180000; // 3 minuty "ciszy" od bota na ogarnięcie plecaka!
+                window.autoSellState.ignoreUntil = Date.now() + 180000;
+                sessionStorage.setItem('hero_autosell_ignore', window.autoSellState.ignoreUntil); // Twardy zapis blokady
                 window.isRushing = false;
                 window.isRushingToShop = false;
                 if (window.rushInterval) clearTimeout(window.rushInterval);
@@ -6451,9 +6452,11 @@ window.toggleTeleportLock = function(city, isChecked) {
 
             if (typeof stopPatrol === 'function') stopPatrol(true); // Zatrzymuje szukanie herosów i ruch expa
 
-            if (window.logHero) window.logHero("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
+      if (window.logHero) window.logHero("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
             if (window.logExp) window.logExp("🏃 Ręcznie wymuszono opróżnienie plecaka! Zatrzymuję akcje i wyruszam...", "#ff5252");
 
+            sessionStorage.removeItem('hero_autosell_ignore'); // Ściągnięcie blokady przy ręcznym wywołaniu
+            window.autoSellState.ignoreUntil = 0;
             window.autoSellState.active = true;
             window.autoSellState.step = 1;
             window.autoSellState.nextActionTime = 0;
@@ -7850,9 +7853,10 @@ if (isDead) {
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.heroEquipment) return;
             if (Engine.battle && Engine.battle.show) return;
             
-       if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
-                // Jeśli użytkownik anulował sprzedaż ręcznie, ignoruj pełny plecak przez wyznaczony czas
-                if (window.autoSellState.ignoreUntil && Date.now() < window.autoSellState.ignoreUntil) return;
+      if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
+                // Odczyt blokady z pamięci przeglądarki (Przeżyje odświeżenie F5)
+                let savedIgnore = parseInt(sessionStorage.getItem('hero_autosell_ignore') || 0);
+                if (savedIgnore > Date.now() || (window.autoSellState.ignoreUntil && Date.now() < window.autoSellState.ignoreUntil)) return;
 
                 const s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
                 if (s.freeSlots <= 0 && s.totalCapacity > 0) {
@@ -8063,7 +8067,8 @@ window.openShopAsync = async (namePart) => {
                             if (window.logExp) window.logExp(msg, "#e53935");
                             
                             window.autoSellState.active = false;
-                            window.autoSellState.ignoreUntil = Date.now() + 180000; // 3 MINUTY CISZY OMIJAJĄCEJ PEŁNY PLECAK
+                            window.autoSellState.ignoreUntil = Date.now() + 180000;
+                            sessionStorage.setItem('hero_autosell_ignore', window.autoSellState.ignoreUntil); // Twardy zapis blokady
                             window.autoSellState.failedNPCs = [];
                             window.autoSellState.targetNpc = null;
                             window.isExpSuspended = false;
