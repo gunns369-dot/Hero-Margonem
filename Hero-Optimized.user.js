@@ -6164,7 +6164,7 @@ window.clearExpMaps = () => {
         if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
     };
 
-    window.optimizeExpRoute = function(silent = false) {
+   window.optimizeExpRoute = function(silent = false) {
         let maps = botSettings.exp.mapOrder;
         if (!maps || maps.length < 2) {
             if (!silent) heroAlert("Dodaj co najmniej 2 mapy do listy, aby bot mógł je zoptymalizować!");
@@ -6179,8 +6179,9 @@ window.clearExpMaps = () => {
         let finalRoute = [currentMap];
         unvisited.delete(currentMap);
 
-        // Sortowanie najbliższego sąsiada (TSP)
+        // Sortowanie najbliższego sąsiada
         while(unvisited.size > 0) {
+            let bestPath = null;
             let bestTarget = null;
             let minLen = Infinity;
 
@@ -6189,26 +6190,48 @@ window.clearExpMaps = () => {
                 let dist = path ? path.length : 999;
                 if (dist < minLen) {
                     minLen = dist;
+                    bestPath = path;
                     bestTarget = target;
                 }
             }
 
-            if (!bestTarget || minLen === 999) {
+            if (!bestPath || minLen === 999) {
                 let remaining = Array.from(unvisited);
                 bestTarget = remaining[0];
+                finalRoute.push(bestTarget);
+            } else {
+                // PRZYWRÓCONA LOGIKA: Zapisujemy wszystkie mapy przejściowe do głównej trasy!
+                // Dzięki temu bot po wejściu do lasu zatrzyma się, wybije potwory, odhaczy w pamięci jako "czyste" i pójdzie dalej.
+                for (let i = 1; i < bestPath.length; i++) {
+                    finalRoute.push(bestPath[i]);
+                }
             }
-
-            // Dodajemy TYLKO główną mapę! Bot sam przejdzie przez korytarze dzięki wbudowanemu GPS.
-            finalRoute.push(bestTarget);
+            
             unvisited.delete(bestTarget);
             currentMap = bestTarget;
         }
 
-        botSettings.exp.mapOrder = finalRoute;
-        localStorage.setItem('exp_map_order_v64', JSON.stringify(finalRoute));
+        // Zamykamy pętlę powrotną (od ostatniej mapy wprost do pierwszej)
+        let returnPath = typeof getShortestPath === 'function' ? getShortestPath(currentMap, finalRoute[0]) : null;
+        if (returnPath && returnPath.length > 1) {
+            for (let i = 1; i < returnPath.length - 1; i++) {
+                finalRoute.push(returnPath[i]);
+            }
+        }
+
+        // Redukcja duplikatów (jeśli algorytm przechodził przez tę samą mapę pod rzad)
+        let cleanRoute = [];
+        finalRoute.forEach(m => {
+            if (cleanRoute.length === 0 || cleanRoute[cleanRoute.length - 1] !== m) {
+                cleanRoute.push(m);
+            }
+        });
+
+        botSettings.exp.mapOrder = cleanRoute;
+        localStorage.setItem('exp_map_order_v64', JSON.stringify(cleanRoute));
         if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
         
-        if (!silent) heroAlert(`✅ Trasa zoptymalizowana!\nAlgorytm ułożył mapy w idealną pętlę. Bot sam odnajdzie przejścia między nimi i wyłączy Berserka w trakcie biegu.`);
+        if (!silent) heroAlert(`✅ Trasa połączona!\nBot dodał mapy przejściowe do głównej listy. Jeśli podczas biegu przez korytarz lub las spotka potwory, wyhamuje, normalnie je wybije i po zrobieniu czystki zapisze tę mapę w pamięci!`);
     };
     window.renderMapOrderList = () => {
         let c = document.getElementById('heroMapListContainer');
