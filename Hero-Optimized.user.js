@@ -8353,32 +8353,48 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Wersja Asynchroniczna
-        async function humanClickAsync(el) {
-            if (!el) return;
-            
-            let rect = el.getBoundingClientRect();
-            let borderX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
-            let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX); 
+// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie Sprzętowe
+        function humanClickAsync(el) {
+            return new Promise((resolve) => {
+                if (!el) return resolve();
+                
+                let rect = el.getBoundingClientRect();
+                let borderX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
+                let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX); 
 
-            let absX = window.screenX + borderX + rect.left + (rect.width / 2);
-            
-            // POPRAWKA CELOWNIKA: Dodajemy +25 pikseli w dół!
-            // Przeglądarki często ukrywają przed systemem pasek zakładek w "outerHeight"
-            let absY = window.screenY + topBorder + rect.top + (rect.height / 2) + 25; 
+                // 1. Pobieramy współczynnik sprzętowego skalowania monitora (np. 1.25 dla 125%)
+                let dpr = window.devicePixelRatio || 1;
 
-            try {
-                await fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`);
-                if(window.logExp) window.logExp("🤖 Python kliknął odpowiedź!", "#e040fb");
-            } catch(err) {
-                if(window.logExp) window.logExp("⚠️ Awaria Pythona! Próbuję klikać JS-em.", "#ff9800");
-                ['mousedown', 'mouseup', 'click'].forEach(eventType => {
-                    el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
-                });
-                if (typeof el.click === 'function') el.click();
-                if (window.jQuery) window.jQuery(el).trigger('click');
-                el.classList.add('pressed', 'active');
-            }
+                // 2. Wyliczamy wirtualne koordynaty z przeglądarki (lekkie obniżenie w dół)
+                let cssX = window.screenX + borderX + rect.left + (rect.width / 2);
+                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2) + 15; 
+
+                // 3. Konwertujemy na PRAWDZIWE fizyczne piksele dla Pythona (Tłumaczenie na język monitora)
+                let absX = cssX * dpr;
+                let absY = cssY * dpr; 
+
+                // Używamy uprawnień Tampermonkey do ominięcia blokad Brave
+                if (typeof GM_xmlhttpRequest !== 'undefined') {
+                    GM_xmlhttpRequest({
+                        method: "GET",
+                        url: `http://127.0.0.1:5000/click?x=${absX}&y=${absY}`,
+                        onload: function(response) {
+                            if(window.logExp) window.logExp("🤖 Python zmierza na cel!", "#e040fb");
+                            resolve(); 
+                        },
+                        onerror: function(error) {
+                            if(window.logExp) window.logExp("⚠️ Błąd GM_xml.", "#ff9800");
+                            el.classList.add('pressed', 'active');
+                            resolve();
+                        }
+                    });
+                } else {
+                    // Stary fetch jako zabezpieczenie
+                    fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`)
+                        .then(res => resolve())
+                        .catch(err => { el.classList.add('pressed', 'active'); resolve(); });
+                }
+            });
         }
 
         // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
