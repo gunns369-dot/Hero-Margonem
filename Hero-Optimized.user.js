@@ -8366,20 +8366,29 @@ window.openShopAsync = async (namePart) => {
         }
 
 function getPreCaptcha() {
-            const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
-            if (preEl && preEl.offsetParent !== null) {
-                const text = (preEl.innerText || preEl.textContent || "").trim();
-                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) return preEl; 
+            // Pobieramy WSZYSTKIE elementy, które mogą być zapadką
+            const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window');
+            for (let el of elements) {
+                // Sprawdzamy każdy po kolei, czy jest fizycznie widoczny
+                if (el.offsetParent !== null || el.classList.contains('show') || el.style.display !== 'none') {
+                    const text = (el.innerText || el.textContent || "").toLowerCase();
+                    if (text.includes("rozwiąż") || text.includes("zagadka pojawi się")) {
+                        return el;
+                    }
+                }
             }
             return null;
         }
 
         function getCaptchaWindow() {
-            // PRZYWRÓCONA KLASA .captcha!
-            const win = document.querySelector('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"]');
-            if (win && win.offsetParent !== null) {
-                const text = (win.innerText || win.textContent || "").trim();
-                if (text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("pozostałych prób") || text.includes("Powodzenia")) return win;
+            const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"]');
+            for (let el of elements) {
+                if (el.offsetWidth > 0 || el.offsetHeight > 0 || el.offsetParent !== null) {
+                    const text = (el.innerText || el.textContent || "").toLowerCase();
+                    if (text.includes("zagadka") || text.includes("potwierdzam") || text.includes("powodzenia")) {
+                        return el;
+                    }
+                }
             }
             return null;
         }
@@ -8431,8 +8440,13 @@ function getPreCaptcha() {
                 window.__captchaLock = true;
                 await sleep(randomDelay(800, 1500));
 
-                let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                if (btn) humanClick(btn);
+             let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
+                if (btn) {
+                    await humanClickAsync(btn);
+                } else {
+                    // Jeśli całe okienko jest guzikiem (czasem tak bywa)
+                    await humanClickAsync(preWin);
+                }
 
                 window.__captchaLock = false;
                 return;
