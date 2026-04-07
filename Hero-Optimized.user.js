@@ -8398,13 +8398,14 @@ window.openShopAsync = async (namePart) => {
             });
         }
 
-        // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
+       // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
         function getPreCaptcha() {
             const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window');
             for (let el of elements) {
-                if (el.offsetParent !== null || el.classList.contains('show') || el.style.display !== 'none') {
+                // Sprawdzamy czy okno fizycznie zajmuje miejsce i czy nie jest ukryte przez CSS
+                const style = window.getComputedStyle(el);
+                if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetWidth > 0) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
-                    // Jeśli jest "pojawi się za", to na 100% to jest to pierwsze okienko
                     if (text.includes("rozwiąż") || text.includes("pojawi się za")) {
                         return el;
                     }
@@ -8417,18 +8418,16 @@ window.openShopAsync = async (namePart) => {
         function getCaptchaWindow() {
             const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"]');
             for (let el of elements) {
-                if (el.offsetWidth > 0 || el.offsetHeight > 0 || el.offsetParent !== null) {
+                const style = window.getComputedStyle(el);
+                if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetWidth > 0) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
-                    // Zabezpieczenie! Nie może to być okno z "pojawi się za".
-                    // Musi mieć słowo klucz z właściwej zapadki.
-                    if (!text.includes("pojawi się za") && (text.includes("zaznacz") || text.includes("potwierdzam") || text.includes("powodzenia"))) {
+                    if (!text.includes("pojawi się za") && (text.includes("zaznacz") || text.includes("potwierdzam") || text.includes("powodzenia") || text.includes("pozostałych prób"))) {
                         return el;
                     }
                 }
             }
             return null;
         }
-
         const symbolMap = {
             "gwiazdk": "*", "tyld": "~", "kratk": "#", "daszek": "^",
             "wykrzyknik": "!", "dolar": "$", "małp": "@", "procent": "%",
@@ -8442,34 +8441,29 @@ window.openShopAsync = async (namePart) => {
             let preWin = getPreCaptcha();
 
             // 1. ZAMKNIĘCIE ZAPADKI I WZNOWIENIE PRACY (Działa zawsze!)
-            if (!fullWin && !preWin) {
+           if (!fullWin && !preWin) {
                 if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre") {
                     window.__captchaPhase = "resuming";
-                    let delay = randomDelay(1000, 2500);
+                    let delay = randomDelay(1000, 2000);
                     if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
 
                     setTimeout(() => {
-                        // Wznowienie EXP
+                        // Jeśli przed zapadką expiliśmy - wciskamy przycisk START EXP
                         if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                             let btn = document.getElementById('btnStartExp');
                             if (btn) btn.click();
                         }
-                        // Wznowienie PATROLU
-                        if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
-                            let btnHero = document.getElementById('btnStartStop');
-                            if (btnHero && btnHero.innerText.includes('START')) btnHero.click();
-                            else if (typeof startPatrol === 'function') startPatrol();
+                        // Jeśli przed zapadką patrolowaliśmy - wciskamy przycisk START PATROL
+                        if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling && !window.isRushing) {
+                            let btn = document.getElementById('btnStartStop');
+                            if (btn) btn.click();
                         }
-                        
                         window.__captchaPhase = "none";
-                        window.__wasExpingBeforeCaptcha = false;
-                        window.__wasPatrollingBeforeCaptcha = false;
                     }, delay);
                 }
                 return;
             }
-
             // 2. ZAPISANIE STANU BOTA (Niezależnie od tego, które okno wyskoczyło jako pierwsze)
             if (window.__captchaPhase === "none") {
                 window.__wasExpingBeforeCaptcha = window.isExping;
