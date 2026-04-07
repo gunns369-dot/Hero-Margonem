@@ -7480,9 +7480,24 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         const state = getUnconsciousState();
         const isDead = isUnconsciousNow();
 
-        if (isDead && !window.__unconscious) {
+      if (isDead && !window.__unconscious) {
             window.__unconscious = true;
-            if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zatrzymuję bota...", "#e53935");
+            if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zamykam walkę i zatrzymuję bota...", "#e53935");
+            
+            // --- WYMUSZONE ZAMKNIĘCIE OKNA WALKI ---
+            if (typeof Engine !== 'undefined' && Engine.battle) {
+                if (typeof Engine.battle.close === 'function') Engine.battle.close();
+            }
+            // Symulacja wciśnięcia klawisza "Z" (Opuść walkę)
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', keyCode: 90, which: 90 }));
+            // Symulacja kliknięcia w fizyczny przycisk "Opuść walkę"
+            let closeZ = document.querySelector('.battle-close, .button.close, [data-tip*="Opuść walkę"]');
+            if (closeZ) { 
+                closeZ.click(); 
+                if (window.jQuery) window.jQuery(closeZ).click(); 
+            }
+            // ---------------------------------------
+
             if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') {
                 Engine.hero.stop();
             }
