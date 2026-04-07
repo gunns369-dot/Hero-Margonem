@@ -8398,13 +8398,13 @@ window.openShopAsync = async (namePart) => {
             });
         }
 
-       // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
+      // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
         function getPreCaptcha() {
             const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window');
             for (let el of elements) {
-                // Sprawdzamy czy okno fizycznie zajmuje miejsce i czy nie jest ukryte przez CSS
                 const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetWidth > 0) {
+                // Sprawdzamy czy okno fizycznie zajmuje miejsce i czy nie jest przezroczyste!
+                if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetWidth > 0) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
                     if (text.includes("rozwiąż") || text.includes("pojawi się za")) {
                         return el;
@@ -8419,7 +8419,7 @@ window.openShopAsync = async (namePart) => {
             const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"]');
             for (let el of elements) {
                 const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden' && el.offsetWidth > 0) {
+                if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetWidth > 0) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
                     if (!text.includes("pojawi się za") && (text.includes("zaznacz") || text.includes("potwierdzam") || text.includes("powodzenia") || text.includes("pozostałych prób"))) {
                         return el;
@@ -8428,6 +8428,7 @@ window.openShopAsync = async (namePart) => {
             }
             return null;
         }
+
         const symbolMap = {
             "gwiazdk": "*", "tyld": "~", "kratk": "#", "daszek": "^",
             "wykrzyknik": "!", "dolar": "$", "małp": "@", "procent": "%",
@@ -8464,17 +8465,18 @@ window.openShopAsync = async (namePart) => {
                 }
                 return;
             }
-            // 2. ZAPISANIE STANU BOTA (Niezależnie od tego, które okno wyskoczyło jako pierwsze)
+
+            // 2. ZAPISANIE STANU BOTA
             if (window.__captchaPhase === "none") {
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
 
-                if (window.isExping) { 
-                    let btn = document.getElementById('btnStartExp'); 
-                    if (btn) btn.click(); 
+                if (window.isExping) {
+                    let btn = document.getElementById('btnStartExp');
+                    if (btn) btn.click();
                 }
                 if (typeof stopPatrol === 'function') stopPatrol(true);
-                
+
                 if (window.logExp) window.logExp("🚨 Wstrzymano bota na czas zapadki!", "#ffeb3b");
                 if (window.logHero) window.logHero("🚨 Wstrzymano bota na czas zapadki!", "#ffeb3b");
             }
@@ -8496,8 +8498,8 @@ window.openShopAsync = async (namePart) => {
                 return;
             }
 
-           // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
-            if (fullWin && window.__captchaPhase !== "solving") {
+            // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI (Naprawiona pętla!)
+            if (fullWin && window.__captchaPhase !== "solving" && window.__captchaPhase !== "manual_waiting") {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
 
@@ -8520,7 +8522,11 @@ window.openShopAsync = async (namePart) => {
                 let targetSymbol = null;
 
                 for (let key in symbolMap) {
-                    if (qText.includes(key)) { targetSymbol = symbolMap[key]; break; }
+                    // Czyta też DOSŁOWNE symbole (np. znak * zamiast słowa "gwiazdka")
+                    if (qText.includes(key) || qText.includes(symbolMap[key])) { 
+                        targetSymbol = symbolMap[key]; 
+                        break; 
+                    }
                 }
 
                 if (targetSymbol) {
@@ -8528,7 +8534,6 @@ window.openShopAsync = async (namePart) => {
                     let toClick = buttons.filter(b => b.textContent.includes(targetSymbol));
 
                     if (toClick.length > 0) {
-                        // Klikamy po kolei w poprawne odpowiedzi
                         for (let i = 0; i < toClick.length; i++) {
                             await humanClickAsync(toClick[i]);
                             await sleep(randomDelay(400, 700));
@@ -8540,7 +8545,7 @@ window.openShopAsync = async (namePart) => {
                              await humanClickAsync(confirmBtn);
                         }
                     } else {
-                        if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem symbolu: " + targetSymbol, "#ff9800");
+                        if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem w opcjach symbolu: " + targetSymbol, "#ff9800");
                         window.__captchaPhase = "manual_waiting";
                     }
                 } else {
