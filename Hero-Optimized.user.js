@@ -8338,20 +8338,21 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
- // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Wersja Asynchroniczna
+// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Wersja Asynchroniczna
         async function humanClickAsync(el) {
             if (!el) return;
             
             let rect = el.getBoundingClientRect();
-            let borderX = (window.outerWidth - window.innerWidth) / 2;
-            let topBorder = window.outerHeight - window.innerHeight - borderX; 
-            if (topBorder < 0) topBorder = 0; 
+            let borderX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
+            let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX); 
 
             let absX = window.screenX + borderX + rect.left + (rect.width / 2);
-            let absY = window.screenY + topBorder + rect.top + (rect.height / 2);
+            
+            // POPRAWKA CELOWNIKA: Dodajemy +25 pikseli w dół!
+            // Przeglądarki często ukrywają przed systemem pasek zakładek w "outerHeight"
+            let absY = window.screenY + topBorder + rect.top + (rect.height / 2) + 25; 
 
             try {
-                // Skrypt ZATRZYMUJE się tutaj, czeka aż Python dojedzie myszką i kliknie
                 await fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`);
                 if(window.logExp) window.logExp("🤖 Python kliknął odpowiedź!", "#e040fb");
             } catch(err) {
@@ -8365,14 +8366,14 @@ window.openShopAsync = async (namePart) => {
             }
         }
 
-function getPreCaptcha() {
-            // Pobieramy WSZYSTKIE elementy, które mogą być zapadką
+        // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
+        function getPreCaptcha() {
             const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window');
             for (let el of elements) {
-                // Sprawdzamy każdy po kolei, czy jest fizycznie widoczny
                 if (el.offsetParent !== null || el.classList.contains('show') || el.style.display !== 'none') {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
-                    if (text.includes("rozwiąż") || text.includes("zagadka pojawi się")) {
+                    // Jeśli jest "pojawi się za", to na 100% to jest to pierwsze okienko
+                    if (text.includes("rozwiąż") || text.includes("pojawi się za")) {
                         return el;
                     }
                 }
@@ -8380,12 +8381,15 @@ function getPreCaptcha() {
             return null;
         }
 
+        // --- PRECYZYJNA DETEKCJA GŁÓWNEGO OKNA ---
         function getCaptchaWindow() {
             const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"]');
             for (let el of elements) {
                 if (el.offsetWidth > 0 || el.offsetHeight > 0 || el.offsetParent !== null) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
-                    if (text.includes("zagadka") || text.includes("potwierdzam") || text.includes("powodzenia")) {
+                    // Zabezpieczenie! Nie może to być okno z "pojawi się za".
+                    // Musi mieć słowo klucz z właściwej zapadki.
+                    if (!text.includes("pojawi się za") && (text.includes("zaznacz") || text.includes("potwierdzam") || text.includes("powodzenia"))) {
                         return el;
                     }
                 }
