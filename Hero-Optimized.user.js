@@ -8325,43 +8325,38 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-  // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON)
-        function humanClick(el) {
+ // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Wersja Asynchroniczna
+        async function humanClickAsync(el) {
             if (!el) return;
             
-            // 1. Obliczanie absolutnej pozycji elementu na fizycznym monitorze
             let rect = el.getBoundingClientRect();
-            
-            // Precyzyjniejsze wyliczanie ramek przeglądarki (górny pasek zakładek)
             let borderX = (window.outerWidth - window.innerWidth) / 2;
             let topBorder = window.outerHeight - window.innerHeight - borderX; 
-            if (topBorder < 0) topBorder = 0; // Jeśli grasz na F11 (pełny ekran)
+            if (topBorder < 0) topBorder = 0; 
 
             let absX = window.screenX + borderX + rect.left + (rect.width / 2);
             let absY = window.screenY + topBorder + rect.top + (rect.height / 2);
 
-            // 2. Wysłanie rozkazu do Twojego serwera Python w tle
-            fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`)
-                .then(res => {
-                    if(window.logExp) window.logExp("🤖 Python przejął myszkę i rozwiązał zapadkę!", "#e040fb");
-                })
-                .catch(err => {
-                    // FALLBACK AWARYJNY
-                    if(window.logExp) window.logExp("⚠️ Brak połączenia z Pythonem! Ratuję się wirtualnym kliknięciem.", "#ff9800");
-                    ['mousedown', 'mouseup', 'click'].forEach(eventType => {
-                        el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
-                    });
-                    if (typeof el.click === 'function') el.click();
-                    if (window.jQuery) window.jQuery(el).trigger('click');
-                    el.classList.add('pressed', 'active');
+            try {
+                // Skrypt ZATRZYMUJE się tutaj, czeka aż Python dojedzie myszką i kliknie
+                await fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`);
+                if(window.logExp) window.logExp("🤖 Python kliknął odpowiedź!", "#e040fb");
+            } catch(err) {
+                if(window.logExp) window.logExp("⚠️ Awaria Pythona! Próbuję klikać JS-em.", "#ff9800");
+                ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                    el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
                 });
+                if (typeof el.click === 'function') el.click();
+                if (window.jQuery) window.jQuery(el).trigger('click');
+                el.classList.add('pressed', 'active');
+            }
         }
 
         function getPreCaptcha() {
             const preEl = document.querySelector('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon');
             if (preEl && preEl.offsetParent !== null) {
                 const text = (preEl.innerText || preEl.textContent || "").trim();
-                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) return preEl;
+                if (text.includes("Rozwiąż") || text.includes("Zagadka") || preEl.classList.contains('show')) return preEl; 
             }
             return null;
         }
@@ -8456,15 +8451,31 @@ window.openShopAsync = async (namePart) => {
                 }
 
                 if (targetSymbol) {
-                    let buttons = fullWin.querySelectorAll(".captcha__buttons button, .captcha__buttons .button");
-                    let clicked = false;
+                    let buttons = Array.from(fullWin.querySelectorAll(".captcha__buttons button, .captcha__buttons .button"));
+                    // Szukamy wszystkich poprawnych odpowiedzi (może być ich kilka!)
+                    let toClick = buttons.filter(b => b.textContent.includes(targetSymbol));
 
-                    buttons.forEach(b => {
-                        if (b.textContent.includes(targetSymbol)) {
-                            humanClick(b);
-                            clicked = true;
+                    if (toClick.length > 0) {
+                        // Klikamy asynchronicznie - jeden po drugim
+                        for (let i = 0; i < toClick.length; i++) {
+                            await humanClickAsync(toClick[i]);
+                            await sleep(randomDelay(400, 700)); // Przerwa, żeby Python miał czas na ruch
                         }
-                    });
+
+                        // Po wyklikaniu wszystkich opcji klikamy "Potwierdzam"
+                        await sleep(randomDelay(600, 1000));
+                        let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
+                        if (confirmBtn) {
+                             await humanClickAsync(confirmBtn);
+                        }
+                    } else {
+                        if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem symbolu: " + targetSymbol, "#ff9800");
+                        window.__captchaPhase = "manual_waiting";
+                    }
+                } else {
+                    if (window.logExp) window.logExp("⚠️ Nie rozpoznano pytania w zapadce. Rozwiąż ręcznie!", "#ff9800");
+                    window.__captchaPhase = "manual_waiting";
+                }
 
                     if (clicked) {
                         await sleep(randomDelay(600, 1200));
