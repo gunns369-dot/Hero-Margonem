@@ -8353,33 +8353,35 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Wersja Czysta dla Maszyny Wirtualnej
+// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie VM + Rozrzut
         function humanClickAsync(el) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
                 
                 let rect = el.getBoundingClientRect();
-                
-                // Wyliczamy rozmiar interfejsu przeglądarki (pasek adresu, zakładki itp.)
                 let borderX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
                 let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX); 
 
-                // Obliczamy idealny, matematyczny środek przycisku
-                let cssX = window.screenX + borderX + rect.left + (rect.width / 2);
-                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2); 
+                // HUMANIZACJA: Losujemy przesunięcie wewnątrz przycisku.
+                // Mnożymy przez 0.6, aby kursor "chodził" po 60% środkowej powierzchni guzika, unikając samych krawędzi.
+                let randomOffsetX = (Math.random() - 0.5) * (rect.width * 0.6); 
+                let randomOffsetY = (Math.random() - 0.5) * (rect.height * 0.6);
 
-                // W maszynie wirtualnej mamy 100% skalowania, więc dpr = 1
+                // Dodajemy nasz losowy rozrzut do idealnego środka
+                let cssX = window.screenX + borderX + rect.left + (rect.width / 2) + randomOffsetX;
+                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2) + randomOffsetY; 
+
+                // Konwersja na fizyczne piksele dla Maszyny Wirtualnej (1:1)
                 let dpr = window.devicePixelRatio || 1;
                 let absX = cssX * dpr;
                 let absY = cssY * dpr; 
 
-                // Używamy uprawnień Tampermonkey do wysłania komendy do Pythona
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
                         method: "GET",
                         url: `http://127.0.0.1:5000/click?x=${absX}&y=${absY}`,
                         onload: function(response) {
-                            if(window.logExp) window.logExp("🤖 Python strzela w cel!", "#e040fb");
+                            if(window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu!", "#e040fb");
                             resolve(); 
                         },
                         onerror: function(error) {
