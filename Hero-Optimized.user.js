@@ -8276,19 +8276,20 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-     // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON)
+  // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON)
         function humanClick(el) {
             if (!el) return;
             
             // 1. Obliczanie absolutnej pozycji elementu na fizycznym monitorze
             let rect = el.getBoundingClientRect();
             
-            // Szacowanie ramek przeglądarki (żeby trafiało idealnie niezależnie od zakładek na górze)
+            // Precyzyjniejsze wyliczanie ramek przeglądarki (górny pasek zakładek)
             let borderX = (window.outerWidth - window.innerWidth) / 2;
-            let borderY = window.outerHeight - window.innerHeight - borderX; 
-            
+            let topBorder = window.outerHeight - window.innerHeight - borderX; 
+            if (topBorder < 0) topBorder = 0; // Jeśli grasz na F11 (pełny ekran)
+
             let absX = window.screenX + borderX + rect.left + (rect.width / 2);
-            let absY = window.screenY + borderY + rect.top + (rect.height / 2);
+            let absY = window.screenY + topBorder + rect.top + (rect.height / 2);
 
             // 2. Wysłanie rozkazu do Twojego serwera Python w tle
             fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`)
@@ -8296,7 +8297,7 @@ window.openShopAsync = async (namePart) => {
                     if(window.logExp) window.logExp("🤖 Python przejął myszkę i rozwiązał zapadkę!", "#e040fb");
                 })
                 .catch(err => {
-                    // FALLBACK AWARYJNY: Jeśli zapomnisz włączyć skryptu Python, bot ratuje się kliknięciem JS
+                    // FALLBACK AWARYJNY
                     if(window.logExp) window.logExp("⚠️ Brak połączenia z Pythonem! Ratuję się wirtualnym kliknięciem.", "#ff9800");
                     ['mousedown', 'mouseup', 'click'].forEach(eventType => {
                         el.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
