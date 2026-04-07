@@ -8374,11 +8374,20 @@ window.openShopAsync = async (namePart) => {
             return null;
         }
 
+     // --- NOWY, PANCERNY WYKRYWACZ ZAPADKI (Na podstawie zdjęcia) ---
         function getCaptchaWindow() {
-            const win = document.querySelector('.captcha, .c-window.border-window.captcha-window, .margo-window[data-wnd="zapadka"]');
-            if (win && win.offsetParent !== null) {
+            // Szukamy po wszystkich znanych klasach okien Margonem NI
+            const win = document.querySelector('.margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"]');
+            
+            // Sprawdzamy, czy okno fizycznie istnieje na ekranie
+            if (win && (win.offsetWidth > 0 || win.offsetHeight > 0 || win.offsetParent !== null)) {
+                // Pobieramy tekst z wnętrza okna
                 const text = (win.innerText || win.textContent || "").trim();
-                if (text.includes("Zagadka") || text.includes("Potwierdzam") || text.includes("pozostałych prób")) return win;
+                // Jeśli w oknie jest słowo "Zagadka", to na 100% to okno
+                if (text.includes("Zagadka")) {
+                    // console.log("✅ Zapadka wykryta!"); // Odkomentuj do debugowania
+                    return win;
+                }
             }
             return null;
         }
