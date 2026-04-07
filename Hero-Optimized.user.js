@@ -8496,7 +8496,7 @@ window.openShopAsync = async (namePart) => {
                 return;
             }
 
-            // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
+           // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
             if (fullWin && window.__captchaPhase !== "solving") {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
@@ -8531,7 +8531,7 @@ window.openShopAsync = async (namePart) => {
                         // Klikamy po kolei w poprawne odpowiedzi
                         for (let i = 0; i < toClick.length; i++) {
                             await humanClickAsync(toClick[i]);
-                            await sleep(randomDelay(400, 700)); 
+                            await sleep(randomDelay(400, 700));
                         }
 
                         await sleep(randomDelay(600, 1000));
