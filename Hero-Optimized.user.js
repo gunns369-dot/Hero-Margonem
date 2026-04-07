@@ -8491,8 +8491,7 @@ window.openShopAsync = async (namePart) => {
                 }
 
                 window.__captchaLock = false;
-            }
-
+            
         }, 500);
     }
   // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar - Zbiorczy) ---
