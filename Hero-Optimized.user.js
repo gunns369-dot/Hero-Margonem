@@ -8441,46 +8441,60 @@ window.openShopAsync = async (namePart) => {
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
+            // 1. ZAMKNIĘCIE ZAPADKI I WZNOWIENIE PRACY (Działa zawsze!)
             if (!fullWin && !preWin) {
-                if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting") {
+                if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre") {
                     window.__captchaPhase = "resuming";
                     let delay = randomDelay(1000, 2500);
                     if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
 
                     setTimeout(() => {
+                        // Wznowienie EXP
                         if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                             let btn = document.getElementById('btnStartExp');
                             if (btn) btn.click();
                         }
+                        // Wznowienie PATROLU
                         if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling) {
-                            if (typeof startPatrol === 'function') startPatrol();
+                            let btnHero = document.getElementById('btnStartStop');
+                            if (btnHero && btnHero.innerText.includes('START')) btnHero.click();
+                            else if (typeof startPatrol === 'function') startPatrol();
                         }
+                        
                         window.__captchaPhase = "none";
+                        window.__wasExpingBeforeCaptcha = false;
+                        window.__wasPatrollingBeforeCaptcha = false;
                     }, delay);
                 }
                 return;
             }
 
-            if (preWin && !fullWin && window.__captchaPhase === "none") {
-                window.__captchaPhase = "pre";
+            // 2. ZAPISANIE STANU BOTA (Niezależnie od tego, które okno wyskoczyło jako pierwsze)
+            if (window.__captchaPhase === "none") {
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
 
-                if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
+                if (window.isExping) { 
+                    let btn = document.getElementById('btnStartExp'); 
+                    if (btn) btn.click(); 
+                }
                 if (typeof stopPatrol === 'function') stopPatrol(true);
+                
+                if (window.logExp) window.logExp("🚨 Wstrzymano bota na czas zapadki!", "#ffeb3b");
+                if (window.logHero) window.logHero("🚨 Wstrzymano bota na czas zapadki!", "#ffeb3b");
+            }
 
-                if (window.logExp) window.logExp("🚨 [Zapadka] Rozpoczynam auto-rozwiązywanie...", "#ffeb3b");
-                if (window.logHero) window.logHero("🚨 [Zapadka] Rozpoczynam auto-rozwiązywanie...", "#ffeb3b");
-
+            // 3. OBSŁUGA MAŁEGO OKNA
+            if (preWin && !fullWin && window.__captchaPhase !== "pre") {
+                window.__captchaPhase = "pre";
                 window.__captchaLock = true;
                 await sleep(randomDelay(800, 1500));
 
-             let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
+                let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
                 if (btn) {
                     await humanClickAsync(btn);
                 } else {
-                    // Jeśli całe okienko jest guzikiem (czasem tak bywa)
                     await humanClickAsync(preWin);
                 }
 
@@ -8488,6 +8502,7 @@ window.openShopAsync = async (namePart) => {
                 return;
             }
 
+            // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
             if (fullWin && window.__captchaPhase !== "solving") {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
@@ -8516,17 +8531,15 @@ window.openShopAsync = async (namePart) => {
 
                 if (targetSymbol) {
                     let buttons = Array.from(fullWin.querySelectorAll(".captcha__buttons button, .captcha__buttons .button"));
-                    // Szukamy wszystkich poprawnych odpowiedzi (może być ich kilka!)
                     let toClick = buttons.filter(b => b.textContent.includes(targetSymbol));
 
                     if (toClick.length > 0) {
-                        // Klikamy asynchronicznie - jeden po drugim
+                        // Klikamy po kolei w poprawne odpowiedzi
                         for (let i = 0; i < toClick.length; i++) {
                             await humanClickAsync(toClick[i]);
-                            await sleep(randomDelay(400, 700)); // Przerwa, żeby Python miał czas na ruch
+                            await sleep(randomDelay(400, 700)); 
                         }
 
-                        // Po wyklikaniu wszystkich opcji klikamy "Potwierdzam"
                         await sleep(randomDelay(600, 1000));
                         let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
                         if (confirmBtn) {
@@ -8541,23 +8554,9 @@ window.openShopAsync = async (namePart) => {
                     window.__captchaPhase = "manual_waiting";
                 }
 
-                    if (clicked) {
-                        await sleep(randomDelay(600, 1200));
-                        let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
-                        if (confirmBtn) humanClick(confirmBtn);
-                    } else {
-                        if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem w odpowiedziach symbolu: " + targetSymbol, "#ff9800");
-                        window.__captchaPhase = "manual_waiting";
-                    }
-                } else {
-                    if (window.logExp) window.logExp("⚠️ Nie rozpoznano pytania w zapadce. Rozwiąż ręcznie!", "#ff9800");
-                    window.__captchaPhase = "manual_waiting";
-                }
-
                 window.__captchaLock = false;
-            
+            }
         }, 500);
-    }
   // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar - Zbiorczy) ---
         window.alertedPlayersList = window.alertedPlayersList || new Set();
 
