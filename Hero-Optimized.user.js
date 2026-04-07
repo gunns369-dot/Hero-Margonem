@@ -6977,9 +6977,13 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 potList.innerHTML = `<span style="color:#e53935; font-size:10px; text-align:center;">Baza danych ładuje się...</span>`; return;
             }
 
-            let healers = window.DatabaseModule.kupcy.filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
+            let healers = window.DatabaseModule.kupcy.filter(k => {
+                if (!k.npc_name) return false;
+                let n = k.npc_name.toLowerCase();
+                return n.includes('uzdrow') || n.includes('tuni');
+            });
 
-            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Uzdrowiciele (${healers.length} postaci):</div>`;
+            let html = `<div style="color:#d81b60; font-size:10px; margin-bottom:5px; font-weight:bold;">Medycy i Alchemicy (${healers.length} postaci):</div>`;
 
             healers.forEach((k, index) => {
                 let itemCount = k.items ? k.items.length : 0;
@@ -7758,7 +7762,12 @@ if (isDead) {
 
                     let currMap = Engine.map.d.name;
                     let availablePotions = [];
-                    let healers = (window.DatabaseModule.kupcy || []).filter(k => k.npc_name && k.npc_name.toLowerCase().includes('uzdrow'));
+                 // Rozszerzamy filtr: szukamy Uzdrowicieli ORAZ Tunii
+                    let healers = (window.DatabaseModule.kupcy || []).filter(k => {
+                        if (!k.npc_name) return false;
+                        let n = k.npc_name.toLowerCase();
+                        return n.includes('uzdrow') || n.includes('tuni');
+                    });
 
                     healers.forEach(k => {
                         let dist = Infinity;
