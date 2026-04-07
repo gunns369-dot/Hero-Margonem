@@ -8353,33 +8353,33 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie Sprzętowe
+// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Wersja Czysta dla Maszyny Wirtualnej
         function humanClickAsync(el) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
                 
                 let rect = el.getBoundingClientRect();
+                
+                // Wyliczamy rozmiar interfejsu przeglądarki (pasek adresu, zakładki itp.)
                 let borderX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
                 let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX); 
 
-                // 1. Pobieramy współczynnik sprzętowego skalowania monitora (np. 1.25 dla 125%)
-                let dpr = window.devicePixelRatio || 1;
-
-                // 2. Wyliczamy wirtualne koordynaty z przeglądarki (lekkie obniżenie w dół)
+                // Obliczamy idealny, matematyczny środek przycisku
                 let cssX = window.screenX + borderX + rect.left + (rect.width / 2);
-                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2) + 15; 
+                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2); 
 
-                // 3. Konwertujemy na PRAWDZIWE fizyczne piksele dla Pythona (Tłumaczenie na język monitora)
+                // W maszynie wirtualnej mamy 100% skalowania, więc dpr = 1
+                let dpr = window.devicePixelRatio || 1;
                 let absX = cssX * dpr;
                 let absY = cssY * dpr; 
 
-                // Używamy uprawnień Tampermonkey do ominięcia blokad Brave
+                // Używamy uprawnień Tampermonkey do wysłania komendy do Pythona
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
                         method: "GET",
                         url: `http://127.0.0.1:5000/click?x=${absX}&y=${absY}`,
                         onload: function(response) {
-                            if(window.logExp) window.logExp("🤖 Python zmierza na cel!", "#e040fb");
+                            if(window.logExp) window.logExp("🤖 Python strzela w cel!", "#e040fb");
                             resolve(); 
                         },
                         onerror: function(error) {
@@ -8389,7 +8389,6 @@ window.openShopAsync = async (namePart) => {
                         }
                     });
                 } else {
-                    // Stary fetch jako zabezpieczenie
                     fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`)
                         .then(res => resolve())
                         .catch(err => { el.classList.add('pressed', 'active'); resolve(); });
