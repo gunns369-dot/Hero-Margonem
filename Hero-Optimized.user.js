@@ -5454,10 +5454,11 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         window._waitingForHeal = false;
     }
 
-    try {
+   try {
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
             expCurrentTargetId = null;
+            window.expConsecutiveStucks = 0; // RESET LICZNIKA FRUSTRACJI!
             expLastTargetSwitchAt = 0;
             expEmptyScans = 0;
             expAttackLockUntil = 0;
@@ -5487,9 +5488,10 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
     const isHeroMoving = !!(hero.path && hero.path.length > 0);
 
    // --- CZYSZCZENIE PAMIĘCI NA NOWEJ MAPIE ---
-    if (expLastMapName !== currMap) {
+   if (expLastMapName !== currMap) {
         window.expLastVisitedMap = expLastMapName;
         expLastMapName = currMap;
+        window.expConsecutiveStucks = 0; // RESET LICZNIKA FRUSTRACJI!
         expMapEnteredAt = now;
         expEmptyScans = 0;
         expCurrentTargetId = null;
@@ -5719,19 +5721,30 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                     let timeStandingStill = now - window.expTargetPursuitStart;
 
                     // Ominięcie zablokowanego moba (Gdy zablokujemy się w drodze - przerywamy locka od razu)
-                    if (timeStandingStill > 3000) {
-                        window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Szukam innej ofiary.`, "#ff5252");
+                   if (timeStandingStill > 3000) {
+                        window.expConsecutiveStucks = (window.expConsecutiveStucks || 0) + 1;
+                        window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Próba (${window.expConsecutiveStucks}/3)`, "#ff5252");
                         let badCoordKey = target.x + "_" + target.y;
                         window.expUnreachableMobs.add(badCoordKey);
                         expCurrentTargetId = null;
-                        window.expTargetLockTime = 0; // Reset locka po zacięciu
+                        window.expTargetLockTime = 0; 
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
-
-                        let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
-                        let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-                        Engine.hero.autoGoTo({ x: rx, y: ry });
-
+                        
+                        // KRYTYCZNY PUNKT: Jeśli zacięliśmy się 3 razy z rzędu, wymuszamy wyjście z mapy!
+                        if (window.expConsecutiveStucks >= 3) {
+                            window.logExp(`🚧 Zbyt wiele blokad z rzędu! Uznaję mapę za niedostępną i idę dalej.`, "#ff9800");
+                            if (!window.mapClearTimes) window.mapClearTimes = {};
+                            window.mapClearTimes[Engine.map.d.name] = Date.now(); // Oznaczamy jako sprawdzoną
+                            window.expConsecutiveStucks = 0; // Resetujemy licznik frustracji
+                            if (window.expMonsterCache) window.expMonsterCache.clear(); // Czyścimy listę mobów na siłę
+                        } else {
+                            // Zwykły krok w bok, jeśli to dopiero 1 lub 2 próba
+                            let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+                            let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+                            Engine.hero.autoGoTo({ x: rx, y: ry });
+                        }
+                        
                         expLastActionTime = now + 1000;
                         return;
                     }
