@@ -8353,28 +8353,25 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie VM + Rozrzut
+        // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie VM + Rozrzut
         function humanClickAsync(el) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
-                
+
                 let rect = el.getBoundingClientRect();
                 let borderX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
-                let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX); 
+                let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX);
 
-                // HUMANIZACJA: Losujemy przesunięcie wewnątrz przycisku.
-                // Mnożymy przez 0.6, aby kursor "chodził" po 60% środkowej powierzchni guzika, unikając samych krawędzi.
-                let randomOffsetX = (Math.random() - 0.5) * (rect.width * 0.6); 
+                // Humanizacja: losowy rozrzut wewnątrz guzika
+                let randomOffsetX = (Math.random() - 0.5) * (rect.width * 0.6);
                 let randomOffsetY = (Math.random() - 0.5) * (rect.height * 0.6);
 
-                // Dodajemy nasz losowy rozrzut do idealnego środka
                 let cssX = window.screenX + borderX + rect.left + (rect.width / 2) + randomOffsetX;
-                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2) + randomOffsetY; 
+                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2) + randomOffsetY;
 
-                // Konwersja na fizyczne piksele dla Maszyny Wirtualnej (1:1)
                 let dpr = window.devicePixelRatio || 1;
                 let absX = cssX * dpr;
-                let absY = cssY * dpr; 
+                let absY = cssY * dpr;
 
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
@@ -8382,7 +8379,7 @@ window.openShopAsync = async (namePart) => {
                         url: `http://127.0.0.1:5000/click?x=${absX}&y=${absY}`,
                         onload: function(response) {
                             if(window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu!", "#e040fb");
-                            resolve(); 
+                            resolve();
                         },
                         onerror: function(error) {
                             if(window.logExp) window.logExp("⚠️ Błąd GM_xml.", "#ff9800");
@@ -8398,12 +8395,11 @@ window.openShopAsync = async (namePart) => {
             });
         }
 
-      // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
+        // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
         function getPreCaptcha() {
             const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window');
             for (let el of elements) {
                 const style = window.getComputedStyle(el);
-                // Sprawdzamy czy okno fizycznie zajmuje miejsce i czy nie jest przezroczyste!
                 if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetWidth > 0) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
                     if (text.includes("rozwiąż") || text.includes("pojawi się za")) {
@@ -8441,8 +8437,8 @@ window.openShopAsync = async (namePart) => {
             let fullWin = getCaptchaWindow();
             let preWin = getPreCaptcha();
 
-            // 1. ZAMKNIĘCIE ZAPADKI I WZNOWIENIE PRACY (Działa zawsze!)
-           if (!fullWin && !preWin) {
+            // 1. ZAMKNIĘCIE ZAPADKI I WZNOWIENIE PRACY
+            if (!fullWin && !preWin) {
                 if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre") {
                     window.__captchaPhase = "resuming";
                     let delay = randomDelay(1000, 2000);
@@ -8450,12 +8446,10 @@ window.openShopAsync = async (namePart) => {
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
 
                     setTimeout(() => {
-                        // Jeśli przed zapadką expiliśmy - wciskamy przycisk START EXP
                         if (window.__wasExpingBeforeCaptcha && !window.isExping) {
                             let btn = document.getElementById('btnStartExp');
                             if (btn) btn.click();
                         }
-                        // Jeśli przed zapadką patrolowaliśmy - wciskamy przycisk START PATROL
                         if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling && !window.isRushing) {
                             let btn = document.getElementById('btnStartStop');
                             if (btn) btn.click();
@@ -8498,7 +8492,7 @@ window.openShopAsync = async (namePart) => {
                 return;
             }
 
-            // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI (Naprawiona pętla!)
+            // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
             if (fullWin && window.__captchaPhase !== "solving" && window.__captchaPhase !== "manual_waiting") {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
@@ -8522,7 +8516,6 @@ window.openShopAsync = async (namePart) => {
                 let targetSymbol = null;
 
                 for (let key in symbolMap) {
-                    // Czyta też DOSŁOWNE symbole (np. znak * zamiast słowa "gwiazdka")
                     if (qText.includes(key) || qText.includes(symbolMap[key])) { 
                         targetSymbol = symbolMap[key]; 
                         break; 
@@ -8556,6 +8549,7 @@ window.openShopAsync = async (namePart) => {
                 window.__captchaLock = false;
             }
         }, 500);
+    } // <--- TO JEST TA KLAMRA, KTÓRA WCZEŚNIEJ ZNIKNĘŁA!
   // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar - Zbiorczy) ---
         window.alertedPlayersList = window.alertedPlayersList || new Set();
 
