@@ -7690,12 +7690,52 @@ if (isDead) {
             }
             // ------------------------------------
 
-            if (!window.autoSellState.active && botSettings.autosell && botSettings.autosell.enabled) {
-                let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {}).filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null).reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
-                if (potCount <= 0) {
-                    if (typeof stopPatrol === 'function') stopPatrol(true);
-                    window.autoPotState.active = true;
-                    window.autoPotState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+          if (!window.autoSellState.active && !window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
+                    let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {}).filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null).reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
+                    if (potCount <= 0) {
+                        
+                        // ZABEZPIECZENIE: Czy mamy miejsce w plecaku na mikstury?
+                        let s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
+                        let requiredStacks = botSettings.autopot.stacks || 14;
+                        
+                        if (s.freeSlots < requiredStacks && botSettings.autosell && botSettings.autosell.enabled) {
+                            if (window.logHero) window.logHero("🎒 Za mało miejsca na potki! Najpierw idę sprzedać śmieci...", "#ffb300");
+                            if (window.logExp) window.logExp("🎒 Za mało miejsca na potki! Najpierw idę sprzedać śmieci...", "#ffb300");
+                            
+                            if (typeof stopPatrol === 'function') stopPatrol(true);
+                            sessionStorage.removeItem('hero_autosell_ignore'); 
+                            window.autoSellState.ignoreUntil = 0;
+                            window.autoSellState.active = true;
+                            window.autoSellState.step = 1;
+                            window.autoSellState.nextActionTime = 0;
+                            window.autoSellState.failedNPCs = [];
+                            window.isRushingToShop = false;
+                            window.isRushing = true;
+                            
+                            window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+                            if (window.autoSellState.wasBerserkOn) {
+                                botSettings.berserk.enabled = false;
+                                let chkBerserk = document.getElementById('berserkEnabled');
+                                if (chkBerserk) chkBerserk.checked = false;
+                                if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                                if (window.logExp) window.logExp("🛡️ Wyłączam Berserka na czas powrotu do sklepu.", "#ff9800");
+                            }
+                            return; // Przerywamy Auto-Poty, niech demon sprzedaży przejmie stery!
+                        }
+
+                        // BRAK MIEJSCA, ALE AUTO-SELL WYŁĄCZONY? Kupujemy tyle, na ile jest miejsca
+                        if (s.freeSlots < requiredStacks) {
+                            if (s.freeSlots === 0) {
+                                if (window.logHero) window.logHero("🚨 Brak miejsca w plecaku na mikstury! Włącz Auto-Sprzedaż!", "#e53935");
+                                return; // Całkowity brak miejsca
+                            }
+                            requiredStacks = s.freeSlots; // Zmniejszamy zakup do limitu wolnych kratek
+                        }
+
+                        if (typeof stopPatrol === 'function') stopPatrol(true);
+                        window.autoPotState.active = true;
+                        window.autoPotState.stacksToBuy = requiredStacks; // Zapisujemy ile realnie kupujemy
+                        window.autoPotState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                     if (window.autoPotState.wasBerserkOn) {
                         botSettings.berserk.enabled = false;
                         let chkBerserk = document.getElementById('berserkEnabled');
@@ -7844,7 +7884,7 @@ if (isDead) {
                         return realName && realName.includes(window.autoPotState.targetItem);
                     });
                     if (itemToBuy && typeof Engine.shop.basket?.buyItem === 'function') {
-                        let stacksToBuy = botSettings.autopot.stacks || 14;
+                        let stacksToBuy = window.autoPotState.stacksToBuy || botSettings.autopot.stacks || 14;
                         let clicksNeeded = stacksToBuy * 3;
                         let msg = `🛒 Wrzucam ${stacksToBuy} staków do koszyka...`;
                         if (window.logHero) window.logHero(msg, "#8bc34a");
