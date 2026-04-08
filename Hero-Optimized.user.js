@@ -2276,7 +2276,6 @@ if (!door) {
     rushInterval = setTimeout(window.executeRushStep, 250);
     return;
 }
-}
 
 let cx = Engine.hero.d.x;
 let cy = Engine.hero.d.y;
