@@ -8688,7 +8688,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
             if (!isBotActive) window.__seenPrivs.clear();
         }, 5000);
-  // --- DAEMON: ANTI-STUCK (Odwieszacz bota na bramach i zacinkach) ---
+ // --- DAEMON: ANTI-STUCK (Odwieszacz bota na bramach i zacinkach) ---
     if (!window.antiStuckDaemonInstalled) {
         window.antiStuckDaemonInstalled = true;
         window.lastStuckCheckPos = { x: -1, y: -1, map: "" };
@@ -8701,20 +8701,29 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 return;
             }
 
-            // Podstawowe zabezpieczenia przed błędnymi interwencjami (Nie przerywa gdy ładuje się mapa!)
+            // Podstawowe zabezpieczenia przed błędnymi interwencjami
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || Engine.map.isLoading) {
                 window.stuckIdleCount = 0;
                 return;
             }
-            if (Engine.battle && Engine.battle.show) return;
-            if (Engine.dead || Engine.hero.d.dead) return;
-            if (window.isHealLocked || window.isRegeneratingToFull) return;
-            if (window.__captchaPhase && window.__captchaPhase !== "none") return;
-            // ZABEZPIECZENIE: Nie wykonuj mikroruchów, jeśli celowo czekamy na respawn (45 sekund)
+            
+            // --- KRYTYCZNE WYJĄTKI (Kiedy bot stoi CELOWO) ---
+            if (Engine.battle && Engine.battle.show) { window.stuckIdleCount = 0; return; }
+            if (Engine.dead || Engine.hero.d.dead) { window.stuckIdleCount = 0; return; }
+            if (window.isHealLocked || window.isRegeneratingToFull) { window.stuckIdleCount = 0; return; }
+            if (window.__captchaPhase && window.__captchaPhase !== "none") { window.stuckIdleCount = 0; return; }
+            
+            // Wyjątki Sklepowe (Auto-Poty i Auto-Sprzedaż)
+            if (window.autoSellState && window.autoSellState.active) { window.stuckIdleCount = 0; return; }
+            if (window.autoPotState && window.autoPotState.active) { window.stuckIdleCount = 0; return; }
+            if (window.isExpSuspended) { window.stuckIdleCount = 0; return; }
+
+            // Wyjątek Czekania na Respawn (45 sekund) lub przejście mapy
             if (window.isExping && window.expMapTransitionCooldown && Date.now() < window.expMapTransitionCooldown) {
                 window.stuckIdleCount = 0;
                 return;
             }
+            // --------------------------------------------------
 
             let currentMap = Engine.map.d.name;
             let currentX = Engine.hero.d.x;
@@ -8728,11 +8737,10 @@ let checkBrowser = botSettings.exp?.playerAlert;
 
                     window.stuckIdleCount++;
 
-                    // ZMNIEJSZONY CZAS: Interweniuje po 5 sekundach zamiast 8!
+                    // Interweniuje po 5 sekundach bezruchu (jeśli żaden wyjątek wyżej go nie zatrzymał)
                     if (window.stuckIdleCount >= 5) {
                         if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Lekko odskakuję...", "#00e5ff");
 
-                        // ZAMIAST klikać pod siebie (co nic nie daje w drzwiach), robi realny krok w bok
                         let stepX = Math.max(0, currentX + (Math.random() > 0.5 ? 1 : -1));
                         let stepY = Math.max(0, currentY + (Math.random() > 0.5 ? 1 : -1));
                         Engine.hero.autoGoTo({x: stepX, y: stepY});
