@@ -2290,37 +2290,41 @@ let dist = door.pathDistance;
         stuckCount = 0;
     }
 }else {
-            // --- FIZYCZNIE STOIMY NA BRAMIE LUB OBOK NIEJ ---
-            if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
+           } else {
+    // Jesteśmy już przy przejściu albo 1 kratkę od niego.
+    // Najpierw próbujemy wejść dokładnie NA pole bramy.
+    let hx = parseInt(Engine.hero.d.x);
+    let hy = parseInt(Engine.hero.d.y);
 
-            // SKRÓCONY CZAS: Reaguje błyskawicznie po 3.5 sekundach!
-            if (Date.now() - window.rushGatewayArrivalTime > 3500) {
-                if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
-                if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
+    let exactGatewayDist = Math.max(Math.abs(hx - door.x), Math.abs(hy - door.y));
 
-                // ZAKŁADAMY KAGANIEC: Blokujemy silnik Rusha na 1.5 sekundy!
-                window.__movementLock = Date.now() + 1500;
+    if (exactGatewayDist > 0 && exactGatewayDist <= 1) {
+        safeGoTo(door.x, door.y, false);
+    }
 
-                // Resetujemy licznik, żeby nie spamowało komunikatu
-                if (typeof window.lastMapChange !== 'undefined') window.lastMapChange = Date.now();
-                if (typeof window.lastGatewayAttempt !== 'undefined') window.lastGatewayAttempt = Date.now();
+    if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
 
-                let hx = parseInt(Engine.hero.d.x);
-                let hy = parseInt(Engine.hero.d.y);
+    if (Date.now() - window.rushGatewayArrivalTime > 3500) {
+        if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
+        if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
 
-                // Mądry krok w tył: bot szuka dookoła siebie wolnej kratki, żeby nie wejść w ścianę
-                let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
-                for (let d of dirs) {
-                    let nx = hx + d[0], ny = hy + d[1];
-                    if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
-                        if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
-                        else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
-                        else window._g(`walk=${nx},${ny}`);
-                        break;
-                    }
-                }
-            } // Koniec mechaniki kroku w tył
-        } // Koniec warunku stania na bramie
+        window.__movementLock = Date.now() + 1500;
+
+        if (typeof window.lastMapChange !== 'undefined') window.lastMapChange = Date.now();
+        if (typeof window.lastGatewayAttempt !== 'undefined') window.lastGatewayAttempt = Date.now();
+
+        let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
+        for (let d of dirs) {
+            let nx = hx + d[0], ny = hy + d[1];
+            if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
+                if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
+                else window._g(`walk=${nx},${ny}`);
+                break;
+            }
+        }
+    }
+}
 
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
@@ -9677,6 +9681,21 @@ function getGatewayReachableStand(gw, distMap) {
     const getKey = (x, y) => `${x}_${y}`;
     let best = null;
 
+    // 1. Najpierw próbujemy dokładne pole przejścia
+    let exactKey = getKey(gw.x, gw.y);
+    if (window.margoWalkableMask.has(exactKey) && distMap.has(exactKey)) {
+        return {
+            x: gw.x,
+            y: gw.y,
+            targetMap: gw.targetMap,
+            reachable: true,
+            stand: { x: gw.x, y: gw.y },
+            pathDistance: distMap.get(exactKey)
+        };
+    }
+
+    // 2. Jeśli nie da się stanąć dokładnie na przejściu,
+    // szukamy najlepszej kratki obok
     for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
             const sx = gw.x + dx;
@@ -9711,7 +9730,6 @@ function getGatewayReachableStand(gw, distMap) {
         pathDistance: Infinity
     };
 }
-
 function getCurrentMapGatewaysForRadar(distMap) {
     if (typeof Engine === 'undefined' || !Engine.map) return [];
 
