@@ -3048,6 +3048,9 @@ function initGUI() {
                     <label style="color:#ff5252; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;" title="Ucieka na 10 minut z czerwonej mapy, gdy gracz jest bliżej niż 6 kratek"><input type="checkbox" id="pvpFlee" ${botSettings.exp.pvpFlee ? 'checked' : ''}> 🏃 Uciekaj z map PvP</label>
                 </div>
                 <div style="border-top:1px solid #333; padding-top:6px;">
+                    <label style="color:#00acc1; font-size:11px; cursor:pointer; font-weight:bold;" title="Wymusza tryb F11 przy starcie bota, co gwarantuje 100% precyzję kliknięć Pythona."><input type="checkbox" id="autoFullscreen" ${botSettings.exp.autoFullscreen ? 'checked' : ''}> 🖥️ Auto-Pełny Ekran (F11)</label>
+                </div>
+                <div style="border-top:1px solid #333; padding-top:6px;">
                     <label style="color:#e040fb; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat (Prywatne)</label>
                     <label style="color:#e0d8c0; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;"><input type="checkbox" id="chatAlertStopBot" ${botSettings.exp.chatAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wiadomości</label>
                 </div>
@@ -3220,10 +3223,18 @@ if (btnExp) {
         window.isExping = !window.isExping;
         const chk = document.getElementById('berserkEnabled');
 
-        if (window.isExping) {
+       if (window.isExping) {
             this.innerHTML = "⏹ STOP";
             this.style.borderColor = "#f44336";
             this.style.color = "#f44336";
+
+            // --- AUTO FULLSCREEN ---
+            if (botSettings.exp.autoFullscreen && !document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e => console.log("Błąd F11:", e));
+            }
+            // -----------------------
+
+            // BEZWZGLĘDNY RESET BLOKAD RUCHU
 
             // BEZWZGLĘDNY RESET BLOKAD RUCHU
             window.isRushing = false;
@@ -3299,6 +3310,8 @@ if (!botSettings.berserk) {
 
         if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
         if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
+        if (botSettings.exp.autoFullscreen === undefined) { botSettings.exp.autoFullscreen = true; saveSettings(); }
+        bindChange('autoFullscreen', (e) => { botSettings.exp.autoFullscreen = e.target.checked; saveSettings(); });
         bindChange('chatAlert', (e) => { botSettings.exp.chatAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
         bindChange('chatAlertStopBot', (e) => { botSettings.exp.chatAlertStopBot = e.target.checked; saveSettings(); });
 
@@ -4582,7 +4595,14 @@ function stopPatrol(hardStop = true) {
                 updateUI();
             }
         }
-        isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
+       isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
+        
+        // --- AUTO FULLSCREEN ---
+        if (botSettings.exp.autoFullscreen && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(e => console.log("Błąd F11:", e));
+        }
+        // -----------------------
+        
         let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336";
 
         window.logHero(`Rozpoczęto patrol (Heros: ${hero}).`, "#4caf50");
