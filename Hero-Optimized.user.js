@@ -10048,7 +10048,7 @@ setInterval(() => {
     initFloatingRadarUI();
 
     if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
-        if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
+        if (!window.wargowalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
             updateWalkableArea();
         }
         renderTacticalRadar();
