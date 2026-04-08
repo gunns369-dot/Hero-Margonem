@@ -3247,8 +3247,9 @@ if (btnExp) {
             if (window.autoPotState) window.autoPotState.active = false;
             if (window.rushInterval) clearTimeout(window.rushInterval);
 
-            expCurrentTargetId = null;
-            expEmptyScans = 0;
+           expCurrentTargetId = null;
+window.expCurrentTargetGroupKey = null;
+expEmptyScans = 0;
             expAttackLockUntil = 0;
             expGatewayLockUntil = 0;
             expLastActionTime = 0;
@@ -3410,7 +3411,7 @@ if (!botSettings.berserk) {
                     if (mIn) mIn.value = botSettings.exp.minLvl; if (mAx) mAx.value = botSettings.exp.maxLvl;
                 }
 
-                window.mapClearTimes = {}; expCurrentTargetId = null; expMapTransitionCooldown = 0; expLastActionTime = 0; expAntiLagTime = 0;
+                window.mapClearTimes = {}; expCurrentTargetId = null; window.expCurrentTargetGroupKey = null; expMapTransitionCooldown = 0; expLastActionTime = 0; expAntiLagTime = 0;
                 saveSettings();
                 expNoMobScans = 0; expLastTargetMap = ""; expLastTargetPos = null; window.lastExpMap = null; window.isRushing = false; window.isRushingToShop = false;
 
@@ -5479,7 +5480,8 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         if (Engine.battle && (Engine.battle.show || Engine.battle.d)) {
             expLastActionTime = now + 500;
             expCurrentTargetId = null;
-            window.expConsecutiveStucks = 0; // RESET LICZNIKA FRUSTRACJI!
+window.expCurrentTargetGroupKey = null;
+window.expConsecutiveStucks = 0;
             expLastTargetSwitchAt = 0;
             expEmptyScans = 0;
             expAttackLockUntil = 0;
@@ -5516,7 +5518,8 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         expMapEnteredAt = now;
         expEmptyScans = 0;
         expCurrentTargetId = null;
-        expAttackLockUntil = 0;
+window.expCurrentTargetGroupKey = null;
+expAttackLockUntil = 0;
         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
         expGatewayLockUntil = now + 1200;
         window.expUnreachableMobs.clear();
@@ -5615,93 +5618,98 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
     });
 
-    let validMobs = [];
-    arr.forEach(n => {
-        let coordKey = n.x + "_" + n.y;
-        if (window.expUnreachableMobs.has(coordKey)) return;
+let validMobs = [];
+const distMap = buildDistanceMapFromHero();
 
-        let lvl = parseInt(n.lvl, 10);
-        if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
+arr.forEach(n => {
+    let coordKey = n.x + "_" + n.y;
+    if (window.expUnreachableMobs.has(coordKey)) return;
 
-        let wt = parseInt(n.wt, 10);
-        let ranga = "normal";
-        if (n.type === 2) {
-            if (wt === 11 || wt === 1) ranga = "elite1";
-            else if (wt === 12 || wt === 2) ranga = "elite2";
-            else if (wt >= 13 || wt >= 3) ranga = "hero";
+    let lvl = parseInt(n.lvl, 10);
+    if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
+
+    let wt = parseInt(n.wt, 10);
+    let ranga = getMobRank(n);
+
+    if (ranga === "normal" && !wantNormal) return;
+    if (ranga === "elite1" && !wantElite) return;
+    if (ranga === "elite2" && !bE2) return;
+    if (ranga === "hero" && !bHero) return;
+
+    let isSafeToAttack = true;
+    for (let spot of dangerousSpots) {
+        if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
+            isSafeToAttack = false;
+            break;
         }
+    }
+    if (!isSafeToAttack) return;
 
-        if (ranga === "normal" && !wantNormal) return;
-        if (ranga === "elite1" && !wantElite) return;
-        if (ranga === "elite2" && !bE2) return;
-        if (ranga === "hero" && !bHero) return;
-
-        let isSafeToAttack = true;
-        for (let spot of dangerousSpots) {
-            if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
-                isSafeToAttack = false; break;
+    let isReachable = false;
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const sk = `${n.x + dx}_${n.y + dy}`;
+            if (window.margoWalkableMask.has(sk) && distMap.has(sk)) {
+                isReachable = true;
+                break;
             }
         }
-        if (!isSafeToAttack) return;
+        if (isReachable) break;
+    }
 
-        let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
-        validMobs.push({
-            id: n.id, x: n.x, y: n.y, wt: wt, type: n.type, ranga: ranga, grp: n.grp,
-            nick: n.nick.replace(/<[^>]*>?/gm, '').trim(),
-            dist: dist,
-            isLocked: false
-        });
+    if (!isReachable) return;
+
+    validMobs.push({
+        id: n.id,
+        x: n.x,
+        y: n.y,
+        wt: wt,
+        type: n.type,
+        ranga: ranga,
+        grp: n.grp,
+        nick: n.nick.replace(/<[^>]*>?/gm, '').trim(),
+        isLocked: false
     });
+});
 
- // --- INTELIGENTNE GRUPOWANIE ORAZ WYZNACZANIE NAJLEPSZEJ TRASY ---
-    validMobs.forEach(m1 => {
-        m1.realGroupSize = 1;
-        validMobs.forEach(m2 => {
-            if (m1.id !== m2.id) {
-                // Szukamy sąsiadów w promieniu 4 kratek dookoła potwora
-                let d = Math.max(Math.abs(m1.x - m2.x), Math.abs(m1.y - m2.y));
-                if (d <= 4) m1.realGroupSize++; 
-            }
-        });
-        m1.groupSize = m1.realGroupSize;
-        m1.groupLabel = m1.groupSize > 1 ? `Skupisko (${m1.groupSize}x) ${m1.nick}` : `Solo ${m1.nick}`;
-    });
+let serverGroups = buildServerMobGroups(validMobs, distMap);
 
-    // Odrzucamy dalekie pojedyncze sztuki by nie tracić czasu
-    validMobs = validMobs.filter(m => !(m.groupSize === 1 && m.dist > 50 && m.ranga === "normal"));
+serverGroups = serverGroups.filter(g => !(g.mobs.length === 1 && g.bestPathDistance > 50 && g.mainRanga === "normal"));
 
-    // 6. UTRZYMANIE CELU (ELASTYCZNY LOCK 3-5s - V16)
-    let lockedMob = null;
-    validMobs.forEach(m => {
-        if (m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0)) {
-            m.isLocked = true;
-            lockedMob = m;
-        }
-    });
+serverGroups.forEach(g => {
+    if (g.key === window.expCurrentTargetGroupKey && now < (window.expTargetLockTime || 0)) {
+        g.isLocked = true;
 
-    // 7. SORTOWANIE WAGOWE (Idzie do największych grup!)
-    validMobs.sort((a, b) => {
-        if (a.isLocked && !b.isLocked) return -1;
-        if (b.isLocked && !a.isLocked) return 1;
+        const rarityBonusMap = {
+            normal: 0,
+            elite1: 8,
+            elite2: 14,
+            hero: 22
+        };
 
-        // Algorytm: Bazowy dystans minus "premia za wielkość grupy".
-        // Każdy potwór w pobliżu redukuje wagę dystansu o 6 kratek.
-        let scoreA = a.dist - (a.groupSize * 6);
-        let scoreB = b.dist - (b.groupSize * 6);
+        g.score =
+            g.bestPathDistance
+            - (g.mobs.length * 5)
+            - (rarityBonusMap[g.mainRanga] || 0)
+            - 10;
+    }
+});
 
-        if (scoreA !== scoreB) return scoreA - scoreB;
-        
-        // Fallback: jeśli score równy, bierz co bliżej
-        if (a.dist !== b.dist) return a.dist - b.dist;
+serverGroups.sort((a, b) => {
+    if (a.isLocked && !b.isLocked) return -1;
+    if (b.isLocked && !a.isLocked) return 1;
 
-        return String(a.id).localeCompare(String(b.id));
-    });
+    if (a.score !== b.score) return a.score - b.score;
+    if (a.bestPathDistance !== b.bestPathDistance) return a.bestPathDistance - b.bestPathDistance;
+    return String(a.key).localeCompare(String(b.key));
+});
 
-    let target = validMobs.length > 0 ? validMobs[0] : null;
+let targetGroup = serverGroups.length > 0 ? serverGroups[0] : null;
+let target = targetGroup ? targetGroup.bestTargetMob : null;
 
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (target) {
-        const targetDist = target.dist;
+const targetDist = targetGroup.bestPathDistance;
 
         if (expEmptyScans > 0) {
             window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
@@ -5716,18 +5724,18 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 if (now < nextAllowedClickTime) return;
 
                 if (expCurrentTargetId !== target.id) {
-                    window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
-                    expCurrentTargetId = target.id;
+                   window.logExp(`🏃 Cel: ${targetGroup.label} (Dystans: ${targetDist}, Score: ${targetGroup.score})`, "#00e5ff");
+expCurrentTargetId = target.id;
+window.expCurrentTargetGroupKey = targetGroup.key;
 
                     // LOSOWY LOCK: Trzyma cel od 3 do 5 sekund.
                     // Po tym czasie bot "przejrzy na oczy" i jeśli inny mob będzie bliżej, zmieni trasę.
                     let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
                     window.expTargetLockTime = now + randomLockSeconds;
                 }
+if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} | dystans: ${targetDist} | score: ${targetGroup.score}`;
 
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.groupLabel}`;
-
-                Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                Engine.hero.autoGoTo({ x: targetGroup.bestStand.x, y: targetGroup.bestStand.y });
                 nextAllowedClickTime = now + 350;
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
@@ -8627,7 +8635,9 @@ window.openShopAsync = async (namePart) => {
 
                     // Przerywamy obecną akcję i wymuszamy natychmiastowe obliczenie nowej drogi
                     expCurrentTargetId = null;
-                    window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+window.expCurrentTargetGroupKey = null;
+window.expLastMoveTx = -1;
+window.expLastMoveTy = -1;
                     window.isRushing = false; 
                     expMapTransitionCooldown = 0; 
                     expLastActionTime = 0; 
@@ -9331,105 +9341,274 @@ function updateWalkableArea() {
         }
     }
 }
+    function buildDistanceMapFromHero() {
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return new Map();
+
+    const w = Engine.map.d.x;
+    const h = Engine.map.d.y;
+    const getKey = (x, y) => `${x}_${y}`;
+    const distMap = new Map();
+
+    const startX = Engine.hero.d.x;
+    const startY = Engine.hero.d.y;
+
+    const q = [[startX, startY]];
+    distMap.set(getKey(startX, startY), 0);
+
+    const dirs = [
+        [0, 1], [0, -1], [1, 0], [-1, 0],
+        [1, 1], [-1, -1], [-1, 1], [1, -1]
+    ];
+
+    while (q.length > 0) {
+        const [cx, cy] = q.shift();
+        const baseDist = distMap.get(getKey(cx, cy));
+
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nk = getKey(nx, ny);
+
+            if (!window.margoWalkableMask.has(nk)) continue;
+            if (distMap.has(nk)) continue;
+
+            if (Math.abs(dx) === 1 && Math.abs(dy) === 1) {
+                if (Engine.map.col.check(cx + dx, cy) && Engine.map.col.check(cx, cy + dy)) {
+                    continue;
+                }
+            }
+
+            distMap.set(nk, baseDist + 1);
+            q.push([nx, ny]);
+        }
+    }
+
+    return distMap;
+}
+
+function getMobRank(n) {
+    let wt = parseInt(n.wt, 10) || 0;
+    let ranga = "normal";
+
+    if (n.type === 2) {
+        if (wt === 11 || wt === 1) ranga = "elite1";
+        else if (wt === 12 || wt === 2) ranga = "elite2";
+        else if (wt >= 13 || wt >= 3) ranga = "hero";
+    }
+
+    return ranga;
+}
+
+function buildServerMobGroups(validMobs, distMap) {
+    const groups = {};
+    const getKey = (x, y) => `${x}_${y}`;
+    const rankPower = { normal: 0, elite1: 1, elite2: 2, hero: 3 };
+
+    for (const m of validMobs) {
+        const key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
+
+        if (!groups[key]) {
+            groups[key] = {
+                key,
+                grp: m.grp || null,
+                mobs: [],
+                mainRanga: "normal",
+                minX: m.x,
+                maxX: m.x,
+                minY: m.y,
+                maxY: m.y,
+                bestPathDistance: Infinity,
+                bestTargetMob: null,
+                bestStand: null,
+                score: Infinity,
+                isLocked: false
+            };
+        }
+
+        const g = groups[key];
+        g.mobs.push(m);
+        g.minX = Math.min(g.minX, m.x);
+        g.maxX = Math.max(g.maxX, m.x);
+        g.minY = Math.min(g.minY, m.y);
+        g.maxY = Math.max(g.maxY, m.y);
+
+        if (rankPower[m.ranga] > rankPower[g.mainRanga]) {
+            g.mainRanga = m.ranga;
+        }
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const sx = m.x + dx;
+                const sy = m.y + dy;
+                const sk = getKey(sx, sy);
+
+                if (!window.margoWalkableMask.has(sk)) continue;
+                if (!distMap.has(sk)) continue;
+
+                const d = distMap.get(sk);
+                if (d < g.bestPathDistance) {
+                    g.bestPathDistance = d;
+                    g.bestTargetMob = m;
+                    g.bestStand = { x: sx, y: sy };
+                }
+            }
+        }
+    }
+
+    return Object.values(groups)
+        .filter(g => Number.isFinite(g.bestPathDistance) && g.bestTargetMob && g.bestStand)
+        .map(g => {
+            const rarityBonusMap = {
+                normal: 0,
+                elite1: 8,
+                elite2: 14,
+                hero: 22
+            };
+
+            const mobCount = g.mobs.length;
+            const rarityBonus = rarityBonusMap[g.mainRanga] || 0;
+
+            g.score =
+                g.bestPathDistance
+                - (mobCount * 5)
+                - rarityBonus
+                - (g.isLocked ? 10 : 0);
+
+            g.label = `${mobCount}x [${g.mainRanga}]`;
+            return g;
+        });
+}
 
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
     let win = document.getElementById('margoRadarWindow');
-    // Rysuj tylko gdy radar jest załadowany i widoczny
     if (!canvas || !win || win.style.display === 'none' || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
     let ctx = canvas.getContext('2d');
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
-    
-    // Obliczanie skali by mapa idealnie wypełniła obszar
+
     let scale = Math.min(canvas.width / w, canvas.height / h);
     let offsetX = (canvas.width - (w * scale)) / 2;
     let offsetY = (canvas.height - (h * scale)) / 2;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    function drawRect(x, y, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(offsetX + (x * scale), offsetY + (y * scale), scale, scale);
-    }
-    
-    function drawDot(x, y, color, sizeMult) {
+    const drawDot = (x, y, color, sizeMult = 1) => {
         ctx.beginPath();
-        ctx.arc(offsetX + (x * scale) + (scale/2), offsetY + (y * scale) + (scale/2), (scale/2) * sizeMult, 0, 2 * Math.PI);
+        ctx.arc(
+            offsetX + (x * scale) + (scale / 2),
+            offsetY + (y * scale) + (scale / 2),
+            Math.max(2, (scale / 2.2) * sizeMult),
+            0,
+            2 * Math.PI
+        );
         ctx.fillStyle = color;
         ctx.fill();
-    }
+    };
 
-    // Teren
-    for(let y = 0; y < h; y++) {
-        for(let x = 0; x < w; x++) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
             if (window.margoWalkableMask.has(`${x}_${y}`)) {
-                drawRect(x, y, '#1b3b22'); 
+                ctx.fillStyle = '#1b3b22';
             } else {
-                drawRect(x, y, '#050505'); 
+                ctx.fillStyle = '#0a0a0a';
             }
+            ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
         }
     }
 
-    // Potwory
+    const distMap = buildDistanceMapFromHero();
+
     let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-    let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
+    let validMobs = [];
 
     for (let id in npcs) {
         let n = npcs[id].d || npcs[id];
         if (!n || n.dead || n.del || n.delete) continue;
+        if (!(n.type === 2 || n.type === 3)) continue;
 
-        if (n.type === 2 || n.type === 3) {
-            let isReachable = false;
-            for(let dx = -1; dx <= 1; dx++) {
-                for(let dy = -1; dy <= 1; dy++) {
-                    if(window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
-                        isReachable = true; break;
-                    }
+        let isReachable = false;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                if (window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
+                    isReachable = true;
+                    break;
                 }
-                if(isReachable) break;
             }
-
-            if (!isReachable) {
-                drawDot(n.x, n.y, '#333333', 0.8);
-                continue; 
-            }
-
-            let wt = parseInt(n.wt, 10) || 0;
-           let ranga = "normal";
-            if (n.type === 2) {
-                if (wt === 11 || wt === 1) ranga = "elite1";
-                else if (wt === 12 || wt === 2) ranga = "elite2";
-                else if (wt >= 13 || wt >= 3) ranga = "hero";
-            }
-            
-            drawDot(n.x, n.y, rangaColors[ranga], 1.2);
+            if (isReachable) break;
         }
+
+        if (!isReachable) {
+            drawDot(n.x, n.y, '#333333', 0.8);
+            continue;
+        }
+
+        validMobs.push({
+            id: n.id,
+            x: n.x,
+            y: n.y,
+            grp: n.grp,
+            type: n.type,
+            wt: parseInt(n.wt, 10) || 0,
+            ranga: getMobRank(n),
+            nick: (n.nick || n.name || 'Potwór').replace(/<[^>]*>?/gm, '').trim()
+        });
     }
 
-    // Rysowanie dynamicznej trasy do expowiska (Wizualizacja celu)
-    if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
-        let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
-        if (targetNpc) {
+    const groups = buildServerMobGroups(validMobs, distMap);
+
+    const rangaColors = {
+        normal: '#ff5252',
+        elite1: '#ff9800',
+        elite2: '#ba68c8',
+        hero: '#00e5ff'
+    };
+
+    groups.forEach(g => {
+        const color = rangaColors[g.mainRanga] || '#ff5252';
+
+        g.mobs.forEach(m => drawDot(m.x, m.y, rangaColors[m.ranga] || color, 1.15));
+
+        const boxX = offsetX + ((g.minX - 0.8) * scale);
+        const boxY = offsetY + ((g.minY - 0.8) * scale);
+        const boxW = (g.maxX - g.minX + 2.6) * scale;
+        const boxH = (g.maxY - g.minY + 2.6) * scale;
+
+        ctx.fillStyle = color + '22';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (window.expCurrentTargetGroupKey === g.key) ? 2.5 : 1;
+        ctx.fillRect(boxX, boxY, boxW, boxH);
+        ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+        ctx.fillStyle = color;
+        ctx.font = '11px Tahoma';
+        ctx.shadowBlur = 2;
+        ctx.shadowColor = '#000';
+        ctx.fillText(`${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} s=${g.score}`, boxX, boxY - 3);
+        ctx.shadowBlur = 0;
+    });
+
+    if (window.isExping && window.expCurrentTargetGroupKey) {
+        const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
+        if (activeGroup && activeGroup.bestStand) {
             ctx.beginPath();
-            ctx.moveTo(offsetX + (Engine.hero.d.x * scale) + (scale/2), offsetY + (Engine.hero.d.y * scale) + (scale/2));
-            ctx.lineTo(offsetX + (targetNpc.x * scale) + (scale/2), offsetY + (targetNpc.y * scale) + (scale/2));
-            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)"; // Świecąca cyjanowa linia
+            ctx.moveTo(offsetX + (Engine.hero.d.x * scale) + (scale / 2), offsetY + (Engine.hero.d.y * scale) + (scale / 2));
+            ctx.lineTo(offsetX + (activeGroup.bestStand.x * scale) + (scale / 2), offsetY + (activeGroup.bestStand.y * scale) + (scale / 2));
+            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
             ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]); // Przerywana
+            ctx.setLineDash([4, 4]);
             ctx.stroke();
-            ctx.setLineDash([]); 
+            ctx.setLineDash([]);
 
-            // Pogrubienie aktualnego celu (żeby wiedzieć do kogo biegnie w grupie)
-            drawDot(targetNpc.x, targetNpc.y, "#00e5ff", 2.0);
+            drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
         }
     }
 
-    // Gracz
     drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
 }
-
 // Główna pętla taktująca
 setInterval(() => {
     initFloatingRadarUI();
