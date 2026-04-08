@@ -2218,16 +2218,21 @@ if (isTeleportRoute) {
 } else {
     let door = getBestReachableGatewayToMap(nextMap);
 
-    if (!door) {
-        if (window._lastRushNextMap !== `no_gate_${nextMap}`) {
-            if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
-            if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
-            window._lastRushNextMap = `no_gate_${nextMap}`;
-        }
-        clearTimeout(rushInterval);
-        rushInterval = setTimeout(window.checkRushArrival, 500);
-        return;
+  if (!door) {
+    markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+
+    if (window._lastRushNextMap !== `no_gate_${currentSysMap}_${nextMap}`) {
+        if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Pomijam ten krok trasy.`, "#ff9800");
+        if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Pomijam ten krok trasy.`, "#ff9800");
+        window._lastRushNextMap = `no_gate_${currentSysMap}_${nextMap}`;
     }
+
+    // Próbujemy wybrać kolejny krok trasy zamiast stać i spamować
+    window.rushNextMap = null;
+    clearTimeout(rushInterval);
+    rushInterval = setTimeout(window.executeRushStep, 250);
+    return;
+}
 
     if (window._lastRushNextMap !== nextMap) {
         if (window.logExp) window.logExp(`🚪 Biegnę do osiągalnego przejścia na: ${nextMap} (d=${door.pathDistance})`, "#ba68c8");
@@ -2261,9 +2266,16 @@ if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
 let door = getBestReachableGatewayToMap(nextMap);
 
 if (!door) {
-    if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
-    if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
+    markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+
+    if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
+    if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
+
+    window.rushNextMap = null;
+    clearTimeout(rushInterval);
+    rushInterval = setTimeout(window.executeRushStep, 250);
     return;
+}
 }
 
 let cx = Engine.hero.d.x;
@@ -9742,9 +9754,37 @@ function getCurrentMapGatewaysForRadar(distMap) {
 
     return rawGateways.map(gw => getGatewayReachableStand(gw, distMap));
 }
-    function getBestReachableGatewayToMap(targetMap) {
+    window.blockedRouteGateways = window.blockedRouteGateways || {};
+
+function makeBlockedGatewayKey(fromMap, toMap) {
+    return `${String(fromMap).trim()}__TO__${String(toMap).trim()}`;
+}
+
+function markGatewayAsBlocked(fromMap, toMap, ms = 30000) {
+    if (!fromMap || !toMap) return;
+    const key = makeBlockedGatewayKey(fromMap, toMap);
+    window.blockedRouteGateways[key] = Date.now() + ms;
+}
+
+function isGatewayBlocked(fromMap, toMap) {
+    if (!fromMap || !toMap) return false;
+    const key = makeBlockedGatewayKey(fromMap, toMap);
+    const until = window.blockedRouteGateways[key] || 0;
+
+    if (!until) return false;
+    if (Date.now() > until) {
+        delete window.blockedRouteGateways[key];
+        return false;
+    }
+
+    return true;
+}
+   function getBestReachableGatewayToMap(targetMap) {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return null;
     if (!targetMap) return null;
+
+    const currentMap = Engine.map.d.name;
+    if (isGatewayBlocked(currentMap, targetMap)) return null;
 
     let distMap = buildDistanceMapFromHero();
     let gateways = getCurrentMapGatewaysForRadar(distMap) || [];
@@ -9762,7 +9802,6 @@ function getCurrentMapGatewaysForRadar(distMap) {
     candidates.sort((a, b) => a.pathDistance - b.pathDistance);
     return candidates[0];
 }
-
 
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
