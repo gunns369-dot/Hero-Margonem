@@ -9242,7 +9242,12 @@ window.expLastMoveTy = -1;
 // ==========================================
 // PŁYWAJĄCY RADAR TAKTYCZNY (DRAG & RESIZE)
 // ==========================================
-window.margoWalkableMask = new Set();
+window.margoWalkableMask = new Set();\
+    window.radarCompactMode = false;
+window.radarShowGateways = true;
+window.radarShowWorldPath = false;
+window.radarGatewayCache = [];
+window.worldPathOverlayCanvas = null;
     
 function initFloatingRadarUI() {
     if (document.getElementById('margoRadarWindow')) return;
@@ -9260,7 +9265,24 @@ function initFloatingRadarUI() {
     // 3. Nagłówek (do przesuwania okna)
     let header = document.createElement('div');
     header.style.cssText = 'background:#111; padding:8px 10px; cursor:move; color:#00acc1; font-weight:bold; font-size:12px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center; user-select:none; font-family: Tahoma, sans-serif;';
-    header.innerHTML = '<span>🎯 Podgląd Mapy (Drag & Resize)</span><span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size: 14px;">✖</span>';
+   header.innerHTML = `
+    <span>🎯 Podgląd Mapy</span>
+    <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
+        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+            <input type="checkbox" id="radarCompactToggle">
+            Compact
+        </label>
+        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+            <input type="checkbox" id="radarGatewaysToggle" checked>
+            Przejścia
+        </label>
+        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+            <input type="checkbox" id="radarWorldPathToggle">
+            Trasa na mapie
+        </label>
+        <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
+    </div>
+`;
     win.appendChild(header);
 
     // 4. Kontener na Canvas
@@ -9281,6 +9303,29 @@ function initFloatingRadarUI() {
         win.style.display = win.style.display === 'none' ? 'flex' : 'none';
     };
     document.getElementById('closeRadarBtn').onclick = () => win.style.display = 'none';
+
+    const compactToggle = document.getElementById('radarCompactToggle');
+const gatewaysToggle = document.getElementById('radarGatewaysToggle');
+const worldPathToggle = document.getElementById('radarWorldPathToggle');
+
+compactToggle.checked = !!window.radarCompactMode;
+gatewaysToggle.checked = !!window.radarShowGateways;
+worldPathToggle.checked = !!window.radarShowWorldPath;
+
+compactToggle.onchange = () => {
+    window.radarCompactMode = compactToggle.checked;
+};
+
+gatewaysToggle.onchange = () => {
+    window.radarShowGateways = gatewaysToggle.checked;
+};
+
+worldPathToggle.onchange = () => {
+    window.radarShowWorldPath = worldPathToggle.checked;
+    if (!window.radarShowWorldPath) {
+        clearWorldPathOverlay();
+    }
+};
 
     // Przesuwanie okna (Drag)
     let isDragging = false;
@@ -9601,6 +9646,148 @@ function buildServerMobGroups(validMobs, distMap) {
                g.label = `${mobCount}x [${g.mainRanga}]`;
         return g;
     });
+}
+
+    function getGatewayReachableStand(gw, distMap) {
+    const getKey = (x, y) => `${x}_${y}`;
+    let best = null;
+
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const sx = gw.x + dx;
+            const sy = gw.y + dy;
+            const sk = getKey(sx, sy);
+
+            if (!window.margoWalkableMask.has(sk)) continue;
+            if (!distMap.has(sk)) continue;
+
+            const d = distMap.get(sk);
+            if (!best || d < best.pathDistance) {
+                best = {
+                    x: gw.x,
+                    y: gw.y,
+                    targetMap: gw.targetMap,
+                    reachable: true,
+                    stand: { x: sx, y: sy },
+                    pathDistance: d
+                };
+            }
+        }
+    }
+
+    if (best) return best;
+
+    return {
+        x: gw.x,
+        y: gw.y,
+        targetMap: gw.targetMap,
+        reachable: false,
+        stand: null,
+        pathDistance: Infinity
+    };
+}
+
+function getCurrentMapGatewaysForRadar(distMap) {
+    if (typeof Engine === 'undefined' || !Engine.map) return [];
+
+    let rawGateways = [];
+    try {
+        rawGateways = HeroScannerModule.scanCurrentMap(Engine.map.d.name, null) || [];
+    } catch (e) {
+        return [];
+    }
+
+    return rawGateways.map(gw => getGatewayReachableStand(gw, distMap));
+}
+
+function ensureWorldPathOverlay() {
+    if (window.worldPathOverlayCanvas && document.body.contains(window.worldPathOverlayCanvas)) {
+        return window.worldPathOverlayCanvas;
+    }
+
+    const overlay = document.createElement('canvas');
+    overlay.id = 'margoWorldPathOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 999997;
+    `;
+    document.body.appendChild(overlay);
+    window.worldPathOverlayCanvas = overlay;
+    return overlay;
+}
+
+function clearWorldPathOverlay() {
+    const overlay = window.worldPathOverlayCanvas;
+    if (!overlay) return;
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+}
+
+function drawWorldPathOverlay(path) {
+    if (!window.radarShowWorldPath || !path || path.length < 2) {
+        clearWorldPathOverlay();
+        return;
+    }
+
+    const overlay = ensureWorldPathOverlay();
+    overlay.width = window.innerWidth;
+    overlay.height = window.innerHeight;
+
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    // Spróbuj pobrać pozycję kontenera mapy
+    const mapEl =
+        document.querySelector('#ground') ||
+        document.querySelector('.ground-layer') ||
+        document.querySelector('.map2-container') ||
+        document.querySelector('.game-window') ||
+        document.querySelector('canvas');
+
+    if (!mapEl || typeof Engine === 'undefined' || !Engine.map) return;
+
+    const rect = mapEl.getBoundingClientRect();
+    const mapW = Engine.map.d.x;
+    const mapH = Engine.map.d.y;
+
+    const tileW = rect.width / mapW;
+    const tileH = rect.height / mapH;
+
+    ctx.beginPath();
+    ctx.moveTo(
+        rect.left + (path[0].x + 0.5) * tileW,
+        rect.top + (path[0].y + 0.5) * tileH
+    );
+
+    for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(
+            rect.left + (path[i].x + 0.5) * tileW,
+            rect.top + (path[i].y + 0.5) * tileH
+        );
+    }
+
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([7, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Kropka celu
+    const last = path[path.length - 1];
+    ctx.beginPath();
+    ctx.arc(
+        rect.left + (last.x + 0.5) * tileW,
+        rect.top + (last.y + 0.5) * tileH,
+        6,
+        0,
+        Math.PI * 2
+    );
+    ctx.fillStyle = 'rgba(0, 229, 255, 0.95)';
+    ctx.fill();
 }
 
 function renderTacticalRadar() {
