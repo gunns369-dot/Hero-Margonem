@@ -10088,245 +10088,133 @@ function isMapKnownInGatewayBase(mapName) {
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
     let win = document.getElementById('margoRadarWindow');
-    if (!canvas || !win || win.style.display === 'none' || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) {
-        return;
-    }
+    // Rysuj tylko gdy radar jest załadowany i widoczny
+    if (!canvas || !win || win.style.display === 'none' || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
     let ctx = canvas.getContext('2d');
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
-
+    
+    // Obliczanie skali by mapa idealnie wypełniła obszar
     let scale = Math.min(canvas.width / w, canvas.height / h);
     let offsetX = (canvas.width - (w * scale)) / 2;
     let offsetY = (canvas.height - (h * scale)) / 2;
 
-    const drawDot = (x, y, color, sizeMult = 1) => {
-        ctx.beginPath();
-        ctx.arc(
-            offsetX + (x * scale) + (scale / 2),
-            offsetY + (y * scale) + (scale / 2),
-            Math.max(2, (scale / 2.2) * sizeMult),
-            0,
-            2 * Math.PI
-        );
-        ctx.fillStyle = color;
-        ctx.fill();
-    };
-
-    const drawSquare = (x, y, color, sizeMult = 1) => {
-        const size = Math.max(4, scale * sizeMult);
-        ctx.fillStyle = color;
-        ctx.fillRect(
-            offsetX + (x * scale) + (scale / 2) - size / 2,
-            offsetY + (y * scale) + (scale / 2) - size / 2,
-            size,
-            size
-        );
-    };
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
+    function drawRect(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(offsetX + (x * scale), offsetY + (y * scale), scale, scale);
+    }
+    
+    function drawDot(x, y, color, sizeMult) {
+        ctx.beginPath();
+        ctx.arc(offsetX + (x * scale) + (scale/2), offsetY + (y * scale) + (scale/2), (scale/2) * sizeMult, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    // Teren
+    for(let y = 0; y < h; y++) {
+        for(let x = 0; x < w; x++) {
             if (window.margoWalkableMask.has(`${x}_${y}`)) {
-                ctx.fillStyle = '#1b3b22';
+                drawRect(x, y, '#1b3b22'); 
             } else {
-                ctx.fillStyle = '#0a0a0a';
+                drawRect(x, y, '#050505'); 
             }
-            ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
         }
     }
 
-    const distMap = buildDistanceMapFromHero();
-
+    // Potwory
     let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-    let validMobs = [];
+    let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
 
     for (let id in npcs) {
         let n = npcs[id].d || npcs[id];
         if (!n || n.dead || n.del || n.delete) continue;
-        if (!(n.type === 2 || n.type === 3)) continue;
 
-        let isReachable = false;
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                if (window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
-                    isReachable = true;
-                    break;
+        if (n.type === 2 || n.type === 3) {
+            let isReachable = false;
+            for(let dx = -1; dx <= 1; dx++) {
+                for(let dy = -1; dy <= 1; dy++) {
+                    if(window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
+                        isReachable = true; break;
+                    }
                 }
+                if(isReachable) break;
             }
-            if (isReachable) break;
-        }
 
-        if (!isReachable) {
-            drawDot(n.x, n.y, '#333333', 0.8);
-            continue;
-        }
+            if (!isReachable) {
+                drawDot(n.x, n.y, '#333333', 0.8);
+                continue; 
+            }
 
-        validMobs.push({
-            id: n.id,
-            x: n.x,
-            y: n.y,
-            grp: n.grp,
-            type: n.type,
-            wt: parseInt(n.wt, 10) || 0,
-            ranga: getMobRank(n),
-            nick: (n.nick || n.name || 'Potwór').replace(/<[^>]*>?/gm, '').trim()
-        });
+            let wt = parseInt(n.wt, 10) || 0;
+            let ranga = "normal";
+            if (n.type === 2) {
+                if (wt === 11 || wt === 1) ranga = "elite1";
+                else if (wt === 12 || wt === 2) ranga = "elite2";
+                else if (wt >= 13 || wt >= 3) ranga = "hero";
+            }
+            
+            drawDot(n.x, n.y, rangaColors[ranga], 1.2);
+        }
     }
 
-    const groups = buildServerMobGroups(validMobs, distMap);
-
-    const rangaColors = {
-        normal: '#ff5252',
-        elite1: '#ff9800',
-        elite2: '#ba68c8',
-        hero: '#00e5ff'
-    };
-
-    groups.forEach(g => {
-        const color = rangaColors[g.mainRanga] || '#ff5252';
-
-        g.mobs.forEach(m => drawDot(m.x, m.y, rangaColors[m.ranga] || color, 1.15));
-
-        const boxX = offsetX + ((g.minX - 0.8) * scale);
-        const boxY = offsetY + ((g.minY - 0.8) * scale);
-        const boxW = (g.maxX - g.minX + 2.6) * scale;
-        const boxH = (g.maxY - g.minY + 2.6) * scale;
-
-        ctx.fillStyle = color + '22';
-        ctx.strokeStyle = color;
-        ctx.lineWidth = (window.expCurrentTargetGroupKey === g.key) ? 2.5 : 1;
-        ctx.fillRect(boxX, boxY, boxW, boxH);
-        ctx.strokeRect(boxX, boxY, boxW, boxH);
-
-        if (!window.radarCompactMode) {
-            ctx.fillStyle = color;
-            ctx.font = '11px Tahoma';
-            ctx.shadowBlur = 2;
-            ctx.shadowColor = '#000';
-            ctx.fillText(
-                `${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} tail=${g.tailPenalty || 0} s=${g.score}`,
-                boxX,
-                boxY - 3
-            );
-            ctx.shadowBlur = 0;
-        }
-    });
-
-    const gateways = getCurrentMapGatewaysForRadar(distMap);
-    window.radarGatewayCache = gateways;
-
-   if (window.radarShowGateways) {
-    gateways
-        .filter(gw => gw.reachable)
-        .forEach(gw => {
-            const color = '#29b6f6';
-            drawSquare(gw.x, gw.y, color, 0.9);
-
-            ctx.strokeStyle = '#81d4fa';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(
-                offsetX + (gw.x * scale) + 1,
-                offsetY + (gw.y * scale) + 1,
-                Math.max(4, scale - 2),
-                Math.max(4, scale - 2)
-            );
-
-            if (!window.radarCompactMode) {
-                ctx.fillStyle = color;
-                ctx.font = '10px Tahoma';
-                ctx.fillText(
-                    `${gw.targetMap || 'Przejście'} d=${gw.pathDistance}`,
-                    offsetX + (gw.x * scale) + 4,
-                    offsetY + (gw.y * scale) - 2
-                );
-            }
-        });
-}
-
-if (window.isExping && window.expCurrentTargetGroupKey) {
-    const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
-
-    if (activeGroup && activeGroup.bestStand) {
-        const path = buildPathToTarget(
-            Engine.hero.d.x,
-            Engine.hero.d.y,
-            activeGroup.bestStand.x,
-            activeGroup.bestStand.y
-        );
-
-        if (path.length > 1) {
+    // Rysowanie dynamicznej trasy do expowiska (Wizualizacja celu)
+    if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
+        let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
+        if (targetNpc) {
             ctx.beginPath();
-            ctx.moveTo(
-                offsetX + (path[0].x * scale) + (scale / 2),
-                offsetY + (path[0].y * scale) + (scale / 2)
-            );
-
-            for (let i = 1; i < path.length; i++) {
-                ctx.lineTo(
-                    offsetX + (path[i].x * scale) + (scale / 2),
-                    offsetY + (path[i].y * scale) + (scale / 2)
-                );
-            }
-
-            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
+            ctx.moveTo(offsetX + (Engine.hero.d.x * scale) + (scale/2), offsetY + (Engine.hero.d.y * scale) + (scale/2));
+            ctx.lineTo(offsetX + (targetNpc.x * scale) + (scale/2), offsetY + (targetNpc.y * scale) + (scale/2));
+            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)"; // Świecąca cyjanowa linia
             ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]);
+            ctx.setLineDash([4, 4]); // Przerywana
             ctx.stroke();
-            ctx.setLineDash([]);
-        }
+            ctx.setLineDash([]); 
 
-        drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
+            // Pogrubienie aktualnego celu (żeby wiedzieć do kogo biegnie w grupie)
+            drawDot(targetNpc.x, targetNpc.y, "#00e5ff", 2.0);
+        }
     }
+
+    // GRACZ — zawsze widoczny, z obwódką
+    ctx.beginPath();
+    ctx.arc(
+        offsetX + (Engine.hero.d.x * scale) + (scale / 2),
+        offsetY + (Engine.hero.d.y * scale) + (scale / 2),
+        Math.max(4, (scale / 2.0) * 1.9),
+        0,
+        2 * Math.PI
+    );
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(
+        offsetX + (Engine.hero.d.x * scale) + (scale / 2),
+        offsetY + (Engine.hero.d.y * scale) + (scale / 2),
+        Math.max(1.5, (scale / 2.8) * 0.9),
+        0,
+        2 * Math.PI
+    );
+    ctx.fillStyle = '#00e5ff';
+    ctx.fill();
 }
 
-
-       // GRACZ — zawsze widoczny, z obwódką
-ctx.beginPath();
-ctx.arc(
-    offsetX + (Engine.hero.d.x * scale) + (scale / 2),
-    offsetY + (Engine.hero.d.y * scale) + (scale / 2),
-    Math.max(4, (scale / 2.0) * 1.9),
-    0,
-    2 * Math.PI
-);
-ctx.fillStyle = '#ffffff';
-ctx.fill();
-ctx.lineWidth = 2;
-ctx.strokeStyle = '#000000';
-ctx.stroke();
-
-ctx.beginPath();
-ctx.arc(
-    offsetX + (Engine.hero.d.x * scale) + (scale / 2),
-    offsetY + (Engine.hero.d.y * scale) + (scale / 2),
-    Math.max(1.5, (scale / 2.8) * 0.9),
-    0,
-    2 * Math.PI
-);
-ctx.fillStyle = '#00e5ff';
-ctx.fill();
-}
-
+// Główna pętla taktująca
 setInterval(() => {
-    try {
-        initFloatingRadarUI();
-
-        if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
-            if (!(window.margoWalkableMask instanceof Set)) {
-                window.margoWalkableMask = new Set();
-            }
-
-            if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
-                updateWalkableArea();
-            }
-
-            renderTacticalRadar();
+    initFloatingRadarUI();
+    // Aktualizuj teren tylko gdy gracz się poruszył
+    if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
+        if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
+            updateWalkableArea();
         }
-    } catch (e) {
-        console.error('[RADAR LOOP ERROR]', e);
+        renderTacticalRadar();
     }
 }, 200);
-
 })(); // Koniec kodu
