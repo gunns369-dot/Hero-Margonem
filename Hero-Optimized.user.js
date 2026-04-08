@@ -5362,11 +5362,24 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
     // --- 1. ZABEZPIECZENIE PRZED ZACIĘCIEM W DRZWIACH (MAP COOLDOWN) ---
     if (window.lastExpMap !== Engine.map.d.name) {
-        window.lastExpMap = Engine.map.d.name;
-        window.mapCooldown = Date.now() + 1500; // 1.5 sekundy przerwy po zmianie mapy
-        window.isRushing = false; // Bezwzględny reset stanu biegu
-        return; // Dajemy grze odetchnąć i załadować tekstury bez robienia spamu w logach
+    window.lastExpMap = Engine.map.d.name;
+
+    // Dłuższy cooldown po wejściu z przejścia:
+    // najpierw bohater musi wyjść z bramy, potem dopiero dociągają się moby
+    window.mapCooldown = Date.now() + 3200;
+
+    // Osobny znacznik: do kiedy nie wolno uznać mapy za pustą
+    window.expMapLoadGraceUntil = Date.now() + 4500;
+
+    window.isRushing = false;
+    expEmptyScans = 0;
+
+    if (window.logExp) {
+        window.logExp(`🕒 Weszłem na mapę [${Engine.map.d.name}] - czekam na dociągnięcie potworów...`, "#90caf9");
     }
+
+    return;
+}
     if (window.mapCooldown && Date.now() < window.mapCooldown) {
         return; // Trwa blokada, czekamy
     }
@@ -5526,6 +5539,7 @@ window.expConsecutiveStucks = 0;
         window.expConsecutiveStucks = 0; // RESET LICZNIKA FRUSTRACJI!
         expMapEnteredAt = now;
         expEmptyScans = 0;
+       window.expMapLoadGraceUntil = now + 4500;
         expCurrentTargetId = null;
 window.expCurrentTargetGroupKey = null;
 expAttackLockUntil = 0;
@@ -5836,12 +5850,35 @@ if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} |
         return;
     }
 // --- ZAAWANSOWANY SMART ROAM: ZAPISANIE W PAMIĘCI ---
-    if (now - expMapEnteredAt < 1200) { expLastActionTime = now + 120; return; }
+// Po wejściu na mapę czekamy dłużej, aż bohater wyjdzie z przejścia
+// i potwory zdążą się dociągnąć.
+if (window.expMapLoadGraceUntil && now < window.expMapLoadGraceUntil) {
+    expEmptyScans = 0;
+    if (displayTarget) {
+        let left = Math.max(0, Math.ceil((window.expMapLoadGraceUntil - now) / 1000));
+        displayTarget.innerText = `Ładowanie mapy... (${left}s)`;
+    }
+    expLastActionTime = now + 150;
+    return;
+}
 
-    expEmptyScans++;
-    if (displayTarget) displayTarget.innerText = `Czysto. Skanowanie... (${expEmptyScans}/6)`;
-    if (expEmptyScans < 6) { expLastActionTime = now + 180; return; }
-    if (now < expMapTransitionCooldown) return;
+// Dodatkowy bezpiecznik: nie oznaczaj mapy jako pustej, jeśli bohater
+// nadal stoi na przejściu albo tuż po zejściu z niego.
+if (isOnGateway(hx, hy)) {
+    expEmptyScans = 0;
+    if (displayTarget) displayTarget.innerText = `Schodzę z przejścia...`;
+    expLastActionTime = now + 150;
+    return;
+}
+
+expEmptyScans++;
+if (displayTarget) displayTarget.innerText = `Czysto. Skanowanie... (${expEmptyScans}/8)`;
+if (expEmptyScans < 8) {
+    expLastActionTime = now + 220;
+    return;
+}
+
+if (now < expMapTransitionCooldown) return;
 
     let mapsPool = botSettings.exp.mapOrder || [];
     if (!mapsPool.length) {
