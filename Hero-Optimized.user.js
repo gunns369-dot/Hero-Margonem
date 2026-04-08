@@ -9335,31 +9335,41 @@ window.radarShowGateways = true;
 window.radarGatewayCache = [];
 
 function initFloatingRadarUI() {
-    if (document.getElementById('margoRadarWindow')) return;
-
     let toggleBtn = document.getElementById('btnToggleRadar');
     if (!toggleBtn) return;
 
-    let win = document.createElement('div');
+    let win = document.getElementById('margoRadarWindow');
+
+    // Jeśli okno już istnieje, to tylko dopinamy/odświeżamy klik do przycisku
+    if (win) {
+        toggleBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
+        };
+        return;
+    }
+
+    win = document.createElement('div');
     win.id = 'margoRadarWindow';
     win.style.cssText = 'display:none; position:fixed; top:50px; right:50px; width:350px; height:350px; background:#0a0a0a; border:2px solid #333; border-radius:6px; z-index:999998; resize:both; overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9); flex-direction:column;';
 
     let header = document.createElement('div');
     header.style.cssText = 'background:#111; padding:8px 10px; cursor:move; color:#00acc1; font-weight:bold; font-size:12px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center; user-select:none; font-family:Tahoma,sans-serif;';
-   header.innerHTML = `
-    <span>🎯 Podgląd Mapy</span>
-    <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
-        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-            <input type="checkbox" id="radarCompactToggle">
-            Compact
-        </label>
-        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-            <input type="checkbox" id="radarGatewaysToggle" checked>
-            Przejścia
-        </label>
-        <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
-    </div>
-`;
+    header.innerHTML = `
+        <span>🎯 Podgląd Mapy</span>
+        <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
+            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+                <input type="checkbox" id="radarCompactToggle">
+                Compact
+            </label>
+            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+                <input type="checkbox" id="radarGatewaysToggle" checked>
+                Przejścia
+            </label>
+            <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
+        </div>
+    `;
     win.appendChild(header);
 
     let canvasWrap = document.createElement('div');
@@ -9372,24 +9382,31 @@ function initFloatingRadarUI() {
 
     document.body.appendChild(win);
 
-    toggleBtn.onclick = () => {
-        win.style.display = win.style.display === 'none' ? 'flex' : 'none';
+    toggleBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
     };
-    document.getElementById('closeRadarBtn').onclick = () => win.style.display = 'none';
+
+    document.getElementById('closeRadarBtn').onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        win.style.display = 'none';
+    };
 
     const compactToggle = document.getElementById('radarCompactToggle');
-const gatewaysToggle = document.getElementById('radarGatewaysToggle');
+    const gatewaysToggle = document.getElementById('radarGatewaysToggle');
 
-compactToggle.checked = !!window.radarCompactMode;
-gatewaysToggle.checked = !!window.radarShowGateways;
+    compactToggle.checked = !!window.radarCompactMode;
+    gatewaysToggle.checked = !!window.radarShowGateways;
 
-compactToggle.onchange = () => {
-    window.radarCompactMode = compactToggle.checked;
-};
+    compactToggle.onchange = () => {
+        window.radarCompactMode = compactToggle.checked;
+    };
 
-gatewaysToggle.onchange = () => {
-    window.radarShowGateways = gatewaysToggle.checked;
-};
+    gatewaysToggle.onchange = () => {
+        window.radarShowGateways = gatewaysToggle.checked;
+    };
 
     let isDragging = false;
     let dragOffsetX, dragOffsetY;
