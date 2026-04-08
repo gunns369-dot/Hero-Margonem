@@ -5704,7 +5704,17 @@ serverGroups.sort((a, b) => {
     return String(a.key).localeCompare(String(b.key));
 });
 
-let targetGroup = serverGroups.length > 0 ? serverGroups[0] : null;
+let targetGroup = serverGroups.lelet targetGroup = null;
+
+const nearbySmallCleanup = serverGroups
+    .filter(g => g.bestPathDistance <= 8 && g.mobs.length <= 2)
+    .sort((a, b) => a.bestPathDistance - b.bestPathDistance);
+
+if (nearbySmallCleanup.length > 0) {
+    targetGroup = nearbySmallCleanup[0];
+} else {
+    targetGroup = serverGroups.length > 0 ? serverGroups[0] : null;
+}ngth > 0 ? serverGroups[0] : null;
 let target = targetGroup ? targetGroup.bestTargetMob : null;
 
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
@@ -9387,7 +9397,71 @@ function updateWalkableArea() {
 
     return distMap;
 }
+    
+function buildPathToTarget(startX, startY, targetX, targetY) {
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return [];
 
+    const w = Engine.map.d.x;
+    const h = Engine.map.d.y;
+    const getKey = (x, y) => `${x}_${y}`;
+
+    const q = [[startX, startY]];
+    const visited = new Set([getKey(startX, startY)]);
+    const parent = new Map();
+
+    const dirs = [
+        [0, 1], [0, -1], [1, 0], [-1, 0],
+        [1, 1], [-1, -1], [-1, 1], [1, -1]
+    ];
+
+    let found = false;
+
+    while (q.length > 0) {
+        const [cx, cy] = q.shift();
+
+        if (cx === targetX && cy === targetY) {
+            found = true;
+            break;
+        }
+
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nk = getKey(nx, ny);
+
+            if (!window.margoWalkableMask.has(nk)) continue;
+            if (visited.has(nk)) continue;
+
+            if (Math.abs(dx) === 1 && Math.abs(dy) === 1) {
+                if (Engine.map.col.check(cx + dx, cy) && Engine.map.col.check(cx, cy + dy)) {
+                    continue;
+                }
+            }
+
+            visited.add(nk);
+            parent.set(nk, { x: cx, y: cy });
+            q.push([nx, ny]);
+        }
+    }
+
+    if (!found) return [];
+
+    const path = [];
+    let cur = { x: targetX, y: targetY };
+
+    while (!(cur.x === startX && cur.y === startY)) {
+        path.push(cur);
+        const prev = parent.get(getKey(cur.x, cur.y));
+        if (!prev) break;
+        cur = prev;
+    }
+
+    path.push({ x: startX, y: startY });
+    path.reverse();
+    return path;
+}
 function getMobRank(n) {
     let wt = parseInt(n.wt, 10) || 0;
     let ranga = "normal";
@@ -9457,29 +9531,71 @@ function buildServerMobGroups(validMobs, distMap) {
         }
     }
 
-    return Object.values(groups)
-        .filter(g => Number.isFinite(g.bestPathDistance) && g.bestTargetMob && g.bestStand)
-        .map(g => {
-            const rarityBonusMap = {
-                normal: 0,
-                elite1: 8,
-                elite2: 14,
-                hero: 22
-            };
+   return Object.values(groups)
+    .filter(g => Number.isFinite(g.bestPathDistance) && g.bestTargetMob && g.bestStand)
+    .map(g => {
+        const rarityBonusMap = {
+            normal: 0,
+            elite1: 8,
+            elite2: 14,
+            hero: 22
+        };
 
-            const mobCount = g.mobs.length;
-            const rarityBonus = rarityBonusMap[g.mainRanga] || 0;
+        const mobCount = g.mobs.length;
+        const rarityBonus = rarityBonusMap[g.mainRanga] || 0;
 
-            g.score =
-                g.bestPathDistance
-                - (mobCount * 5)
-                - rarityBonus
-                - (g.isLocked ? 10 : 0);
+        const heroX = Engine.hero.d.x;
+        const heroY = Engine.hero.d.y;
 
-            g.label = `${mobCount}x [${g.mainRanga}]`;
-            return g;
-        });
-}
+        const groupCenterX = (g.minX + g.maxX) / 2;
+        const groupCenterY = (g.minY + g.maxY) / 2;
+
+        let tailPenalty = 0;
+
+        for (const other of Object.values(groups)) {
+            if (other.key === g.key) continue;
+            if (!Number.isFinite(other.bestPathDistance)) continue;
+
+            const otherCenterX = (other.minX + other.maxX) / 2;
+            const otherCenterY = (other.minY + other.maxY) / 2;
+
+            const heroToOther = Math.abs(heroX - otherCenterX) + Math.abs(heroY - otherCenterY);
+            const groupToOther = Math.abs(groupCenterX - otherCenterX) + Math.abs(groupCenterY - otherCenterY);
+
+            const vx1 = groupCenterX - heroX;
+            const vy1 = groupCenterY - heroY;
+            const vx2 = otherCenterX - heroX;
+            const vy2 = otherCenterY - heroY;
+
+            const dot = (vx1 * vx2) + (vy1 * vy2);
+
+            const otherIsBehind = dot < 0;
+
+            if (otherIsBehind && heroToOther < 18 && other.mobs.length <= 2) {
+                tailPenalty += 8;
+            }
+
+            if (otherIsBehind && heroToOther < 10 && other.mobs.length === 1) {
+                tailPenalty += 8;
+            }
+
+            if (groupToOther > 20 && otherIsBehind) {
+                tailPenalty += 4;
+            }
+        }
+
+        g.tailPenalty = tailPenalty;
+
+        g.score =
+            g.bestPathDistance
+            - (mobCount * 5)
+            - rarityBonus
+            - (g.isLocked ? 10 : 0)
+            + tailPenalty;
+
+        g.label = `${mobCount}x [${g.mainRanga}]`;
+        return g;
+    });
 
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
@@ -9587,25 +9703,48 @@ function renderTacticalRadar() {
         ctx.font = '11px Tahoma';
         ctx.shadowBlur = 2;
         ctx.shadowColor = '#000';
-        ctx.fillText(`${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} s=${g.score}`, boxX, boxY - 3);
+        ctx.fillTctx.fillText(
+    `${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} tail=${g.tailPenalty || 0} s=${g.score}`,
+    boxX,
+    boxY - 3
+);ext(`${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} s=${g.score}`, boxX, boxY - 3);
         ctx.shadowBlur = 0;
     });
 
-    if (window.isExping && window.expCurrentTargetGroupKey) {
-        const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
-        if (activeGroup && activeGroup.bestStand) {
+   if (window.isExping && window.expCurrentTargetGroupKey) {
+    const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
+    if (activeGroup && activeGroup.bestStand) {
+        const path = buildPathToTarget(
+            Engine.hero.d.x,
+            Engine.hero.d.y,
+            activeGroup.bestStand.x,
+            activeGroup.bestStand.y
+        );
+
+        if (path.length > 1) {
             ctx.beginPath();
-            ctx.moveTo(offsetX + (Engine.hero.d.x * scale) + (scale / 2), offsetY + (Engine.hero.d.y * scale) + (scale / 2));
-            ctx.lineTo(offsetX + (activeGroup.bestStand.x * scale) + (scale / 2), offsetY + (activeGroup.bestStand.y * scale) + (scale / 2));
+            ctx.moveTo(
+                offsetX + (path[0].x * scale) + (scale / 2),
+                offsetY + (path[0].y * scale) + (scale / 2)
+            );
+
+            for (let i = 1; i < path.length; i++) {
+                ctx.lineTo(
+                    offsetX + (path[i].x * scale) + (scale / 2),
+                    offsetY + (path[i].y * scale) + (scale / 2)
+                );
+            }
+
             ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 4]);
             ctx.stroke();
             ctx.setLineDash([]);
-
-            drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
         }
+
+        drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
     }
+}
 
     drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
 }
