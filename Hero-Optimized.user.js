@@ -9210,70 +9210,93 @@ window.openShopAsync = async (namePart) => {
             }
         }, 500);
     }
-    // ==========================================
-// ZAAWANSOWANY RADAR TAKTYCZNY I PODZIAŁ UI
+// ==========================================
+// PŁYWAJĄCY RADAR TAKTYCZNY (DRAG & RESIZE)
 // ==========================================
 window.margoWalkableMask = new Set();
 
-function initTacticalRadarUI() {
-    let expConsole = document.getElementById('expConsole');
-    if (expConsole && !document.getElementById('margoTacticalRadar')) {
-        
-        // 1. Dzielenie okna konsoli na pół
-        let wrapper = document.createElement('div');
-        wrapper.style.display = 'flex';
-        wrapper.style.flexDirection = 'row';
-        wrapper.style.gap = '4px';
-        wrapper.style.marginBottom = '4px';
-        wrapper.style.height = '120px'; // Optymalna wysokość
+function initFloatingRadarUI() {
+    if (document.getElementById('margoRadarWindow')) return;
 
-        expConsole.parentNode.insertBefore(wrapper, expConsole);
-        
-        // Konfiguracja samej konsoli
-        expConsole.style.flex = '1';
-        expConsole.style.height = '100%';
-        expConsole.style.marginBottom = '0';
-        wrapper.appendChild(expConsole);
+    // 1. Przycisk otwierający/zamykający Radar
+    let toggleBtn = document.createElement('button');
+    toggleBtn.innerHTML = '🗺️ Radar Taktyczny';
+    toggleBtn.style.cssText = 'position:fixed; top:10px; right:20px; z-index:999999; padding:6px 12px; background:#111; color:#00acc1; border:1px solid #00acc1; border-radius:4px; cursor:pointer; font-weight:bold; box-shadow: 0 2px 5px rgba(0,0,0,0.5); transition: background 0.2s;';
+    toggleBtn.onmouseover = () => toggleBtn.style.background = '#1a1a1a';
+    toggleBtn.onmouseout = () => toggleBtn.style.background = '#111';
+    document.body.appendChild(toggleBtn);
 
-        // 2. Budowa Radaru
-        let radarContainer = document.createElement('div');
-        radarContainer.id = 'margoTacticalRadar';
-        radarContainer.style.flex = '1';
-        radarContainer.style.height = '100%';
-        radarContainer.style.background = '#0a0a0a';
-        radarContainer.style.border = '1px solid #333';
-        radarContainer.style.boxShadow = 'inset 0 1px 3px #000';
-        radarContainer.style.position = 'relative';
-        radarContainer.style.overflow = 'hidden';
-        
-        let canvas = document.createElement('canvas');
-        canvas.id = 'margoRadarCanvas';
-        canvas.style.display = 'block';
-        canvas.style.position = 'absolute';
-        canvas.style.top = '0';
-        canvas.style.left = '0';
-        
-        // Klikanie na mini-mapę, by się przemieszczać
-        canvas.addEventListener('mousedown', (e) => {
-            if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
-            const rect = canvas.getBoundingClientRect();
-            const w = Engine.map.d.x;
-            const h = Engine.map.d.y;
-            const scale = Math.min(rect.width / w, rect.height / h);
-            const offsetX = (rect.width - (w * scale)) / 2;
-            const offsetY = (rect.height - (h * scale)) / 2;
-            
-            const clickX = Math.floor((e.clientX - rect.left - offsetX) / scale);
-            const clickY = Math.floor((e.clientY - rect.top - offsetY) / scale);
+    // 2. Pływające okno Radaru
+    let win = document.createElement('div');
+    win.id = 'margoRadarWindow';
+    // Parametr resize: both pozwala na rozciąganie okna
+    win.style.cssText = 'display:none; position:fixed; top:50px; right:50px; width:350px; height:350px; background:#0a0a0a; border:2px solid #333; border-radius: 6px; z-index:999998; resize:both; overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9); flex-direction:column;';
 
-            if (window.margoWalkableMask.has(`${clickX}_${clickY}`) && typeof Engine.hero.autoGoTo === 'function') {
-                Engine.hero.autoGoTo({x: clickX, y: clickY});
-            }
-        });
+    // 3. Nagłówek (do przesuwania okna)
+    let header = document.createElement('div');
+    header.style.cssText = 'background:#111; padding:8px 10px; cursor:move; color:#00acc1; font-weight:bold; font-size:12px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center; user-select:none; font-family: Tahoma, sans-serif;';
+    header.innerHTML = '<span>🎯 Podgląd Mapy (Drag & Resize)</span><span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size: 14px;">✖</span>';
+    win.appendChild(header);
 
-        radarContainer.appendChild(canvas);
-        wrapper.appendChild(radarContainer);
-    }
+    // 4. Kontener na Canvas
+    let canvasWrap = document.createElement('div');
+    canvasWrap.style.cssText = 'flex:1; position:relative; overflow:hidden; background:#000; cursor:crosshair;';
+    let canvas = document.createElement('canvas');
+    canvas.id = 'margoRadarCanvas';
+    canvas.style.cssText = 'display:block; position:absolute; top:0; left:0;';
+    canvasWrap.appendChild(canvas);
+    win.appendChild(canvasWrap);
+
+    document.body.appendChild(win);
+
+    // --- LOGIKA UI ---
+
+    // Toggle widoczności
+    toggleBtn.onclick = () => {
+        win.style.display = win.style.display === 'none' ? 'flex' : 'none';
+    };
+    document.getElementById('closeRadarBtn').onclick = () => win.style.display = 'none';
+
+    // Przesuwanie okna (Drag)
+    let isDragging = false;
+    let offsetX, offsetY;
+    header.onmousedown = (e) => {
+        if (e.target.id === 'closeRadarBtn') return;
+        isDragging = true;
+        offsetX = e.clientX - win.getBoundingClientRect().left;
+        offsetY = e.clientY - win.getBoundingClientRect().top;
+    };
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        win.style.left = (e.clientX - offsetX) + 'px';
+        win.style.top = (e.clientY - offsetY) + 'px';
+        win.style.right = 'auto'; // Resetuje przypięcie do prawej po poruszeniu
+    });
+    document.addEventListener('mouseup', () => isDragging = false);
+
+    // Dynamiczna zmiana rozmiaru Canvas przy rozciąganiu okna
+    const resizeObserver = new ResizeObserver(() => {
+        canvas.width = canvasWrap.clientWidth;
+        canvas.height = canvasWrap.clientHeight;
+    });
+    resizeObserver.observe(canvasWrap);
+
+    // Klikanie by przejść
+    canvas.addEventListener('mousedown', (e) => {
+        if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+        let w = Engine.map.d.x;
+        let h = Engine.map.d.y;
+        let scale = Math.min(canvas.width / w, canvas.height / h);
+        let offX = (canvas.width - (w * scale)) / 2;
+        let offY = (canvas.height - (h * scale)) / 2;
+        
+        let clickX = Math.floor((e.clientX - canvas.getBoundingClientRect().left - offX) / scale);
+        let clickY = Math.floor((e.clientY - canvas.getBoundingClientRect().top - offY) / scale);
+
+        if (window.margoWalkableMask.has(`${clickX}_${clickY}`) && typeof Engine.hero.autoGoTo === 'function') {
+            Engine.hero.autoGoTo({x: clickX, y: clickY});
+        }
+    });
 }
 
 function updateWalkableArea() {
@@ -9288,7 +9311,6 @@ function updateWalkableArea() {
     
     visited.add(getKey(Engine.hero.d.x, Engine.hero.d.y));
 
-    // Dynamiczny Flood Fill - 8 Kierunków
     while(queue.length > 0) {
         let [cx, cy] = queue.shift();
         window.margoWalkableMask.add(getKey(cx, cy));
@@ -9299,7 +9321,6 @@ function updateWalkableArea() {
             if(nx >= 0 && nx < w && ny >= 0 && ny < h) {
                 let nk = getKey(nx, ny);
                 if(!visited.has(nk)) {
-                    // Blokada przenikania przez skos ściany
                     if (Math.abs(d[0]) === 1 && Math.abs(d[1]) === 1) {
                         if (Engine.map.col.check(cx + d[0], cy) && Engine.map.col.check(cx, cy + d[1])) continue;
                     }
@@ -9313,17 +9334,15 @@ function updateWalkableArea() {
 
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
-    if (!canvas || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+    let win = document.getElementById('margoRadarWindow');
+    // Rysuj tylko gdy radar jest załadowany i widoczny
+    if (!canvas || !win || win.style.display === 'none' || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
-    let container = canvas.parentElement;
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
-    
     let ctx = canvas.getContext('2d');
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
     
-    // Obliczanie skali by mapa idealnie wypełniła połowę podzielonej sekcji
+    // Obliczanie skali by mapa idealnie wypełniła obszar
     let scale = Math.min(canvas.width / w, canvas.height / h);
     let offsetX = (canvas.width - (w * scale)) / 2;
     let offsetY = (canvas.height - (h * scale)) / 2;
@@ -9342,18 +9361,18 @@ function renderTacticalRadar() {
         ctx.fill();
     }
 
-    // 1. Rysowanie terenu z Flood Fill
+    // Teren
     for(let y = 0; y < h; y++) {
         for(let x = 0; x < w; x++) {
             if (window.margoWalkableMask.has(`${x}_${y}`)) {
-                drawRect(x, y, '#1b3b22'); // Dostępny teren (ciemna zieleń)
+                drawRect(x, y, '#1b3b22'); 
             } else {
-                drawRect(x, y, '#050505'); // Pustka / Ściany
+                drawRect(x, y, '#050505'); 
             }
         }
     }
 
-    // 2. Rysowanie Potworów
+    // Potwory
     let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
     let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
 
@@ -9362,7 +9381,6 @@ function renderTacticalRadar() {
         if (!n || n.dead || n.del || n.delete) continue;
 
         if (n.type === 2 || n.type === 3) {
-            // Sprawdzanie czy potwór jest osiągalny
             let isReachable = false;
             for(let dx = -1; dx <= 1; dx++) {
                 for(let dy = -1; dy <= 1; dy++) {
@@ -9374,11 +9392,10 @@ function renderTacticalRadar() {
             }
 
             if (!isReachable) {
-                drawDot(n.x, n.y, '#333333', 0.8); // Zablokowany mob -> szara kropka
+                drawDot(n.x, n.y, '#333333', 0.8);
                 continue; 
             }
 
-            // Rozpoznawanie rangi (korzystając z mechaniki bota)
             let wt = parseInt(n.wt, 10) || 0;
             let ranga = "normal";
             if (n.type === 2) {
@@ -9391,15 +9408,15 @@ function renderTacticalRadar() {
         }
     }
 
-    // 3. Rysowanie Gracza
+    // Gracz
     drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.5);
 }
 
-// Główna pętla taktująca dla radaru
+// Główna pętla taktująca
 setInterval(() => {
-    initTacticalRadarUI();
-    if (document.getElementById('margoRadarCanvas')) {
-        // Aktualizuj teren tylko gdy gracz się poruszył / zmienił mapę
+    initFloatingRadarUI();
+    // Aktualizuj teren tylko gdy gracz się poruszył
+    if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
         if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
             updateWalkableArea();
         }
