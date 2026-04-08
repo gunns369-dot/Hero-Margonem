@@ -5575,26 +5575,10 @@ if (mapsPool.includes(currMap) && !isMapTemporarilyCleared(currMap)) {
                 }
             }
 
-            if (bestTarget) {
-                targetExpMap = bestTarget;
-            }
-        }
-    }
-}
-
-            for (let i = 1; i <= mapOrder.length; i++) {
-                let checkIdx = (currIdx !== -1 ? currIdx + i : i - 1) % mapOrder.length;
-                let checkMap = mapOrder[checkIdx];
-                if (!window.mapClearTimes[checkMap]) {
-                    nextMap = checkMap;
-                    break;
+           if (bestTarget) {
+                        targetExpMap = bestTarget;
+                    }
                 }
-            }
-
-            if (nextMap) {
-                targetExpMap = nextMap;
-            } else {
-                targetExpMap = currMap; // Pętla skończona, czekamy na respawn
             }
         }
 
@@ -6090,10 +6074,11 @@ if (now < expMapTransitionCooldown) return;
         return;
     }
 
-    // Przekazujemy kontrolę wyżej w następnym cyklu - bot ułoży cel na nową jaskinię i od razu do niej pobiegnie.
+   // Przekazujemy kontrolę wyżej w następnym cyklu - bot ułoży cel na nową jaskinię i od razu do niej pobiegnie.
     expLastActionTime = now + 200;
     return;
- // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
+} // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
+
 setInterval(runExpLogic, 150);
 
     // --- BAZA DANYCH PROFILI EXPOWISK ---
