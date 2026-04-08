@@ -9878,12 +9878,14 @@ function renderTacticalRadar() {
     const gateways = getCurrentMapGatewaysForRadar(distMap);
     window.radarGatewayCache = gateways;
 
-    if (window.radarShowGateways) {
-        gateways.forEach(gw => {
-            const color = gw.reachable ? '#29b6f6' : '#666666';
+   if (window.radarShowGateways) {
+    gateways
+        .filter(gw => gw.reachable)
+        .forEach(gw => {
+            const color = '#29b6f6';
             drawSquare(gw.x, gw.y, color, 0.9);
 
-            ctx.strokeStyle = gw.reachable ? '#81d4fa' : '#444';
+            ctx.strokeStyle = '#81d4fa';
             ctx.lineWidth = 1;
             ctx.strokeRect(
                 offsetX + (gw.x * scale) + 1,
@@ -9896,13 +9898,13 @@ function renderTacticalRadar() {
                 ctx.fillStyle = color;
                 ctx.font = '10px Tahoma';
                 ctx.fillText(
-                    `${gw.targetMap || 'Przejście'}${gw.reachable ? ` d=${gw.pathDistance}` : ' [X]'}`,
+                    `${gw.targetMap || 'Przejście'} d=${gw.pathDistance}`,
                     offsetX + (gw.x * scale) + 4,
                     offsetY + (gw.y * scale) - 2
                 );
             }
         });
-    }
+}
 
 if (window.isExping && window.expCurrentTargetGroupKey) {
     const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
@@ -9938,8 +9940,6 @@ if (window.isExping && window.expCurrentTargetGroupKey) {
 
         drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
     }
-} else {
-    clearWorldPathOverlay();
 }
 
 
