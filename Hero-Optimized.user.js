@@ -5062,69 +5062,52 @@ function expDetectMobKind(n) {
 
 
 function getExpMobsFromDrawableList(hero, minL, maxL) {
-
     const arr = Engine.npcs.getDrawableList?.() || [];
-
-
-
     return arr
-
         .map(n => n.d || n)
-
         .filter(n => {
-
             if (!n) return false;
-
             if (typeof n.x !== 'number' || typeof n.y !== 'number') return false;
-
-
+            
+            // --- INTEGRACJA Z RADAREM (Omijanie szarych kropek) ---
+            if (window.margoWalkableMask && window.margoWalkableMask.size > 0) {
+                let isReachable = false;
+                for(let dx = -1; dx <= 1; dx++) {
+                    for(let dy = -1; dy <= 1; dy++) {
+                        if(window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
+                            isReachable = true; break;
+                        }
+                    }
+                    if(isReachable) break;
+                }
+                // Jeśli potwór nie dotyka dostępnego terenu - zignoruj go!
+                if (!isReachable) return false; 
+            }
+            // ------------------------------------------------------
 
             const name = (n.nick || n.name || '').replace(/<[^>]*>?/gm, '').trim();
-
             if (!name) return false;
-
-
-
             const lvl = parseInt(n.lvl, 10);
-
             if (isNaN(lvl) || lvl <= 0) return false;
-
             if (lvl < minL || lvl > maxL) return false;
-
-
-
+            
             return true;
-
         })
-
         .map(n => ({
-
             id: n.id,
-
             nazwa: (n.nick || n.name).replace(/<[^>]*>?/gm, '').replace(/\s*\(\d+m\)$/, '').trim(),
-
             lvl: parseInt(n.lvl, 10) || 0,
-
             x: n.x,
-
             y: n.y,
-
             dystans: Math.abs(hero.x - n.x) + Math.abs(hero.y - n.y),
-
             attackDist: Math.max(Math.abs(hero.x - n.x), Math.abs(hero.y - n.y)),
-
             raw: n
-
         }))
-
         .sort((a, b) => {
-
+            // Optymalizacja ścieżki - atakujemy to co mamy najbliżej w linii ataku
             if (a.attackDist !== b.attackDist) return a.attackDist - b.attackDist;
-
             return a.dystans - b.dystans;
-
         });
-
 }
 
 
@@ -9227,4 +9210,200 @@ window.openShopAsync = async (namePart) => {
             }
         }, 500);
     }
+    // ==========================================
+// ZAAWANSOWANY RADAR TAKTYCZNY I PODZIAŁ UI
+// ==========================================
+window.margoWalkableMask = new Set();
+
+function initTacticalRadarUI() {
+    let expConsole = document.getElementById('expConsole');
+    if (expConsole && !document.getElementById('margoTacticalRadar')) {
+        
+        // 1. Dzielenie okna konsoli na pół
+        let wrapper = document.createElement('div');
+        wrapper.style.display = 'flex';
+        wrapper.style.flexDirection = 'row';
+        wrapper.style.gap = '4px';
+        wrapper.style.marginBottom = '4px';
+        wrapper.style.height = '120px'; // Optymalna wysokość
+
+        expConsole.parentNode.insertBefore(wrapper, expConsole);
+        
+        // Konfiguracja samej konsoli
+        expConsole.style.flex = '1';
+        expConsole.style.height = '100%';
+        expConsole.style.marginBottom = '0';
+        wrapper.appendChild(expConsole);
+
+        // 2. Budowa Radaru
+        let radarContainer = document.createElement('div');
+        radarContainer.id = 'margoTacticalRadar';
+        radarContainer.style.flex = '1';
+        radarContainer.style.height = '100%';
+        radarContainer.style.background = '#0a0a0a';
+        radarContainer.style.border = '1px solid #333';
+        radarContainer.style.boxShadow = 'inset 0 1px 3px #000';
+        radarContainer.style.position = 'relative';
+        radarContainer.style.overflow = 'hidden';
+        
+        let canvas = document.createElement('canvas');
+        canvas.id = 'margoRadarCanvas';
+        canvas.style.display = 'block';
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        
+        // Klikanie na mini-mapę, by się przemieszczać
+        canvas.addEventListener('mousedown', (e) => {
+            if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+            const rect = canvas.getBoundingClientRect();
+            const w = Engine.map.d.x;
+            const h = Engine.map.d.y;
+            const scale = Math.min(rect.width / w, rect.height / h);
+            const offsetX = (rect.width - (w * scale)) / 2;
+            const offsetY = (rect.height - (h * scale)) / 2;
+            
+            const clickX = Math.floor((e.clientX - rect.left - offsetX) / scale);
+            const clickY = Math.floor((e.clientY - rect.top - offsetY) / scale);
+
+            if (window.margoWalkableMask.has(`${clickX}_${clickY}`) && typeof Engine.hero.autoGoTo === 'function') {
+                Engine.hero.autoGoTo({x: clickX, y: clickY});
+            }
+        });
+
+        radarContainer.appendChild(canvas);
+        wrapper.appendChild(radarContainer);
+    }
+}
+
+function updateWalkableArea() {
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+    
+    window.margoWalkableMask.clear();
+    let w = Engine.map.d.x;
+    let h = Engine.map.d.y;
+    let queue = [[Engine.hero.d.x, Engine.hero.d.y]];
+    let visited = new Set();
+    let getKey = (x,y) => `${x}_${y}`;
+    
+    visited.add(getKey(Engine.hero.d.x, Engine.hero.d.y));
+
+    // Dynamiczny Flood Fill - 8 Kierunków
+    while(queue.length > 0) {
+        let [cx, cy] = queue.shift();
+        window.margoWalkableMask.add(getKey(cx, cy));
+        
+        let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [-1,1], [1,-1]];
+        for(let d of dirs) {
+            let nx = cx + d[0], ny = cy + d[1];
+            if(nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                let nk = getKey(nx, ny);
+                if(!visited.has(nk)) {
+                    // Blokada przenikania przez skos ściany
+                    if (Math.abs(d[0]) === 1 && Math.abs(d[1]) === 1) {
+                        if (Engine.map.col.check(cx + d[0], cy) && Engine.map.col.check(cx, cy + d[1])) continue;
+                    }
+                    visited.add(nk);
+                    if(!Engine.map.col.check(nx, ny)) queue.push([nx, ny]);
+                }
+            }
+        }
+    }
+}
+
+function renderTacticalRadar() {
+    let canvas = document.getElementById('margoRadarCanvas');
+    if (!canvas || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+
+    let container = canvas.parentElement;
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+    
+    let ctx = canvas.getContext('2d');
+    let w = Engine.map.d.x;
+    let h = Engine.map.d.y;
+    
+    // Obliczanie skali by mapa idealnie wypełniła połowę podzielonej sekcji
+    let scale = Math.min(canvas.width / w, canvas.height / h);
+    let offsetX = (canvas.width - (w * scale)) / 2;
+    let offsetY = (canvas.height - (h * scale)) / 2;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    function drawRect(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(offsetX + (x * scale), offsetY + (y * scale), scale, scale);
+    }
+    
+    function drawDot(x, y, color, sizeMult) {
+        ctx.beginPath();
+        ctx.arc(offsetX + (x * scale) + (scale/2), offsetY + (y * scale) + (scale/2), (scale/2) * sizeMult, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    // 1. Rysowanie terenu z Flood Fill
+    for(let y = 0; y < h; y++) {
+        for(let x = 0; x < w; x++) {
+            if (window.margoWalkableMask.has(`${x}_${y}`)) {
+                drawRect(x, y, '#1b3b22'); // Dostępny teren (ciemna zieleń)
+            } else {
+                drawRect(x, y, '#050505'); // Pustka / Ściany
+            }
+        }
+    }
+
+    // 2. Rysowanie Potworów
+    let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+    let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
+
+    for (let id in npcs) {
+        let n = npcs[id].d || npcs[id];
+        if (!n || n.dead || n.del || n.delete) continue;
+
+        if (n.type === 2 || n.type === 3) {
+            // Sprawdzanie czy potwór jest osiągalny
+            let isReachable = false;
+            for(let dx = -1; dx <= 1; dx++) {
+                for(let dy = -1; dy <= 1; dy++) {
+                    if(window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
+                        isReachable = true; break;
+                    }
+                }
+                if(isReachable) break;
+            }
+
+            if (!isReachable) {
+                drawDot(n.x, n.y, '#333333', 0.8); // Zablokowany mob -> szara kropka
+                continue; 
+            }
+
+            // Rozpoznawanie rangi (korzystając z mechaniki bota)
+            let wt = parseInt(n.wt, 10) || 0;
+            let ranga = "normal";
+            if (n.type === 2) {
+                if (wt === 11 || wt === 1) ranga = "elite1";
+                else if (wt === 12 || wt === 2) ranga = "elite2";
+                else if (wt >= 13 || wt >= 3) ranga = "hero";
+            }
+            
+            drawDot(n.x, n.y, rangaColors[ranga], 1.2);
+        }
+    }
+
+    // 3. Rysowanie Gracza
+    drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.5);
+}
+
+// Główna pętla taktująca dla radaru
+setInterval(() => {
+    initTacticalRadarUI();
+    if (document.getElementById('margoRadarCanvas')) {
+        // Aktualizuj teren tylko gdy gracz się poruszył / zmienił mapę
+        if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
+            updateWalkableArea();
+        }
+        renderTacticalRadar();
+    }
+}, 200);
 })(); // Koniec kodu
