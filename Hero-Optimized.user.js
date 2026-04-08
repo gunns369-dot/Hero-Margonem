@@ -5684,22 +5684,49 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             expAttackLockUntil = 0;
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
-            if (isNewDestination) {
+           if (isNewDestination) {
                 if (now < nextAllowedClickTime) return;
+
+                // --- SMART A* REACHABILITY CHECK (Skanowanie przeszkód przed biegiem!) ---
+                let path = typeof window.findAStarPath === 'function' ? window.findAStarPath(hx, hy, target.x, target.y) : null;
+                
+                // Jeśli nowa funkcja A* nie znalazła absolutnie żadnej drogi do potwora:
+                if (typeof window.findAStarPath === 'function' && (!path || path.length === 0)) {
+                    // Ignorujemy brak drogi tylko wtedy, gdy mob jest tuż obok (bo wtedy nie musimy iść, tylko uderzamy)
+                    if (targetDist > 1) {
+                        window.logExp(`🚧 Potwór ${target.nick} zrespił się za barierą (brak drogi)! Ignoruję go.`, "#ff9800");
+                        
+                        // Dodajemy potwora do czarnej listy bez ani jednej próby podejścia!
+                        window.expUnreachableMobs.add(target.x + "_" + target.y);
+                        
+                        // Zdejmujemy z niego "Locka" i wymuszamy wzięcie nowego celu w następnej milisekundzie
+                        expCurrentTargetId = null;
+                        window.expTargetLockTime = 0;
+                        return; 
+                    }
+                }
+                // -------------------------------------------------------------------------
 
                 if (expCurrentTargetId !== target.id) {
                     window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
 
                     // LOSOWY LOCK: Trzyma cel od 3 do 5 sekund.
-                    // Po tym czasie bot "przejrzy na oczy" i jeśli inny mob będzie bliżej, zmieni trasę.
                     let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
                     window.expTargetLockTime = now + randomLockSeconds;
                 }
 
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.groupLabel}`;
 
-                Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                // Używamy naszej nowej, bezbłędnej ścieżki z A*, jeśli istnieje
+                if (path && path.length > 0) {
+                    Engine.hero.d.path = path;
+                    if (typeof window._g === 'function' && !Engine.hero.d.walking) window._g(`walk=${path[0].x},${path[0].y}`);
+                } else {
+                    // Zabezpieczenie awaryjne (Gdyby np. gracz ręcznie wyłączył funkcję A*)
+                    Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                }
+                
                 nextAllowedClickTime = now + 350;
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
