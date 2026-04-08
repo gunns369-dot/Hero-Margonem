@@ -2302,7 +2302,6 @@ let dist = door.pathDistance;
         stuckCount = 0;
     }
 }else {
-           } else {
     // Jesteśmy już przy przejściu albo 1 kratkę od niego.
     // Najpierw próbujemy wejść dokładnie NA pole bramy.
     let hx = parseInt(Engine.hero.d.x);
@@ -2335,7 +2334,6 @@ let dist = door.pathDistance;
                 break;
             }
         }
-    }
 }
 
         rushInterval = setTimeout(window.checkRushArrival, 500);
