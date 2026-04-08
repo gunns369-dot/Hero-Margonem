@@ -2240,38 +2240,46 @@ function autoDetectEngineData() {
         let currentSysMap = lastMapName;
         if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
 
-        let nextMap = window.rushNextMap;
-        if (!nextMap) return;
+       let nextMap = window.rushNextMap;
+if (!nextMap) return;
 
-        let tp = ZAKONNICY[currentSysMap];
-        let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-        if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
+let tp = ZAKONNICY[currentSysMap];
+let baseDoor = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+let isFakeDoor = baseDoor && tp && Math.abs(baseDoor.x - tp.x) <= 2 && Math.abs(baseDoor.y - tp.y) <= 2;
+if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
 
-        if (!door) return;
+let door = getBestReachableGatewayToMap(nextMap);
 
-        let cx = Engine.hero.d.x; let cy = Engine.hero.d.y;
-        let dist = Math.abs(cx - door.x) + Math.abs(cy - door.y);
+if (!door) {
+    if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
+    if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
+    return;
+}
 
-        if (dist > 1) {
-            let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-            window.rushGatewayArrivalTime = 0;
+let cx = Engine.hero.d.x;
+let cy = Engine.hero.d.y;
+let dist = door.pathDistance;
 
-            if (!isMoving) {
-                if (cx === window.rushLastX && cy === window.rushLastY) {
-                    stuckCount++;
-                    if (stuckCount > 6) {
-                        safeGoTo(door.x, door.y, false);
-                        stuckCount = 0;
-                    }
-                } else {
-                    window.rushLastX = cx; window.rushLastY = cy;
-                    stuckCount = 0;
-                }
-            } else {
+     if (dist > 1) {
+    let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+    window.rushGatewayArrivalTime = 0;
+
+    if (!isMoving) {
+        if (cx === window.rushLastX && cy === window.rushLastY) {
+            stuckCount++;
+            if (stuckCount > 6) {
+                safeGoTo(door.stand.x, door.stand.y, false);
                 stuckCount = 0;
             }
         } else {
+            window.rushLastX = cx;
+            window.rushLastY = cy;
+            stuckCount = 0;
+        }
+    } else {
+        stuckCount = 0;
+    }
+}else {
             // --- FIZYCZNIE STOIMY NA BRAMIE LUB OBOK NIEJ ---
             if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
 
@@ -9261,24 +9269,20 @@ function initFloatingRadarUI() {
 
     let header = document.createElement('div');
     header.style.cssText = 'background:#111; padding:8px 10px; cursor:move; color:#00acc1; font-weight:bold; font-size:12px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center; user-select:none; font-family:Tahoma,sans-serif;';
-    header.innerHTML = `
-        <span>🎯 Podgląd Mapy</span>
-        <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
-            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-                <input type="checkbox" id="radarCompactToggle">
-                Compact
-            </label>
-            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-                <input type="checkbox" id="radarGatewaysToggle" checked>
-                Przejścia
-            </label>
+   header.innerHTML = `
+    <span>🎯 Podgląd Mapy</span>
+    <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
         <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-    <input type="checkbox" id="radarWorldPathToggle">
-    Trasa na mapie
-</label>
-            <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
-        </div>
-    `;
+            <input type="checkbox" id="radarCompactToggle">
+            Compact
+        </label>
+        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+            <input type="checkbox" id="radarGatewaysToggle" checked>
+            Przejścia
+        </label>
+        <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
+    </div>
+`;
     win.appendChild(header);
 
     let canvasWrap = document.createElement('div');
@@ -9297,23 +9301,18 @@ function initFloatingRadarUI() {
     document.getElementById('closeRadarBtn').onclick = () => win.style.display = 'none';
 
     const compactToggle = document.getElementById('radarCompactToggle');
-    const gatewaysToggle = document.getElementById('radarGatewaysToggle');
-    const worldPathToggle = document.getElementById('radarWorldPathToggle');
+const gatewaysToggle = document.getElementById('radarGatewaysToggle');
 
-    compactToggle.checked = !!window.radarCompactMode;
-    gatewaysToggle.checked = !!window.radarShowGateways;
-    worldPathToggle.checked = !!window.radarShowWorldPath;
+compactToggle.checked = !!window.radarCompactMode;
+gatewaysToggle.checked = !!window.radarShowGateways;
 
-    compactToggle.onchange = () => {
-        window.radarCompactMode = compactToggle.checked;
-    };
-    gatewaysToggle.onchange = () => {
-        window.radarShowGateways = gatewaysToggle.checked;
-    };
-    worldPathToggle.onchange = () => {
-        window.radarShowWorldPath = worldPathToggle.checked;
-        if (!window.radarShowWorldPath) clearWorldPathOverlay();
-    };
+compactToggle.onchange = () => {
+    window.radarCompactMode = compactToggle.checked;
+};
+
+gatewaysToggle.onchange = () => {
+    window.radarShowGateways = gatewaysToggle.checked;
+};
 
     let isDragging = false;
     let dragOffsetX, dragOffsetY;
@@ -9679,6 +9678,26 @@ function getCurrentMapGatewaysForRadar(distMap) {
     }
 
     return rawGateways.map(gw => getGatewayReachableStand(gw, distMap));
+}
+    function getBestReachableGatewayToMap(targetMap) {
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return null;
+    if (!targetMap) return null;
+
+    let distMap = buildDistanceMapFromHero();
+    let gateways = getCurrentMapGatewaysForRadar(distMap) || [];
+
+    let candidates = gateways.filter(g =>
+        g &&
+        g.reachable &&
+        g.stand &&
+        g.targetMap &&
+        String(g.targetMap).trim().toLowerCase() === String(targetMap).trim().toLowerCase()
+    );
+
+    if (!candidates.length) return null;
+
+    candidates.sort((a, b) => a.pathDistance - b.pathDistance);
+    return candidates[0];
 }
 
 function ensureWorldPathOverlay() {
