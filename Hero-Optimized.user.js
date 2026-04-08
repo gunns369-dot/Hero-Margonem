@@ -2717,12 +2717,13 @@ function initGUI() {
         mainGui.innerHTML = `
             <div class="gui-header">
                 <div id="guiHeaderTitle" style="margin-right:5px; color:#00e5ff; text-shadow: 0 0 5px #00e5ff; font-weight:900;">MargoNeuro</div>
-                <div class="header-buttons">
+               <div class="header-buttons">
                     <button id="btnStartStop" style="color:#4caf50; border-color:#4caf50;"><span class="btn-icon">▶</span><span>START</span></button>
                     <button id="btnGoToTop" style="color:#00acc1; border-color:#00acc1;"><span class="btn-icon">➡</span><span>IDŹ DO</span></button>
                     <button id="btnOpenMaps" style="color:#2196f3; border-color:#2196f3;"><span class="btn-icon">🗺️</span><span>Mapy</span></button>
+                    <button id="btnToggleRadar" style="color:#9c27b0; border-color:#9c27b0;"><span class="btn-icon">📡</span><span>Radar</span></button>
                     <button id="btnOpenSettings"><span class="btn-icon">⚙️</span><span>Opcje</span></button>
-                   <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;" onclick="window.toggleMainVisibility()"><span class="btn-icon">✖</span></button>
+                    <button id="btnMinimizeMain" style="background:transparent; border:none; color:#777;" onclick="window.toggleMainVisibility()"><span class="btn-icon">✖</span></button>
                 </div>
             </div>
            <div class="tabs-wrapper">
@@ -5652,44 +5653,47 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         });
     });
 
-   // --- DODANIE ETYKIET GRUP DO LOGÓW ORAZ FILTR DYSTANSU ---
-    let groupsCount = {};
-    validMobs.forEach(m => {
-        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
-        groupsCount[key] = (groupsCount[key] || 0) + 1;
+ // --- INTELIGENTNE GRUPOWANIE ORAZ WYZNACZANIE NAJLEPSZEJ TRASY ---
+    validMobs.forEach(m1 => {
+        m1.realGroupSize = 1;
+        validMobs.forEach(m2 => {
+            if (m1.id !== m2.id) {
+                // Szukamy sąsiadów w promieniu 4 kratek dookoła potwora
+                let d = Math.max(Math.abs(m1.x - m2.x), Math.abs(m1.y - m2.y));
+                if (d <= 4) m1.realGroupSize++; 
+            }
+        });
+        m1.groupSize = m1.realGroupSize;
+        m1.groupLabel = m1.groupSize > 1 ? `Skupisko (${m1.groupSize}x) ${m1.nick}` : `Solo ${m1.nick}`;
     });
 
-    validMobs.forEach(m => {
-        let key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
-        let size = groupsCount[key];
-        m.groupSize = size;
-        m.groupLabel = size > 1 ? `Grupa (${size}x) ${m.nick}` : `Solo ${m.nick}`;
-    });
-
-    // ODRZUCANIE DALEKICH PŁOTEK: Jeśli zwykły potwór jest sam i dalej niż 50 kratek -> omijamy go.
-    // Dzięki temu validMobs będzie puste i bot od razu poleci na kolejną mapę!
+    // Odrzucamy dalekie pojedyncze sztuki by nie tracić czasu
     validMobs = validMobs.filter(m => !(m.groupSize === 1 && m.dist > 50 && m.ranga === "normal"));
 
     // 6. UTRZYMANIE CELU (ELASTYCZNY LOCK 3-5s - V16)
     let lockedMob = null;
     validMobs.forEach(m => {
-        // Zmienna expTargetLockTime trzyma w pamięci czas, kiedy lock wygaśnie
         if (m.id === expCurrentTargetId && now < (window.expTargetLockTime || 0)) {
             m.isLocked = true;
             lockedMob = m;
         }
     });
 
-// 7. STABILNE SORTOWANIE (Kto bliżej, ten ginie - bez priorytetu dla Elit)
+    // 7. SORTOWANIE WAGOWE (Idzie do największych grup!)
     validMobs.sort((a, b) => {
-        // Bezwzględny priorytet utrzymania celu (Lock na 3-5 sekund)
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
 
-        // Główna zasada: Bije to, co jest najbliżej (niezależnie czy to Elita, czy zwykły mob)
+        // Algorytm: Bazowy dystans minus "premia za wielkość grupy".
+        // Każdy potwór w pobliżu redukuje wagę dystansu o 6 kratek.
+        let scoreA = a.dist - (a.groupSize * 6);
+        let scoreB = b.dist - (b.groupSize * 6);
+
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        
+        // Fallback: jeśli score równy, bierz co bliżej
         if (a.dist !== b.dist) return a.dist - b.dist;
 
-        // Zabezpieczenie przed kręceniem się w miejscu
         return String(a.id).localeCompare(String(b.id));
     });
 
@@ -9214,17 +9218,13 @@ window.openShopAsync = async (namePart) => {
 // PŁYWAJĄCY RADAR TAKTYCZNY (DRAG & RESIZE)
 // ==========================================
 window.margoWalkableMask = new Set();
-
+    
 function initFloatingRadarUI() {
     if (document.getElementById('margoRadarWindow')) return;
 
-    // 1. Przycisk otwierający/zamykający Radar
-    let toggleBtn = document.createElement('button');
-    toggleBtn.innerHTML = '🗺️ Radar Taktyczny';
-    toggleBtn.style.cssText = 'position:fixed; top:10px; right:20px; z-index:999999; padding:6px 12px; background:#111; color:#00acc1; border:1px solid #00acc1; border-radius:4px; cursor:pointer; font-weight:bold; box-shadow: 0 2px 5px rgba(0,0,0,0.5); transition: background 0.2s;';
-    toggleBtn.onmouseover = () => toggleBtn.style.background = '#1a1a1a';
-    toggleBtn.onmouseout = () => toggleBtn.style.background = '#111';
-    document.body.appendChild(toggleBtn);
+    // 1. Przypisanie do przycisku z głównego interfejsu
+    let toggleBtn = document.getElementById('btnToggleRadar');
+    if (!toggleBtn) return; // Czeka aż UI się wygeneruje
 
     // 2. Pływające okno Radaru
     let win = document.createElement('div');
@@ -9397,7 +9397,7 @@ function renderTacticalRadar() {
             }
 
             let wt = parseInt(n.wt, 10) || 0;
-            let ranga = "normal";
+           let ranga = "normal";
             if (n.type === 2) {
                 if (wt === 11 || wt === 1) ranga = "elite1";
                 else if (wt === 12 || wt === 2) ranga = "elite2";
@@ -9408,8 +9408,26 @@ function renderTacticalRadar() {
         }
     }
 
+    // Rysowanie dynamicznej trasy do expowiska (Wizualizacja celu)
+    if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
+        let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
+        if (targetNpc) {
+            ctx.beginPath();
+            ctx.moveTo(offsetX + (Engine.hero.d.x * scale) + (scale/2), offsetY + (Engine.hero.d.y * scale) + (scale/2));
+            ctx.lineTo(offsetX + (targetNpc.x * scale) + (scale/2), offsetY + (targetNpc.y * scale) + (scale/2));
+            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)"; // Świecąca cyjanowa linia
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]); // Przerywana
+            ctx.stroke();
+            ctx.setLineDash([]); 
+
+            // Pogrubienie aktualnego celu (żeby wiedzieć do kogo biegnie w grupie)
+            drawDot(targetNpc.x, targetNpc.y, "#00e5ff", 2.0);
+        }
+    }
+
     // Gracz
-    drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.5);
+    drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
 }
 
 // Główna pętla taktująca
