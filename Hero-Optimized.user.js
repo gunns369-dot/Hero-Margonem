@@ -4513,45 +4513,112 @@ function optimizeRoute() {
     }
 
 
-   function safeGoTo(targetX, targetY, useRandom)
+ function safeGoTo(targetX, targetY, useRandom) {
+        let now = Date.now();
+        if (now < nextAllowedClickTime) return;
 
+        let x = Number(targetX); 
+        let y = Number(targetY);
 
-function stopPatrol(hardStop = true) {
-        let wasMoving = isPatrolling || isRushing;
-        isPatrolling = false;
-    // --- TWARDE WYJŚCIE Z PEŁNEGO EKRANU ---
-        if (botSettings.exp.autoFullscreen && document.fullscreenElement) {
-            document.exitFullscreen().catch(e => console.log("Błąd wyjścia z F11:", e));
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.map || !Engine.map.col) return;
+
+        // 1. INTELIGENTNA LOSOWOŚĆ (Szuka tylko WOLNYCH kratek!)
+        if (useRandom) {
+            let radius = botSettings.randomRadius || 0;
+            if (radius > 0) {
+                let validSpots = [];
+                for(let rx = x - radius; rx <= x + radius; rx++) {
+                    for(let ry = y - radius; ry <= y + radius; ry++) {
+                        if (rx >= 0 && ry >= 0 && rx < Engine.map.d.x && ry < Engine.map.d.y) {
+                            if (!Engine.map.col.check(rx, ry)) {
+                                validSpots.push({x: rx, y: ry});
+                            }
+                        }
+                    }
+                }
+                if (validSpots.length > 0) {
+                    let pick = validSpots[Math.floor(Math.random() * validSpots.length)];
+                    x = pick.x;
+                    y = pick.y;
+                }
+            }
         }
-        // --------------------------------------
-        isRushing = false;
-        window.isRushing = false;
-        window.isRushingToShop = false;
-        window.resumePatrolAfterRush = false; // KRYTYCZNA POPRAWKA: Blokuje auto-wznawianie po ręcznym zatrzymaniu!
 
-        clearTimeout(rushInterval);
-        clearTimeout(smoothPatrolInterval);
+        // 2. WŁASNY ALGORYTM A* (A-Star Pathfinding) - Omijanie drzew i ścian
+        window.findAStarPath = function(startX, startY, endX, endY) {
+            let w = Engine.map.d.x; let h = Engine.map.d.y;
+            if (startX < 0 || startX >= w || startY < 0 || startY >= h) return null;
+            if (endX < 0 || endX >= w || endY < 0 || endY >= h) return null;
 
-        let btn = document.getElementById('btnStartStop');
-        if (btn) {
-            btn.innerHTML = '<span class="btn-icon">▶</span><span>START</span>';
-            btn.style.color = "#4caf50";
-            btn.style.borderColor = "#4caf50";
+            let openSet = [{x: startX, y: startY, f: 0, g: 0}];
+            let closedSet = new Set();
+            let cameFrom = new Map();
+            let gScore = new Map();
+            
+            const getHash = (nx, ny) => `${nx},${ny}`;
+            gScore.set(getHash(startX, startY), 0);
+
+            const heuristic = (x1, y1, x2, y2) => Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
+
+            while (openSet.length > 0) {
+                openSet.sort((a, b) => a.f - b.f);
+                let current = openSet.shift();
+                let currentHash = getHash(current.x, current.y);
+
+                if (current.x === endX && current.y === endY) {
+                    let path = [];
+                    let curr = currentHash;
+                    while (cameFrom.has(curr)) {
+                        let parts = curr.split(',');
+                        path.unshift({x: parseInt(parts[0]), y: parseInt(parts[1])});
+                        curr = cameFrom.get(curr);
+                    }
+                    return path;
+                }
+
+                closedSet.add(currentHash);
+
+                let dirs = [
+                    {x: 0, y: -1, c: 1}, {x: 0, y: 1, c: 1}, {x: -1, y: 0, c: 1}, {x: 1, y: 0, c: 1},
+                    {x: -1, y: -1, c: 1.4}, {x: 1, y: -1, c: 1.4}, {x: -1, y: 1, c: 1.4}, {x: 1, y: 1, c: 1.4}
+                ];
+
+                for (let d of dirs) {
+                    let nx = current.x + d.x; let ny = current.y + d.y;
+                    let nHash = getHash(nx, ny);
+
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                    if (closedSet.has(nHash)) continue;
+
+                    if ((nx !== endX || ny !== endY) && Engine.map.col.check(nx, ny)) continue;
+
+                    if (Math.abs(d.x) === 1 && Math.abs(d.y) === 1) {
+                        if (Engine.map.col.check(current.x + d.x, current.y) && Engine.map.col.check(current.x, current.y + d.y)) continue;
+                    }
+
+                    let t_gScore = gScore.get(currentHash) + d.c;
+                    if (!gScore.has(nHash) || t_gScore < gScore.get(nHash)) {
+                        cameFrom.set(nHash, currentHash);
+                        gScore.set(nHash, t_gScore);
+                        let f = t_gScore + heuristic(nx, ny, endX, endY);
+                        if (!openSet.some(n => n.x === nx && n.y === ny)) openSet.push({x: nx, y: ny, f: f, g: t_gScore});
+                    }
+                }
+            }
+            return null;
+        };
+
+        let myPath = window.findAStarPath(Engine.hero.d.x, Engine.hero.d.y, x, y);
+
+        if (myPath && myPath.length > 0) {
+            Engine.hero.d.path = myPath;
+            if (typeof window._g === 'function' && !Engine.hero.d.walking) window._g(`walk=${myPath[0].x},${myPath[0].y}`);
+        } else {
+            Engine.hero.autoGoTo({x: x, y: y});
         }
 
-        // Nie czyścimy checkedPoints tutaj, żeby bot pamiętał co sprawdził, jeśli wznowisz patrol!
-        renderCordsList(-1);
-
-        if (wasMoving && window.logHero) window.logHero("🛑 Zatrzymano patrol ręcznie.", "#f44336");
-
-        // TWARDE HAMOWANIE POSTACI W GRZE
-        if (hardStop && typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d) {
-            try {
-                if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                Engine.hero.autoGoTo({x: Engine.hero.d.x, y: Engine.hero.d.y}); // Resetuje trasę do punktu pod nogami
-                if (Engine.hero.d.path) Engine.hero.d.path = [];
-            } catch(e) {}
-        }
+        let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
+        nextAllowedClickTime = Date.now() + throttleDelay;
     }
 
     function startPatrol() {
@@ -8757,25 +8824,32 @@ window.openShopAsync = async (namePart) => {
                 return;
             }
             
-            // --- KRYTYCZNE WYJĄTKI (Kiedy bot stoi CELOWO i nie wolno mu przeszkadzać) ---
+            // 1. BEZWZGLĘDNA BLOKADA WIZUALNA: Jeśli otwarty jest JAKIKOLWIEK sklep, depozyt lub okno dialogowe - NIE ODSKAKUJ!
+            let isAnyWindowOpen = document.querySelector('.shop-wrapper, .shop-window, #shop-wrapper, .dialogue-window.is-open, #dialog, .depot-window');
+            if (isAnyWindowOpen && isAnyWindowOpen.style.display !== 'none' && isAnyWindowOpen.offsetWidth > 0) {
+                window.stuckIdleCount = 0;
+                return;
+            }
+
+            // 2. KRYTYCZNE WYJĄTKI GRY (Walka, Śmierć, Leczenie, Zapadka)
             if (Engine.battle && Engine.battle.show) { window.stuckIdleCount = 0; return; }
             if (Engine.dead || Engine.hero.d.dead) { window.stuckIdleCount = 0; return; }
             if (window.isHealLocked || window.isRegeneratingToFull) { window.stuckIdleCount = 0; return; }
             if (window.__captchaPhase && window.__captchaPhase !== "none") { window.stuckIdleCount = 0; return; }
             
-            // Wyjątki Sklepowe (Auto-Poty, Auto-Sprzedaż, Bieg do NPC)
+            // 3. WYJĄTKI LOGICZNE BOTA
             if (window.autoSellState && window.autoSellState.active) { window.stuckIdleCount = 0; return; }
             if (window.autoPotState && window.autoPotState.active) { window.stuckIdleCount = 0; return; }
             if (window.autoBuyTask) { window.stuckIdleCount = 0; return; }
             if (window.npcWalkInterval) { window.stuckIdleCount = 0; return; }
             if (window.isExpSuspended) { window.stuckIdleCount = 0; return; }
 
-            // Wyjątek Czekania na Respawn (np. 45 sekund na koniec pętli)
-            if (window.isExping && window.expMapTransitionCooldown && Date.now() < window.expMapTransitionCooldown) {
+            // 4. WYJĄTEK CZEKANIA NA RESP (Potężny bezpiecznik na koniec pętli!)
+            let now = Date.now();
+            if (window.isExping && window.expMapTransitionCooldown && now < window.expMapTransitionCooldown) {
                 window.stuckIdleCount = 0;
                 return;
             }
-            // --------------------------------------------------------------------------
 
             let currentMap = Engine.map.d.name;
             let currentX = Engine.hero.d.x;
@@ -8785,7 +8859,6 @@ window.openShopAsync = async (namePart) => {
             if (!isMoving) {
                 if (window.lastStuckCheckPos.x === currentX && window.lastStuckCheckPos.y === currentY && window.lastStuckCheckPos.map === currentMap) {
                     window.stuckIdleCount++;
-                    // Odskakuje dopiero po 6 sekundach fizycznego braku ruchu, jeśli żaden wyjątek z listy wyżej go nie uchronił
                     if (window.stuckIdleCount >= 6) {
                         if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Lekko odskakuję...", "#00e5ff");
                         let stepX = Math.max(0, currentX + (Math.random() > 0.5 ? 1 : -1));
