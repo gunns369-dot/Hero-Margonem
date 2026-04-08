@@ -9598,9 +9598,10 @@ function buildServerMobGroups(validMobs, distMap) {
             - (g.isLocked ? 10 : 0)
             + tailPenalty;
 
-        g.label = `${mobCount}x [${g.mainRanga}]`;
+               g.label = `${mobCount}x [${g.mainRanga}]`;
         return g;
     });
+}
 
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
