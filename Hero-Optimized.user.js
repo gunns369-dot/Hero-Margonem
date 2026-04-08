@@ -9272,7 +9272,10 @@ function initFloatingRadarUI() {
                 <input type="checkbox" id="radarGatewaysToggle" checked>
                 Przejścia
             </label>
-        
+        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+    <input type="checkbox" id="radarWorldPathToggle">
+    Trasa na mapie
+</label>
             <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
         </div>
     `;
