@@ -5453,6 +5453,34 @@ window.expMoveLockUntil = 0;
 
 window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
+    function isMapTemporarilyCleared(mapName) {
+    if (!mapName) return false;
+    if (!window.mapClearTimes) window.mapClearTimes = {};
+
+    const ts = window.mapClearTimes[mapName];
+    if (!ts) return false;
+
+    // 5 minut
+    const ttl = 5 * 60 * 1000;
+
+    if (Date.now() - ts > ttl) {
+        delete window.mapClearTimes[mapName];
+        return false;
+    }
+
+    return true;
+}
+
+function markMapTemporarilyCleared(mapName) {
+    if (!mapName) return;
+    if (!window.mapClearTimes) window.mapClearTimes = {};
+    window.mapClearTimes[mapName] = Date.now();
+}
+
+function getAllCandidateExpMaps() {
+    const maps = botSettings?.exp?.mapOrder || [];
+    return Array.isArray(maps) ? [...maps] : [];
+}
 
   function runExpLogic() {
     if (!window.isExping) return;
@@ -5492,20 +5520,60 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
     const isExpMap = isMapInSelectedExpowisko(currMap);
     setExpBerserkState(isExpMap);
 
-  // --- 2. RUCH NA EXPOWISKO ORAZ PAMIĘĆ MAP ---
-    let mapOrder = botSettings.exp.mapOrder || [];
-    let targetExpMap = currMap;
+// --- 2. RUCH NA EXPOWISKO ORAZ PAMIĘĆ MAP ---
+let mapsPool = getAllCandidateExpMaps();
+let targetExpMap = currMap;
 
-    if (!window.mapClearTimes) window.mapClearTimes = {};
+if (!window.mapClearTimes) window.mapClearTimes = {};
 
-    if (mapOrder.length > 0) {
-        if (mapOrder.includes(currMap) && !window.mapClearTimes[currMap]) {
-            // Jesteśmy na mapie docelowej i jeszcze jej nie wyczyściliśmy
-            targetExpMap = currMap;
-        } else {
-            // Szukamy następnej mapy do czyszczenia zgodnie z ułożoną kolejnością!
-            let currIdx = mapOrder.indexOf(currMap);
-            let nextMap = null;
+// Jeśli jesteśmy na mapie z expowiska i nie jest oznaczona jako chwilowo pusta,
+// to zawsze traktujemy ją jako pełnoprawną mapę do czyszczenia.
+if (mapsPool.includes(currMap) && !isMapTemporarilyCleared(currMap)) {
+    targetExpMap = currMap;
+} else {
+    // Szukamy najbliższej mapy z expowiska, która nie jest chwilowo wyczyszczona
+    let uncheckedMaps = mapsPool.filter(m => !isMapTemporarilyCleared(m));
+
+    if (uncheckedMaps.length > 0) {
+        let bestPath = null;
+        let bestTarget = null;
+        let bestLen = Infinity;
+
+        for (const m of uncheckedMaps) {
+            const p = typeof getShortestPath === 'function' ? getShortestPath(currMap, m) : null;
+            if (p && p.length > 0 && p.length < bestLen) {
+                bestLen = p.length;
+                bestPath = p;
+                bestTarget = m;
+            }
+        }
+
+        if (bestTarget) {
+            targetExpMap = bestTarget;
+        }
+    } else {
+        // Wszystkie mapy są chwilowo wyczyszczone -> reset po 5 min działa sam,
+        // ale jeśli wszystko jest świeżo czyste, wybierz najbliższą z puli
+        if (mapsPool.length > 0) {
+            let bestPath = null;
+            let bestTarget = null;
+            let bestLen = Infinity;
+
+            for (const m of mapsPool) {
+                const p = typeof getShortestPath === 'function' ? getShortestPath(currMap, m) : null;
+                if (p && p.length > 0 && p.length < bestLen) {
+                    bestLen = p.length;
+                    bestPath = p;
+                    bestTarget = m;
+                }
+            }
+
+            if (bestTarget) {
+                targetExpMap = bestTarget;
+            }
+        }
+    }
+}
 
             for (let i = 1; i <= mapOrder.length; i++) {
                 let checkIdx = (currIdx !== -1 ? currIdx + i : i - 1) % mapOrder.length;
@@ -5992,9 +6060,10 @@ if (now < expMapTransitionCooldown) return;
 
     // Zapamiętujemy, że obecna mapa jest wyczyszczona
     if (!window.mapClearTimes) window.mapClearTimes = {};
-    window.mapClearTimes[currMap] = now;
-    if (window.logExp) window.logExp(`🗺️ Mapa [${currMap}] pusta! Zapisano w pamięci. Biegne do kolejnej!`, "#ba68c8");
-
+    markMapTemporarilyCleared(currMap);
+    if (window.logExp) {
+    window.logExp(`🗺️ Mapa [${currMap}] pusta! Pomijam ją przez 5 minut.`, "#ba68c8");
+}
     let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m]);
 
     // Jeśli nie ma już żadnych map do sprawdzenia
@@ -6541,9 +6610,22 @@ window.clearExpMaps = () => {
                 if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
                 return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button></div></div></div>`;
             } else {
-                // Czyściutka lista, BEZ NUMERACJI
-                return `<div class="list-item"><div class="map-name-wrap"><span class="btn-del-map" onclick="window.removeExpMap(${index})">✖</span><span class="map-name" style="color:#81c784; font-weight:bold;">${mapName}</span></div><div class="buttons-wrapper"><button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów (opcjonalne)">🚪</button></div></div>`;
-            }
+const inBase = isMapKnownInGatewayBase(mapName);
+const baseBadge = inBase
+    ? `<span style="color:#81c784; font-size:10px; margin-left:4px;">[BAZA]</span>`
+    : `<span style="color:#ef9a9a; font-size:10px; margin-left:4px;">[BRAK]</span>`;
+
+return `<div class="list-item">
+    <div class="map-name-wrap">
+        <span class="btn-del-map" onclick="window.removeExpMap(${index})">✖</span>
+        <span class="map-name" style="color:#81c784; font-weight:bold;">
+            ${mapName} ${baseBadge}
+        </span>
+    </div>
+    <div class="buttons-wrapper">
+        <button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów (opcjonalne)">🚪</button>
+    </div>
+</div>`;}
         }).join('');
     };
 
@@ -9896,6 +9978,21 @@ function isGatewayBlocked(fromMap, toMap) {
     candidates.sort((a, b) => a.pathDistance - b.pathDistance);
     return candidates[0];
 }
+function isMapKnownInGatewayBase(mapName) {
+    if (!mapName || !window.globalGateways) return false;
+
+    // Sprawdź, czy mapa istnieje jako źródło lub jako cel w bazie
+    if (window.globalGateways[mapName]) return true;
+
+    for (let fromMap in window.globalGateways) {
+        if (window.globalGateways[fromMap] && window.globalGateways[fromMap][mapName]) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
     function pickNextReachableMapFromRoute(currentSysMap) {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return null;
 
