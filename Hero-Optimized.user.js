@@ -2201,39 +2201,49 @@ function autoDetectEngineData() {
         }
 
         window.rushNextMap = nextMap;
-        let tp = ZAKONNICY[currentSysMap];
-        let door = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-        let isFakeDoor = door && tp && Math.abs(door.x - tp.x) <= 2 && Math.abs(door.y - tp.y) <= 2;
-        let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
+       let tp = ZAKONNICY[currentSysMap];
+let baseDoor = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+let isFakeDoor = baseDoor && tp && Math.abs(baseDoor.x - tp.x) <= 2 && Math.abs(baseDoor.y - tp.y) <= 2;
+let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
 
-        if (isTeleportRoute) {
-            if (window._lastRushNextMap !== nextMap) {
-                if (window.logExp) window.logExp(`🚀 Teleportuję (Zakonnik) do: ${nextMap}`, "#9c27b0");
-                window._lastRushNextMap = nextMap;
-            }
-            clearTimeout(rushInterval);
-            rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
-        } else if (door) {
-            if (window._lastRushNextMap !== nextMap) {
-                if (window.logExp) window.logExp(`🚪 Biegnę do przejścia na: ${nextMap}`, "#ba68c8");
-                window._lastRushNextMap = nextMap;
-            }
+if (isTeleportRoute) {
+    if (window._lastRushNextMap !== nextMap) {
+        if (window.logExp) window.logExp(`🚀 Teleportuję (Zakonnik) do: ${nextMap}`, "#9c27b0");
+        if (window.logHero) window.logHero(`🚀 Teleportuję (Zakonnik) do: ${nextMap}`, "#9c27b0");
+        window._lastRushNextMap = nextMap;
+    }
+    clearTimeout(rushInterval);
+    rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
 
-            let targetX = door.x; let targetY = door.y;
-            if (door.allCoords && door.allCoords.length > 0) {
-                let rnd = door.allCoords[Math.floor(Math.random() * door.allCoords.length)];
-                targetX = rnd[0]; targetY = rnd[1];
-            }
+} else {
+    let door = getBestReachableGatewayToMap(nextMap);
 
-            window.rushLastX = Engine.hero.d.x;
-            window.rushLastY = Engine.hero.d.y;
-            stuckCount = 0;
-            window.rushGatewayArrivalTime = 0;
-
-            safeGoTo(targetX, targetY, false);
-            clearTimeout(rushInterval);
-            rushInterval = setTimeout(window.checkRushArrival, 500);
+    if (!door) {
+        if (window._lastRushNextMap !== `no_gate_${nextMap}`) {
+            if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
+            if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia do: ${nextMap}`, "#ff9800");
+            window._lastRushNextMap = `no_gate_${nextMap}`;
         }
+        clearTimeout(rushInterval);
+        rushInterval = setTimeout(window.checkRushArrival, 500);
+        return;
+    }
+
+    if (window._lastRushNextMap !== nextMap) {
+        if (window.logExp) window.logExp(`🚪 Biegnę do osiągalnego przejścia na: ${nextMap} (d=${door.pathDistance})`, "#ba68c8");
+        if (window.logHero) window.logHero(`🚪 Biegnę do osiągalnego przejścia na: ${nextMap} (d=${door.pathDistance})`, "#ba68c8");
+        window._lastRushNextMap = nextMap;
+    }
+
+    window.rushLastX = Engine.hero.d.x;
+    window.rushLastY = Engine.hero.d.y;
+    stuckCount = 0;
+    window.rushGatewayArrivalTime = 0;
+
+    safeGoTo(door.stand.x, door.stand.y, false);
+    clearTimeout(rushInterval);
+    rushInterval = setTimeout(window.checkRushArrival, 500);
+}
     };
  window.checkRushArrival = function() {
         if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
