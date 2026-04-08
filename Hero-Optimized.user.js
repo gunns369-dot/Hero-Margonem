@@ -5722,18 +5722,90 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
     });
 
-// 7. STABILNE SORTOWANIE (Kto bliżej, ten ginie - bez priorytetu dla Elit)
-    validMobs.sort((a, b) => {
-        // Bezwzględny priorytet utrzymania celu (Lock na 3-5 sekund)
-        if (a.isLocked && !b.isLocked) return -1;
-        if (b.isLocked && !a.isLocked) return 1;
+// 7. ZAAWANSOWANE SORTOWANIE: Ścieżka Komiwojażera (TSP) z uwzględnieniem kolizji
+    if (validMobs.length > 0) {
+        // Zabezpieczenie: Jeśli trzymamy locka na jakimś mobie, nie musimy liczyć całej mapy od nowa
+        let hasLockedMob = validMobs.some(m => m.isLocked);
+        
+        if (!hasLockedMob) {
+            // Grupowanie potworów stojących obok siebie, żeby nie przeciążać algorytmu A*
+            let clusters = [];
+            validMobs.forEach(m => {
+                let added = false;
+                for (let c of clusters) {
+                    if (Math.max(Math.abs(c.x - m.x), Math.abs(c.y - m.y)) <= 2) {
+                        c.mobs.push(m);
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added) clusters.push({ x: m.x, y: m.y, mobs: [m] });
+            });
 
-        // Główna zasada: Bije to, co jest najbliżej (niezależnie czy to Elita, czy zwykły mob)
-        if (a.dist !== b.dist) return a.dist - b.dist;
+            // Wyliczanie najkrótszej łącznej ścieżki przez wszystkie klastry
+            let currX = hx;
+            let currY = hy;
+            let orderedMobs = [];
 
-        // Zabezpieczenie przed kręceniem się w miejscu
-        return String(a.id).localeCompare(String(b.id));
-    });
+            while (clusters.length > 0) {
+                let bestIdx = -1;
+                let bestScore = Infinity; // Zamiast dystansu w linii prostej, użyjemy kosztu kroków z A*
+
+                for (let i = 0; i < clusters.length; i++) {
+                    let c = clusters[i];
+                    
+                    // Szybki dystans w linii prostej jako wstępny filtr (Manhattan)
+                    let baseDist = Math.abs(currX - c.x) + Math.abs(currY - c.y);
+                    
+                    // Premia punktowa dla klastrów z większą ilością mobów lub z Elitami
+                    let rankBonus = 0;
+                    if (c.mobs.some(m => m.ranga === "elite2" || m.ranga === "hero")) rankBonus -= 15;
+                    else if (c.mobs.some(m => m.ranga === "elite1")) rankBonus -= 5;
+                    
+                    let clusterSizeBonus = c.mobs.length * 2; 
+                    
+                    // Szacowany "Koszt" dojścia do tego klastra
+                    let score = baseDist - clusterSizeBonus + rankBonus;
+
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestIdx = i;
+                    }
+                }
+
+                // Pobieramy najlepszy klaster, ustawiamy go jako zaliczony i przenosimy punkt startowy
+                let chosenCluster = clusters.splice(bestIdx, 1)[0];
+                
+                // Dokładne wyliczenie prawdziwej drogi A* (dla pewności, czy da się tam dojść)
+                let realPath = typeof window.findAStarPath === 'function' ? window.findAStarPath(currX, currY, chosenCluster.x, chosenCluster.y) : null;
+                
+                if (realPath && realPath.length > 0) {
+                    // Dodajemy moby z tego klastra do ostatecznej kolejki
+                    orderedMobs.push(...chosenCluster.mobs);
+                    currX = chosenCluster.x;
+                    currY = chosenCluster.y;
+                } else if (baseDist <= 1) {
+                    // Jeśli mob jest zaraz obok, po prostu go bijemy
+                    orderedMobs.push(...chosenCluster.mobs);
+                    currX = chosenCluster.x;
+                    currY = chosenCluster.y;
+                } else {
+                     // Brak drogi = Czarna Lista. Od razu ignorujemy wszystkie moby z tego klastra na przyszłość!
+                     chosenCluster.mobs.forEach(badMob => {
+                         window.expUnreachableMobs.add(badMob.x + "_" + badMob.y);
+                     });
+                }
+            }
+            validMobs = orderedMobs; // Zastępujemy surową listę naszą idealnie ułożoną ścieżką
+        } else {
+            // Jeśli trzymamy locka, mob zablokowany musi być na 1 miejscu
+            validMobs.sort((a, b) => {
+                if (a.isLocked && !b.isLocked) return -1;
+                if (b.isLocked && !a.isLocked) return 1;
+                return a.dist - b.dist;
+            });
+        }
+    }
 
     let target = validMobs.length > 0 ? validMobs[0] : null;
 
