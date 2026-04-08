@@ -2250,69 +2250,84 @@ if (isTeleportRoute) {
     rushInterval = setTimeout(window.checkRushArrival, 500);
 }
     };
- window.checkRushArrival = function() {
-        if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
-        let currentSysMap = lastMapName;
-        if (currentSysMap === rushTarget) { window.executeRushStep(); return; }
+window.checkRushArrival = function() {
+    if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
 
-       let nextMap = window.rushNextMap;
-if (!nextMap) return;
+    let currentSysMap = lastMapName;
+    if (currentSysMap === rushTarget) {
+        window.executeRushStep();
+        return;
+    }
 
-let tp = ZAKONNICY[currentSysMap];
-let baseDoor = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
-let isFakeDoor = baseDoor && tp && Math.abs(baseDoor.x - tp.x) <= 2 && Math.abs(baseDoor.y - tp.y) <= 2;
-if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) return;
+    let nextMap = window.rushNextMap;
+    if (!nextMap) return;
 
-let door = getBestReachableGatewayToMap(nextMap);
+    let tp = ZAKONNICY[currentSysMap];
+    let baseDoor = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
+    let isFakeDoor = baseDoor && tp &&
+        Math.abs(baseDoor.x - tp.x) <= 2 &&
+        Math.abs(baseDoor.y - tp.y) <= 2;
 
-if (!door) {
-    markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+    if (tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor)) {
+        return;
+    }
 
-    if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
-    if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
+    let door = getBestReachableGatewayToMap(nextMap);
 
-    window.rushNextMap = null;
-    clearTimeout(rushInterval);
-    rushInterval = setTimeout(window.executeRushStep, 250);
-    return;
-}
+    if (!door) {
+        markGatewayAsBlocked(currentSysMap, nextMap, 30000);
 
-let cx = Engine.hero.d.x;
-let cy = Engine.hero.d.y;
-let dist = door.pathDistance;
+        if (window.logHero) {
+            window.logHero(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
+        }
+        if (window.logExp) {
+            window.logExp(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
+        }
 
-     if (dist > 1) {
-    let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
-    window.rushGatewayArrivalTime = 0;
+        window.rushNextMap = null;
+        clearTimeout(rushInterval);
+        rushInterval = setTimeout(window.executeRushStep, 250);
+        return;
+    }
 
-    if (!isMoving) {
-        if (cx === window.rushLastX && cy === window.rushLastY) {
-            stuckCount++;
-            if (stuckCount > 6) {
-                safeGoTo(door.stand.x, door.stand.y, false);
+    let cx = parseInt(Engine.hero.d.x, 10);
+    let cy = parseInt(Engine.hero.d.y, 10);
+    let dist = door.pathDistance;
+
+    if (dist > 1) {
+        let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+        window.rushGatewayArrivalTime = 0;
+
+        if (!isMoving) {
+            if (cx === window.rushLastX && cy === window.rushLastY) {
+                stuckCount++;
+
+                if (stuckCount > 6) {
+                    safeGoTo(door.stand.x, door.stand.y, false);
+                    stuckCount = 0;
+                }
+            } else {
+                window.rushLastX = cx;
+                window.rushLastY = cy;
                 stuckCount = 0;
             }
         } else {
-            window.rushLastX = cx;
-            window.rushLastY = cy;
             stuckCount = 0;
         }
-    } else {
-        stuckCount = 0;
-    }
-}else {
-    // Jesteśmy już przy przejściu albo 1 kratkę od niego.
-    // Najpierw próbujemy wejść dokładnie NA pole bramy.
-    let hx = parseInt(Engine.hero.d.x);
-    let hy = parseInt(Engine.hero.d.y);
 
-    let exactGatewayDist = Math.max(Math.abs(hx - door.x), Math.abs(hy - door.y));
+        return;
+    }
+
+    // Stoimy przy przejściu lub obok niego — próbujemy wejść dokładnie na kratkę przejścia
+    let exactGatewayDist = Math.max(Math.abs(cx - door.x), Math.abs(cy - door.y));
 
     if (exactGatewayDist > 0 && exactGatewayDist <= 1) {
         safeGoTo(door.x, door.y, false);
     }
 
-    if (!window.rushGatewayArrivalTime) window.rushGatewayArrivalTime = Date.now();
+    if (!window.rushGatewayArrivalTime) {
+        window.rushGatewayArrivalTime = Date.now();
+    }
 
     if (Date.now() - window.rushGatewayArrivalTime > 3500) {
         if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
@@ -2325,18 +2340,22 @@ let dist = door.pathDistance;
 
         let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
         for (let d of dirs) {
-            let nx = hx + d[0], ny = hy + d[1];
+            let nx = cx + d[0];
+            let ny = cy + d[1];
+
             if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
-                if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
-                else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
-                else window._g(`walk=${nx},${ny}`);
+                if (window.originalAutoWalk) {
+                    window.originalAutoWalk.call(Engine.hero, nx, ny);
+                } else if (typeof Engine.hero.autoWalk === 'function') {
+                    Engine.hero.autoWalk(nx, ny);
+                } else {
+                    window._g(`walk=${nx},${ny}`);
+                }
                 break;
             }
         }
-}
-
-        rushInterval = setTimeout(window.checkRushArrival, 500);
-    };
+    }
+};
 
 // ==========================================
     // ALGORYTM DIJKSTRY (Z CZARNĄ LISTĄ BRAM I WAGAMI)
