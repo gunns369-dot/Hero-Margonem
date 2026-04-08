@@ -3262,12 +3262,11 @@ if (btnExp) {
         } else {
             this.innerHTML = "▶ START";
             this.style.borderColor = "#4caf50";
-            this.style.color = "#4caf50";
            // --- TWARDE WYJŚCIE Z PEŁNEGO EKRANU ---
-            if (botSettings.exp.autoFullscreen && document.fullscreenElement) {
-                document.exitFullscreen().catch(e => console.log("Błąd wyjścia z F11:", e));
-            }
-            // --------------------------------------
+        if (botSettings.exp.autoFullscreen && document.fullscreenElement && window.__captchaPhase === "none") {
+            document.exitFullscreen().catch(e => console.log("Błąd wyjścia z F11:", e));
+        }
+        // --------------------------------------
 
             // TWARDE ZATRZYMANIE BOTA I POSTACI
             window.isRushing = false;
