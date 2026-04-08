@@ -9768,7 +9768,94 @@ function drawWorldPathOverlay(path) {
     ctx.fillStyle = 'rgba(0, 229, 255, 0.95)';
     ctx.fill();
 }
+function ensureWorldPathOverlay() {
+    if (window.worldPathOverlayCanvas && document.body.contains(window.worldPathOverlayCanvas)) {
+        return window.worldPathOverlayCanvas;
+    }
 
+    const overlay = document.createElement('canvas');
+    overlay.id = 'margoWorldPathOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 999997;
+    `;
+    document.body.appendChild(overlay);
+    window.worldPathOverlayCanvas = overlay;
+    return overlay;
+}
+
+function clearWorldPathOverlay() {
+    const overlay = window.worldPathOverlayCanvas;
+    if (!overlay) return;
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+}
+
+function drawWorldPathOverlay(path) {
+    if (!window.radarShowWorldPath || !path || path.length < 2) {
+        clearWorldPathOverlay();
+        return;
+    }
+
+    const overlay = ensureWorldPathOverlay();
+    overlay.width = window.innerWidth;
+    overlay.height = window.innerHeight;
+
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    // najpierw próbujemy znaleźć faktyczny obszar gry
+    const mapEl =
+        document.querySelector('#centerbox') ||
+        document.querySelector('#ground') ||
+        document.querySelector('.ground-layer') ||
+        document.querySelector('.map2-container') ||
+        document.querySelector('.game-window');
+
+    if (!mapEl || typeof Engine === 'undefined' || !Engine.map) return;
+
+    const rect = mapEl.getBoundingClientRect();
+    const mapW = Engine.map.d.x;
+    const mapH = Engine.map.d.y;
+
+    const tileW = rect.width / mapW;
+    const tileH = rect.height / mapH;
+
+    ctx.beginPath();
+    ctx.moveTo(
+        rect.left + (path[0].x + 0.5) * tileW,
+        rect.top + (path[0].y + 0.5) * tileH
+    );
+
+    for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(
+            rect.left + (path[i].x + 0.5) * tileW,
+            rect.top + (path[i].y + 0.5) * tileH
+        );
+    }
+
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.9)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([7, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const last = path[path.length - 1];
+    ctx.beginPath();
+    ctx.arc(
+        rect.left + (last.x + 0.5) * tileW,
+        rect.top + (last.y + 0.5) * tileH,
+        5,
+        0,
+        Math.PI * 2
+    );
+    ctx.fillStyle = 'rgba(0, 229, 255, 0.95)';
+    ctx.fill();
+}
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
     let win = document.getElementById('margoRadarWindow');
@@ -9928,40 +10015,51 @@ function renderTacticalRadar() {
         });
     }
 
-    if (window.isExping && window.expCurrentTargetGroupKey) {
-        const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
-        if (activeGroup && activeGroup.bestStand) {
-            const path = buildPathToTarget(
-                Engine.hero.d.x,
-                Engine.hero.d.y,
-                activeGroup.bestStand.x,
-                activeGroup.bestStand.y
+if (window.isExping && window.expCurrentTargetGroupKey) {
+    const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
+
+    if (activeGroup && activeGroup.bestStand) {
+        const path = buildPathToTarget(
+            Engine.hero.d.x,
+            Engine.hero.d.y,
+            activeGroup.bestStand.x,
+            activeGroup.bestStand.y
+        );
+
+        if (path.length > 1) {
+            // trasa na radarze
+            ctx.beginPath();
+            ctx.moveTo(
+                offsetX + (path[0].x * scale) + (scale / 2),
+                offsetY + (path[0].y * scale) + (scale / 2)
             );
 
-            if (path.length > 1) {
-                ctx.beginPath();
-                ctx.moveTo(
-                    offsetX + (path[0].x * scale) + (scale / 2),
-                    offsetY + (path[0].y * scale) + (scale / 2)
+            for (let i = 1; i < path.length; i++) {
+                ctx.lineTo(
+                    offsetX + (path[i].x * scale) + (scale / 2),
+                    offsetY + (path[i].y * scale) + (scale / 2)
                 );
-
-                for (let i = 1; i < path.length; i++) {
-                    ctx.lineTo(
-                        offsetX + (path[i].x * scale) + (scale / 2),
-                        offsetY + (path[i].y * scale) + (scale / 2)
-                    );
-                }
-
-                ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                drawWorldPathOverlay(path);
-            } else {
-                clearWorldPathOverlay();
             }
+
+            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // trasa na prawdziwej mapie
+            drawWorldPathOverlay(path);
+        } else {
+            clearWorldPathOverlay();
+        }
+
+        drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
+    } else {
+        clearWorldPathOverlay();
+    }
+} else {
+    clearWorldPathOverlay();
+}
 
             drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
         } else {
