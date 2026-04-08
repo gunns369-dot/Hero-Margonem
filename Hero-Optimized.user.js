@@ -5448,7 +5448,8 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
 
         expCurrentTargetId = null;
-        window.expTargetLockTime = 0;
+window.expCurrentTargetGroupKey = null;
+window.expTargetLockTime = 0;
         window.expLastMoveTx = -1;
         window.expLastMoveTy = -1;
 
@@ -5554,7 +5555,10 @@ expAttackLockUntil = 0;
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
                 Engine.hero.autoGoTo({ x: stepX, y: stepY });
                 expAntiLagTime = now + 2000; expMapTransitionCooldown = now + 2000; expLastActionTime = now + 500;
-                expCurrentTargetId = null; window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                expCurrentTargetId = null;
+window.expCurrentTargetGroupKey = null;
+window.expLastMoveTx = -1;
+window.expLastMoveTy = -1;
                 window.expGatewayStandTime = 0;
             }
             return;
@@ -5704,7 +5708,7 @@ serverGroups.sort((a, b) => {
     return String(a.key).localeCompare(String(b.key));
 });
 
-let targetGroup = serverGroups.lelet targetGroup = null;
+let targetGroup = null;
 
 const nearbySmallCleanup = serverGroups
     .filter(g => g.bestPathDistance <= 8 && g.mobs.length <= 2)
@@ -5714,7 +5718,8 @@ if (nearbySmallCleanup.length > 0) {
     targetGroup = nearbySmallCleanup[0];
 } else {
     targetGroup = serverGroups.length > 0 ? serverGroups[0] : null;
-}ngth > 0 ? serverGroups[0] : null;
+}
+
 let target = targetGroup ? targetGroup.bestTargetMob : null;
 
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
@@ -5793,7 +5798,7 @@ if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} |
 
                     if (timeStandingStill > 1000 && (now % 1000 < 150)) {
                         if (now >= nextAllowedClickTime) {
-                            Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                            Engine.hero.autoGoTo({ x: targetGroup.bestStand.x, y: targetGroup.bestStand.y });
                             nextAllowedClickTime = now + 350;
                         }
                     }
@@ -5805,7 +5810,7 @@ if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} |
 
         // --- WALKA ---
         if (targetDist <= 1) {
-            if (displayTarget) displayTarget.innerText = `Walka: ${target.groupLabel}`;
+            if (displayTarget) displayTarget.innerText = `Walka: ${targetGroup.label}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
