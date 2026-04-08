@@ -5749,23 +5749,20 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
             while (clusters.length > 0) {
                 let bestIdx = -1;
-                let bestScore = Infinity; // Zamiast dystansu w linii prostej, użyjemy kosztu kroków z A*
+                let bestScore = Infinity; 
 
                 for (let i = 0; i < clusters.length; i++) {
                     let c = clusters[i];
                     
-                    // Szybki dystans w linii prostej jako wstępny filtr (Manhattan)
-                    let baseDist = Math.abs(currX - c.x) + Math.abs(currY - c.y);
+                    let dist = Math.abs(currX - c.x) + Math.abs(currY - c.y);
                     
-                    // Premia punktowa dla klastrów z większą ilością mobów lub z Elitami
                     let rankBonus = 0;
                     if (c.mobs.some(m => m.ranga === "elite2" || m.ranga === "hero")) rankBonus -= 15;
                     else if (c.mobs.some(m => m.ranga === "elite1")) rankBonus -= 5;
                     
                     let clusterSizeBonus = c.mobs.length * 2; 
                     
-                    // Szacowany "Koszt" dojścia do tego klastra
-                    let score = baseDist - clusterSizeBonus + rankBonus;
+                    let score = dist - clusterSizeBonus + rankBonus;
 
                     if (score < bestScore) {
                         bestScore = score;
@@ -5773,32 +5770,27 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                     }
                 }
 
-                // Pobieramy najlepszy klaster, ustawiamy go jako zaliczony i przenosimy punkt startowy
                 let chosenCluster = clusters.splice(bestIdx, 1)[0];
+                let distToCluster = Math.abs(currX - chosenCluster.x) + Math.abs(currY - chosenCluster.y);
                 
-                // Dokładne wyliczenie prawdziwej drogi A* (dla pewności, czy da się tam dojść)
                 let realPath = typeof window.findAStarPath === 'function' ? window.findAStarPath(currX, currY, chosenCluster.x, chosenCluster.y) : null;
                 
                 if (realPath && realPath.length > 0) {
-                    // Dodajemy moby z tego klastra do ostatecznej kolejki
                     orderedMobs.push(...chosenCluster.mobs);
                     currX = chosenCluster.x;
                     currY = chosenCluster.y;
-                } else if (baseDist <= 1) {
-                    // Jeśli mob jest zaraz obok, po prostu go bijemy
+                } else if (distToCluster <= 1) { // <--- TUTAJ BYŁ BŁĄD, TERAZ JEST NAPRAWIONY
                     orderedMobs.push(...chosenCluster.mobs);
                     currX = chosenCluster.x;
                     currY = chosenCluster.y;
                 } else {
-                     // Brak drogi = Czarna Lista. Od razu ignorujemy wszystkie moby z tego klastra na przyszłość!
                      chosenCluster.mobs.forEach(badMob => {
                          window.expUnreachableMobs.add(badMob.x + "_" + badMob.y);
                      });
                 }
             }
-            validMobs = orderedMobs; // Zastępujemy surową listę naszą idealnie ułożoną ścieżką
+            validMobs = orderedMobs; 
         } else {
-            // Jeśli trzymamy locka, mob zablokowany musi być na 1 miejscu
             validMobs.sort((a, b) => {
                 if (a.isLocked && !b.isLocked) return -1;
                 if (b.isLocked && !a.isLocked) return 1;
