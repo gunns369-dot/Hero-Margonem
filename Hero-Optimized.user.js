@@ -3707,17 +3707,17 @@ selHero.addEventListener('change', (e) => {
 
       // --- MODUŁ EXPORTU / IMPORTU DO PLIKU ---
         let keysToSave = ['hero_global_gateways_v20', 'hero_map_order_v20', 'hero_settings_db_v64', 'exp_profiles_v64_4', 'hero_boss_coords_v64', 'hero_teleports_by_nick_v64'];
-        
+
         let btnExport = document.getElementById('btnExportFile');
         if (btnExport) {
             btnExport.addEventListener('click', () => {
                 let backup = {};
                 keysToSave.forEach(k => { if(localStorage.getItem(k)) backup[k] = localStorage.getItem(k); });
-                
+
                 // Tworzenie wirtualnego pliku JSON
                 let blob = new Blob([JSON.stringify(backup, null, 2)], {type: "application/json"});
                 let url = URL.createObjectURL(blob);
-                
+
                 // Wymuszenie pobrania
                 let a = document.createElement('a');
                 a.href = url;
@@ -3726,7 +3726,7 @@ selHero.addEventListener('change', (e) => {
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                
+
                 heroAlert("✅ Plik z zapisaną pamięcią bota został pomyślnie wygenerowany i pobrany na Twój komputer!");
             });
         }
@@ -3741,7 +3741,7 @@ selHero.addEventListener('change', (e) => {
                 input.onchange = e => {
                     let file = e.target.files[0];
                     if (!file) return;
-                    
+
                     let reader = new FileReader();
                     reader.onload = function(ev) {
                         try {
@@ -4611,13 +4611,13 @@ function stopPatrol(hardStop = true) {
             }
         }
        isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
-        
+
         // --- AUTO FULLSCREEN ---
         if (botSettings.exp.autoFullscreen && !document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(e => console.log("Błąd F11:", e));
         }
         // -----------------------
-        
+
         let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336";
 
         window.logHero(`Rozpoczęto patrol (Heros: ${hero}).`, "#4caf50");
@@ -5070,7 +5070,7 @@ function getExpMobsFromDrawableList(hero, minL, maxL) {
         .filter(n => {
             if (!n) return false;
             if (typeof n.x !== 'number' || typeof n.y !== 'number') return false;
-            
+
             // --- INTEGRACJA Z RADAREM (Omijanie szarych kropek) ---
             if (window.margoWalkableMask && window.margoWalkableMask.size > 0) {
                 let isReachable = false;
@@ -5083,7 +5083,7 @@ function getExpMobsFromDrawableList(hero, minL, maxL) {
                     if(isReachable) break;
                 }
                 // Jeśli potwór nie dotyka dostępnego terenu - zignoruj go!
-                if (!isReachable) return false; 
+                if (!isReachable) return false;
             }
             // ------------------------------------------------------
 
@@ -5092,7 +5092,7 @@ function getExpMobsFromDrawableList(hero, minL, maxL) {
             const lvl = parseInt(n.lvl, 10);
             if (isNaN(lvl) || lvl <= 0) return false;
             if (lvl < minL || lvl > maxL) return false;
-            
+
             return true;
         })
         .map(n => ({
@@ -5774,10 +5774,10 @@ if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} |
                         let badCoordKey = target.x + "_" + target.y;
                         window.expUnreachableMobs.add(badCoordKey);
                         expCurrentTargetId = null;
-                        window.expTargetLockTime = 0; 
+                        window.expTargetLockTime = 0;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
                         if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                        
+
                         // KRYTYCZNY PUNKT: Jeśli zacięliśmy się 3 razy z rzędu, wymuszamy wyjście z mapy!
                         if (window.expConsecutiveStucks >= 3) {
                             window.logExp(`🚧 Zbyt wiele blokad z rzędu! Uznaję mapę za niedostępną i idę dalej.`, "#ff9800");
@@ -5791,7 +5791,7 @@ if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} |
                             let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
                             Engine.hero.autoGoTo({ x: rx, y: ry });
                         }
-                        
+
                         expLastActionTime = now + 1000;
                         return;
                     }
@@ -7530,7 +7530,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
       if (isDead && !window.__unconscious) {
             window.__unconscious = true;
             if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zamykam walkę i zatrzymuję bota...", "#e53935");
-            
+
             // --- WYMUSZONE ZAMKNIĘCIE OKNA WALKI ---
             if (typeof Engine !== 'undefined' && Engine.battle) {
                 if (typeof Engine.battle.close === 'function') Engine.battle.close();
@@ -7539,9 +7539,9 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', keyCode: 90, which: 90 }));
             // Symulacja kliknięcia w fizyczny przycisk "Opuść walkę"
             let closeZ = document.querySelector('.battle-close, .button.close, [data-tip*="Opuść walkę"]');
-            if (closeZ) { 
-                closeZ.click(); 
-                if (window.jQuery) window.jQuery(closeZ).click(); 
+            if (closeZ) {
+                closeZ.click();
+                if (window.jQuery) window.jQuery(closeZ).click();
             }
             // ---------------------------------------
 
@@ -7772,17 +7772,17 @@ if (isDead) {
           if (!window.autoSellState.active && !window.autoPotState.active && botSettings.autopot && botSettings.autopot.enabled) {
                     let potCount = Object.values(Engine.heroEquipment.getHItems?.() || {}).filter(i => Number(i?.st) === 0 && Number(i?.cl) === 16 && i?.getLeczyStat?.() != null).reduce((sum, i) => sum + (Number(i?.getAmount?.()) || 1), 0);
                     if (potCount <= 0) {
-                        
+
                         // ZABEZPIECZENIE: Czy mamy miejsce w plecaku na mikstury?
                         let s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
                         let requiredStacks = botSettings.autopot.stacks || 14;
-                        
+
                         if (s.freeSlots < requiredStacks && botSettings.autosell && botSettings.autosell.enabled) {
                             if (window.logHero) window.logHero("🎒 Za mało miejsca na potki! Najpierw idę sprzedać śmieci...", "#ffb300");
                             if (window.logExp) window.logExp("🎒 Za mało miejsca na potki! Najpierw idę sprzedać śmieci...", "#ffb300");
-                            
+
                             if (typeof stopPatrol === 'function') stopPatrol(true);
-                            sessionStorage.removeItem('hero_autosell_ignore'); 
+                            sessionStorage.removeItem('hero_autosell_ignore');
                             window.autoSellState.ignoreUntil = 0;
                             window.autoSellState.active = true;
                             window.autoSellState.step = 1;
@@ -7790,7 +7790,7 @@ if (isDead) {
                             window.autoSellState.failedNPCs = [];
                             window.isRushingToShop = false;
                             window.isRushing = true;
-                            
+
                             window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                             if (window.autoSellState.wasBerserkOn) {
                                 botSettings.berserk.enabled = false;
@@ -8563,9 +8563,9 @@ window.openShopAsync = async (namePart) => {
                 let targetSymbol = null;
 
                 for (let key in symbolMap) {
-                    if (qText.includes(key) || qText.includes(symbolMap[key])) { 
-                        targetSymbol = symbolMap[key]; 
-                        break; 
+                    if (qText.includes(key) || qText.includes(symbolMap[key])) {
+                        targetSymbol = symbolMap[key];
+                        break;
                     }
                 }
 
@@ -8628,7 +8628,7 @@ window.openShopAsync = async (namePart) => {
 
                 let isRedMap = Engine.map.d.pvp === 2;
                 let shouldFlee = false;
-                
+
                 // --- LOGIKA UCIECZKI Z MAP PVP ---
                 if (isRedMap && botSettings.exp.pvpFlee) {
                     newPlayers.forEach(p => {
@@ -8639,24 +8639,24 @@ window.openShopAsync = async (namePart) => {
 
                 if (shouldFlee) {
                     if (window.logExp) window.logExp(`🚨 UWAGA! Wróg < 6 kratek na mapie PvP! Ewakuacja na inną mapę!`, "#ff5252");
-                    
+
                     // Banujemy mapę w logice pętli na równe 10 minut
                     let banTime = Date.now() + 10 * 60 * 1000;
                     window.__bannedMaps = window.__bannedMaps || {};
                     window.__bannedMaps[Engine.map.d.name] = banTime;
-                    
+
                     if (!window.mapClearTimes) window.mapClearTimes = {};
-                    window.mapClearTimes[Engine.map.d.name] = banTime; 
+                    window.mapClearTimes[Engine.map.d.name] = banTime;
 
                     // Przerywamy obecną akcję i wymuszamy natychmiastowe obliczenie nowej drogi
                     expCurrentTargetId = null;
 window.expCurrentTargetGroupKey = null;
 window.expLastMoveTx = -1;
 window.expLastMoveTy = -1;
-                    window.isRushing = false; 
-                    expMapTransitionCooldown = 0; 
-                    expLastActionTime = 0; 
-                    
+                    window.isRushing = false;
+                    expMapTransitionCooldown = 0;
+                    expLastActionTime = 0;
+
                     if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
                 } else {
                     // Tradycyjne powiadomienia i (ewentualne) zatrzymanie bota
@@ -8782,13 +8782,13 @@ window.expLastMoveTy = -1;
                 window.stuckIdleCount = 0;
                 return;
             }
-            
+
             // --- KRYTYCZNE WYJĄTKI (Kiedy bot stoi CELOWO i nie wolno mu przeszkadzać) ---
             if (Engine.battle && Engine.battle.show) { window.stuckIdleCount = 0; return; }
             if (Engine.dead || Engine.hero.d.dead) { window.stuckIdleCount = 0; return; }
             if (window.isHealLocked || window.isRegeneratingToFull) { window.stuckIdleCount = 0; return; }
             if (window.__captchaPhase && window.__captchaPhase !== "none") { window.stuckIdleCount = 0; return; }
-            
+
             // Wyjątki Sklepowe (Auto-Poty, Auto-Sprzedaż, Bieg do NPC)
             if (window.autoSellState && window.autoSellState.active) { window.stuckIdleCount = 0; return; }
             if (window.autoPotState && window.autoPotState.active) { window.stuckIdleCount = 0; return; }
@@ -9225,14 +9225,14 @@ window.expLastMoveTy = -1;
                 if (now - lastLostCloseTime < 1500) return; // Cooldown na kliknięcie
 
                 const btn = document.querySelector("div.button.green.close-battle-ground.small, .close-battle-btn, .battle-close-button");
-                
+
                 if (btn && getComputedStyle(btn).display !== "none" && getComputedStyle(btn).visibility !== "hidden") {
                     lastLostCloseTime = now;
-                    
+
                     // Podwójne, bezpieczne kliknięcie
                     if (window.jQuery) jQuery(btn).trigger('click');
                     if (typeof btn.click === 'function') btn.click();
-                    
+
                     if (window.logExp) window.logExp("💀 Przegrana walka! Automatycznie opuszczam pole bitwy...", "#e53935");
                     else if (window.logHero) window.logHero("💀 Przegrana walka! Zamykam...", "#e53935");
                 }
@@ -9242,13 +9242,13 @@ window.expLastMoveTy = -1;
 // ==========================================
 // PŁYWAJĄCY RADAR TAKTYCZNY (DRAG & RESIZE)
 // ==========================================
-window.margoWalkableMask = new Set();\
+window.margoWalkableMask = new Set();
     window.radarCompactMode = false;
 window.radarShowGateways = true;
 window.radarShowWorldPath = false;
 window.radarGatewayCache = [];
 window.worldPathOverlayCanvas = null;
-    
+
 function initFloatingRadarUI() {
     if (document.getElementById('margoRadarWindow')) return;
 
@@ -9359,7 +9359,7 @@ worldPathToggle.onchange = () => {
         let scale = Math.min(canvas.width / w, canvas.height / h);
         let offX = (canvas.width - (w * scale)) / 2;
         let offY = (canvas.height - (h * scale)) / 2;
-        
+
         let clickX = Math.floor((e.clientX - canvas.getBoundingClientRect().left - offX) / scale);
         let clickY = Math.floor((e.clientY - canvas.getBoundingClientRect().top - offY) / scale);
 
@@ -9371,20 +9371,20 @@ worldPathToggle.onchange = () => {
 
 function updateWalkableArea() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
-    
+
     window.margoWalkableMask.clear();
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
     let queue = [[Engine.hero.d.x, Engine.hero.d.y]];
     let visited = new Set();
     let getKey = (x,y) => `${x}_${y}`;
-    
+
     visited.add(getKey(Engine.hero.d.x, Engine.hero.d.y));
 
     while(queue.length > 0) {
         let [cx, cy] = queue.shift();
         window.margoWalkableMask.add(getKey(cx, cy));
-        
+
         let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [-1,1], [1,-1]];
         for(let d of dirs) {
             let nx = cx + d[0], ny = cy + d[1];
@@ -9447,7 +9447,7 @@ function updateWalkableArea() {
 
     return distMap;
 }
-    
+
 function buildPathToTarget(startX, startY, targetX, targetY) {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return [];
 
