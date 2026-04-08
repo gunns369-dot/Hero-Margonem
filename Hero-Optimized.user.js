@@ -2833,8 +2833,16 @@ function initGUI() {
                             </div>
                         </div>
                     </div>
-                 <div class="accordion-header" id="accAdvancedExp" onclick="toggleSettingsAcc('accAdvancedExp')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ZAAWANSOWANE (Alarmy / Opcje walki)</div>
-                    <div id="accAdvancedExpContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
+                 <div class="accordion-header" id="accAlerts" onclick="toggleSettingsAcc('accAlerts')" style="background: rgba(33, 150, 243, 0.2); border-color: #2196f3; color: #2196f3; margin-top: 5px; margin-bottom: 0;">▼ ALARMY I POWIADOMIENIA</div>
+                    <div id="accAlertsContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #2196f3; border-top: none; margin-bottom: 5px;">
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <button id="btnOpenBrowserAlertsModule" class="btn-sepia" style="background:#ff9800; border-color:#f57c00; width:100%; padding:6px; font-weight:bold; font-size:11px;">🔔 POWIADOMIENIA PRZEGLĄDARKI</button>
+                            <button id="btnOpenDiscordModule" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; padding:6px; font-weight:bold; font-size:11px;">💬 KONFIGURACJA DISCORD</button>
+                        </div>
+                    </div>
+
+                    <div class="accordion-header" id="accExpRules" onclick="toggleSettingsAcc('accExpRules')" style="background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #ba68c8; margin-top: 5px; margin-bottom: 0;">▼ ZASADY WALKI I BEZPIECZEŃSTWO</div>
+                    <div id="accExpRulesContent" style="display:none; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid #9c27b0; border-top: none; margin-bottom: 5px;">
                         <label style="color:#a99a75; font-size:10px; margin-bottom:0; margin-top:2px;">Przedział poziomowy (Automatyczny +1 przy awansie):</label>
                         <div class="nav-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:2px;">
                             <label>Min Lvl: <input type="number" id="expMinL" value="${botSettings.exp.minLvl}" style="background:#000;"></label>
@@ -2845,10 +2853,9 @@ function initGUI() {
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expN" ${botSettings.exp.normal ? 'checked' : ''}> Zwykłe</label>
                             <label style="margin:0; cursor:pointer;"><input type="checkbox" id="expE" ${botSettings.exp.elite ? 'checked' : ''}> Elity I</label>
                         </div>
-
-                        <div style="border-top:1px solid #333; padding-top:6px; display:flex; flex-direction:column; gap:6px;">
-                            <button id="btnOpenBrowserAlertsModule" class="btn-sepia" style="background:#ff9800; border-color:#f57c00; width:100%; margin-top:2px; padding:6px; font-weight:bold; font-size:11px;">🔔 POWIADOMIENIA PRZEGLĄDARKI</button>
-                            <button id="btnOpenDiscordModule" class="btn-sepia" style="background:#5865F2; border-color:#4752C4; width:100%; margin-top:2px; padding:6px; font-weight:bold; font-size:11px;">💬 KONFIGURACJA DISCORD</button>
+                        <div style="border-top:1px solid #333; padding-top:6px; margin-top:4px;">
+                            <label style="color:#ff5252; font-size:10px; cursor:pointer; display:block; margin-bottom:4px;" title="Ucieka na 10 minut z czerwonej mapy, gdy gracz jest bliżej niż 6 kratek"><input type="checkbox" id="pvpFlee" ${botSettings.exp.pvpFlee ? 'checked' : ''}> 🏃 Uciekaj z map PvP</label>
+                            <label style="color:#00acc1; font-size:10px; cursor:pointer; display:block;" title="Wymusza tryb F11 przy starcie bota i wyłącza przy zatrzymaniu."><input type="checkbox" id="autoFullscreen" ${botSettings.exp.autoFullscreen ? 'checked' : ''}> 🖥️ Auto-Pełny Ekran (F11)</label>
                         </div>
                     </div>
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
@@ -3037,7 +3044,7 @@ function initGUI() {
     function handleGlobalKeydown(e) { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (botSettings.toggleKey && e.code === botSettings.toggleKey) { window.toggleMainVisibility(); } }
 
 // --- MODUŁ: POWIADOMIENIA PRZEGLĄDARKI ---
-      const browserAlertsGui = document.createElement('div'); browserAlertsGui.id = 'browserAlertsSettingsGUI'; browserAlertsGui.className = 'hero-window'; browserAlertsGui.style.display = 'none'; browserAlertsGui.style.top = '60px'; browserAlertsGui.style.left = '400px'; browserAlertsGui.style.width = '320px';
+        const browserAlertsGui = document.createElement('div'); browserAlertsGui.id = 'browserAlertsSettingsGUI'; browserAlertsGui.className = 'hero-window'; browserAlertsGui.style.display = 'none'; browserAlertsGui.style.top = '60px'; browserAlertsGui.style.left = '400px'; browserAlertsGui.style.width = '320px';
         browserAlertsGui.innerHTML = `
             <div class="gui-header" style="color:#ff9800;">🔔 Powiadomienia Przeglądarki <button class="btn-close" onclick="document.getElementById('browserAlertsSettingsGUI').style.display='none'">✖</button></div>
             <div class="gui-content" style="gap:8px;">
@@ -3045,10 +3052,6 @@ function initGUI() {
                 <div style="border-top:1px solid #333; padding-top:6px;">
                     <label style="color:#ffb300; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
                     <label style="color:#e0d8c0; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;"><input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu</label>
-                    <label style="color:#ff5252; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;" title="Ucieka na 10 minut z czerwonej mapy, gdy gracz jest bliżej niż 6 kratek"><input type="checkbox" id="pvpFlee" ${botSettings.exp.pvpFlee ? 'checked' : ''}> 🏃 Uciekaj z map PvP</label>
-                </div>
-                <div style="border-top:1px solid #333; padding-top:6px;">
-                    <label style="color:#00acc1; font-size:11px; cursor:pointer; font-weight:bold;" title="Wymusza tryb F11 przy starcie bota, co gwarantuje 100% precyzję kliknięć Pythona."><input type="checkbox" id="autoFullscreen" ${botSettings.exp.autoFullscreen ? 'checked' : ''}> 🖥️ Auto-Pełny Ekran (F11)</label>
                 </div>
                 <div style="border-top:1px solid #333; padding-top:6px;">
                     <label style="color:#e040fb; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat (Prywatne)</label>
@@ -3260,6 +3263,11 @@ if (btnExp) {
             this.innerHTML = "▶ START";
             this.style.borderColor = "#4caf50";
             this.style.color = "#4caf50";
+           // --- TWARDE WYJŚCIE Z PEŁNEGO EKRANU ---
+            if (botSettings.exp.autoFullscreen && document.fullscreenElement) {
+                document.exitFullscreen().catch(e => console.log("Błąd wyjścia z F11:", e));
+            }
+            // --------------------------------------
 
             // TWARDE ZATRZYMANIE BOTA I POSTACI
             window.isRushing = false;
@@ -4552,6 +4560,11 @@ function optimizeRoute() {
 function stopPatrol(hardStop = true) {
         let wasMoving = isPatrolling || isRushing;
         isPatrolling = false;
+    // --- TWARDE WYJŚCIE Z PEŁNEGO EKRANU ---
+        if (botSettings.exp.autoFullscreen && document.fullscreenElement) {
+            document.exitFullscreen().catch(e => console.log("Błąd wyjścia z F11:", e));
+        }
+        // --------------------------------------
         isRushing = false;
         window.isRushing = false;
         window.isRushingToShop = false;
