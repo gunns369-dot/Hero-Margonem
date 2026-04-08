@@ -1,3 +1,4 @@
+
 // ==UserScript==
 // @name         MargoNeuro - Optimized Edition
 // @version      64.3
@@ -5590,7 +5591,6 @@ if (mapsPool.includes(currMap) && !isMapTemporarilyCleared(currMap)) {
                 targetExpMap = currMap; // Pętla skończona, czekamy na respawn
             }
         }
-    }
 
     if (currMap !== targetExpMap) {
         let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
@@ -6087,8 +6087,9 @@ if (now < expMapTransitionCooldown) return;
     // Przekazujemy kontrolę wyżej w następnym cyklu - bot ułoży cel na nową jaskinię i od razu do niej pobiegnie.
     expLastActionTime = now + 200;
     return;
-} // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
+ // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
 setInterval(runExpLogic, 150);
+
     // --- BAZA DANYCH PROFILI EXPOWISK ---
 
     window.saveCurrentExpProfile = function() {
