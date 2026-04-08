@@ -9706,15 +9706,15 @@ function renderTacticalRadar() {
         ctx.strokeRect(boxX, boxY, boxW, boxH);
 
         ctx.fillStyle = color;
-        ctx.font = '11px Tahoma';
-        ctx.shadowBlur = 2;
-        ctx.shadowColor = '#000';
-        ctx.fillTctx.fillText(
+ctx.font = '11px Tahoma';
+ctx.shadowBlur = 2;
+ctx.shadowColor = '#000';
+ctx.fillText(
     `${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} tail=${g.tailPenalty || 0} s=${g.score}`,
     boxX,
     boxY - 3
-);ext(`${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} s=${g.score}`, boxX, boxY - 3);
-        ctx.shadowBlur = 0;
+);
+ctx.shadowBlur = 0;
     });
 
    if (window.isExping && window.expCurrentTargetGroupKey) {
