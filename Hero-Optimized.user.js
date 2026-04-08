@@ -9243,7 +9243,7 @@ window.expLastMoveTy = -1;
 // PŁYWAJĄCY RADAR TAKTYCZNY (DRAG & RESIZE)
 // ==========================================
 window.margoWalkableMask = new Set();
-    window.radarCompactMode = false;
+window.radarCompactMode = false;
 window.radarShowGateways = true;
 window.radarShowWorldPath = false;
 window.radarGatewayCache = [];
@@ -9252,40 +9252,35 @@ window.worldPathOverlayCanvas = null;
 function initFloatingRadarUI() {
     if (document.getElementById('margoRadarWindow')) return;
 
-    // 1. Przypisanie do przycisku z głównego interfejsu
     let toggleBtn = document.getElementById('btnToggleRadar');
-    if (!toggleBtn) return; // Czeka aż UI się wygeneruje
+    if (!toggleBtn) return;
 
-    // 2. Pływające okno Radaru
     let win = document.createElement('div');
     win.id = 'margoRadarWindow';
-    // Parametr resize: both pozwala na rozciąganie okna
-    win.style.cssText = 'display:none; position:fixed; top:50px; right:50px; width:350px; height:350px; background:#0a0a0a; border:2px solid #333; border-radius: 6px; z-index:999998; resize:both; overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9); flex-direction:column;';
+    win.style.cssText = 'display:none; position:fixed; top:50px; right:50px; width:350px; height:350px; background:#0a0a0a; border:2px solid #333; border-radius:6px; z-index:999998; resize:both; overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9); flex-direction:column;';
 
-    // 3. Nagłówek (do przesuwania okna)
     let header = document.createElement('div');
-    header.style.cssText = 'background:#111; padding:8px 10px; cursor:move; color:#00acc1; font-weight:bold; font-size:12px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center; user-select:none; font-family: Tahoma, sans-serif;';
-   header.innerHTML = `
-    <span>🎯 Podgląd Mapy</span>
-    <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
-        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-            <input type="checkbox" id="radarCompactToggle">
-            Compact
-        </label>
-        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-            <input type="checkbox" id="radarGatewaysToggle" checked>
-            Przejścia
-        </label>
-        <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
-            <input type="checkbox" id="radarWorldPathToggle">
-            Trasa na mapie
-        </label>
-        <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
-    </div>
-`;
+    header.style.cssText = 'background:#111; padding:8px 10px; cursor:move; color:#00acc1; font-weight:bold; font-size:12px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center; user-select:none; font-family:Tahoma,sans-serif;';
+    header.innerHTML = `
+        <span>🎯 Podgląd Mapy</span>
+        <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
+            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+                <input type="checkbox" id="radarCompactToggle">
+                Compact
+            </label>
+            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+                <input type="checkbox" id="radarGatewaysToggle" checked>
+                Przejścia
+            </label>
+            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;">
+                <input type="checkbox" id="radarWorldPathToggle">
+                Trasa na mapie
+            </label>
+            <span id="closeRadarBtn" style="cursor:pointer; color:#e53935; padding:0 5px; font-size:14px;">✖</span>
+        </div>
+    `;
     win.appendChild(header);
 
-    // 4. Kontener na Canvas
     let canvasWrap = document.createElement('div');
     canvasWrap.style.cssText = 'flex:1; position:relative; overflow:hidden; background:#000; cursor:crosshair;';
     let canvas = document.createElement('canvas');
@@ -9296,64 +9291,58 @@ function initFloatingRadarUI() {
 
     document.body.appendChild(win);
 
-    // --- LOGIKA UI ---
-
-    // Toggle widoczności
     toggleBtn.onclick = () => {
         win.style.display = win.style.display === 'none' ? 'flex' : 'none';
     };
     document.getElementById('closeRadarBtn').onclick = () => win.style.display = 'none';
 
     const compactToggle = document.getElementById('radarCompactToggle');
-const gatewaysToggle = document.getElementById('radarGatewaysToggle');
-const worldPathToggle = document.getElementById('radarWorldPathToggle');
+    const gatewaysToggle = document.getElementById('radarGatewaysToggle');
+    const worldPathToggle = document.getElementById('radarWorldPathToggle');
 
-compactToggle.checked = !!window.radarCompactMode;
-gatewaysToggle.checked = !!window.radarShowGateways;
-worldPathToggle.checked = !!window.radarShowWorldPath;
+    compactToggle.checked = !!window.radarCompactMode;
+    gatewaysToggle.checked = !!window.radarShowGateways;
+    worldPathToggle.checked = !!window.radarShowWorldPath;
 
-compactToggle.onchange = () => {
-    window.radarCompactMode = compactToggle.checked;
-};
-
-gatewaysToggle.onchange = () => {
-    window.radarShowGateways = gatewaysToggle.checked;
-};
-
-worldPathToggle.onchange = () => {
-    window.radarShowWorldPath = worldPathToggle.checked;
-    if (!window.radarShowWorldPath) {
-        clearWorldPathOverlay();
-    }
-};
-
-    // Przesuwanie okna (Drag)
-    let isDragging = false;
-    let offsetX, offsetY;
-    header.onmousedown = (e) => {
-        if (e.target.id === 'closeRadarBtn') return;
-        isDragging = true;
-        offsetX = e.clientX - win.getBoundingClientRect().left;
-        offsetY = e.clientY - win.getBoundingClientRect().top;
+    compactToggle.onchange = () => {
+        window.radarCompactMode = compactToggle.checked;
     };
+    gatewaysToggle.onchange = () => {
+        window.radarShowGateways = gatewaysToggle.checked;
+    };
+    worldPathToggle.onchange = () => {
+        window.radarShowWorldPath = worldPathToggle.checked;
+        if (!window.radarShowWorldPath) clearWorldPathOverlay();
+    };
+
+    let isDragging = false;
+    let dragOffsetX, dragOffsetY;
+
+    header.onmousedown = (e) => {
+        if (e.target.id === 'closeRadarBtn' || e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
+        isDragging = true;
+        dragOffsetX = e.clientX - win.getBoundingClientRect().left;
+        dragOffsetY = e.clientY - win.getBoundingClientRect().top;
+    };
+
     document.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
-        win.style.left = (e.clientX - offsetX) + 'px';
-        win.style.top = (e.clientY - offsetY) + 'px';
-        win.style.right = 'auto'; // Resetuje przypięcie do prawej po poruszeniu
+        win.style.left = (e.clientX - dragOffsetX) + 'px';
+        win.style.top = (e.clientY - dragOffsetY) + 'px';
+        win.style.right = 'auto';
     });
+
     document.addEventListener('mouseup', () => isDragging = false);
 
-    // Dynamiczna zmiana rozmiaru Canvas przy rozciąganiu okna
     const resizeObserver = new ResizeObserver(() => {
         canvas.width = canvasWrap.clientWidth;
         canvas.height = canvasWrap.clientHeight;
     });
     resizeObserver.observe(canvasWrap);
 
-    // Klikanie by przejść
     canvas.addEventListener('mousedown', (e) => {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+
         let w = Engine.map.d.x;
         let h = Engine.map.d.y;
         let scale = Math.min(canvas.width / w, canvas.height / h);
@@ -9364,7 +9353,7 @@ worldPathToggle.onchange = () => {
         let clickY = Math.floor((e.clientY - canvas.getBoundingClientRect().top - offY) / scale);
 
         if (window.margoWalkableMask.has(`${clickX}_${clickY}`) && typeof Engine.hero.autoGoTo === 'function') {
-            Engine.hero.autoGoTo({x: clickX, y: clickY});
+            Engine.hero.autoGoTo({ x: clickX, y: clickY });
         }
     });
 }
@@ -9377,31 +9366,32 @@ function updateWalkableArea() {
     let h = Engine.map.d.y;
     let queue = [[Engine.hero.d.x, Engine.hero.d.y]];
     let visited = new Set();
-    let getKey = (x,y) => `${x}_${y}`;
+    let getKey = (x, y) => `${x}_${y}`;
 
     visited.add(getKey(Engine.hero.d.x, Engine.hero.d.y));
 
-    while(queue.length > 0) {
+    while (queue.length > 0) {
         let [cx, cy] = queue.shift();
         window.margoWalkableMask.add(getKey(cx, cy));
 
-        let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [-1,1], [1,-1]];
-        for(let d of dirs) {
+        let dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,-1],[-1,1],[1,-1]];
+        for (let d of dirs) {
             let nx = cx + d[0], ny = cy + d[1];
-            if(nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
                 let nk = getKey(nx, ny);
-                if(!visited.has(nk)) {
+                if (!visited.has(nk)) {
                     if (Math.abs(d[0]) === 1 && Math.abs(d[1]) === 1) {
                         if (Engine.map.col.check(cx + d[0], cy) && Engine.map.col.check(cx, cy + d[1])) continue;
                     }
                     visited.add(nk);
-                    if(!Engine.map.col.check(nx, ny)) queue.push([nx, ny]);
+                    if (!Engine.map.col.check(nx, ny)) queue.push([nx, ny]);
                 }
             }
         }
     }
 }
-    function buildDistanceMapFromHero() {
+
+function buildDistanceMapFromHero() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return new Map();
 
     const w = Engine.map.d.x;
@@ -9416,8 +9406,8 @@ function updateWalkableArea() {
     distMap.set(getKey(startX, startY), 0);
 
     const dirs = [
-        [0, 1], [0, -1], [1, 0], [-1, 0],
-        [1, 1], [-1, -1], [-1, 1], [1, -1]
+        [0,1],[0,-1],[1,0],[-1,0],
+        [1,1],[-1,-1],[-1,1],[1,-1]
     ];
 
     while (q.length > 0) {
@@ -9460,8 +9450,8 @@ function buildPathToTarget(startX, startY, targetX, targetY) {
     const parent = new Map();
 
     const dirs = [
-        [0, 1], [0, -1], [1, 0], [-1, 0],
-        [1, 1], [-1, -1], [-1, 1], [1, -1]
+        [0,1],[0,-1],[1,0],[-1,0],
+        [1,1],[-1,-1],[-1,1],[1,-1]
     ];
 
     let found = false;
@@ -9512,6 +9502,7 @@ function buildPathToTarget(startX, startY, targetX, targetY) {
     path.reverse();
     return path;
 }
+
 function getMobRank(n) {
     let wt = parseInt(n.wt, 10) || 0;
     let ranga = "normal";
@@ -9581,74 +9572,64 @@ function buildServerMobGroups(validMobs, distMap) {
         }
     }
 
-   return Object.values(groups)
-    .filter(g => Number.isFinite(g.bestPathDistance) && g.bestTargetMob && g.bestStand)
-    .map(g => {
-        const rarityBonusMap = {
-            normal: 0,
-            elite1: 8,
-            elite2: 14,
-            hero: 22
-        };
+    return Object.values(groups)
+        .filter(g => Number.isFinite(g.bestPathDistance) && g.bestTargetMob && g.bestStand)
+        .map(g => {
+            const rarityBonusMap = {
+                normal: 0,
+                elite1: 8,
+                elite2: 14,
+                hero: 22
+            };
 
-        const mobCount = g.mobs.length;
-        const rarityBonus = rarityBonusMap[g.mainRanga] || 0;
+            const mobCount = g.mobs.length;
+            const rarityBonus = rarityBonusMap[g.mainRanga] || 0;
 
-        const heroX = Engine.hero.d.x;
-        const heroY = Engine.hero.d.y;
+            const heroX = Engine.hero.d.x;
+            const heroY = Engine.hero.d.y;
 
-        const groupCenterX = (g.minX + g.maxX) / 2;
-        const groupCenterY = (g.minY + g.maxY) / 2;
+            const groupCenterX = (g.minX + g.maxX) / 2;
+            const groupCenterY = (g.minY + g.maxY) / 2;
 
-        let tailPenalty = 0;
+            let tailPenalty = 0;
 
-        for (const other of Object.values(groups)) {
-            if (other.key === g.key) continue;
-            if (!Number.isFinite(other.bestPathDistance)) continue;
+            for (const other of Object.values(groups)) {
+                if (other.key === g.key) continue;
+                if (!Number.isFinite(other.bestPathDistance)) continue;
 
-            const otherCenterX = (other.minX + other.maxX) / 2;
-            const otherCenterY = (other.minY + other.maxY) / 2;
+                const otherCenterX = (other.minX + other.maxX) / 2;
+                const otherCenterY = (other.minY + other.maxY) / 2;
 
-            const heroToOther = Math.abs(heroX - otherCenterX) + Math.abs(heroY - otherCenterY);
-            const groupToOther = Math.abs(groupCenterX - otherCenterX) + Math.abs(groupCenterY - otherCenterY);
+                const heroToOther = Math.abs(heroX - otherCenterX) + Math.abs(heroY - otherCenterY);
+                const groupToOther = Math.abs(groupCenterX - otherCenterX) + Math.abs(groupCenterY - otherCenterY);
 
-            const vx1 = groupCenterX - heroX;
-            const vy1 = groupCenterY - heroY;
-            const vx2 = otherCenterX - heroX;
-            const vy2 = otherCenterY - heroY;
+                const vx1 = groupCenterX - heroX;
+                const vy1 = groupCenterY - heroY;
+                const vx2 = otherCenterX - heroX;
+                const vy2 = otherCenterY - heroY;
 
-            const dot = (vx1 * vx2) + (vy1 * vy2);
+                const dot = (vx1 * vx2) + (vy1 * vy2);
+                const otherIsBehind = dot < 0;
 
-            const otherIsBehind = dot < 0;
-
-            if (otherIsBehind && heroToOther < 18 && other.mobs.length <= 2) {
-                tailPenalty += 8;
+                if (otherIsBehind && heroToOther < 18 && other.mobs.length <= 2) tailPenalty += 8;
+                if (otherIsBehind && heroToOther < 10 && other.mobs.length === 1) tailPenalty += 8;
+                if (groupToOther > 20 && otherIsBehind) tailPenalty += 4;
             }
 
-            if (otherIsBehind && heroToOther < 10 && other.mobs.length === 1) {
-                tailPenalty += 8;
-            }
+            g.tailPenalty = tailPenalty;
+            g.score =
+                g.bestPathDistance
+                - (mobCount * 5)
+                - rarityBonus
+                - (g.isLocked ? 10 : 0)
+                + tailPenalty;
 
-            if (groupToOther > 20 && otherIsBehind) {
-                tailPenalty += 4;
-            }
-        }
-
-        g.tailPenalty = tailPenalty;
-
-        g.score =
-            g.bestPathDistance
-            - (mobCount * 5)
-            - rarityBonus
-            - (g.isLocked ? 10 : 0)
-            + tailPenalty;
-
-               g.label = `${mobCount}x [${g.mainRanga}]`;
-        return g;
-    });
+            g.label = `${mobCount}x [${g.mainRanga}]`;
+            return g;
+        });
 }
 
-    function getGatewayReachableStand(gw, distMap) {
+function getGatewayReachableStand(gw, distMap) {
     const getKey = (x, y) => `${x}_${y}`;
     let best = null;
 
@@ -9740,7 +9721,6 @@ function drawWorldPathOverlay(path) {
     const ctx = overlay.getContext('2d');
     ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-    // Spróbuj pobrać pozycję kontenera mapy
     const mapEl =
         document.querySelector('#ground') ||
         document.querySelector('.ground-layer') ||
@@ -9776,7 +9756,6 @@ function drawWorldPathOverlay(path) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Kropka celu
     const last = path[path.length - 1];
     ctx.beginPath();
     ctx.arc(
@@ -9793,7 +9772,10 @@ function drawWorldPathOverlay(path) {
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
     let win = document.getElementById('margoRadarWindow');
-    if (!canvas || !win || win.style.display === 'none' || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
+    if (!canvas || !win || win.style.display === 'none' || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) {
+        clearWorldPathOverlay();
+        return;
+    }
 
     let ctx = canvas.getContext('2d');
     let w = Engine.map.d.x;
@@ -9814,6 +9796,17 @@ function renderTacticalRadar() {
         );
         ctx.fillStyle = color;
         ctx.fill();
+    };
+
+    const drawSquare = (x, y, color, sizeMult = 1) => {
+        const size = Math.max(4, scale * sizeMult);
+        ctx.fillStyle = color;
+        ctx.fillRect(
+            offsetX + (x * scale) + (scale / 2) - size / 2,
+            offsetY + (y * scale) + (scale / 2) - size / 2,
+            size,
+            size
+        );
     };
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -9892,57 +9885,94 @@ function renderTacticalRadar() {
         ctx.fillRect(boxX, boxY, boxW, boxH);
         ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-        ctx.fillStyle = color;
-ctx.font = '11px Tahoma';
-ctx.shadowBlur = 2;
-ctx.shadowColor = '#000';
-ctx.fillText(
-    `${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} tail=${g.tailPenalty || 0} s=${g.score}`,
-    boxX,
-    boxY - 3
-);
-ctx.shadowBlur = 0;
+        if (!window.radarCompactMode) {
+            ctx.fillStyle = color;
+            ctx.font = '11px Tahoma';
+            ctx.shadowBlur = 2;
+            ctx.shadowColor = '#000';
+            ctx.fillText(
+                `${g.mobs.length}x [${g.mainRanga}] d=${g.bestPathDistance} tail=${g.tailPenalty || 0} s=${g.score}`,
+                boxX,
+                boxY - 3
+            );
+            ctx.shadowBlur = 0;
+        }
     });
 
-   if (window.isExping && window.expCurrentTargetGroupKey) {
-    const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
-    if (activeGroup && activeGroup.bestStand) {
-        const path = buildPathToTarget(
-            Engine.hero.d.x,
-            Engine.hero.d.y,
-            activeGroup.bestStand.x,
-            activeGroup.bestStand.y
-        );
+    const gateways = getCurrentMapGatewaysForRadar(distMap);
+    window.radarGatewayCache = gateways;
 
-        if (path.length > 1) {
-            ctx.beginPath();
-            ctx.moveTo(
-                offsetX + (path[0].x * scale) + (scale / 2),
-                offsetY + (path[0].y * scale) + (scale / 2)
+    if (window.radarShowGateways) {
+        gateways.forEach(gw => {
+            const color = gw.reachable ? '#29b6f6' : '#666666';
+            drawSquare(gw.x, gw.y, color, 0.9);
+
+            ctx.strokeStyle = gw.reachable ? '#81d4fa' : '#444';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(
+                offsetX + (gw.x * scale) + 1,
+                offsetY + (gw.y * scale) + 1,
+                Math.max(4, scale - 2),
+                Math.max(4, scale - 2)
             );
 
-            for (let i = 1; i < path.length; i++) {
-                ctx.lineTo(
-                    offsetX + (path[i].x * scale) + (scale / 2),
-                    offsetY + (path[i].y * scale) + (scale / 2)
+            if (!window.radarCompactMode) {
+                ctx.fillStyle = color;
+                ctx.font = '10px Tahoma';
+                ctx.fillText(
+                    `${gw.targetMap || 'Przejście'}${gw.reachable ? ` d=${gw.pathDistance}` : ' [X]'}`,
+                    offsetX + (gw.x * scale) + 4,
+                    offsetY + (gw.y * scale) - 2
                 );
             }
-
-            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-
-        drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
+        });
     }
-}
+
+    if (window.isExping && window.expCurrentTargetGroupKey) {
+        const activeGroup = groups.find(g => g.key === window.expCurrentTargetGroupKey);
+        if (activeGroup && activeGroup.bestStand) {
+            const path = buildPathToTarget(
+                Engine.hero.d.x,
+                Engine.hero.d.y,
+                activeGroup.bestStand.x,
+                activeGroup.bestStand.y
+            );
+
+            if (path.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(
+                    offsetX + (path[0].x * scale) + (scale / 2),
+                    offsetY + (path[0].y * scale) + (scale / 2)
+                );
+
+                for (let i = 1; i < path.length; i++) {
+                    ctx.lineTo(
+                        offsetX + (path[i].x * scale) + (scale / 2),
+                        offsetY + (path[i].y * scale) + (scale / 2)
+                    );
+                }
+
+                ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                drawWorldPathOverlay(path);
+            } else {
+                clearWorldPathOverlay();
+            }
+
+            drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
+        } else {
+            clearWorldPathOverlay();
+        }
+    } else {
+        clearWorldPathOverlay();
+    }
 
     drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
 }
-// Główna pętla taktująca
-setInterval(() => {
     initFloatingRadarUI();
     // Aktualizuj teren tylko gdy gracz się poruszył
     if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
