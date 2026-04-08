@@ -10061,13 +10061,6 @@ if (window.isExping && window.expCurrentTargetGroupKey) {
     clearWorldPathOverlay();
 }
 
-            drawDot(activeGroup.bestTargetMob.x, activeGroup.bestTargetMob.y, "#00e5ff", 2.0);
-        } else {
-            clearWorldPathOverlay();
-        }
-    } else {
-        clearWorldPathOverlay();
-    }
 
        drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
 }
