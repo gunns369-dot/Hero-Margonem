@@ -4426,9 +4426,15 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
 
             headerCurrent.style.padding = "4px 5px"; headerCurrent.style.background = "rgba(76, 175, 80, 0.1)"; headerCurrent.style.border = "1px solid #4caf50"; headerCurrent.style.marginBottom = "2px"; container.appendChild(headerCurrent);
 
-           let dbDistMap = buildDistanceMapFromHero();
-let dbReachableGateways = getCurrentMapGatewaysForRadar(dbDistMap) || [];
+           if (!(window.margoWalkableMask instanceof Set)) {
+    window.margoWalkableMask = new Set();
+}
+if (window.margoWalkableMask.size === 0 && typeof updateWalkableArea === 'function') {
+    updateWalkableArea();
+}
 
+let dbDistMap = buildDistanceMapFromHero();
+let dbReachableGateways = getCurrentMapGatewaysForRadar(dbDistMap) || [];
 for (let target in currentMapGateways) {
     let coords = currentMapGateways[target];
 
@@ -6491,11 +6497,13 @@ setInterval(runExpLogic, 150);
 
     };
 
-window.clearExpMaps = () => {
-        botSettings.exp.mapOrder = [];
-        localStorage.setItem('exp_map_order_v64', '[]');
-        if(typeof window.renderExpMaps === 'function') window.renderExpMaps();
-    };
+function clearExpMaps() {
+    botSettings.exp.mapOrder = [];
+    localStorage.setItem('exp_map_order_v64', '[]');
+    if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
+}
+
+window.clearExpMaps = clearExpMaps;
 
    window.optimizeExpRoute = function(silent = false) {
         let maps = botSettings.exp.mapOrder;
@@ -6598,7 +6606,19 @@ window.clearExpMaps = () => {
             }
         }).join('');
     };
+function isMapKnownInGatewayBase(mapName) {
+    if (!mapName || !window.globalGateways) return false;
 
+    if (window.globalGateways[mapName]) return true;
+
+    for (let fromMap in window.globalGateways) {
+        if (window.globalGateways[fromMap] && window.globalGateways[fromMap][mapName]) {
+            return true;
+        }
+    }
+
+    return false;
+}
    window.renderExpMaps = () => {
         let c = document.getElementById('expMapList'); if (!c) return;
         let currentMap = lastMapName;
@@ -9631,6 +9651,14 @@ function updateWalkableArea() {
 function buildDistanceMapFromHero() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return new Map();
 
+    if (!(window.margoWalkableMask instanceof Set)) {
+        window.margoWalkableMask = new Set();
+    }
+
+    if (window.margoWalkableMask.size === 0 && typeof updateWalkableArea === 'function') {
+        updateWalkableArea();
+    }
+
     const w = Engine.map.d.x;
     const h = Engine.map.d.y;
     const getKey = (x, y) => `${x}_${y}`;
@@ -9639,8 +9667,9 @@ function buildDistanceMapFromHero() {
     const startX = Engine.hero.d.x;
     const startY = Engine.hero.d.y;
 
+    const startKey = getKey(startX, startY);
     const q = [[startX, startY]];
-    distMap.set(getKey(startX, startY), 0);
+    distMap.set(startKey, 0);
 
     const dirs = [
         [0,1],[0,-1],[1,0],[-1,0],
@@ -9658,6 +9687,7 @@ function buildDistanceMapFromHero() {
             if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
             const nk = getKey(nx, ny);
 
+            if (!(window.margoWalkableMask instanceof Set)) continue;
             if (!window.margoWalkableMask.has(nk)) continue;
             if (distMap.has(nk)) continue;
 
@@ -9674,7 +9704,6 @@ function buildDistanceMapFromHero() {
 
     return distMap;
 }
-
 function buildPathToTarget(startX, startY, targetX, targetY) {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return [];
 
