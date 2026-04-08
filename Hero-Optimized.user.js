@@ -9943,7 +9943,31 @@ if (window.isExping && window.expCurrentTargetGroupKey) {
 }
 
 
-       drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
+       // GRACZ — zawsze widoczny, z obwódką
+ctx.beginPath();
+ctx.arc(
+    offsetX + (Engine.hero.d.x * scale) + (scale / 2),
+    offsetY + (Engine.hero.d.y * scale) + (scale / 2),
+    Math.max(4, (scale / 2.0) * 1.9),
+    0,
+    2 * Math.PI
+);
+ctx.fillStyle = '#ffffff';
+ctx.fill();
+ctx.lineWidth = 2;
+ctx.strokeStyle = '#000000';
+ctx.stroke();
+
+ctx.beginPath();
+ctx.arc(
+    offsetX + (Engine.hero.d.x * scale) + (scale / 2),
+    offsetY + (Engine.hero.d.y * scale) + (scale / 2),
+    Math.max(1.5, (scale / 2.8) * 0.9),
+    0,
+    2 * Math.PI
+);
+ctx.fillStyle = '#00e5ff';
+ctx.fill();
 }
 
 // Główna pętla taktująca
