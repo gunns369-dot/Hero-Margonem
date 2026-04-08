@@ -4513,48 +4513,7 @@ function optimizeRoute() {
     }
 
 
-    function safeGoTo(targetX, targetY, useRandom) {
-
-        let now = Date.now();
-
-        if (now < nextAllowedClickTime) return;
-
-
-
-        let x = Number(targetX); let y = Number(targetY);
-
-
-
-        if (useRandom) {
-
-            let radius = botSettings.randomRadius;
-
-            if (radius > 0) {
-
-                x += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
-
-                y += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
-
-                x = Math.max(0, x); y = Math.max(0, y);
-
-            }
-
-        }
-
-
-
-        if (typeof Engine !== 'undefined' && Engine.hero) {
-
-            Engine.hero.autoGoTo({x: x, y: y});
-
-            let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
-
-            nextAllowedClickTime = Date.now() + throttleDelay;
-
-        }
-
-    }
-
+   function safeGoTo(targetX, targetY, useRandom)
 
 
 function stopPatrol(hardStop = true) {
