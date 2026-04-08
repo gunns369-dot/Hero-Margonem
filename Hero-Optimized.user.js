@@ -2218,22 +2218,36 @@ if (isTeleportRoute) {
 } else {
     let door = getBestReachableGatewayToMap(nextMap);
 
-  if (!door) {
+ if (!door) {
     markGatewayAsBlocked(currentSysMap, nextMap, 30000);
 
-    if (window._lastRushNextMap !== `no_gate_${currentSysMap}_${nextMap}`) {
-        if (window.logExp) window.logExp(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Pomijam ten krok trasy.`, "#ff9800");
-        if (window.logHero) window.logHero(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Pomijam ten krok trasy.`, "#ff9800");
-        window._lastRushNextMap = `no_gate_${currentSysMap}_${nextMap}`;
+    let fallback = pickNextReachableMapFromRoute(currentSysMap);
+
+    if (fallback && fallback.nextMap && fallback.door) {
+        window.rushNextMap = fallback.nextMap;
+
+        if (window._lastRushNextMap !== fallback.nextMap) {
+            if (window.logExp) window.logExp(`🚪 Biegnę do: ${fallback.nextMap} (pominięto martwe przejście do ${nextMap})`, "#ba68c8");
+            if (window.logHero) window.logHero(`🚪 Biegnę do: ${fallback.nextMap} (pominięto martwe przejście do ${nextMap})`, "#ba68c8");
+            window._lastRushNextMap = fallback.nextMap;
+        }
+
+        window.rushLastX = Engine.hero.d.x;
+        window.rushLastY = Engine.hero.d.y;
+        stuckCount = 0;
+        window.rushGatewayArrivalTime = 0;
+
+        safeGoTo(fallback.door.stand.x, fallback.door.stand.y, false);
+        clearTimeout(rushInterval);
+        rushInterval = setTimeout(window.checkRushArrival, 500);
+        return;
     }
 
-    // Próbujemy wybrać kolejny krok trasy zamiast stać i spamować
     window.rushNextMap = null;
     clearTimeout(rushInterval);
     rushInterval = setTimeout(window.executeRushStep, 250);
     return;
 }
-
     if (window._lastRushNextMap !== nextMap) {
         if (window.logExp) window.logExp(`🚪 Biegnę do osiągalnego przejścia na: ${nextMap} (d=${door.pathDistance})`, "#ba68c8");
         if (window.logHero) window.logHero(`🚪 Biegnę do osiągalnego przejścia na: ${nextMap} (d=${door.pathDistance})`, "#ba68c8");
@@ -2274,21 +2288,33 @@ window.checkRushArrival = function() {
 
     let door = getBestReachableGatewayToMap(nextMap);
 
-    if (!door) {
-        markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+  if (!door) {
+    markGatewayAsBlocked(currentSysMap, nextMap, 30000);
 
-        if (window.logHero) {
-            window.logHero(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
-        }
-        if (window.logExp) {
-            window.logExp(`⛔ Brak osiągalnego przejścia z [${currentSysMap}] do: ${nextMap}. Przeskakuję dalej.`, "#ff9800");
-        }
+    let fallback = pickNextReachableMapFromRoute(currentSysMap);
 
-        window.rushNextMap = null;
+    if (fallback && fallback.nextMap && fallback.door) {
+        window.rushNextMap = fallback.nextMap;
+
+        if (window.logHero) window.logHero(`🚪 Zmieniam cel na: ${fallback.nextMap} (martwe przejście do ${nextMap} pominięte)`, "#ba68c8");
+        if (window.logExp) window.logExp(`🚪 Zmieniam cel na: ${fallback.nextMap} (martwe przejście do ${nextMap} pominięte)`, "#ba68c8");
+
+        window.rushLastX = Engine.hero.d.x;
+        window.rushLastY = Engine.hero.d.y;
+        stuckCount = 0;
+        window.rushGatewayArrivalTime = 0;
+
+        safeGoTo(fallback.door.stand.x, fallback.door.stand.y, false);
         clearTimeout(rushInterval);
-        rushInterval = setTimeout(window.executeRushStep, 250);
+        rushInterval = setTimeout(window.checkRushArrival, 500);
         return;
     }
+
+    window.rushNextMap = null;
+    clearTimeout(rushInterval);
+    rushInterval = setTimeout(window.executeRushStep, 250);
+    return;
+}
 
     let cx = parseInt(Engine.hero.d.x, 10);
     let cy = parseInt(Engine.hero.d.y, 10);
@@ -4399,8 +4425,43 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
 
             headerCurrent.style.padding = "4px 5px"; headerCurrent.style.background = "rgba(76, 175, 80, 0.1)"; headerCurrent.style.border = "1px solid #4caf50"; headerCurrent.style.marginBottom = "2px"; container.appendChild(headerCurrent);
 
-            for (let target in currentMapGateways) { let coords = currentMapGateways[target]; let row = document.createElement('div'); row.className = "list-item"; row.style.borderLeft = "3px solid #4caf50"; row.innerHTML = `<div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer; flex-grow:1;" onclick="goSinglePoint(${coords.x}, ${coords.y}, '${currentSysMap}')" title="Biegnij tam!"><span style="color:#00acc1; font-weight:bold;">DO: ${target}</span><span style="color:#a99a75;">Ostatnia klatka: X: ${coords.x}, Y: ${coords.y}</span></div><button class="icon-btn" style="padding:0 5px;" title="Usuń z bazy" onclick="deleteGateway('${currentSysMap}', '${target}')">🗑️</button>`; container.appendChild(row); }
+           let dbDistMap = buildDistanceMapFromHero();
+let dbReachableGateways = getCurrentMapGatewaysForRadar(dbDistMap) || [];
 
+for (let target in currentMapGateways) {
+    let coords = currentMapGateways[target];
+
+    let liveGw = dbReachableGateways.find(g =>
+        String(g.targetMap).trim().toLowerCase() === String(target).trim().toLowerCase()
+    );
+
+    let isReachable = !!(liveGw && liveGw.reachable && liveGw.stand);
+    let borderColor = isReachable ? "#4caf50" : "#9e9e9e";
+    let targetColor = isReachable ? "#00acc1" : "#b0bec5";
+    let statusText = isReachable ? "✅ dostępne" : "⛔ brak dojścia z tej mapy";
+    let titleText = isReachable ? "Biegnij tam!" : "To przejście jest zapisane w bazie, ale aktualnie nie ma do niego dojścia";
+
+    let clickAction = isReachable
+        ? `onclick="goSinglePoint(${coords.x}, ${coords.y}, '${currentSysMap}')"`
+        : "";
+
+    let row = document.createElement('div');
+    row.className = "list-item";
+    row.style.borderLeft = `3px solid ${borderColor}`;
+
+    row.innerHTML = `
+        <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; ${isReachable ? 'cursor:pointer;' : 'opacity:0.75;'} flex-grow:1;"
+             ${clickAction}
+             title="${titleText}">
+            <span style="color:${targetColor}; font-weight:bold;">DO: ${target}</span>
+            <span style="color:#a99a75;">Ostatnia klatka: X: ${coords.x}, Y: ${coords.y}</span>
+            <span style="color:${isReachable ? '#81c784' : '#ef9a9a'};">${statusText}</span>
+        </div>
+        <button class="icon-btn" style="padding:0 5px;" title="Usuń z bazy" onclick="deleteGateway('${currentSysMap}', '${target}')">🗑️</button>
+    `;
+
+    container.appendChild(row);
+}
         }
 
         let headerOther = document.createElement('div'); headerOther.innerHTML = `<span style="color:#d4af37; font-weight:bold; font-size:10px;">🗺️ POZOSTAŁE PRZEJŚCIA W PAMIĘCI:</span>`; headerOther.style.padding = "4px 5px"; headerOther.style.background = "#1a1a1a"; headerOther.style.marginTop = "8px"; headerOther.style.marginBottom = "4px"; container.appendChild(headerOther);
@@ -9834,6 +9895,47 @@ function isGatewayBlocked(fromMap, toMap) {
 
     candidates.sort((a, b) => a.pathDistance - b.pathDistance);
     return candidates[0];
+}
+    function pickNextReachableMapFromRoute(currentSysMap) {
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return null;
+
+    let distMap = buildDistanceMapFromHero();
+    let directGateways = (getCurrentMapGatewaysForRadar(distMap) || [])
+        .filter(g => g && g.reachable && g.stand && g.targetMap);
+
+    if (!directGateways.length) return null;
+
+    // 1. Najpierw próbujemy dobrać coś z aktualnej pełnej ścieżki rusha
+    let routeCandidates = [];
+
+    if (window.rushFullPath && window.rushFullPath.length > 0) {
+        let idx = window.rushFullPath.indexOf(currentSysMap);
+        if (idx !== -1) {
+            routeCandidates = window.rushFullPath.slice(idx + 1);
+        } else {
+            routeCandidates = [...window.rushFullPath];
+        }
+    }
+
+    // 2. Jeśli nie ma rushFullPath, użyj kolejki expowiska
+    if ((!routeCandidates || routeCandidates.length === 0) && botSettings.exp && Array.isArray(botSettings.exp.mapOrder)) {
+        routeCandidates = [...botSettings.exp.mapOrder];
+    }
+
+    // 3. Wybierz pierwszą mapę z trasy, do której jest realnie osiągalna brama z tej mapy
+    for (let candidate of routeCandidates) {
+        let gw = directGateways.find(g =>
+            String(g.targetMap).trim().toLowerCase() === String(candidate).trim().toLowerCase()
+        );
+        if (gw) {
+            return {
+                nextMap: candidate,
+                door: gw
+            };
+        }
+    }
+
+    return null;
 }
 
 function renderTacticalRadar() {
