@@ -9971,10 +9971,13 @@ function renderTacticalRadar() {
         clearWorldPathOverlay();
     }
 
-    drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
+       drawDot(Engine.hero.d.x, Engine.hero.d.y, '#ffffff', 1.8);
 }
+
+// Główna pętla taktująca
+setInterval(() => {
     initFloatingRadarUI();
-    // Aktualizuj teren tylko gdy gracz się poruszył
+
     if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
         if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
             updateWalkableArea();
@@ -9982,4 +9985,5 @@ function renderTacticalRadar() {
         renderTacticalRadar();
     }
 }, 200);
+
 })(); // Koniec kodu
