@@ -4511,7 +4511,6 @@ function optimizeRoute() {
         currentCordsList = newRoute;
     }
 
-
 function safeGoTo(targetX, targetY, useRandom) {
         let now = Date.now();
         if (now < nextAllowedClickTime) return;
@@ -4551,84 +4550,6 @@ function safeGoTo(targetX, targetY, useRandom) {
         let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
         nextAllowedClickTime = Date.now() + throttleDelay;
     }
-
-        // 2. WŁASNY ALGORYTM A* (A-Star Pathfinding) - Omijanie drzew i ścian
-        window.findAStarPath = function(startX, startY, endX, endY) {
-            let w = Engine.map.d.x; let h = Engine.map.d.y;
-            if (startX < 0 || startX >= w || startY < 0 || startY >= h) return null;
-            if (endX < 0 || endX >= w || endY < 0 || endY >= h) return null;
-
-            let openSet = [{x: startX, y: startY, f: 0, g: 0}];
-            let closedSet = new Set();
-            let cameFrom = new Map();
-            let gScore = new Map();
-            
-            const getHash = (nx, ny) => `${nx},${ny}`;
-            gScore.set(getHash(startX, startY), 0);
-
-            const heuristic = (x1, y1, x2, y2) => Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
-
-            while (openSet.length > 0) {
-                openSet.sort((a, b) => a.f - b.f);
-                let current = openSet.shift();
-                let currentHash = getHash(current.x, current.y);
-
-                if (current.x === endX && current.y === endY) {
-                    let path = [];
-                    let curr = currentHash;
-                    while (cameFrom.has(curr)) {
-                        let parts = curr.split(',');
-                        path.unshift({x: parseInt(parts[0]), y: parseInt(parts[1])});
-                        curr = cameFrom.get(curr);
-                    }
-                    return path;
-                }
-
-                closedSet.add(currentHash);
-
-                let dirs = [
-                    {x: 0, y: -1, c: 1}, {x: 0, y: 1, c: 1}, {x: -1, y: 0, c: 1}, {x: 1, y: 0, c: 1},
-                    {x: -1, y: -1, c: 1.4}, {x: 1, y: -1, c: 1.4}, {x: -1, y: 1, c: 1.4}, {x: 1, y: 1, c: 1.4}
-                ];
-
-                for (let d of dirs) {
-                    let nx = current.x + d.x; let ny = current.y + d.y;
-                    let nHash = getHash(nx, ny);
-
-                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-                    if (closedSet.has(nHash)) continue;
-
-                    if ((nx !== endX || ny !== endY) && Engine.map.col.check(nx, ny)) continue;
-
-                    if (Math.abs(d.x) === 1 && Math.abs(d.y) === 1) {
-                        if (Engine.map.col.check(current.x + d.x, current.y) && Engine.map.col.check(current.x, current.y + d.y)) continue;
-                    }
-
-                    let t_gScore = gScore.get(currentHash) + d.c;
-                    if (!gScore.has(nHash) || t_gScore < gScore.get(nHash)) {
-                        cameFrom.set(nHash, currentHash);
-                        gScore.set(nHash, t_gScore);
-                        let f = t_gScore + heuristic(nx, ny, endX, endY);
-                        if (!openSet.some(n => n.x === nx && n.y === ny)) openSet.push({x: nx, y: ny, f: f, g: t_gScore});
-                    }
-                }
-            }
-            return null;
-        };
-
-        let myPath = window.findAStarPath(Engine.hero.d.x, Engine.hero.d.y, x, y);
-
-        if (myPath && myPath.length > 0) {
-            Engine.hero.d.path = myPath;
-            if (typeof window._g === 'function' && !Engine.hero.d.walking) window._g(`walk=${myPath[0].x},${myPath[0].y}`);
-        } else {
-            Engine.hero.autoGoTo({x: x, y: y});
-        }
-
-        let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
-        nextAllowedClickTime = Date.now() + throttleDelay;
-    }
-
     function startPatrol() {
         let hero = document.getElementById('selHero').value;
         let mapList = heroMapOrder[hero];
@@ -5804,44 +5725,25 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
             expAttackLockUntil = 0;
             let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
 
-           if (isNewDestination) {
+          if (isNewDestination) {
                 if (now < nextAllowedClickTime) return;
-
-                // --- SMART A* REACHABILITY CHECK (Skanowanie przeszkód przed biegiem!) ---
-                let path = typeof window.findAStarPath === 'function' ? window.findAStarPath(hx, hy, target.x, target.y) : null;
-                
-                // Jeśli nowa funkcja A* nie znalazła absolutnie żadnej drogi do potwora:
-                if (typeof window.findAStarPath === 'function' && (!path || path.length === 0)) {
-                    // Ignorujemy brak drogi tylko wtedy, gdy mob jest tuż obok (bo wtedy nie musimy iść, tylko uderzamy)
-                    if (targetDist > 1) {
-                        window.logExp(`🚧 Potwór ${target.nick} zrespił się za barierą (brak drogi)! Ignoruję go.`, "#ff9800");
-                        
-                        // Dodajemy potwora do czarnej listy bez ani jednej próby podejścia!
-                        window.expUnreachableMobs.add(target.x + "_" + target.y);
-                        
-                        // Zdejmujemy z niego "Locka" i wymuszamy wzięcie nowego celu w następnej milisekundzie
-                        expCurrentTargetId = null;
-                        window.expTargetLockTime = 0;
-                        return; 
-                    }
-                }
-                // -------------------------------------------------------------------------
 
                 if (expCurrentTargetId !== target.id) {
                     window.logExp(`🏃 Cel: ${target.groupLabel} (Dystans: ${targetDist})`, "#00e5ff");
                     expCurrentTargetId = target.id;
-
-                    // LOSOWY LOCK: Trzyma cel od 3 do 5 sekund.
                     let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
                     window.expTargetLockTime = now + randomLockSeconds;
                 }
 
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.groupLabel}`;
 
-                // Używamy naszej nowej, bezbłędnej ścieżki z A*, jeśli istnieje
-                if (path && path.length > 0) {
-                    Engine.hero.d.path = path;
-                    if (typeof window._g === 'function' && !Engine.hero.d.walking) window._g(`walk=${path[0].x},${path[0].y}`);
+                Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                nextAllowedClickTime = now + 350;
+
+                window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
+                window.expPursuitLastX = hx; window.expPursuitLastY = hy;
+                window.expTargetPursuitStart = now;
+                window.expMoveLockUntil = now + 800;
                 } else {
                     // Zabezpieczenie awaryjne (Gdyby np. gracz ręcznie wyłączył funkcję A*)
                     Engine.hero.autoGoTo({ x: target.x, y: target.y });
