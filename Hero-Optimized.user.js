@@ -10043,15 +10043,23 @@ ctx.fillStyle = '#00e5ff';
 ctx.fill();
 }
 
-// Główna pętla taktująca
 setInterval(() => {
-    initFloatingRadarUI();
+    try {
+        initFloatingRadarUI();
 
-    if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
-        if (!window.wargowalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
-            updateWalkableArea();
+        if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
+            if (!(window.margoWalkableMask instanceof Set)) {
+                window.margoWalkableMask = new Set();
+            }
+
+            if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
+                updateWalkableArea();
+            }
+
+            renderTacticalRadar();
         }
-        renderTacticalRadar();
+    } catch (e) {
+        console.error('[RADAR LOOP ERROR]', e);
     }
 }, 200);
 
