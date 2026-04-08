@@ -4512,16 +4512,16 @@ function optimizeRoute() {
     }
 
 
- function safeGoTo(targetX, targetY, useRandom) {
+function safeGoTo(targetX, targetY, useRandom) {
         let now = Date.now();
         if (now < nextAllowedClickTime) return;
 
         let x = Number(targetX); 
         let y = Number(targetY);
 
-        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.map || !Engine.map.col) return;
+        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.map) return;
 
-        // 1. INTELIGENTNA LOSOWOŚĆ (Szuka tylko WOLNYCH kratek!)
+        // 1. INTELIGENTNA LOSOWOŚĆ (Gwarancja, że kursor nie uderzy w drzewo/wodę)
         if (useRandom) {
             let radius = botSettings.randomRadius || 0;
             if (radius > 0) {
@@ -4529,7 +4529,9 @@ function optimizeRoute() {
                 for(let rx = x - radius; rx <= x + radius; rx++) {
                     for(let ry = y - radius; ry <= y + radius; ry++) {
                         if (rx >= 0 && ry >= 0 && rx < Engine.map.d.x && ry < Engine.map.d.y) {
-                            if (!Engine.map.col.check(rx, ry)) {
+                            if (typeof Engine.map.col !== 'undefined' && typeof Engine.map.col.check === 'function') {
+                                if (!Engine.map.col.check(rx, ry)) validSpots.push({x: rx, y: ry});
+                            } else {
                                 validSpots.push({x: rx, y: ry});
                             }
                         }
@@ -4542,6 +4544,13 @@ function optimizeRoute() {
                 }
             }
         }
+
+        // CZYSTE, BEZPIECZNE WYWOŁANIE RUCHU (Bez ryzyka bana/kicka)
+        Engine.hero.autoGoTo({x: x, y: y});
+
+        let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
+        nextAllowedClickTime = Date.now() + throttleDelay;
+    }
 
         // 2. WŁASNY ALGORYTM A* (A-Star Pathfinding) - Omijanie drzew i ścian
         window.findAStarPath = function(startX, startY, endX, endY) {
@@ -5722,18 +5731,16 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
         }
     });
 
-// 7. ZAAWANSOWANE SORTOWANIE: Ścieżka Komiwojażera (TSP) z uwzględnieniem kolizji
+// 7. ZAAWANSOWANE SORTOWANIE: Inteligentne klastry (Bezpieczne)
     if (validMobs.length > 0) {
-        // Zabezpieczenie: Jeśli trzymamy locka na jakimś mobie, nie musimy liczyć całej mapy od nowa
         let hasLockedMob = validMobs.some(m => m.isLocked);
         
         if (!hasLockedMob) {
-            // Grupowanie potworów stojących obok siebie, żeby nie przeciążać algorytmu A*
             let clusters = [];
             validMobs.forEach(m => {
                 let added = false;
                 for (let c of clusters) {
-                    if (Math.max(Math.abs(c.x - m.x), Math.abs(c.y - m.y)) <= 2) {
+                    if (Math.max(Math.abs(c.x - m.x), Math.abs(c.y - m.y)) <= 3) { // Tolerancja grupy to 3 kratki
                         c.mobs.push(m);
                         added = true;
                         break;
@@ -5742,7 +5749,6 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 if (!added) clusters.push({ x: m.x, y: m.y, mobs: [m] });
             });
 
-            // Wyliczanie najkrótszej łącznej ścieżki przez wszystkie klastry
             let currX = hx;
             let currY = hy;
             let orderedMobs = [];
@@ -5753,15 +5759,13 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
                 for (let i = 0; i < clusters.length; i++) {
                     let c = clusters[i];
-                    
                     let dist = Math.abs(currX - c.x) + Math.abs(currY - c.y);
                     
                     let rankBonus = 0;
-                    if (c.mobs.some(m => m.ranga === "elite2" || m.ranga === "hero")) rankBonus -= 15;
-                    else if (c.mobs.some(m => m.ranga === "elite1")) rankBonus -= 5;
+                    if (c.mobs.some(m => m.ranga === "elite2" || m.ranga === "hero")) rankBonus -= 20;
+                    else if (c.mobs.some(m => m.ranga === "elite1")) rankBonus -= 10;
                     
-                    let clusterSizeBonus = c.mobs.length * 2; 
-                    
+                    let clusterSizeBonus = c.mobs.length * 3; 
                     let score = dist - clusterSizeBonus + rankBonus;
 
                     if (score < bestScore) {
@@ -5771,23 +5775,9 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
                 }
 
                 let chosenCluster = clusters.splice(bestIdx, 1)[0];
-                let distToCluster = Math.abs(currX - chosenCluster.x) + Math.abs(currY - chosenCluster.y);
-                
-                let realPath = typeof window.findAStarPath === 'function' ? window.findAStarPath(currX, currY, chosenCluster.x, chosenCluster.y) : null;
-                
-                if (realPath && realPath.length > 0) {
-                    orderedMobs.push(...chosenCluster.mobs);
-                    currX = chosenCluster.x;
-                    currY = chosenCluster.y;
-                } else if (distToCluster <= 1) { // <--- TUTAJ BYŁ BŁĄD, TERAZ JEST NAPRAWIONY
-                    orderedMobs.push(...chosenCluster.mobs);
-                    currX = chosenCluster.x;
-                    currY = chosenCluster.y;
-                } else {
-                     chosenCluster.mobs.forEach(badMob => {
-                         window.expUnreachableMobs.add(badMob.x + "_" + badMob.y);
-                     });
-                }
+                orderedMobs.push(...chosenCluster.mobs);
+                currX = chosenCluster.x;
+                currY = chosenCluster.y;
             }
             validMobs = orderedMobs; 
         } else {
