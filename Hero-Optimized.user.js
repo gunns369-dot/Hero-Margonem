@@ -3045,6 +3045,7 @@ function initGUI() {
                 <div style="border-top:1px solid #333; padding-top:6px;">
                     <label style="color:#ffb300; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="playerAlert" ${botSettings.exp.playerAlert ? 'checked' : ''}> 👁️ Alarm na Graczy</label>
                     <label style="color:#e0d8c0; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;"><input type="checkbox" id="playerAlertStopBot" ${botSettings.exp.playerAlertStopBot ? 'checked' : ''}> Zatrzymuj bota przy wykryciu</label>
+                    <label style="color:#ff5252; font-size:10px; cursor:pointer; padding-left:20px; margin-top:3px;" title="Ucieka na 10 minut z czerwonej mapy, gdy gracz jest bliżej niż 6 kratek"><input type="checkbox" id="pvpFlee" ${botSettings.exp.pvpFlee ? 'checked' : ''}> 🏃 Uciekaj z map PvP</label>
                 </div>
                 <div style="border-top:1px solid #333; padding-top:6px;">
                     <label style="color:#e040fb; font-size:11px; cursor:pointer; font-weight:bold;"><input type="checkbox" id="chatAlert" ${botSettings.exp.chatAlert ? 'checked' : ''}> 📩 Alarm Czat (Prywatne)</label>
@@ -3292,6 +3293,9 @@ if (!botSettings.berserk) {
 
         if (botSettings.exp.playerAlertStopBot === undefined) { botSettings.exp.playerAlertStopBot = false; saveSettings(); }
         bindChange('playerAlertStopBot', (e) => { botSettings.exp.playerAlertStopBot = e.target.checked; saveSettings(); });
+
+        if (botSettings.exp.pvpFlee === undefined) { botSettings.exp.pvpFlee = false; saveSettings(); }
+        bindChange('pvpFlee', (e) => { botSettings.exp.pvpFlee = e.target.checked; saveSettings(); });
 
         if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
         if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
@@ -8574,31 +8578,59 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 let newPlayers = [];
                 players.forEach(p => { if (!window.alertedPlayersList.has(p.id)) { window.alertedPlayersList.add(p.id); newPlayers.push(p); } });
 
-                if (newPlayers.length > 0) {
+           if (newPlayers.length > 0) {
                     let msgTitle = newPlayers.length === 1 ? `👁️ Wykryto Gracza!` : `👁️ Wykryto Graczy (${newPlayers.length})!`;
                     let msgBody = newPlayers.map(p => `- ${p.nick} (${p.lvl} lvl)`).join('\n');
                     let logBody = newPlayers.map(p => `${p.nick} (${p.lvl} lvl)`).join('<br> &nbsp;&nbsp;&nbsp; ↳ ');
 
-                    // Niezależna Przeglądarka
-                    if (checkBrowser) {
-                        if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
-                        if (Notification.permission === "granted") new Notification(msgTitle, { body: msgBody });
+                    let isRedMap = Engine.map.d.pvp === 2;
+                    let shouldFlee = false;
+                    
+                    // --- LOGIKA UCIECZKI Z MAP PVP ---
+                    if (isRedMap && botSettings.exp.pvpFlee) {
+                        newPlayers.forEach(p => {
+                            let dist = Math.max(Math.abs(Engine.hero.d.x - p.x), Math.abs(Engine.hero.d.y - p.y));
+                            if (dist <= 6) shouldFlee = true; // Alarm poniżej 6 kratek!
+                        });
                     }
 
-                    // Niezależny Discord
-                    if (checkDiscord) {
-                        let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
-                        window.sendDiscordWebhook(msgTitle, `${msgBody}\n**Mapa:** ${mapName}`, 16711680);
-                    }
+                    if (shouldFlee) {
+                        if (window.logExp) window.logExp(`🚨 UWAGA! Wróg < 6 kratek na mapie PvP! Ewakuacja na inną mapę!`, "#ff5252");
+                        
+                        // Banujemy mapę w logice pętli na równe 10 minut
+                        let banTime = Date.now() + 10 * 60 * 1000;
+                        window.__bannedMaps = window.__bannedMaps || {};
+                        window.__bannedMaps[Engine.map.d.name] = banTime;
+                        
+                        if (!window.mapClearTimes) window.mapClearTimes = {};
+                        window.mapClearTimes[Engine.map.d.name] = banTime; 
 
-                    // Niezależne zablokowanie bota (wystarczy, że jedno z nich jest zaznaczone)
-                    if (botSettings.exp.playerAlertStopBot || botSettings.discord?.stop?.player) {
-                        if (typeof stopPatrol === 'function') stopPatrol(true);
-                        if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
-                        if (window.logExp) window.logExp(`🛑 Zatrzymano bota, ponieważ wykryto intruzów!`, "#f44336");
+                        // Przerywamy obecną akcję i wymuszamy natychmiastowe obliczenie nowej drogi
+                        expCurrentTargetId = null;
+                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                        window.isRushing = false; 
+                        expMapTransitionCooldown = 0; 
+                        expLastActionTime = 0; 
+                        
+                        if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                    } else {
+                        // Tradycyjne powiadomienia i (ewentualne) zatrzymanie bota
+                        if (checkBrowser) {
+                            if (window.logExp) window.logExp(`👁️ Wykryto obcych:<br> &nbsp;&nbsp;&nbsp; ↳ ${logBody}`, "#ffb300");
+                            if (Notification.permission === "granted") new Notification(msgTitle, { body: msgBody });
+                        }
+                        if (checkDiscord) {
+                            let mapName = typeof Engine !== 'undefined' ? Engine.map.d.name : "Nieznana Mapa";
+                            window.sendDiscordWebhook(msgTitle, `${msgBody}\n**Mapa:** ${mapName}`, 16711680);
+                        }
+                        // Jeśli ucieczka NIE zadziałała, ale opcja Stopu jest włączona
+                        if (botSettings.exp.playerAlertStopBot || botSettings.discord?.stop?.player) {
+                            if (typeof stopPatrol === 'function') stopPatrol(true);
+                            if (window.isExping) { let btn = document.getElementById('btnStartExp'); if (btn) btn.click(); }
+                            if (window.logExp) window.logExp(`🛑 Zatrzymano bota, ponieważ wykryto intruzów!`, "#f44336");
+                        }
                     }
-                }
-            } else if (!isBotActive) {
+                } else if (!isBotActive) {
                 window.alertedPlayersList.clear();
             }
         }, 1000);
@@ -8688,7 +8720,7 @@ let checkBrowser = botSettings.exp?.playerAlert;
             let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
             if (!isBotActive) window.__seenPrivs.clear();
         }, 5000);
- // --- DAEMON: ANTI-STUCK (Odwieszacz bota na bramach i zacinkach) ---
+// --- DAEMON: ANTI-STUCK (Odwieszacz bota na bramach i zacinkach) ---
     if (!window.antiStuckDaemonInstalled) {
         window.antiStuckDaemonInstalled = true;
         window.lastStuckCheckPos = { x: -1, y: -1, map: "" };
@@ -8701,29 +8733,30 @@ let checkBrowser = botSettings.exp?.playerAlert;
                 return;
             }
 
-            // Podstawowe zabezpieczenia przed błędnymi interwencjami
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || Engine.map.isLoading) {
                 window.stuckIdleCount = 0;
                 return;
             }
             
-            // --- KRYTYCZNE WYJĄTKI (Kiedy bot stoi CELOWO) ---
+            // --- KRYTYCZNE WYJĄTKI (Kiedy bot stoi CELOWO i nie wolno mu przeszkadzać) ---
             if (Engine.battle && Engine.battle.show) { window.stuckIdleCount = 0; return; }
             if (Engine.dead || Engine.hero.d.dead) { window.stuckIdleCount = 0; return; }
             if (window.isHealLocked || window.isRegeneratingToFull) { window.stuckIdleCount = 0; return; }
             if (window.__captchaPhase && window.__captchaPhase !== "none") { window.stuckIdleCount = 0; return; }
             
-            // Wyjątki Sklepowe (Auto-Poty i Auto-Sprzedaż)
+            // Wyjątki Sklepowe (Auto-Poty, Auto-Sprzedaż, Bieg do NPC)
             if (window.autoSellState && window.autoSellState.active) { window.stuckIdleCount = 0; return; }
             if (window.autoPotState && window.autoPotState.active) { window.stuckIdleCount = 0; return; }
+            if (window.autoBuyTask) { window.stuckIdleCount = 0; return; }
+            if (window.npcWalkInterval) { window.stuckIdleCount = 0; return; }
             if (window.isExpSuspended) { window.stuckIdleCount = 0; return; }
 
-            // Wyjątek Czekania na Respawn (45 sekund) lub przejście mapy
+            // Wyjątek Czekania na Respawn (np. 45 sekund na koniec pętli)
             if (window.isExping && window.expMapTransitionCooldown && Date.now() < window.expMapTransitionCooldown) {
                 window.stuckIdleCount = 0;
                 return;
             }
-            // --------------------------------------------------
+            // --------------------------------------------------------------------------
 
             let currentMap = Engine.map.d.name;
             let currentX = Engine.hero.d.x;
@@ -8731,28 +8764,14 @@ let checkBrowser = botSettings.exp?.playerAlert;
             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
 
             if (!isMoving) {
-                if (window.lastStuckCheckPos.x === currentX &&
-                    window.lastStuckCheckPos.y === currentY &&
-                    window.lastStuckCheckPos.map === currentMap) {
-
+                if (window.lastStuckCheckPos.x === currentX && window.lastStuckCheckPos.y === currentY && window.lastStuckCheckPos.map === currentMap) {
                     window.stuckIdleCount++;
-
-                    // Interweniuje po 5 sekundach bezruchu (jeśli żaden wyjątek wyżej go nie zatrzymał)
-                    if (window.stuckIdleCount >= 5) {
+                    // Odskakuje dopiero po 6 sekundach fizycznego braku ruchu, jeśli żaden wyjątek z listy wyżej go nie uchronił
+                    if (window.stuckIdleCount >= 6) {
                         if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Lekko odskakuję...", "#00e5ff");
-
                         let stepX = Math.max(0, currentX + (Math.random() > 0.5 ? 1 : -1));
                         let stepY = Math.max(0, currentY + (Math.random() > 0.5 ? 1 : -1));
                         Engine.hero.autoGoTo({x: stepX, y: stepY});
-
-                        if (typeof isPatrolling !== 'undefined' && isPatrolling && typeof window.executePatrolStep === 'function') {
-                            setTimeout(() => window.executePatrolStep(), 1500);
-                        } else if (window.isRushing && typeof window.executeRushStep === 'function') {
-                            setTimeout(() => window.executeRushStep(), 1500);
-                        } else if (window.isExping && typeof window.expMainLoop === 'function') {
-                            setTimeout(() => window.expMainLoop(), 1500);
-                        }
-
                         window.stuckIdleCount = 0;
                     }
                 } else {
