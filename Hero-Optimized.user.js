@@ -6048,7 +6048,7 @@ if (
     expAntiLagTime = now + getAntiLagDelay();
 }
 
-  // --- SKANOWANIE POTWORÓW (KOSIARKA V15 - INTELIGENTNA PAMIĘĆ Z ODRZUTEM NIEDOSTĘPNYCH) ---
+// --- SKANOWANIE POTWORÓW (KOSIARKA V15 - Z ODRZUTEM NIEDOSTĘPNYCH) ---
     if (!window.expMonsterCache) window.expMonsterCache = new Map();
 
     let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
@@ -6079,7 +6079,7 @@ if (
         }
     });
 
-    // Pamięć: czyścimy tylko moby, do których podeszliśmy (dystans < 12) a których fizycznie nie ma
+    // Pamięć: czyszczenie mobów
     window.expMonsterCache.forEach((cachedMob, id) => {
         let distToCached = Math.max(Math.abs(hx - cachedMob.x), Math.abs(hy - cachedMob.y));
         if (distToCached <= 12) {
@@ -6092,8 +6092,8 @@ if (
     });
 
     let arr = Array.from(window.expMonsterCache.values());
-
     let dangerousSpots = [];
+    
     arr.forEach(n => {
         let wt = parseInt(n.wt, 10);
         let ranga = "normal";
@@ -6113,7 +6113,7 @@ if (
     arr.forEach(n => {
         let coordKey = n.x + "_" + n.y;
         if (window.expUnreachableMobs.has(coordKey)) {
-            window.expMonsterCache.delete(n.id); // Twarde usunięcie niedostępnych - naprawia lewo/prawo
+            window.expMonsterCache.delete(n.id); // TWARDE USUNIĘCIE zablokowanych mobów!
             return;
         }
 
@@ -6149,7 +6149,7 @@ if (
             if (isReachable) break;
         }
 
-        // TWARDE USUWANIE: Jeśli widzisz moba na ekranie lub masz go w pamięci, ale jest poza zasięgiem dojścia (np. za ścianą) - usuń go z pamięci, żeby bot nie tańczył!
+        // Odrzucenie potworów za ścianą, do których fizycznie nie da się dojść
         if (!isReachable) {
             window.expMonsterCache.delete(n.id);
             return;
@@ -6168,43 +6168,28 @@ if (
         });
     });
 
-    let serverGroups = buildServerMobGroups(validMobs, distMap);
+    let serverGroups = typeof buildServerMobGroups === 'function' ? buildServerMobGroups(validMobs, distMap) : [];
 
     serverGroups = serverGroups.filter(g => !(g.mobs.length === 1 && g.bestPathDistance > 50 && g.mainRanga === "normal"));
 
     serverGroups.forEach(g => {
         if (g.key === window.expCurrentTargetGroupKey && now < (window.expTargetLockTime || 0)) {
             g.isLocked = true;
-
-            const rarityBonusMap = {
-                normal: 0,
-                elite1: 8,
-                elite2: 14,
-                hero: 22
-            };
-
-            g.score =
-                g.bestPathDistance
-                - (g.mobs.length * 5)
-                - (rarityBonusMap[g.mainRanga] || 0)
-                - 10;
+            const rarityBonusMap = { normal: 0, elite1: 8, elite2: 14, hero: 22 };
+            g.score = g.bestPathDistance - (g.mobs.length * 5) - (rarityBonusMap[g.mainRanga] || 0) - 10;
         }
     });
 
     serverGroups.sort((a, b) => {
         if (a.isLocked && !b.isLocked) return -1;
         if (b.isLocked && !a.isLocked) return 1;
-
         if (a.score !== b.score) return a.score - b.score;
         if (a.bestPathDistance !== b.bestPathDistance) return a.bestPathDistance - b.bestPathDistance;
         return String(a.key).localeCompare(String(b.key));
     });
 
     let targetGroup = null;
-
-    const nearbySmallCleanup = serverGroups
-        .filter(g => g.bestPathDistance <= 8 && g.mobs.length <= 2)
-        .sort((a, b) => a.bestPathDistance - b.bestPathDistance);
+    const nearbySmallCleanup = serverGroups.filter(g => g.bestPathDistance <= 8 && g.mobs.length <= 2).sort((a, b) => a.bestPathDistance - b.bestPathDistance);
 
     if (nearbySmallCleanup.length > 0) {
         targetGroup = nearbySmallCleanup[0];
@@ -6214,26 +6199,18 @@ if (
 
     let target = targetGroup && targetGroup.bestTargetMob ? targetGroup.bestTargetMob : null;
 
-    if (targetGroup && targetGroup.bestTargetMob && Number.isFinite(targetGroup.bestPathDistance)) {
-        window.expCurrentTargetGroupKey = targetGroup.key;
-        window.expTargetLockTime = now + (Engine.map.d.pvp === 2 ? 8000 : 5000);
-        expPinnedMap = currMapName;
-        expPinnedMapUntil = now + (Engine.map.d.pvp === 2 ? 20000 : 10000);
-    }
-
-    // --- INTELIGENTNA PAMIĘĆ WIDZIANYCH POTWORÓW (Naprawiona kosiarka) ---
+    // --- INTELIGENTNA PAMIĘĆ ---
     const liveCount = validMobs.length;
     const mapStillHasWork = liveCount > 0;
 
     if (mapStillHasWork && !target) {
-        expEmptyScans = 0; // Mamy misję.
-        if (displayTarget) displayTarget.innerText = \`Biegnę do zapamiętanego potwora... (W pamięci: \${liveCount})\`;
+        expEmptyScans = 0; 
+        if (displayTarget) displayTarget.innerText = `Biegnę do zapamiętanego potwora... (W pamięci: ${liveCount})`;
 
-        let memoryMob = validMobs[0]; // Bierzemy pierwszego lepszego dostępnego moba
+        let memoryMob = validMobs[0]; 
 
         if (memoryMob && typeof Engine.hero.autoGoTo === 'function') {
             if (now > nextAllowedClickTime) {
-                // Precyzyjny bieg pod cel zamiast ruszania się w lewo i prawo!
                 Engine.hero.autoGoTo({ x: memoryMob.x, y: memoryMob.y });
                 nextAllowedClickTime = now + 400;
                 window.expLastMoveTx = memoryMob.x; 
@@ -6243,7 +6220,6 @@ if (
         expLastActionTime = now + 150;
         return;
     }
-
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (target) {
         const targetDist = targetGroup.bestPathDistance;
@@ -10208,6 +10184,14 @@ function isCollisionSafe(x, y) {
     return false;
 }
 
+function isCollisionSafe(x, y) {
+    if (typeof Engine === 'undefined' || !Engine.map) return false;
+    // Uniwersalne sprawdzanie kolizji (działa na Starym i Nowym Interfejsie)
+    if (typeof Engine.map.checkCollision === 'function') return Engine.map.checkCollision(x, y);
+    if (Engine.map.col && typeof Engine.map.col.check === 'function') return Engine.map.col.check(x, y);
+    return false;
+}
+
 function updateWalkableArea() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
@@ -10231,6 +10215,7 @@ function updateWalkableArea() {
                 let nk = getKey(nx, ny);
                 if (!visited.has(nk)) {
                     if (Math.abs(d[0]) === 1 && Math.abs(d[1]) === 1) {
+                        // Zabezpieczenie przed przechodzeniem przez ściany na ukos
                         if (isCollisionSafe(cx + d[0], cy) && isCollisionSafe(cx, cy + d[1])) continue;
                     }
                     visited.add(nk);
