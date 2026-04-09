@@ -4590,92 +4590,82 @@ let btnAddRec = document.getElementById('btnAddSelectedRec');
     }
 
 
-
-    function renderGatewaysDatabase() {
-
+function renderGatewaysDatabase() {
         const container = document.getElementById('gatewaysListContainer'); if(!container) return; container.innerHTML = ''; let currentSysMap = lastMapName; let count = 0;
-
         let currentMapGateways = globalGateways[currentSysMap] || {};
 
         if (Object.keys(currentMapGateways).length > 0) {
-
             count++; let headerCurrent = document.createElement('div');
-
             headerCurrent.innerHTML = `<span style="color:#4caf50; font-weight:bold; font-size:11px;">📍 JESTEŚ TUTAJ: ${currentSysMap}</span>`;
-
             headerCurrent.style.padding = "4px 5px"; headerCurrent.style.background = "rgba(76, 175, 80, 0.1)"; headerCurrent.style.border = "1px solid #4caf50"; headerCurrent.style.marginBottom = "2px"; container.appendChild(headerCurrent);
 
-           if (!(window.margoWalkableMask instanceof Set)) {
-    window.margoWalkableMask = new Set();
-}
-if (window.margoWalkableMask.size === 0 && typeof updateWalkableArea === 'function') {
-    updateWalkableArea();
-}
+            if (!(window.margoWalkableMask instanceof Set)) {
+                window.margoWalkableMask = new Set();
+            }
+            if (window.margoWalkableMask.size === 0 && typeof updateWalkableArea === 'function') {
+                updateWalkableArea();
+            }
 
-let dbDistMap = buildDistanceMapFromHero();
-let dbReachableGateways = getCurrentMapGatewaysForRadar(dbDistMap) || [];
-for (let target in currentMapGateways) {
-    let coords = currentMapGateways[target];
+            let dbDistMap = buildDistanceMapFromHero();
+            
+            for (let target in currentMapGateways) {
+                let coords = currentMapGateways[target];
 
-    let liveGw = dbReachableGateways.find(g =>
-        String(g.targetMap).trim().toLowerCase() === String(target).trim().toLowerCase()
-    );
+                // FIZYCZNE SPRAWDZENIE KRATKI ZAMIAST PO NAZWIE
+                let isReachable = false;
+                if (dbDistMap && dbDistMap.size > 0) {
+                    for(let dx = -1; dx <= 1; dx++) {
+                        for(let dy = -1; dy <= 1; dy++) {
+                            if(dbDistMap.has(`${coords.x + dx}_${coords.y + dy}`)) {
+                                isReachable = true; break;
+                            }
+                        }
+                        if(isReachable) break;
+                    }
+                }
 
-    let isReachable = !!(liveGw && liveGw.reachable && liveGw.stand);
-    let borderColor = isReachable ? "#4caf50" : "#9e9e9e";
-    let targetColor = isReachable ? "#00acc1" : "#b0bec5";
-    let statusText = isReachable ? "✅ dostępne" : "⛔ brak dojścia z tej mapy";
-    let titleText = isReachable ? "Biegnij tam!" : "To przejście jest zapisane w bazie, ale aktualnie nie ma do niego dojścia";
+                let borderColor = isReachable ? "#4caf50" : "#9e9e9e";
+                let targetColor = isReachable ? "#00acc1" : "#b0bec5";
+                let statusText = isReachable ? "✅ dostępne" : "⛔ brak dojścia";
+                let titleText = isReachable ? "Biegnij tam!" : "To przejście jest w bazie, ale ściana lub odległość blokuje dostęp.";
 
-    let clickAction = isReachable
-        ? `onclick="goSinglePoint(${coords.x}, ${coords.y}, '${currentSysMap}')"`
-        : "";
+                let clickAction = isReachable ? `onclick="goSinglePoint(${coords.x}, ${coords.y}, '${currentSysMap}')"` : "";
 
-    let row = document.createElement('div');
-    row.className = "list-item";
-    row.style.borderLeft = `3px solid ${borderColor}`;
+                let row = document.createElement('div');
+                row.className = "list-item";
+                row.style.borderLeft = `3px solid ${borderColor}`;
 
-    row.innerHTML = `
-        <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; ${isReachable ? 'cursor:pointer;' : 'opacity:0.75;'} flex-grow:1;"
-             ${clickAction}
-             title="${titleText}">
-            <span style="color:${targetColor}; font-weight:bold;">DO: ${target}</span>
-            <span style="color:#a99a75;">Ostatnia klatka: X: ${coords.x}, Y: ${coords.y}</span>
-            <span style="color:${isReachable ? '#81c784' : '#ef9a9a'};">${statusText}</span>
-        </div>
-        <button class="icon-btn" style="padding:0 5px;" title="Usuń z bazy" onclick="deleteGateway('${currentSysMap}', '${target}')">🗑️</button>
-    `;
+                row.innerHTML = `
+                    <div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; ${isReachable ? 'cursor:pointer;' : 'opacity:0.75;'} flex-grow:1;"
+                         ${clickAction} title="${titleText}">
+                        <span style="color:${targetColor}; font-weight:bold;">DO: ${target}</span>
+                        <span style="color:#a99a75;">Ostatnia klatka: X: ${coords.x}, Y: ${coords.y}</span>
+                        <span style="color:${isReachable ? '#81c784' : '#ef9a9a'};">${statusText}</span>
+                    </div>
+                    <button class="icon-btn" style="padding:0 5px;" title="Usuń z bazy" onclick="deleteGateway('${currentSysMap}', '${target}')">🗑️</button>
+                `;
 
-    container.appendChild(row);
-}
+                container.appendChild(row);
+            }
         }
 
         let headerOther = document.createElement('div'); headerOther.innerHTML = `<span style="color:#d4af37; font-weight:bold; font-size:10px;">🗺️ POZOSTAŁE PRZEJŚCIA W PAMIĘCI:</span>`; headerOther.style.padding = "4px 5px"; headerOther.style.background = "#1a1a1a"; headerOther.style.marginTop = "8px"; headerOther.style.marginBottom = "4px"; container.appendChild(headerOther);
-
         let otherCount = 0;
 
         for (let sourceMap in globalGateways) {
-
             if (sourceMap === currentSysMap) continue;
-
             if (Object.keys(globalGateways[sourceMap]).length === 0) continue;
-
             count++; otherCount++;
 
             let groupWrap = document.createElement('div'); groupWrap.style.marginBottom = "2px"; let header = document.createElement('div'); header.className = "accordion-header"; header.innerHTML = `▶ Z mapy: ${sourceMap}`; let content = document.createElement('div'); content.style.display = "none"; content.style.paddingLeft = "4px"; content.style.borderLeft = "1px solid #333"; content.style.marginBottom = "4px";
-
             header.onclick = () => { let isHidden = content.style.display === "none"; content.style.display = isHidden ? "block" : "none"; header.innerHTML = `${isHidden ? '▼' : '▶'} Z mapy: ${sourceMap}`; };
 
             for (let target in globalGateways[sourceMap]) { let coords = globalGateways[sourceMap][target]; let row = document.createElement('div'); row.className = "list-item"; row.innerHTML = `<div style="font-size:10px; color:#e0d8c0; display:flex; flex-direction:column; cursor:pointer; flex-grow:1;" onclick="goSinglePoint(${coords.x}, ${coords.y}, '${sourceMap}')" title="Musisz iść na mapę: ${sourceMap}"><span style="color:#00acc1; font-weight:bold;">DO: ${target}</span><span style="color:#a99a75;">Ostatnia klatka: X: ${coords.x}, Y: ${coords.y}</span></div><button class="icon-btn" style="padding:0 5px;" title="Usuń z bazy" onclick="deleteGateway('${sourceMap}', '${target}')">🗑️</button>`; content.appendChild(row); }
-
             groupWrap.appendChild(header); groupWrap.appendChild(content); container.appendChild(groupWrap);
-
         }
 
         if (otherCount === 0) container.innerHTML += `<div style="padding:5px; text-align:center; color:#777; font-size:10px; font-style:italic;">Brak innych przejść.</div>`;
-
         if (count === 0) container.innerHTML = `<div style="padding:5px; text-align:center; color:#777; font-size:10px; font-style:italic;">Brak zapisanych przejść w całej pamięci.<br><br>Włącz Smart Memory (🎥) i graj, a same się tu pojawią!</div>`;
-
     }
 
 
@@ -4812,48 +4802,43 @@ function optimizeRoute() {
     }
 
 
-    function safeGoTo(targetX, targetY, useRandom) {
-
+   window.safeGoTo = function(targetX, targetY, useRandom) {
         let now = Date.now();
-
         if (now < nextAllowedClickTime) return;
 
-
-
-        let x = Number(targetX); let y = Number(targetY);
-
-
+        let x = Number(targetX); 
+        let y = Number(targetY);
+        if (isNaN(x) || isNaN(y)) return;
 
         if (useRandom) {
-
             let radius = botSettings.randomRadius;
-
             if (radius > 0) {
-
                 x += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
-
                 y += Math.floor(Math.random() * (radius * 2 + 1)) - radius;
-
                 x = Math.max(0, x); y = Math.max(0, y);
-
             }
-
         }
-
-
 
         if (typeof Engine !== 'undefined' && Engine.hero) {
-
-            Engine.hero.autoGoTo({x: x, y: y});
+            if (typeof Engine.hero.autoGoTo === 'function') {
+                Engine.hero.autoGoTo({x: x, y: y});
+            } else if (typeof window.originalAutoWalk === 'function') {
+                window.originalAutoWalk.call(Engine.hero, x, y);
+            } else if (typeof Engine.hero.autoWalk === 'function') {
+                Engine.hero.autoWalk(x, y);
+            } else if (typeof window._g === 'function') {
+                window._g(`walk=${x},${y}`);
+            }
 
             let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
-
             nextAllowedClickTime = Date.now() + throttleDelay;
-
         }
+    };
 
+    // Kompatybilność wsteczna w razie wywołania bez "window."
+    function safeGoTo(targetX, targetY, useRandom) {
+        window.safeGoTo(targetX, targetY, useRandom);
     }
-
 
 
 function stopPatrol(hardStop = true) {
@@ -6206,7 +6191,7 @@ if (
         expPinnedMapUntil = now + (Engine.map.d.pvp === 2 ? 20000 : 10000);
     }
 
-    // --- INTELIGENTNA PAMIĘĆ WIDZIANYCH POTWORÓW ---
+   // --- INTELIGENTNA PAMIĘĆ WIDZIANYCH POTWORÓW ---
     const liveCount = validMobs.length;
     const mapStillHasWork = liveCount > 0;
 
@@ -6216,9 +6201,10 @@ if (
 
         let memoryMob = validMobs[0]; 
 
-        if (memoryMob && typeof Engine.hero.autoGoTo === 'function') {
+        if (memoryMob) {
             if (now > nextAllowedClickTime) {
-                Engine.hero.autoGoTo({ x: memoryMob.x, y: memoryMob.y });
+                if (typeof window.safeGoTo === 'function') window.safeGoTo(memoryMob.x, memoryMob.y, false);
+                else Engine.hero.autoGoTo({ x: memoryMob.x, y: memoryMob.y });
                 nextAllowedClickTime = now + 400;
                 window.expLastMoveTx = memoryMob.x; 
                 window.expLastMoveTy = memoryMob.y;
@@ -6256,7 +6242,13 @@ if (
                 }
                 if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} | dystans: ${targetDist} | score: ${targetGroup.score}`;
 
-                Engine.hero.autoGoTo({ x: targetGroup.bestStand.x, y: targetGroup.bestStand.y });
+                // Niezawodny bieg pod cel (Naprawa błędu z "bestStand null")
+                let goX = targetGroup.bestStand ? targetGroup.bestStand.x : target.x;
+                let goY = targetGroup.bestStand ? targetGroup.bestStand.y : target.y;
+                
+                if (typeof window.safeGoTo === 'function') window.safeGoTo(goX, goY, false);
+                else Engine.hero.autoGoTo({ x: goX, y: goY });
+
                 nextAllowedClickTime = now + 350;
 
                 window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
@@ -6293,7 +6285,9 @@ if (
                         } else {
                             let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                             let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-                            Engine.hero.autoGoTo({ x: rx, y: ry });
+                            
+                            if (typeof window.safeGoTo === 'function') window.safeGoTo(rx, ry, false);
+                            else Engine.hero.autoGoTo({ x: rx, y: ry });
                         }
 
                         expLastActionTime = now + 1000;
@@ -6302,7 +6296,12 @@ if (
 
                     if (timeStandingStill > 1000 && (now % 1000 < 150)) {
                         if (now >= nextAllowedClickTime) {
-                            Engine.hero.autoGoTo({ x: targetGroup.bestStand.x, y: targetGroup.bestStand.y });
+                            let goX = targetGroup.bestStand ? targetGroup.bestStand.x : target.x;
+                            let goY = targetGroup.bestStand ? targetGroup.bestStand.y : target.y;
+                            
+                            if (typeof window.safeGoTo === 'function') window.safeGoTo(goX, goY, false);
+                            else Engine.hero.autoGoTo({ x: goX, y: goY });
+                            
                             nextAllowedClickTime = now + 350;
                         }
                     }
