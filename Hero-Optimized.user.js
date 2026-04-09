@@ -6925,80 +6925,6 @@ window.clearExpMaps = clearExpMaps;
 
         if (!silent) heroAlert(`✅ Trasa połączona!\nBot dodał mapy przejściowe do głównej listy. Jeśli podczas biegu przez korytarz lub las spotka potwory, wyhamuje, normalnie je wybije i po zrobieniu czystki zapisze tę mapę w pamięci!`);
     };
-    window.renderMapOrderList = () => {
-        let c = document.getElementById('heroMapListContainer');
-        if (!c) return;
-
-        let hero = document.getElementById('selHero').value;
-        if (!hero || !heroMapOrder[hero] || heroMapOrder[hero].length === 0) {
-            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa, by zobaczyć trasę</div>';
-            return;
-        }
-
-        let currentMap = lastMapName;
-
-        c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
-            let safeMapName = mapName.replace(/'/g, "\\'");
-
-            if (editingGatewayFor === mapName) {
-                let defaultX = "";
-                let defaultY = "";
-                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
-
-                if (refDoor) {
-                    defaultX = refDoor.x;
-                    defaultY = refDoor.y;
-                }
-
-                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
-                    <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
-                        <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
-                            <label style="color:#a99a75; font-size:10px; margin:0;">X:
-                                <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;">
-                            </label>
-                            <label style="color:#a99a75; font-size:10px; margin:0;">Y:
-                                <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;">
-                            </label>
-                            <button class="btn-sepia" style="flex-grow:1;"
-                                onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;"
-                                title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button>
-                        </div>
-                        <div style="display:flex; gap:4px; margin-top:4px;">
-                            <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button>
-                            <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button>
-                        </div>
-                    </div>
-                </div>`;
-            } else {
-                const inBase = isMapKnownInGatewayBase(mapName);
-                const baseBadge = inBase
-                    ? `<span style="color:#81c784; font-size:10px; margin-left:4px;">[BAZA]</span>`
-                    : `<span style="color:#ef9a9a; font-size:10px; margin-left:4px;">[BRAK]</span>`;
-
-                const mapColor = inBase ? "#81c784" : "#ef9a9a";
-
-                return `<div class="list-item">
-                    <div class="map-name-wrap">
-                        <span class="btn-del-map" onclick="window.removeHeroMapFromOrder(${index})">✖</span>
-                        <span class="map-name" style="color:${mapColor}; font-weight:bold;">
-                            ${index + 1}. ${mapName} ${baseBadge}
-                        </span>
-                    </div>
-                    <div class="buttons-wrapper">
-                        <input type="number"
-                               min="1"
-                               max="${heroMapOrder[hero].length}"
-                               value="${index + 1}"
-                               onchange="window.changeMapOrder(${index}, this.value)"
-                               style="width:42px; text-align:center; font-size:10px; padding:2px; background:#111; color:#d4af37; border:1px solid #444; border-radius:4px;">
-                        <button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów">🚪</button>
-                    </div>
-                </div>`;
-            }
-        }).join('');
-    };
-
 window.renderMapOrderList = () => {
         let c = document.getElementById('heroMapListContainer');
         if (!c) return;
@@ -7055,17 +6981,18 @@ window.renderMapOrderList = () => {
                 const doorDistance = liveDoor ? liveDoor.pathDistance : "?";
                 
                 const baseBadge = inBase
-                    ? `<span style="color:#81c784; font-size:10px; margin-left:4px;" title="${liveDoor ? `Odległość do bramy: ${doorDistance}` : `Nie widzę bramy z obecnego punktu`}"><br>[BAZA${liveDoor ? ' ✔' : ''}]</span>`
-                    : `<span style="color:#ef9a9a; font-size:10px; margin-left:4px;"><br>[BRAK ZAPISU]</span>`;
+                    ? `<span style="color:#81c784; font-size:9px; margin-left:4px; white-space:nowrap;" title="${liveDoor ? `Odległość do bramy: ${doorDistance}` : `Nie widzę bramy z obecnego punktu`} ">[BAZA${liveDoor ? ' ✔' : ''}]</span>`
+                    : `<span style="color:#ef9a9a; font-size:9px; margin-left:4px; white-space:nowrap;">[BRAK]</span>`;
 
                 const mapColor = inBase ? (liveDoor ? "#4caf50" : "#aed581") : "#ef9a9a";
 
                 return `<div class="list-item">
-                    <div class="map-name-wrap">
+                    <div class="map-name-wrap" title="${mapName}">
                         <span class="btn-del-map" onclick="window.removeHeroMapFromOrder(${index})">✖</span>
                         <span class="map-name" style="color:${mapColor}; font-weight:bold;">
-                            ${index + 1}. ${mapName} ${baseBadge}
+                            ${index + 1}. ${mapName}
                         </span>
+                        ${baseBadge}
                     </div>
                     <div class="buttons-wrapper">
                         <input type="number"
@@ -7073,7 +7000,7 @@ window.renderMapOrderList = () => {
                                max="${heroMapOrder[hero].length}"
                                value="${index + 1}"
                                onchange="window.changeMapOrder(${index}, this.value)"
-                               style="width:42px; text-align:center; font-size:10px; padding:2px; background:#111; color:#d4af37; border:1px solid #444; border-radius:4px;">
+                               style="width:35px; text-align:center; font-size:10px; padding:2px; background:#111; color:#d4af37; border:1px solid #444; border-radius:4px;">
                         <button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów">🚪</button>
                     </div>
                 </div>`;
@@ -7131,17 +7058,18 @@ window.renderMapOrderList = () => {
                 const doorDistance = liveDoor ? liveDoor.pathDistance : "?";
                 
                 const baseBadge = inBase
-                    ? `<span style="color:#81c784; font-size:10px; margin-left:4px;" title="${liveDoor ? `Odległość do bramy: ${doorDistance}` : `Nie widzę bramy z obecnego punktu`}">[BAZA${liveDoor ? ' ✔' : ''}]</span>`
-                    : `<span style="color:#ef9a9a; font-size:10px; margin-left:4px;">[BRAK ZAPISU]</span>`;
+                    ? `<span style="color:#81c784; font-size:9px; margin-left:4px; white-space:nowrap;" title="${liveDoor ? `Odległość do bramy: ${doorDistance}` : `Nie widzę bramy z obecnego punktu`} ">[BAZA${liveDoor ? ' ✔' : ''}]</span>`
+                    : `<span style="color:#ef9a9a; font-size:9px; margin-left:4px; white-space:nowrap;">[BRAK]</span>`;
 
                 const mapColor = inBase ? (liveDoor ? "#4caf50" : "#aed581") : "#ef9a9a";
 
                 return `<div class="list-item">
-                    <div class="map-name-wrap">
+                    <div class="map-name-wrap" title="${mapName}">
                         <span class="btn-del-map" onclick="window.removeExpMap(${index})">✖</span>
                         <span class="map-name" style="color:${mapColor}; font-weight:bold;">
-                            ${mapName} ${baseBadge}
+                            ${mapName}
                         </span>
+                        ${baseBadge}
                     </div>
                     <div class="buttons-wrapper">
                         <button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów (opcjonalne)">🚪</button>
