@@ -4910,7 +4910,6 @@ let expCurrentTargetId = null;
 let expLastX = -1;
     let expPinnedMap = "";
 let expPinnedMapUntil = 0;
-let expSearchAfterKillUntil = 0;
 
 let expLastY = -1;
 
@@ -5550,7 +5549,7 @@ function hasNearbyReachableMobsForExp(maxDistance = 12) {
 
     expPinnedMap = Engine.map.d.name;
     expPinnedMapUntil = Date.now() + (Engine.map.d.pvp === 2 ? 25000 : 12000);
-    expSearchAfterKillUntil = 0;
+
 
     if (window.logExp) {
         window.logExp(`🕒 Weszłem na mapę [${Engine.map.d.name}] - czekam na dociągnięcie potworów...`, "#90caf9");
@@ -5757,7 +5756,7 @@ window.expConsecutiveStucks = 0;
 
     // po walce nie czyścimy mapy z logiki, tylko od razu wracamy do wyboru kolejnej grupy
     expEmptyScans = 0;
-    expSearchAfterKillUntil = 0;
+   
 
     expPinnedMap = Engine.map.d.name;
     expPinnedMapUntil = now + (Engine.map?.d?.pvp === 2 ? 20000 : 10000);
@@ -6087,12 +6086,7 @@ const targetDist = targetGroup.bestPathDistance;
     expLastActionTime = now + 80;
     return;
 }
-    window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
-    expEmptyScans = 0;
-    expSearchAfterKillUntil = 0;
-    expLastActionTime = now + 120;
-    return;
-}
+
 
         if (targetDist > 1) {
             expAttackLockUntil = 0;
@@ -6212,60 +6206,7 @@ if (isOnGateway(hx, hy)) {
     return;
 }
 
-const isRedMap = Engine.map?.d?.pvp === 2;
-
-// więcej skanów na czerwonych mapach (ograniczona widoczność)
-const emptyScanLimit = isRedMap ? 14 : 8;
-
-      if (isRedMapNow) {
-    const remembered = window.expRedMapMemory[currMapName]
-        ? Object.keys(window.expRedMapMemory[currMapName]).length
-        : 0;
-
-    if (remembered > 0) {
-        expEmptyScans = 0;
-        if (displayTarget) {
-            displayTarget.innerText = `Czerwona mapa: pamiętam ${remembered} potw. — czyszczę dalej`;
-        }
-        expLastActionTime = now + 200;
-        return;
-    }
-}
-  // Jeśli ta mapa jest przypięta do czyszczenia i nadal pamiętamy / widzimy potwory,
-// nie wolno jej uznać za pustą.
-if (
-    expPinnedMap === currMapName &&
-    now < expPinnedMapUntil &&
-    mapStillHasWork &&
-    !target
-) {
-    expEmptyScans = 0;
-
-    if (displayTarget) {
-        displayTarget.innerText = isRedMapNow
-            ? `Czyszczę mapę do końca... (pamięć: ${rememberedCount})`
-            : `Czyszczę mapę do końca...`;
-    }
-
-    expLastActionTime = now + 100;
-    return;
-}
-expEmptyScans++;
-
-
-if (now < expMapTransitionCooldown) return;
-
-let expRouteMaps = botSettings.exp.mapOrder || [];
-if (!expRouteMaps.length) {
-    expEmptyScans = 0;
-    expLastActionTime = now + 1500;
-    return;
-}
-
-// Zapamiętujemy, że obecna mapa jest wyczyszczona
-if (!window.mapClearTimes) window.mapClearTimes = {};
-
-// jeśli mapa nadal ma robotę, nie oznaczaj jej jako pustej
+// Jeśli nadal pamiętamy / widzimy robotę na tej mapie, nie wolno jej oznaczać jako pustej.
 if (mapStillHasWork && !target) {
     expEmptyScans = 0;
 
@@ -6278,6 +6219,31 @@ if (mapStillHasWork && !target) {
     expLastActionTime = now + 100;
     return;
 }
+
+expEmptyScans++;
+if (displayTarget) {
+    displayTarget.innerText = isRedMapNow
+        ? `Czysto. Skanowanie... (${expEmptyScans}/14)`
+        : `Czysto. Skanowanie... (${expEmptyScans}/8)`;
+}
+
+const emptyScanLimit = isRedMapNow ? 14 : 8;
+if (expEmptyScans < emptyScanLimit) {
+    expLastActionTime = now + (isRedMapNow ? 320 : 220);
+    return;
+}
+
+if (now < expMapTransitionCooldown) return;
+
+let expRouteMaps = botSettings.exp.mapOrder || [];
+if (!expRouteMaps.length) {
+    expEmptyScans = 0;
+    expLastActionTime = now + 1500;
+    return;
+}
+
+// Zapamiętujemy, że obecna mapa jest wyczyszczona
+if (!window.mapClearTimes) window.mapClearTimes = {};
 
 // dopiero tutaj mapa naprawdę jest pusta
 markMapTemporarilyCleared(currMap);
