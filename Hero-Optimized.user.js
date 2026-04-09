@@ -8618,24 +8618,23 @@ window.openShopAsync = async (namePart) => {
                 if (!el) return resolve();
 
                 let rect = el.getBoundingClientRect();
-                let borderX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
-                let topBorder = Math.max(0, window.outerHeight - window.innerHeight - borderX);
 
                 // Humanizacja: losowy rozrzut wewnątrz guzika
                 let randomOffsetX = (Math.random() - 0.5) * (rect.width * 0.6);
                 let randomOffsetY = (Math.random() - 0.5) * (rect.height * 0.6);
 
-                let cssX = window.screenX + borderX + rect.left + (rect.width / 2) + randomOffsetX;
-                let cssY = window.screenY + topBorder + rect.top + (rect.height / 2) + randomOffsetY;
-
+                // Punkt względem samego viewportu gry (bez ramek i paska przeglądarki).
+                // Python przelicza to na absolutny ekran na podstawie aktywnego okna.
+                let viewportX = rect.left + (rect.width / 2) + randomOffsetX;
+                let viewportY = rect.top + (rect.height / 2) + randomOffsetY;
                 let dpr = window.devicePixelRatio || 1;
-                let absX = cssX * dpr;
-                let absY = cssY * dpr;
+                let vx = viewportX * dpr;
+                let vy = viewportY * dpr;
 
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
                         method: "GET",
-                        url: `http://127.0.0.1:5000/click?x=${absX}&y=${absY}`,
+                        url: `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`,
                         onload: function(response) {
                             if(window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu!", "#e040fb");
                             resolve();
@@ -8647,7 +8646,7 @@ window.openShopAsync = async (namePart) => {
                         }
                     });
                 } else {
-                    fetch(`http://127.0.0.1:5000/click?x=${absX}&y=${absY}`)
+                    fetch(`http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`)
                         .then(res => resolve())
                         .catch(err => { el.classList.add('pressed', 'active'); resolve(); });
                 }
