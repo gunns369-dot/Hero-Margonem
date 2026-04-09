@@ -5211,6 +5211,7 @@ function getExpMobsFromDrawableList(hero, minL, maxL) {
             if (!name) return false;
             const lvl = parseInt(n.lvl, 10);
             if (isNaN(lvl) || lvl <= 0) return false;
+            if (n.dead || n.del || n.delete) return false;
             if (lvl < minL || lvl > maxL) return false;
 
             return true;
@@ -5528,6 +5529,12 @@ function hasNearbyReachableMobsForExp(maxDistance = 12) {
     if (typeof updateWalkableArea === 'function') {
         updateWalkableArea();
     }
+
+    // --- DODANA BLOKADA SPAMU RUCHU I WALKI ---
+    if (Engine.hero.d.path && Engine.hero.d.path.length > 0) return;
+    if (Engine.battle && Engine.battle.show) return;
+    // ------------------------------------------
+
     // --- 0. PRIORYTET: AUTO-SPRZEDAŻ I AUTO-POTY ---
     if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) {
         return; // Bot stoi w miejscu, oddając kontrolę systemom miejskim
@@ -10317,10 +10324,16 @@ setInterval(() => {
     initFloatingRadarUI();
 
     if (typeof Engine !== 'undefined' && Engine.hero && Engine.map) {
-        if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
-            updateWalkableArea();
+        // ZABEZPIECZENIE: Tworzy maskę, jeśli jeszcze nie istnieje
+        if (!window.margoWalkableMask) {
+            window.margoWalkableMask = new Set();
         }
-        renderTacticalRadar();
+
+        if (!window.margoWalkableMask.has(`${Engine.hero.d.x}_${Engine.hero.d.y}`)) {
+            if (typeof updateWalkableArea === 'function') updateWalkableArea();
+        }
+        
+        if (typeof renderTacticalRadar === 'function') renderTacticalRadar();
     }
-}, 500);
+}, 250); // ZMIENIONO z 50 na 250 ms!
 })(); // Koniec kodu
