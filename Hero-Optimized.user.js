@@ -9745,12 +9745,12 @@ window.margoWalkableMask = new Set();
 window.radarCompactMode = false;
 window.radarShowGateways = true;
 window.radarGatewayCache = [];
-    window.radarGroupsCache = [];
+window.radarGroupsCache = [];
 window.radarGroupsCacheTime = 0;
 window.radarGroupsCacheMap = "";
 window.radarTargetInfo = null;
 
-    function toggleRadar() {
+function toggleRadar() {
     const win = document.getElementById('margoRadarWindow');
     if (!win) return;
 
@@ -9767,7 +9767,6 @@ function initFloatingRadarUI() {
 
     let win = document.getElementById('margoRadarWindow');
 
-    // Jeśli okno już istnieje, to tylko dopinamy/odświeżamy klik do przycisku
     if (win) {
         toggleBtn.onclick = (e) => {
             e.preventDefault();
@@ -9776,29 +9775,31 @@ function initFloatingRadarUI() {
         };
         return;
     }
-if (!window.__radarButtonFixInstalled) {
-    window.__radarButtonFixInstalled = true;
 
-    document.addEventListener('click', (e) => {
-        const btn = e.target?.closest?.('#btnToggleRadar');
-        if (!btn) return;
+    if (!window.__radarButtonFixInstalled) {
+        window.__radarButtonFixInstalled = true;
 
-        e.preventDefault();
-        e.stopPropagation();
+        document.addEventListener('click', (e) => {
+            const btn = e.target?.closest?.('#btnToggleRadar');
+            if (!btn) return;
 
-        let win = document.getElementById('margoRadarWindow');
-        if (!win) {
-            if (typeof initFloatingRadarUI === 'function') {
-                initFloatingRadarUI();
-                win = document.getElementById('margoRadarWindow');
+            e.preventDefault();
+            e.stopPropagation();
+
+            let win = document.getElementById('margoRadarWindow');
+            if (!win) {
+                if (typeof initFloatingRadarUI === 'function') {
+                    initFloatingRadarUI();
+                    win = document.getElementById('margoRadarWindow');
+                }
             }
-        }
 
-        if (win) {
-            win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
-        }
-    }, true);
-}
+            if (win) {
+                win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
+            }
+        }, true);
+    }
+
     win = document.createElement('div');
     win.id = 'margoRadarWindow';
     win.style.cssText = 'display:none; position:fixed; top:50px; right:50px; width:350px; height:350px; background:#0a0a0a; border:2px solid #333; border-radius:6px; z-index:999998; resize:both; overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9); flex-direction:column;';
@@ -9821,24 +9822,23 @@ if (!window.__radarButtonFixInstalled) {
     `;
     win.appendChild(header);
 
-   let canvasWrap = document.createElement('div');
-canvasWrap.id = 'margoRadarCanvasWrap';
-canvasWrap.style.cssText = 'flex:1; min-height:120px; position:relative; overflow:hidden; background:#000; cursor:crosshair;';
+    let canvasWrap = document.createElement('div');
+    canvasWrap.id = 'margoRadarCanvasWrap';
+    canvasWrap.style.cssText = 'flex:1; min-height:120px; position:relative; overflow:hidden; background:#000; cursor:crosshair;';
 
-let canvas = document.createElement('canvas');
-canvas.id = 'margoRadarCanvas';
-canvas.style.cssText = 'display:block; position:absolute; top:0; left:0;';
-canvasWrap.appendChild(canvas);
-win.appendChild(canvasWrap);
+    let canvas = document.createElement('canvas');
+    canvas.id = 'margoRadarCanvas';
+    canvas.style.cssText = 'display:block; position:absolute; top:0; left:0;';
+    canvasWrap.appendChild(canvas);
+    win.appendChild(canvasWrap);
 
-// Panel info pod mapą
-let infoPanel = document.createElement('div');
-infoPanel.id = 'margoRadarInfoPanel';
-infoPanel.style.cssText = 'height:72px; overflow:auto; background:#0b0b0b; border-top:1px solid #222; color:#d7d7d7; font:11px Tahoma,sans-serif; padding:6px 8px; box-sizing:border-box;';
-infoPanel.innerHTML = '<div style="color:#777;">Brak danych grup.</div>';
-win.appendChild(infoPanel);
+    let infoPanel = document.createElement('div');
+    infoPanel.id = 'margoRadarInfoPanel';
+    infoPanel.style.cssText = 'height:72px; overflow:auto; background:#0b0b0b; border-top:1px solid #222; color:#d7d7d7; font:11px Tahoma,sans-serif; padding:6px 8px; box-sizing:border-box;';
+    infoPanel.innerHTML = '<div style="color:#777;">Brak danych grup.</div>';
+    win.appendChild(infoPanel);
 
-document.body.appendChild(win);
+    document.body.appendChild(win);
 
     toggleBtn.onclick = (e) => {
         e.preventDefault();
@@ -9857,19 +9857,19 @@ document.body.appendChild(win);
 
     compactToggle.checked = !!window.radarCompactMode;
     const infoPanelInit = document.getElementById('margoRadarInfoPanel');
-if (infoPanelInit) {
-    infoPanelInit.style.display = window.radarCompactMode ? 'none' : 'block';
-}
+    if (infoPanelInit) {
+        infoPanelInit.style.display = window.radarCompactMode ? 'none' : 'block';
+    }
     gatewaysToggle.checked = !!window.radarShowGateways;
 
-   compactToggle.onchange = () => {
-    window.radarCompactMode = compactToggle.checked;
+    compactToggle.onchange = () => {
+        window.radarCompactMode = compactToggle.checked;
+        const infoPanel = document.getElementById('margoRadarInfoPanel');
+        if (infoPanel) {
+            infoPanel.style.display = compactToggle.checked ? 'none' : 'block';
+        }
+    };
 
-    const infoPanel = document.getElementById('margoRadarInfoPanel');
-    if (infoPanel) {
-        infoPanel.style.display = compactToggle.checked ? 'none' : 'block';
-    }
-};
     gatewaysToggle.onchange = () => {
         window.radarShowGateways = gatewaysToggle.checked;
     };
@@ -9893,12 +9893,13 @@ if (infoPanelInit) {
 
     document.addEventListener('mouseup', () => isDragging = false);
 
-   const resizeObserver = new ResizeObserver(() => {
-    canvas.width = canvasWrap.clientWidth;
-    canvas.height = canvasWrap.clientHeight;
-});
-resizeObserver.observe(win);
-resizeObserver.observe(canvasWrap);
+    const resizeObserver = new ResizeObserver(() => {
+        canvas.width = canvasWrap.clientWidth;
+        canvas.height = canvasWrap.clientHeight;
+    });
+    resizeObserver.observe(win);
+    resizeObserver.observe(canvasWrap);
+
     canvas.addEventListener('mousedown', (e) => {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
@@ -10006,7 +10007,8 @@ function buildDistanceMapFromHero() {
 
     return distMap;
 }
-    function refreshRadarGroupsCache(force = false) {
+
+function refreshRadarGroupsCache(force = false) {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero || !Engine.npcs) return;
 
     const now = Date.now();
@@ -10082,365 +10084,6 @@ function buildDistanceMapFromHero() {
 
     window.radarTargetInfo = currentTarget;
 }
-function buildPathToTarget(startX, startY, targetX, targetY) {
-    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return [];
-
-    const w = Engine.map.d.x;
-    const h = Engine.map.d.y;
-    const getKey = (x, y) => `${x}_${y}`;
-
-    const q = [[startX, startY]];
-    const visited = new Set([getKey(startX, startY)]);
-    const parent = new Map();
-
-    const dirs = [
-        [0,1],[0,-1],[1,0],[-1,0],
-        [1,1],[-1,-1],[-1,1],[1,-1]
-    ];
-
-    let found = false;
-
-    while (q.length > 0) {
-        const [cx, cy] = q.shift();
-
-        if (cx === targetX && cy === targetY) {
-            found = true;
-            break;
-        }
-
-        for (const [dx, dy] of dirs) {
-            const nx = cx + dx;
-            const ny = cy + dy;
-
-            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-            const nk = getKey(nx, ny);
-
-            if (!window.margoWalkableMask.has(nk)) continue;
-            if (visited.has(nk)) continue;
-
-            if (Math.abs(dx) === 1 && Math.abs(dy) === 1) {
-                if (Engine.map.col.check(cx + dx, cy) && Engine.map.col.check(cx, cy + dy)) {
-                    continue;
-                }
-            }
-
-            visited.add(nk);
-            parent.set(nk, { x: cx, y: cy });
-            q.push([nx, ny]);
-        }
-    }
-
-    if (!found) return [];
-
-    const path = [];
-    let cur = { x: targetX, y: targetY };
-
-    while (!(cur.x === startX && cur.y === startY)) {
-        path.push(cur);
-        const prev = parent.get(getKey(cur.x, cur.y));
-        if (!prev) break;
-        cur = prev;
-    }
-
-    path.push({ x: startX, y: startY });
-    path.reverse();
-    return path;
-}
-
-function getMobRank(n) {
-    let wt = parseInt(n.wt, 10) || 0;
-    let ranga = "normal";
-
-    if (n.type === 2) {
-        if (wt === 11 || wt === 1) ranga = "elite1";
-        else if (wt === 12 || wt === 2) ranga = "elite2";
-        else if (wt >= 13 || wt >= 3) ranga = "hero";
-    }
-
-    return ranga;
-}
-
-function buildServerMobGroups(validMobs, distMap) {
-    const groups = {};
-    const getKey = (x, y) => `${x}_${y}`;
-    const rankPower = { normal: 0, elite1: 1, elite2: 2, hero: 3 };
-
-    for (const m of validMobs) {
-        const key = m.grp ? `grp_${m.grp}` : `solo_${m.id}`;
-
-        if (!groups[key]) {
-            groups[key] = {
-                key,
-                grp: m.grp || null,
-                mobs: [],
-                mainRanga: "normal",
-                minX: m.x,
-                maxX: m.x,
-                minY: m.y,
-                maxY: m.y,
-                bestPathDistance: Infinity,
-                bestTargetMob: null,
-                bestStand: null,
-                score: Infinity,
-                isLocked: false
-            };
-        }
-
-        const g = groups[key];
-        g.mobs.push(m);
-        g.minX = Math.min(g.minX, m.x);
-        g.maxX = Math.max(g.maxX, m.x);
-        g.minY = Math.min(g.minY, m.y);
-        g.maxY = Math.max(g.maxY, m.y);
-
-        if (rankPower[m.ranga] > rankPower[g.mainRanga]) {
-            g.mainRanga = m.ranga;
-        }
-
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                const sx = m.x + dx;
-                const sy = m.y + dy;
-                const sk = getKey(sx, sy);
-
-                if (!window.margoWalkableMask.has(sk)) continue;
-                if (!distMap.has(sk)) continue;
-
-                const d = distMap.get(sk);
-                if (d < g.bestPathDistance) {
-                    g.bestPathDistance = d;
-                    g.bestTargetMob = m;
-                    g.bestStand = { x: sx, y: sy };
-                }
-            }
-        }
-    }
-
-    return Object.values(groups)
-        .filter(g => Number.isFinite(g.bestPathDistance) && g.bestTargetMob && g.bestStand)
-        .map(g => {
-            const rarityBonusMap = {
-                normal: 0,
-                elite1: 8,
-                elite2: 14,
-                hero: 22
-            };
-
-            const mobCount = g.mobs.length;
-            const rarityBonus = rarityBonusMap[g.mainRanga] || 0;
-
-            const heroX = Engine.hero.d.x;
-            const heroY = Engine.hero.d.y;
-
-            const groupCenterX = (g.minX + g.maxX) / 2;
-            const groupCenterY = (g.minY + g.maxY) / 2;
-
-            let tailPenalty = 0;
-
-            for (const other of Object.values(groups)) {
-                if (other.key === g.key) continue;
-                if (!Number.isFinite(other.bestPathDistance)) continue;
-
-                const otherCenterX = (other.minX + other.maxX) / 2;
-                const otherCenterY = (other.minY + other.maxY) / 2;
-
-                const heroToOther = Math.abs(heroX - otherCenterX) + Math.abs(heroY - otherCenterY);
-                const groupToOther = Math.abs(groupCenterX - otherCenterX) + Math.abs(groupCenterY - otherCenterY);
-
-                const vx1 = groupCenterX - heroX;
-                const vy1 = groupCenterY - heroY;
-                const vx2 = otherCenterX - heroX;
-                const vy2 = otherCenterY - heroY;
-
-                const dot = (vx1 * vx2) + (vy1 * vy2);
-                const otherIsBehind = dot < 0;
-
-                if (otherIsBehind && heroToOther < 18 && other.mobs.length <= 2) tailPenalty += 8;
-                if (otherIsBehind && heroToOther < 10 && other.mobs.length === 1) tailPenalty += 8;
-                if (groupToOther > 20 && otherIsBehind) tailPenalty += 4;
-            }
-
-            g.tailPenalty = tailPenalty;
-            g.score =
-                g.bestPathDistance
-                - (mobCount * 5)
-                - rarityBonus
-                - (g.isLocked ? 10 : 0)
-                + tailPenalty;
-
-            g.label = `${mobCount}x [${g.mainRanga}]`;
-            return g;
-        });
-}
-
-function getGatewayReachableStand(gw, distMap) {
-    const getKey = (x, y) => `${x}_${y}`;
-    let best = null;
-
-    // 1. Najpierw próbujemy dokładne pole przejścia
-    let exactKey = getKey(gw.x, gw.y);
-    if (window.margoWalkableMask.has(exactKey) && distMap.has(exactKey)) {
-        return {
-            x: gw.x,
-            y: gw.y,
-            targetMap: gw.targetMap,
-            reachable: true,
-            stand: { x: gw.x, y: gw.y },
-            pathDistance: distMap.get(exactKey)
-        };
-    }
-
-    // 2. Jeśli nie da się stanąć dokładnie na przejściu,
-    // szukamy najlepszej kratki obok
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            const sx = gw.x + dx;
-            const sy = gw.y + dy;
-            const sk = getKey(sx, sy);
-
-            if (!window.margoWalkableMask.has(sk)) continue;
-            if (!distMap.has(sk)) continue;
-
-            const d = distMap.get(sk);
-            if (!best || d < best.pathDistance) {
-                best = {
-                    x: gw.x,
-                    y: gw.y,
-                    targetMap: gw.targetMap,
-                    reachable: true,
-                    stand: { x: sx, y: sy },
-                    pathDistance: d
-                };
-            }
-        }
-    }
-
-    if (best) return best;
-
-    return {
-        x: gw.x,
-        y: gw.y,
-        targetMap: gw.targetMap,
-        reachable: false,
-        stand: null,
-        pathDistance: Infinity
-    };
-}
-function getCurrentMapGatewaysForRadar(distMap) {
-    if (typeof Engine === 'undefined' || !Engine.map) return [];
-
-    let rawGateways = [];
-    try {
-        rawGateways = HeroScannerModule.scanCurrentMap(Engine.map.d.name, null) || [];
-    } catch (e) {
-        return [];
-    }
-
-    return rawGateways.map(gw => getGatewayReachableStand(gw, distMap));
-}
-    window.blockedRouteGateways = window.blockedRouteGateways || {};
-
-function makeBlockedGatewayKey(fromMap, toMap) {
-    return `${String(fromMap).trim()}__TO__${String(toMap).trim()}`;
-}
-
-function markGatewayAsBlocked(fromMap, toMap, ms = 30000) {
-    if (!fromMap || !toMap) return;
-    const key = makeBlockedGatewayKey(fromMap, toMap);
-    window.blockedRouteGateways[key] = Date.now() + ms;
-}
-
-function isGatewayBlocked(fromMap, toMap) {
-    if (!fromMap || !toMap) return false;
-    const key = makeBlockedGatewayKey(fromMap, toMap);
-    const until = window.blockedRouteGateways[key] || 0;
-
-    if (!until) return false;
-    if (Date.now() > until) {
-        delete window.blockedRouteGateways[key];
-        return false;
-    }
-
-    return true;
-}
-   function getBestReachableGatewayToMap(targetMap) {
-    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return null;
-    if (!targetMap) return null;
-
-    const currentMap = Engine.map.d.name;
-    if (isGatewayBlocked(currentMap, targetMap)) return null;
-
-    let distMap = buildDistanceMapFromHero();
-    let gateways = getCurrentMapGatewaysForRadar(distMap) || [];
-
-    let candidates = gateways.filter(g =>
-        g &&
-        g.reachable &&
-        g.stand &&
-        g.targetMap &&
-        String(g.targetMap).trim().toLowerCase() === String(targetMap).trim().toLowerCase()
-    );
-
-    if (!candidates.length) return null;
-
-    candidates.sort((a, b) => a.pathDistance - b.pathDistance);
-    return candidates[0];
-}
-function isMapKnownInGatewayBase(mapName) {
-    if (!mapName || !globalGateways) return false;
-
-    if (globalGateways[mapName]) return true;
-
-    for (let fromMap in globalGateways) {
-        if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-    function pickNextReachableMapFromRoute(currentSysMap) {
-    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return null;
-
-    let distMap = buildDistanceMapFromHero();
-    let directGateways = (getCurrentMapGatewaysForRadar(distMap) || [])
-        .filter(g => g && g.reachable && g.stand && g.targetMap);
-
-    if (!directGateways.length) return null;
-
-    // 1. Najpierw próbujemy dobrać coś z aktualnej pełnej ścieżki rusha
-    let routeCandidates = [];
-
-    if (window.rushFullPath && window.rushFullPath.length > 0) {
-        let idx = window.rushFullPath.indexOf(currentSysMap);
-        if (idx !== -1) {
-            routeCandidates = window.rushFullPath.slice(idx + 1);
-        } else {
-            routeCandidates = [...window.rushFullPath];
-        }
-    }
-
-    // 2. Jeśli nie ma rushFullPath, użyj kolejki expowiska
-    if ((!routeCandidates || routeCandidates.length === 0) && botSettings.exp && Array.isArray(botSettings.exp.mapOrder)) {
-        routeCandidates = [...botSettings.exp.mapOrder];
-    }
-
-    // 3. Wybierz pierwszą mapę z trasy, do której jest realnie osiągalna brama z tej mapy
-    for (let candidate of routeCandidates) {
-        let gw = directGateways.find(g =>
-            String(g.targetMap).trim().toLowerCase() === String(candidate).trim().toLowerCase()
-        );
-        if (gw) {
-            return {
-                nextMap: candidate,
-                door: gw
-            };
-        }
-    }
-
-    return null;
-}
 
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
@@ -10484,7 +10127,6 @@ function renderTacticalRadar() {
         ctx.fill();
     }
 
-    // Teren
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             if (window.margoWalkableMask.has(`${x}_${y}`)) {
@@ -10495,7 +10137,6 @@ function renderTacticalRadar() {
         }
     }
 
-    // Przejścia
     if (showGateways) {
         let distMap = buildDistanceMapFromHero();
         let gateways = getCurrentMapGatewaysForRadar(distMap) || [];
@@ -10534,10 +10175,8 @@ function renderTacticalRadar() {
         }
     }
 
-    // Potwory
     let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
     let rangaColors = { normal: '#ff5252', elite1: '#ff9800', elite2: '#ba68c8', hero: '#00e5ff' };
-    let validMobs = [];
 
     for (let id in npcs) {
         let n = npcs[id].d || npcs[id];
@@ -10557,26 +10196,10 @@ function renderTacticalRadar() {
 
         const ranga = typeof getMobRank === 'function' ? getMobRank(n) : 'normal';
 
-        validMobs.push({
-            id: n.id || id,
-            x: n.x,
-            y: n.y,
-            wt: parseInt(n.wt, 10) || 0,
-            type: n.type,
-            ranga,
-            grp: n.grp,
-            nick: (n.nick || n.name || 'Potwór').replace(/<[^>]*>?/gm, '').trim(),
-            __reachable: isReachable
-        });
-
-        if (!isReachable) {
-            drawDot(n.x, n.y, '#333333', 0.8);
-        } else {
-            drawDot(n.x, n.y, rangaColors[ranga] || '#ff5252', 1.1);
-        }
+        if (!isReachable) drawDot(n.x, n.y, '#333333', 0.8);
+        else drawDot(n.x, n.y, rangaColors[ranga] || '#ff5252', 1.1);
     }
 
-    // Wizualne grupy na radarze
     for (const g of radarGroups) {
         if (!g || !g.mobs || !g.mobs.length) continue;
 
@@ -10624,33 +10247,6 @@ function renderTacticalRadar() {
         }
     }
 
-    // Trasa do aktualnego targetu
-    if (window.isExping && radarTarget && radarTarget.bestStand) {
-        let realPath = buildPathToTarget(
-            Engine.hero.d.x,
-            Engine.hero.d.y,
-            radarTarget.bestStand.x,
-            radarTarget.bestStand.y
-        );
-
-        if (realPath && realPath.length > 1) {
-            ctx.beginPath();
-            for (let i = 0; i < realPath.length; i++) {
-                const p = realPath[i];
-                const px = offsetX + (p.x * scale) + (scale / 2);
-                const py = offsetY + (p.y * scale) + (scale / 2);
-                if (i === 0) ctx.moveTo(px, py);
-                else ctx.lineTo(px, py);
-            }
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-    }
-
-    // GRACZ
     ctx.beginPath();
     ctx.arc(
         offsetX + (Engine.hero.d.x * scale) + (scale / 2),
@@ -10676,7 +10272,6 @@ function renderTacticalRadar() {
     ctx.fillStyle = '#00e5ff';
     ctx.fill();
 
-    // Panel info pod mapą
     try {
         const infoPanel = document.getElementById('margoRadarInfoPanel');
         if (infoPanel) {
@@ -10716,6 +10311,7 @@ function renderTacticalRadar() {
         }
     } catch (e) {}
 }
+
 // Główna pętla taktująca
 setInterval(() => {
     initFloatingRadarUI();
