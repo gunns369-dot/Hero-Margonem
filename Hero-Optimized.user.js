@@ -10229,51 +10229,58 @@ for (let id in npcs) {
     }
 }
 
-// Nakładka grup
+// Legenda grup na mapie (czytelna lista zamiast podpisów wszędzie)
 try {
     let distMap = buildDistanceMapFromHero();
     let serverGroups = buildServerMobGroups(validMobs.filter(m => m.__reachable), distMap);
 
-    ctx.font = `${Math.max(9, Math.floor(scale * 1.55))}px Arial`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+    // Zliczanie grup wg składu: np. "2x normal", "3x elite2"
+    let summary = new Map();
 
     for (const g of serverGroups) {
-        if (!g.bestStand) continue;
+        if (!g || !g.mobs || !g.mobs.length) continue;
 
-        const gx = offsetX + (g.bestStand.x * scale) + (scale / 2);
-        const gy = offsetY + (g.bestStand.y * scale) + (scale / 2);
-        const isCurrent = g.key === window.expCurrentTargetGroupKey;
+        const label = `${g.mobs.length}x ${g.mainRanga || 'normal'}`;
+        summary.set(label, (summary.get(label) || 0) + 1);
+    }
 
-        ctx.beginPath();
-        ctx.arc(gx, gy, Math.max(3, scale * 0.7), 0, 2 * Math.PI);
-        ctx.strokeStyle = isCurrent ? '#00e5ff' : '#ffffff44';
-        ctx.lineWidth = isCurrent ? 2 : 1;
-        ctx.stroke();
+    const entries = [...summary.entries()]
+        .sort((a, b) => {
+            const getCount = s => parseInt(String(s).split('x')[0], 10) || 0;
+            return getCount(b[0]) - getCount(a[0]);
+        });
 
-        // Compact: pokazuj tylko aktualny target
-        if (compactMode && !isCurrent) continue;
+    if (entries.length > 0) {
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
 
-        // Normalny tryb: podpisuj tylko większe grupy lub aktualny target
-        if (!compactMode && g.mobs.length < 3 && !isCurrent) continue;
+        const title = 'Grupy na mapie:';
+        const lines = entries.map(([label, count]) => `${count}× ${label}`);
 
-        const label = compactMode
-            ? `${g.mobs.length}x`
-            : `${g.mobs.length}x ${g.mainRanga}`;
+        let maxWidth = ctx.measureText(title).width;
+        for (const line of lines) {
+            maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+        }
 
-        const tx = gx + 6;
-        const ty = gy - 8;
-        const tw = ctx.measureText(label).width;
-        const th = 12;
+        const lineH = 14;
+        const boxX = offsetX + 8;
+        const boxY = offsetY + 8;
+        const boxW = maxWidth + 12;
+        const boxH = 8 + lineH * (lines.length + 1);
 
         ctx.fillStyle = 'rgba(0,0,0,0.72)';
-        ctx.fillRect(tx - 2, ty - th / 2, tw + 4, th);
+        ctx.fillRect(boxX, boxY, boxW, boxH);
 
-        ctx.fillStyle = isCurrent ? '#00e5ff' : '#e0d8c0';
-        ctx.fillText(label, tx, ty);
+        ctx.fillStyle = '#00e5ff';
+        ctx.fillText(title, boxX + 6, boxY + 4);
+
+        ctx.fillStyle = '#e0d8c0';
+        lines.forEach((line, i) => {
+            ctx.fillText(line, boxX + 6, boxY + 4 + lineH * (i + 1));
+        });
     }
 } catch (e) {}
-
   // Rysowanie dynamicznej trasy do expowiska (REALNA ŚCIEŻKA PO TERENIE)
 if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
     let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
