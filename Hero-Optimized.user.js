@@ -5490,7 +5490,38 @@ function getAllCandidateExpMaps() {
     const maps = botSettings?.exp?.mapOrder || [];
     return Array.isArray(maps) ? [...maps] : [];
 }
+function hasNearbyReachableMobsForExp(maxDistance = 12) {
+    if (typeof Engine === 'undefined' || !Engine.hero || !Engine.map || !Engine.npcs) return false;
 
+    let distMap = buildDistanceMapFromHero();
+    let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+
+    for (let id in npcs) {
+        let n = npcs[id].d || npcs[id];
+        if (!n || n.dead || n.del || n.delete) continue;
+
+        // tylko normal / elite / hero
+        if (n.type !== 2 && n.type !== 3 && n.type !== 11) continue;
+
+        // szukamy pola dojścia obok moba
+        let bestDist = Infinity;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                const key = `${n.x + dx}_${n.y + dy}`;
+                if (distMap.has(key)) {
+                    bestDist = Math.min(bestDist, distMap.get(key));
+                }
+            }
+        }
+
+        if (bestDist <= maxDistance) {
+            return true;
+        }
+    }
+
+    return false;
+}
   function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
@@ -5526,20 +5557,46 @@ function getAllCandidateExpMaps() {
         return; // Trwa blokada, czekamy
     }
 
-    // --- KONTROLA BERSERKA (Musi być sprawdzona PRZED komendą biegu) ---
-    const currMap = Engine.map.d.name;
-    const isExpMap = isMapInSelectedExpowisko(currMap);
-    setExpBerserkState(isExpMap);
-
-// --- 2. RUCH NA EXPOWISKO ORAZ PAMIĘĆ MAP ---
+  // --- KONTROLA BERSERKA + DECYZJA CZY CZYŚCIĆ AKTUALNĄ MAPĘ ---
+const currMap = Engine.map.d.name;
 let mapsPool = getAllCandidateExpMaps();
 let targetExpMap = currMap;
 
 if (!window.mapClearTimes) window.mapClearTimes = {};
 
+// Czy obecna mapa jest częścią wybranego expowiska?
+const isExpMap = mapsPool.includes(currMap);
+
+// Czy na tej mapie są bliskie, osiągalne potwory?
+const shouldClearCurrentMap = hasNearbyReachableMobsForExp(12);
+
+// Jeśli stoimy na mapie z expowiska i są tu bliskie moby, czyścimy ją od razu
+if (isExpMap && shouldClearCurrentMap && !isMapTemporarilyCleared(currMap)) {
+    targetExpMap = currMap;
+
+    // jeśli był rush, kończymy go i przechodzimy do normalnego expienia
+    window.isRushing = false;
+
+    // berserk może działać tylko podczas realnego czyszczenia mapy
+    setExpBerserkState(true);
+} else {
+    // W KAŻDYM innym przypadku: najpierw bieg / przejście / szukanie celu -> berserk OFF
+    setExpBerserkState(false);
+
+    // Jeśli jesteśmy na mapie z expowiska, ale nic sensownego blisko nie ma,
+    // traktujemy ją jak mapę przelotową i szukamy kolejnej sensownej mapy do czyszczenia
+    if (isExpMap && !isMapTemporarilyCleared(currMap) && !shouldClearCurrentMap) {
+        // celowo nic — pozwalamy niższej logice wybrać dalszy target
+    } else if (isExpMap && !isMapTemporarilyCleared(currMap) && shouldClearCurrentMap) {
+        targetExpMap = currMap;
+    }
+}
+
+if (!window.mapClearTimes) window.mapClearTimes = {};
+
 // Jeśli jesteśmy na mapie z expowiska i nie jest oznaczona jako chwilowo pusta,
 // to zawsze traktujemy ją jako pełnoprawną mapę do czyszczenia.
-if (mapsPool.includes(currMap) && !isMapTemporarilyCleared(currMap)) {
+if (isExpMap && shouldClearCurrentMap && !isMapTemporarilyCleared(currMap)) {
     targetExpMap = currMap;
 } else {
     // Szukamy najbliższej mapy z expowiska, która nie jest chwilowo wyczyszczona
@@ -5586,15 +5643,23 @@ if (mapsPool.includes(currMap) && !isMapTemporarilyCleared(currMap)) {
             }
         }
 
-    if (currMap !== targetExpMap) {
-        let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
-        if (!currentlyRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
-            if (typeof window.rushToMap === 'function') {
-                window.rushToMap(targetExpMap);
-            }
+  if (currMap !== targetExpMap) {
+    let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
+
+    // podczas biegu między mapami berserk zawsze OFF
+    setExpBerserkState(false);
+
+    if (!currentlyRushing && (!window.mapCooldown || Date.now() > window.mapCooldown)) {
+        if (window.logExp) {
+            window.logExp(`🏃 Biegnę na mapę docelową [${targetExpMap}] bez berserka.`, "#90caf9");
         }
-        return; // Przerywa wykonywanie reszty skryptu podczas biegu (Dlatego przełącznik musi być wyżej!)
+
+        if (typeof window.rushToMap === 'function') {
+            window.rushToMap(targetExpMap);
+        }
     }
+    return;
+}
 
     const now = Date.now();
     const hero = Engine.hero.d;
