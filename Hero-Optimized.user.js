@@ -5728,12 +5728,25 @@ expAttackLockUntil = 0;
         return false;
     };
 
-    if (hx !== expLastX || hy !== expLastY) {
-        expLastX = hx;
-        expLastY = hy;
-        expAntiLagTime = now + getAntiLagDelay();
-        window.expGatewayStandTime = 0;
-    } else if (now > expAntiLagTime) {
+  // Anti-Lag tylko gdy bot realnie próbuje gdzieś iść.
+// Gdy czeka na respawn / pusta mapa / cooldown przejścia, NIE wolno go ruszać.
+if (
+    window.isExping &&
+    (
+        (window.expMapTransitionCooldown && now < window.expMapTransitionCooldown) ||
+        (!expCurrentTargetId && !window.expCurrentTargetGroupKey)
+    )
+) {
+    expLastX = hx;
+    expLastY = hy;
+    expAntiLagTime = now + getAntiLagDelay();
+    window.expGatewayStandTime = 0;
+} else if (hx !== expLastX || hy !== expLastY) {
+    expLastX = hx;
+    expLastY = hy;
+    expAntiLagTime = now + getAntiLagDelay();
+    window.expGatewayStandTime = 0;
+} else if (now > expAntiLagTime) {
         if (isOnGateway(hx, hy)) {
             if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
             if (now - window.expGatewayStandTime > 12000) {
@@ -9098,11 +9111,17 @@ window.expLastMoveTy = -1;
             if (window.npcWalkInterval) { window.stuckIdleCount = 0; return; }
             if (window.isExpSuspended) { window.stuckIdleCount = 0; return; }
 
-            // Wyjątek Czekania na Respawn (np. 45 sekund na koniec pętli)
-            if (window.isExping && window.expMapTransitionCooldown && Date.now() < window.expMapTransitionCooldown) {
-                window.stuckIdleCount = 0;
-                return;
-            }
+        // Wyjątek Czekania na Respawn / brak celu
+if (
+    window.isExping &&
+    (
+        (window.expMapTransitionCooldown && Date.now() < window.expMapTransitionCooldown) ||
+        (!window.expCurrentTargetGroupKey && !window.expCurrentTargetId)
+    )
+) {
+    window.stuckIdleCount = 0;
+    return;
+}
             // --------------------------------------------------------------------------
 
             let currentMap = Engine.map.d.name;
