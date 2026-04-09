@@ -2461,11 +2461,6 @@ window.executeRushStep = function() {
                     targetX = baseDoor.x;
                     targetY = baseDoor.y;
                     doorInfo = "(Z pamięci bazy)";
-                } else {
-                    if (window._lastRushNextMap !== nextMap) {
-                        if (window.logExp) window.logExp(`⚠️ Przejście z bazy do [${nextMap}] jest zablokowane murem. Ignoruję!`, "#ff9800");
-                        if (window.logHero) window.logHero(`⚠️ Przejście z bazy do [${nextMap}] jest zablokowane murem. Ignoruję!`, "#ff9800");
-                    }
                 }
             }
 
@@ -3595,7 +3590,13 @@ expEmptyScans = 0;
             window.expGlobalTargetMap = null;
             if (typeof window.logExp === 'function') window.logExp("🚀 Uruchomiono tryb automatyczny!", "#4caf50");
 
-            if (botSettings.berserk) { botSettings.berserk.userEnabled = true; if (chk) chk.checked = true; saveSettings(); }
+            if (botSettings.berserk) {
+                botSettings.berserk.userEnabled = true;
+                botSettings.berserk.enabled = false; // Aktywacja dopiero po wejściu na mapę z kolejności map.
+                if (chk) chk.checked = false;
+                saveSettings();
+                if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+            }
         } else {
             this.innerHTML = "▶ START";
             this.style.borderColor = "#4caf50";
@@ -6109,6 +6110,12 @@ function runExpLogic() {
         const bestTransit = pickNextUnclearedExpMap(currMap, mapsPool);
         let bestTargetMap = bestTransit ? bestTransit.targetMap : null;
 
+        // Jeśli startujemy poza expowiskiem, dobijamy najpierw do najbliższej mapy z kolejności.
+        if (!bestTargetMap && !isExpMap) {
+            const nearestExpPath = getClosestExpMapPath(currMap);
+            if (nearestExpPath?.targetMap) bestTargetMap = nearestExpPath.targetMap;
+        }
+
         if (!bestTargetMap) {
             const fallbackRoute = pickNextReachableMapFromRoute(currMap);
             if (fallbackRoute?.nextMap) bestTargetMap = fallbackRoute.nextMap;
@@ -6165,10 +6172,16 @@ function runExpLogic() {
             window.expWaitingSafeMap = null;
             expEmptyScans = 0;
             return;
-        } else if (!bestTargetMap && !isExpMap) {
-            // Backtracking (Cofanie się)
+        } else if (!bestTargetMap) {
+            // Backtracking (Cofanie się), np. gdy utknęliśmy na ślepej mapie.
             let back = window.expMapHistory?.pop();
-            if (back) window.rushToMap(back);
+            if (back) {
+                if (window.logExp && window._lastTransitMapLog !== back) {
+                    window.logExp(`↩️ Brak dalszego przejścia. Wracam na mapę: [${back}]`, "#ffb74d");
+                    window._lastTransitMapLog = back;
+                }
+                window.rushToMap(back);
+            }
         }
     }
 }
