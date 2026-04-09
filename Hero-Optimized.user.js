@@ -2628,8 +2628,27 @@ window.executeRushStep = function() {
 // ==========================================
     // ALGORYTM DIJKSTRY (Z CZARNĄ LISTĄ BRAM I WAGAMI)
     // ==========================================
+    function refreshGatewayBaseFromStorage() {
+        try {
+            const raw = localStorage.getItem('hero_global_gateways_v20');
+            if (!raw) return false;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return false;
+            if (Object.keys(parsed).length === 0) return false;
+            globalGateways = parsed;
+            window.globalGateways = globalGateways;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function getShortestPath(start, end) {
         if (start === end) return [start];
+
+        if (!globalGateways || Object.keys(globalGateways).length === 0 || !globalGateways[start]) {
+            refreshGatewayBaseFromStorage();
+        }
 
         let distances = {};
         let previous = {};
@@ -3174,7 +3193,6 @@ function initGUI() {
                         </div>
                         <div style="border-top:1px solid #333; padding-top:6px; margin-top:4px;">
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; display:block; margin-bottom:4px;" title="Ucieka na 10 minut z czerwonej mapy, gdy gracz jest bliżej niż 6 kratek"><input type="checkbox" id="pvpFlee" ${botSettings.exp.pvpFlee ? 'checked' : ''}> 🏃 Uciekaj z map PvP</label>
-                            <label style="color:#00acc1; font-size:10px; cursor:pointer; display:block;" title="Wymusza tryb F11 przy starcie bota i wyłącza przy zatrzymaniu."><input type="checkbox" id="autoFullscreen" ${botSettings.exp.autoFullscreen ? 'checked' : ''}> 🖥️ Auto-Pełny Ekran (F11)</label>
                             <label style="color:#e040fb; font-size:10px; cursor:pointer; display:block; margin-top:4px;" title="Zezwala na używanie zwojów teleportacji z ekwipunku podczas expienia."><input type="checkbox" id="useTeleportsEq" ${botSettings.exp.useTeleportsEq ? 'checked' : ''}> 📜 Używaj teleportów z EQ (tylko w EXP)</label>
                         </div>
                     </div>
@@ -3551,12 +3569,6 @@ if (btnExp) {
             this.style.borderColor = "#f44336";
             this.style.color = "#f44336";
 
-            // --- AUTO FULLSCREEN ---
-            if (botSettings.exp.autoFullscreen && !document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(e => console.log("Błąd F11:", e));
-            }
-            // -----------------------
-
             // BEZWZGLĘDNY RESET BLOKAD RUCHU
 
             // BEZWZGLĘDNY RESET BLOKAD RUCHU
@@ -3584,12 +3596,6 @@ expEmptyScans = 0;
             this.innerHTML = "▶ START";
             this.style.borderColor = "#4caf50";
             this.style.color = "#4caf50";
-           // --- TWARDE WYJŚCIE Z PEŁNEGO EKRANU ---
-            if (botSettings.exp.autoFullscreen && document.fullscreenElement) {
-                document.exitFullscreen().catch(e => console.log("Błąd wyjścia z F11:", e));
-            }
-            // --------------------------------------
-
             // TWARDE ZATRZYMANIE BOTA I POSTACI
             window.isRushing = false;
             if (window.rushInterval) clearTimeout(window.rushInterval);
@@ -3639,8 +3645,6 @@ if (!botSettings.berserk) {
 
         if (botSettings.exp.chatAlert === undefined) { botSettings.exp.chatAlert = false; saveSettings(); }
         if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
-        if (botSettings.exp.autoFullscreen === undefined) { botSettings.exp.autoFullscreen = true; saveSettings(); }
-        bindChange('autoFullscreen', (e) => { botSettings.exp.autoFullscreen = e.target.checked; saveSettings(); });
         if (botSettings.exp.useTeleportsEq === undefined) { botSettings.exp.useTeleportsEq = true; saveSettings(); }
 bindChange('useTeleportsEq', (e) => { botSettings.exp.useTeleportsEq = e.target.checked; saveSettings(); });
         bindChange('chatAlert', (e) => { botSettings.exp.chatAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
@@ -4909,11 +4913,6 @@ function optimizeRoute() {
 function stopPatrol(hardStop = true) {
         let wasMoving = isPatrolling || isRushing;
         isPatrolling = false;
-    // --- TWARDE WYJŚCIE Z PEŁNEGO EKRANU ---
-        if (botSettings.exp.autoFullscreen && document.fullscreenElement) {
-            document.exitFullscreen().catch(e => console.log("Błąd wyjścia z F11:", e));
-        }
-        // --------------------------------------
         isRushing = false;
         window.isRushing = false;
         window.isRushingToShop = false;
@@ -4958,12 +4957,6 @@ function stopPatrol(hardStop = true) {
             }
         }
        isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
-
-        // --- AUTO FULLSCREEN ---
-        if (botSettings.exp.autoFullscreen && !document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(e => console.log("Błąd F11:", e));
-        }
-        // -----------------------
 
         let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336";
 
@@ -5720,6 +5713,30 @@ function getAllCandidateExpMaps() {
     const maps = botSettings?.exp?.mapOrder || [];
     return Array.isArray(maps) ? [...maps] : [];
 }
+
+function pickNextUnclearedExpMap(currMap, mapsPool) {
+    if (!Array.isArray(mapsPool) || mapsPool.length === 0) return null;
+
+    const currIdx = mapsPool.indexOf(currMap);
+    const ordered = [];
+
+    if (currIdx >= 0) {
+        for (let i = 1; i <= mapsPool.length; i++) {
+            ordered.push(mapsPool[(currIdx + i) % mapsPool.length]);
+        }
+    } else {
+        ordered.push(...mapsPool);
+    }
+
+    for (const candidate of ordered) {
+        if (!candidate || candidate === currMap) continue;
+        if (isMapTemporarilyCleared(candidate)) continue;
+        const p = getShortestPath(currMap, candidate);
+        if (p && p.length > 1) return candidate;
+    }
+
+    return null;
+}
 function getPathToAdjacentTile(targetX, targetY, distMap) {
     if (!(window.margoWalkableMask instanceof Set)) return null;
     if (!distMap) distMap = buildDistanceMapFromHero();
@@ -5968,15 +5985,18 @@ function runExpLogic() {
 
         window.expStandStillStart = null;
         if (now > nextAllowedClickTime) {
-            const targetChanged = window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y;
+            const adjacent = getPathToAdjacentTile(target.x, target.y, distMap);
+            const moveX = adjacent?.stand?.x ?? target.x;
+            const moveY = adjacent?.stand?.y ?? target.y;
+            const targetChanged = window.expLastMoveTx !== moveX || window.expLastMoveTy !== moveY;
             const isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
             const heroUnchanged = window.expLastMoveHeroX === hx && window.expLastMoveHeroY === hy;
             const isStuck = heroUnchanged && window.expLastMoveAt && (now - window.expLastMoveAt > 1600);
 
             if (targetChanged || !isMoving || isStuck) {
-                window.safeGoTo(target.x, target.y, false);
-                window.expLastMoveTx = target.x;
-                window.expLastMoveTy = target.y;
+                window.safeGoTo(moveX, moveY, false);
+                window.expLastMoveTx = moveX;
+                window.expLastMoveTy = moveY;
                 window.expLastMoveAt = now;
             }
 
@@ -6001,12 +6021,12 @@ function runExpLogic() {
             }
         }
 
-        let bestTargetMap = null;
-        let minLen = Infinity;
-        mapsPool.filter(m => !isMapTemporarilyCleared(m)).forEach(m => {
-            const p = getShortestPath(currMap, m);
-            if (p && p.length < minLen) { minLen = p.length; bestTargetMap = m; }
-        });
+        let bestTargetMap = pickNextUnclearedExpMap(currMap, mapsPool);
+
+        if (!bestTargetMap) {
+            const fallbackRoute = pickNextReachableMapFromRoute(currMap);
+            if (fallbackRoute?.nextMap) bestTargetMap = fallbackRoute.nextMap;
+        }
 
         if (bestTargetMap && !window.isRushing) {
             if (window.logExp && window._lastTransitMapLog !== bestTargetMap) {
