@@ -5755,12 +5755,10 @@ window.expConsecutiveStucks = 0;
 } else if (window.expWasInBattle) {
     window.expWasInBattle = false;
 
+    // po walce nie czyścimy mapy z logiki, tylko od razu wracamy do wyboru kolejnej grupy
     expEmptyScans = 0;
+    expSearchAfterKillUntil = 0;
 
-    // bardzo krótka pauza po walce, tylko żeby odświeżyły się dane
-    expSearchAfterKillUntil = now + 700;
-
-    // dalej czyścimy tę samą mapę
     expPinnedMap = Engine.map.d.name;
     expPinnedMapUntil = now + (Engine.map?.d?.pvp === 2 ? 20000 : 10000);
 
@@ -5768,7 +5766,8 @@ window.expConsecutiveStucks = 0;
     window.expCurrentTargetGroupKey = null;
     window.expTargetLockTime = 0;
 
-    expLastActionTime = now + 120;
+    // bardzo krótki bufor tylko na odświeżenie stanu po walce
+    expLastActionTime = now + 50;
     return;
 }
     } catch (e) {}
@@ -6082,7 +6081,12 @@ if (targetGroup && targetGroup.bestTargetMob && Number.isFinite(targetGroup.best
     if (target) {
 const targetDist = targetGroup.bestPathDistance;
 
-   if (expEmptyScans > 0 || (expSearchAfterKillUntil && now < expSearchAfterKillUntil)) {
+   if (expEmptyScans > 0) {
+    window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
+    expEmptyScans = 0;
+    expLastActionTime = now + 80;
+    return;
+}
     window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
     expEmptyScans = 0;
     expSearchAfterKillUntil = 0;
@@ -6243,19 +6247,7 @@ if (
             : `Czyszczę mapę do końca...`;
     }
 
-    expLastActionTime = now + 120;
-    return;
-}
-
-// Krótki bufor po walce — tylko na odświeżenie danych, bez sztucznego kręcenia się
-if (expSearchAfterKillUntil && now < expSearchAfterKillUntil) {
-    expEmptyScans = 0;
-
-    if (displayTarget) {
-        displayTarget.innerText = `Szukam kolejnej grupy...`;
-    }
-
-    expLastActionTime = now + 80;
+    expLastActionTime = now + 100;
     return;
 }
 expEmptyScans++;
