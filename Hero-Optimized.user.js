@@ -1266,10 +1266,30 @@ function pickNextReachableMapFromRoute(currentSysMap) {
     for(let i = 1; i < mapList.length; i++) {
         let checkIdx = (currIdx + i) % mapList.length;
         let checkMap = mapList[checkIdx];
+        if (window.__bannedMaps && window.__bannedMaps[checkMap] && Date.now() < window.__bannedMaps[checkMap]) continue;
         let door = reachableDoors.find(g => g.targetMap.toLowerCase() === checkMap.toLowerCase());
         if (door) return { nextMap: checkMap, door: door };
+
+        // Fallback: jeśli bezpośredniego przejścia nie ma, szukaj mapy z trasy, do której istnieje ścieżka
+        // i wejdź pierwszym osiągalnym krokiem tej ścieżki (np. alternatywną jaskinią).
+        let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, checkMap) : null;
+        if (path && path.length > 1) {
+            let firstHop = path[1];
+            let hopDoor = reachableDoors.find(g => g.targetMap.toLowerCase() === firstHop.toLowerCase());
+            if (hopDoor) return { nextMap: firstHop, door: hopDoor, finalTarget: checkMap, viaPath: path };
+        }
     }
     return null;
+}
+
+function getExpGroupNameForMap(mapName) {
+    if (!mapName) return null;
+    let source = (typeof botSettings !== 'undefined' && Array.isArray(botSettings.expProfiles) && botSettings.expProfiles.length > 0)
+        ? botSettings.expProfiles
+        : (Array.isArray(window.defaultExpProfiles) ? window.defaultExpProfiles : []);
+    let mapLower = mapName.toLowerCase();
+    let profile = source.find(p => Array.isArray(p.maps) && p.maps.some(m => (m || "").toLowerCase() === mapLower));
+    return profile ? profile.name : null;
 }
 
 function isMapKnownInGatewayBase(mapName) {
@@ -2217,7 +2237,10 @@ function autoDetectEngineData() {
         }
 
         // Zabezpieczenie przed podwójnymi logami
-        let msg = `🏃 Obieram kurs na: [${targetMapName}]`;
+        let groupName = typeof getExpGroupNameForMap === 'function' ? getExpGroupNameForMap(targetMapName) : null;
+        let msg = groupName
+            ? `🏃 Obieram kurs na: [${targetMapName}] • Grupa: [${groupName}]`
+            : `🏃 Obieram kurs na: [${targetMapName}]`;
         if (window._lastRushTargetLog !== msg) {
             if (window.logHero) window.logHero(msg, "#00acc1");
             if (window.logExp) window.logExp(msg, "#00acc1");
@@ -2447,15 +2470,16 @@ window.executeRushStep = function() {
                 
                 let fallback = null;
                 // Tylko jak biega rutynowo w Expie, szukamy następnej mapy z listy
-                if (window.isExping && !window.rushTarget && botSettings.exp && botSettings.exp.mapOrder) {
+                if (window.isExping && botSettings.exp && botSettings.exp.mapOrder) {
                     fallback = typeof pickNextReachableMapFromRoute === 'function' ? pickNextReachableMapFromRoute(currentSysMap) : null;
                 }
 
                 if (fallback && fallback.nextMap && fallback.door) {
                     window.rushNextMap = fallback.nextMap;
                     if (window._lastRushNextMap !== fallback.nextMap) {
-                        if (window.logExp) window.logExp(`🚪 Biegnę do: ${fallback.nextMap} (pominięto martwe przejście)`, "#ba68c8");
-                        if (window.logHero) window.logHero(`🚪 Biegnę do: ${fallback.nextMap} (pominięto martwe przejście)`, "#ba68c8");
+                        let suffix = fallback.finalTarget ? ` → cel trasy: ${fallback.finalTarget}` : "";
+                        if (window.logExp) window.logExp(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (pominięto martwe przejście)`, "#ba68c8");
+                        if (window.logHero) window.logHero(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (pominięto martwe przejście)`, "#ba68c8");
                         window._lastRushNextMap = fallback.nextMap;
                     }
                     safeGoTo(fallback.door.x, fallback.door.y, false);
@@ -8651,14 +8675,19 @@ window.openShopAsync = async (namePart) => {
                 // Python przelicza to na absolutny ekran na podstawie aktywnego okna.
                 let viewportX = rect.left + (rect.width / 2) + randomOffsetX;
                 let viewportY = rect.top + (rect.height / 2) + randomOffsetY;
-                let dpr = window.devicePixelRatio || 1;
-                let vx = viewportX * dpr;
-                let vy = viewportY * dpr;
+                let vx = viewportX;
+                let vy = viewportY;
+
+                // Fallback "nie-fullscreen": policz absolut z uwzględnieniem pasków przeglądarki.
+                let browserLeftBar = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
+                let browserTopBar = Math.max(0, window.outerHeight - window.innerHeight);
+                let absX = window.screenX + browserLeftBar + viewportX;
+                let absY = window.screenY + browserTopBar + viewportY;
 
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
                         method: "GET",
-                        url: `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`,
+                        url: `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}&ax=${absX}&ay=${absY}&topbar=${browserTopBar}`,
                         onload: function(response) {
                             if(window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu!", "#e040fb");
                             resolve();
@@ -8670,7 +8699,7 @@ window.openShopAsync = async (namePart) => {
                         }
                     });
                 } else {
-                    fetch(`http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`)
+                    fetch(`http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}&ax=${absX}&ay=${absY}&topbar=${browserTopBar}`)
                         .then(res => resolve())
                         .catch(err => { el.classList.add('pressed', 'active'); resolve(); });
                 }
