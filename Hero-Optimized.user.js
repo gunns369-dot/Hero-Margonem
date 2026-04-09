@@ -2321,7 +2321,7 @@ window.executeRushStep = function() {
         let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
         let currentDistance = path ? path.length : 999;
 
-        // --- MĄDRE ZWOJE TELEPORTACJI Z KALKULATOREM TRASY (TYLKO EXP) ---
+        // --- ZWOJE TELEPORTACJI (Tylko EXP i tylko jeśli ptaszek zaznaczony) ---
         let tps = (window.isExping && botSettings.exp.useTeleportsEq) ? window.getAvailableTeleports() : [];
         let bestTp = null;
         let bestDist = currentDistance - 1;
@@ -2350,7 +2350,6 @@ window.executeRushStep = function() {
             rushInterval = setTimeout(window.executeRushStep, 2500);
             return;
         }
-        // --- KONIEC SYSTEMU ZWOJÓW ---
 
         if (path && path.length > 1) {
             nextMap = path[1];
@@ -2391,13 +2390,13 @@ window.executeRushStep = function() {
             clearTimeout(rushInterval);
             rushInterval = setTimeout(() => window.handleTeleportNPC(nextMap), 200);
         } else {
-            // TWARDE CHODZENIE PO BAZIE DANYCH (Omija ograniczenia widoczności radaru!)
+            // SPRAWDZANIE BRAM (Z RADAREM ŚCIAN)
             let targetX = null, targetY = null;
             let doorInfo = "";
             let liveDoor = typeof getBestReachableGatewayToMap === 'function' ? getBestReachableGatewayToMap(nextMap) : null;
 
             if (liveDoor && liveDoor.reachable) {
-                targetX = liveDoor.x; // Proste koordynaty bramy (bez udziwnień)
+                targetX = liveDoor.x;
                 targetY = liveDoor.y;
                 doorInfo = "(Zasięg radaru)";
             } else if (baseDoor) {
@@ -2438,7 +2437,6 @@ window.executeRushStep = function() {
             stuckCount = 0;
             window.rushGatewayArrivalTime = 0;
 
-            // Podchodzenie w punkt, tak jak na patrolu
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
             rushInterval = setTimeout(window.checkRushArrival, 500);
@@ -2474,9 +2472,8 @@ window.executeRushStep = function() {
 
         let cx = parseInt(Engine.hero.d.x, 10);
         let cy = parseInt(Engine.hero.d.y, 10);
-        let dist = Math.abs(cx - exactX) + Math.abs(cy - exactY);
+        let dist = Math.max(Math.abs(cx - exactX), Math.abs(cy - exactY));
 
-        // Gdy jesteśmy dalej niż 1 kratka - to podchodzimy z systemem Anti-Stuck jak na patrolu
         if (dist > 1) {
             let isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
             window.rushGatewayArrivalTime = 0;
@@ -2485,7 +2482,6 @@ window.executeRushStep = function() {
                 if (cx === window.rushLastX && cy === window.rushLastY) {
                     stuckCount++;
                     if (stuckCount === 6) {
-                        // Ponawia kliknięcie bezpośrednio w drzwi
                         safeGoTo(exactX, exactY, false);
                     }
                     if (stuckCount > 15) {
@@ -2503,12 +2499,13 @@ window.executeRushStep = function() {
             } else {
                 stuckCount = 0;
             }
+            
+            // MUSIMY DODAĆ TIMEOUT, INACZEJ BOT UMRZE W PĘTLI!
             clearTimeout(rushInterval);
             rushInterval = setTimeout(window.checkRushArrival, 500);
             return;
         }
 
-        // Stoimy na bramie lub obok niej - Wciskamy w przejście!
         if (dist === 1 || dist === 0) {
             safeGoTo(exactX, exactY, false);
         }
@@ -2517,7 +2514,6 @@ window.executeRushStep = function() {
             window.rushGatewayArrivalTime = Date.now();
         }
 
-        // Jak stoi na bramie przez 3.5s i nic, to znaczy że brama się zacięła
         if (Date.now() - window.rushGatewayArrivalTime > 3500) {
             if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
             if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
@@ -2534,8 +2530,9 @@ window.executeRushStep = function() {
                     break;
                 }
             }
-            window.rushGatewayArrivalTime = Date.now() + 1500; // Reset by spróbował znowu po odsunięciu się
+            window.rushGatewayArrivalTime = Date.now() + 1500;
         }
+        
         clearTimeout(rushInterval);
         rushInterval = setTimeout(window.checkRushArrival, 500);
     };
@@ -5694,150 +5691,197 @@ function runExpLogic() {
 
             if (!window.mapClearTimes) window.mapClearTimes = {};
 
-            // CZYSZCZENIE POTWORÓW - Prosta lista po zasięgu i rankingu (Ignorujemy niedostępne)
-            let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-            let validMobs = [];
-            
-            const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
-            const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
-            const wantNormal = document.getElementById('expN')?.checked ?? botSettings.exp.normal;
-            const wantElite = document.getElementById('expE')?.checked ?? botSettings.exp.elite;
-            const minL = parseInt(document.getElementById('expMinL')?.value || botSettings.exp.minLvl, 10);
-            const maxL = parseInt(document.getElementById('expMaxL')?.value || botSettings.exp.maxLvl, 10);
+           // --- SKANOWANIE POTWORÓW (Z RADAREM ŚCIAN I POPRAWIONYM KLIKANIEM) ---
+    let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+    let validMobs = [];
+    
+    const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
+    const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
+    
+    // Pobieramy mapę odległości z radaru, żeby odrzucić potwory za ścianą
+    let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
 
-            for (let key in npcsData) {
-                let n = npcsData[key]?.d || npcsData[key];
-                if (!n || n.type === 4 || n.type < 2 || n.dead || n.del || n.delete) continue;
+    for (let key in npcsData) {
+        let n = npcsData[key]?.d || npcsData[key];
+        if (!n || n.type === 4 || n.type < 2 || n.dead || n.del || n.delete) continue;
 
-                let lvl = parseInt(n.lvl, 10);
-                if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) continue;
+        let lvl = parseInt(n.lvl, 10);
+        if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) continue;
 
-                let ranga = typeof getMobRank === 'function' ? getMobRank(n) : "normal";
+        let ranga = typeof getMobRank === 'function' ? getMobRank(n) : "normal";
 
-                if (ranga === "normal" && !wantNormal) continue;
-                if (ranga === "elite1" && !wantElite) continue;
-                if (ranga === "elite2" && !bE2) continue;
-                if (ranga === "hero" && !bHero) continue;
+        if (ranga === "normal" && !wantNormal) continue;
+        if (ranga === "elite1" && !wantElite) continue;
+        if (ranga === "elite2" && !bE2) continue;
+        if (ranga === "hero" && !bHero) continue;
 
-                let coordKey = n.x + "_" + n.y;
-                if (window.expUnreachableMobs && window.expUnreachableMobs.has(coordKey)) continue;
+        // Omijanie mobów, do których już próbowaliśmy dojść, ale zablokowaliśmy się na ścianie
+        let coordKey = n.x + "_" + n.y;
+        if (window.expUnreachableMobs && window.expUnreachableMobs.has(coordKey)) continue;
 
-                let dist = Math.abs(Engine.hero.d.x - n.x) + Math.abs(Engine.hero.d.y - n.y);
-
-                validMobs.push({
-                    id: n.id || key,
-                    x: n.x,
-                    y: n.y,
-                    dist: dist,
-                    ranga: ranga,
-                    nick: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').trim()
-                });
-            }
-
-            // Moby posortowane po dystansie, tak jak to dziala w patrolu
-            validMobs.sort((a, b) => a.dist - b.dist);
-            let target = validMobs.length > 0 ? validMobs[0] : null;
-
-            // BERSERK STATE
-            if (isExpMap && target) {
-                setExpBerserkState(true);
-            } else {
-                setExpBerserkState(false);
-            }
-
-            const now = Date.now();
-            let hx = Engine.hero.d.x;
-            let hy = Engine.hero.d.y;
-
-            // --- ZABEZPIECZENIE PO RESPAWNIE ---
-            let hp = Engine.hero.d.hp !== undefined ? parseInt(Engine.hero.d.hp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 100);
-            let maxhp = Engine.hero.d.maxhp !== undefined ? parseInt(Engine.hero.d.maxhp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 100);
-            
-            if (window.isRegeneratingToFull || (hp / maxhp) * 100 < 40) {
-                if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                return;
-            }
-
-            // --- LOGIKA PODCHODZENIA (SKOPIOWANA Z PATROLU HEROSÓW) ---
-            if (target) {
-                expEmptyScans = 0;
-                let displayTarget = document.getElementById('expTargetDisplay');
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick} (Dystans: ${target.dist})`;
-
-                // WALKA - Dystans 1 kratka
-                if (target.dist <= 1) {
-                    window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                    if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-
-                    if (!window.expAttackLockUntil) window.expAttackLockUntil = 0;
-
-                    if (now > window.expAttackLockUntil) {
-                        // Uderzamy prosto z gry
-                        if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
-                        else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
-                        
-                        // Jiggle na rozbudzenie
-                        let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
-                        let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-                        if (typeof window.safeGoTo === 'function') window.safeGoTo(stepX, stepY, false);
-                        else Engine.hero.autoGoTo({ x: stepX, y: stepY });
-
-                        window.expAttackLockUntil = now + 2500; 
-                    }
-                    return;
+        // Sprawdzamy czy da się DOSTAĆ do potwora (czy jakakolwiek kratka wokół niego jest zielona na radarze)
+        let isReachable = false;
+        let bestDist = Infinity;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const sk = `${n.x + dx}_${n.y + dy}`;
+                if (distMap.has(sk)) {
+                    isReachable = true;
+                    let d = distMap.get(sk);
+                    if (d < bestDist) bestDist = d;
                 }
+            }
+        }
 
-                // BIEG DO MOBA (Dystans > 1)
-                let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
+        // Jeśli radar działa (mapa nie jest wczytywana) i potwór jest za ścianą - ignoruj go!
+        if (!isReachable && distMap.size > 0) continue;
 
-                if (isNewDestination) {
-                    window.expLastMoveTx = target.x;
-                    window.expLastMoveTy = target.y;
+        // Bierzemy prawdziwy dystans (omijający ściany) lub dystans w linii prostej jako zapas
+        let dist = isReachable ? bestDist : (Math.abs(hx - n.x) + Math.abs(hy - n.y));
+
+        validMobs.push({
+            id: n.id || key,
+            x: n.x,
+            y: n.y,
+            dist: dist,
+            ranga: ranga,
+            nick: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').trim()
+        });
+    }
+
+    // Sortowanie potworów: najbliższe najpierw
+    validMobs.sort((a, b) => a.dist - b.dist);
+
+    let target = validMobs.length > 0 ? validMobs[0] : null;
+
+    // BERSERK STATE
+    if (isExpMap && target) {
+        setExpBerserkState(true);
+    } else {
+        setExpBerserkState(false);
+    }
+
+    const now = Date.now();
+    let hx = Engine.hero.d.x;
+    let hy = Engine.hero.d.y;
+
+    // --- ZABEZPIECZENIE PO RESPAWNIE ---
+    let hp = Engine.hero.d.hp !== undefined ? parseInt(Engine.hero.d.hp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 100);
+    let maxhp = Engine.hero.d.maxhp !== undefined ? parseInt(Engine.hero.d.maxhp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 100);
+    
+    if (window.isRegeneratingToFull || (hp / maxhp) * 100 < 40) {
+        if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
+        return;
+    }
+
+    // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
+    if (target) {
+        let exactTargetDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
+
+        if (expEmptyScans > 0) {
+            if (window.logExp) window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
+            expEmptyScans = 0;
+            expLastActionTime = now + 80;
+            return;
+        }
+
+        // --- PODCHODZENIE (Tylko co throttle delay!) ---
+        if (exactTargetDist > 1) {
+            expAttackLockUntil = 0;
+            let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
+
+            if (isNewDestination) {
+                // Jeśli jest limit kliknięć, przerywamy by nie spamować
+                if (now < nextAllowedClickTime) return;
+
+                if (expCurrentTargetId !== target.id) {
+                    // NAPRAWIONY LOG (używamy target.nick zamiast usuniętego targetGroup!)
+                    if (window.logExp) window.logExp(`🏃 Cel: ${target.nick} (Dystans: ${exactTargetDist})`, "#00e5ff");
+                    expCurrentTargetId = target.id;
+
+                    let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
+                    window.expTargetLockTime = now + randomLockSeconds;
+                }
+                if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick} | dystans: ${exactTargetDist}`;
+                
+                if (typeof window.safeGoTo === 'function') window.safeGoTo(target.x, target.y, false);
+                else Engine.hero.autoGoTo({ x: target.x, y: target.y });
+
+                // Blokada spamu!
+                nextAllowedClickTime = now + 350;
+
+                window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
+                window.expPursuitLastX = hx; window.expPursuitLastY = hy;
+                window.expTargetPursuitStart = now;
+                window.expConsecutiveStucks = 0;
+            } else {
+                if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
                     window.expPursuitLastX = hx;
                     window.expPursuitLastY = hy;
                     window.expTargetPursuitStart = now;
                     window.expConsecutiveStucks = 0;
-
-                    if (window.logExp && expCurrentTargetId !== target.id) {
-                        window.logExp(`🏃 Biorę na cel: ${target.nick} [${target.x}, ${target.y}]`, "#00e5ff");
-                        expCurrentTargetId = target.id;
-                    }
                 }
 
-                // Wysyłamy go dokładnie w kordy moba. Gra go zatrzyma 1 kratkę przed.
-                if (typeof window.safeGoTo === 'function') window.safeGoTo(target.x, target.y, false);
-                else Engine.hero.autoGoTo({ x: target.x, y: target.y });
+                let timeStandingStill = now - window.expTargetPursuitStart;
 
-                // Anti-Stuck dla moba
-                if (hx === window.expPursuitLastX && hy === window.expPursuitLastY) {
-                    if (now - window.expTargetPursuitStart > 2500) {
-                        window.expConsecutiveStucks = (window.expConsecutiveStucks || 0) + 1;
-                        if (window.logExp) window.logExp(`🚨 Zacięcie na mobie. Próba (${window.expConsecutiveStucks}/4)`, "#ff5252");
-                        window.expTargetPursuitStart = now;
-
-                        if (window.expConsecutiveStucks >= 4) {
-                            if (window.logExp) window.logExp(`🚧 Potwór nieosiągalny! Ignoruję go.`, "#ff9800");
-                            if(!window.expUnreachableMobs) window.expUnreachableMobs = new Set();
-                            window.expUnreachableMobs.add(target.x + "_" + target.y);
-                            window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                            expCurrentTargetId = null;
-                            if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-                        } else {
+                // Jak 2.5s nic nie drgnie to znaczy, że wlazł w ścianę/zablokował się
+                if (timeStandingStill > 2500) {
+                    window.expConsecutiveStucks = (window.expConsecutiveStucks || 0) + 1;
+                    if (window.logExp) window.logExp(`🚨 Zacięcie w drodze do: ${target.nick}. Próba (${window.expConsecutiveStucks}/4)`, "#ff5252");
+                    window.expTargetPursuitStart = now; // Reset żeby dać kolejne 2.5s na sprawdzenie
+                    
+                    if (window.expConsecutiveStucks >= 4) {
+                        if (window.logExp) window.logExp(`🚧 Potwór nieosiągalny! Ignoruję go.`, "#ff9800");
+                        if(!window.expUnreachableMobs) window.expUnreachableMobs = new Set();
+                        window.expUnreachableMobs.add(target.x + "_" + target.y);
+                        expCurrentTargetId = null;
+                        window.expTargetLockTime = 0;
+                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                        if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                    } else {
+                        // Anti-Stuck ping
+                        if (now >= nextAllowedClickTime) {
                             let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                             let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
                             if (typeof window.safeGoTo === 'function') window.safeGoTo(rx, ry, false);
                             else Engine.hero.autoGoTo({ x: rx, y: ry });
+                            // Ustawiamy blokade na chwile po kroku ratunkowym
+                            nextAllowedClickTime = now + 600;
                         }
                     }
-                } else {
-                    window.expPursuitLastX = hx;
-                    window.expPursuitLastY = hy;
-                    window.expTargetPursuitStart = now;
-                    window.expConsecutiveStucks = 0;
                 }
+            }
+            expLastActionTime = now + 100;
+            return;
+        }
+
+        // --- WALKA (Dystans <= 1) ---
+        if (exactTargetDist <= 1) {
+            if (displayTarget) displayTarget.innerText = `Walka: ${target.nick}`;
+            window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
+            if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
+
+            if (expAttackLockUntil === 0) {
+                expAttackLockUntil = now + ((botSettings.berserk && botSettings.berserk.enabled) ? 2500 : 0);
+            } else if (now > expAttackLockUntil) {
+                if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
+                else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
+
+                if (now >= nextAllowedClickTime) {
+                    let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+                    let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+                    if (typeof window.safeGoTo === 'function') window.safeGoTo(stepX, stepY, false);
+                    else Engine.hero.autoGoTo({ x: stepX, y: stepY });
+                }
+
+                expAttackLockUntil = now + 2500; 
+                expLastActionTime = now + 800;
                 return;
             }
-
+            expLastActionTime = now + 100;
+        }
+        return;
+    }
             // --- ZMIANA MAPY (Gdy czysto) ---
             expEmptyScans++;
             let isRedMapNow = Engine.map.d.pvp === 2;
