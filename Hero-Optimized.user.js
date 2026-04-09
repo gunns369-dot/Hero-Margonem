@@ -1,7 +1,7 @@
 
 // ==UserScript==
 // @name         MargoNeuro - Optimized Edition
-// @version      64.3
+// @version      64.4
 // @description  Automatyczne wykrywanie, inteligentny zasięg, natywny auto-atak, poprawne limity poziomowe, naprawiony scroll.
 // @author       Ty & Gemini
 // @match        https://*.margonem.pl/
@@ -1584,16 +1584,24 @@ let attackInterval = null;
         // METODA GARGONEMA - Włącza natywnego auto-ataka prosto na serwerze gry
 
         if (typeof window._g === 'function') {
-
             window._g(`settings&action=update&id=34&v=1`); // Włącz Berserka
-
             window._g(`settings&action=update&id=34&key=elite&v=1`); // Bij Elity
-
             window._g(`settings&action=update&id=34&key=elite2&v=1`); // Bij Elity 2 i Herosów
-
             window._g(`fight&a=attack&id=${targetId}`); // Wymuś start
-
         }
+
+        let lastForceAttackAt = 0;
+        const forceAttackPulse = () => {
+            let now = Date.now();
+            if (now - lastForceAttackAt < 350) return;
+            lastForceAttackAt = now;
+
+            try {
+                if (typeof window._g === 'function') window._g(`fight&a=attack&id=${targetId}`);
+                if (Engine?.npcs?.interact) Engine.npcs.interact(targetId);
+                if (Engine?.npcs?.clickNpc) Engine.npcs.clickNpc(targetId);
+            } catch(e) {}
+        };
 
 
 
@@ -1651,6 +1659,9 @@ let attackInterval = null;
 
 
 
+            // Pchamy atak cyklicznie nawet gdy postać jeszcze dochodzi.
+            forceAttackPulse();
+
             if (dist > 1) {
                 manualAttackIssued = false;
 
@@ -1667,8 +1678,10 @@ let attackInterval = null;
             } else {
 
                 let now = Date.now();
-                if (!manualAttackIssued || now - lastManualAttackAt > 6000) {
+                if (!manualAttackIssued || now - lastManualAttackAt > 1200) {
                     if (Engine.npcs && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(targetId);
+                    if (Engine.npcs && typeof Engine.npcs.clickNpc === 'function') Engine.npcs.clickNpc(targetId);
+                    if (typeof window._g === 'function') window._g(`fight&a=attack&id=${targetId}`);
 
                     let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
                     if (confirmBtn && confirmBtn.innerText.toLowerCase().includes("zaatakuj")) confirmBtn.click();
