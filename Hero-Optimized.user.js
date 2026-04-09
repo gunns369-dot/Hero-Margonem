@@ -10220,10 +10220,13 @@ function renderTacticalRadar() {
     let ctx = canvas.getContext('2d');
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
-    refreshRadarGroupsCache(false);
-const radarGroups = window.radarGroupsCache || [];
-const radarTarget = window.radarTargetInfo || null;
 
+    if (typeof refreshRadarGroupsCache === 'function') {
+        refreshRadarGroupsCache(false);
+    }
+
+    const radarGroups = window.radarGroupsCache || [];
+    const radarTarget = window.radarTargetInfo || null;
     const compactMode = !!window.radarCompactMode;
     const showGateways = !!window.radarShowGateways;
 
@@ -10240,179 +10243,77 @@ const radarTarget = window.radarTargetInfo || null;
 
     function drawDot(x, y, color, sizeMult) {
         ctx.beginPath();
-        ctx.arc(offsetX + (x * scale) + (scale/2), offsetY + (y * scale) + (scale/2), (scale/2) * sizeMult, 0, 2 * Math.PI);
+        ctx.arc(
+            offsetX + (x * scale) + (scale / 2),
+            offsetY + (y * scale) + (scale / 2),
+            Math.max(1, (scale / 2) * sizeMult),
+            0,
+            2 * Math.PI
+        );
         ctx.fillStyle = color;
         ctx.fill();
     }
 
     // Teren
-    for(let y = 0; y < h; y++) {
-        for(let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
             if (window.margoWalkableMask.has(`${x}_${y}`)) {
                 drawRect(x, y, '#1b3b22');
             } else {
                 drawRect(x, y, '#050505');
             }
         }
- // Panel info pod mapą
-try {
- const infoPanel = document.getElementById('margoRadarInfoPanel');
-if (infoPanel) {
-    const serverGroups = radarGroups || [];
+    }
 
-        serverGroups.sort((a, b) => {
-            const ad = a.bestPathDistance ?? 9999;
-            const bd = b.bestPathDistance ?? 9999;
-            if (a.key === window.expCurrentTargetGroupKey && b.key !== window.expCurrentTargetGroupKey) return -1;
-            if (b.key === window.expCurrentTargetGroupKey && a.key !== window.expCurrentTargetGroupKey) return 1;
-            return ad - bd;
-        });
+    // Przejścia
+    if (showGateways) {
+        let distMap = buildDistanceMapFromHero();
+        let gateways = getCurrentMapGatewaysForRadar(distMap) || [];
 
-        if (!serverGroups.length) {
-            infoPanel.innerHTML = '<div style="color:#777;">Brak wykrytych grup.</div>';
-        } else {
-            infoPanel.innerHTML = serverGroups.map(g => {
-    const isCurrent = radarTarget && g.key === radarTarget.key;
-    const label = `${g.mobs.length}x ${g.mainRanga}`;
-    const dist = (g.bestPathDistance ?? '?');
-    const score = (typeof g.score !== 'undefined') ? g.score : '?';
+        for (const gw of gateways) {
+            if (!gw || (gw.x === undefined || gw.y === undefined)) continue;
 
-    return `
-        <div style="
-            padding:3px 0;
-            border-bottom:1px solid rgba(255,255,255,0.06);
-            color:${isCurrent ? '#00e5ff' : '#d7d7d7'};
-            font-weight:${isCurrent ? 'bold' : 'normal'};
-        ">
-            ${isCurrent ? '🎯 CEL: ' : '• '}
-            ${label}
-            <span style="color:#999;"> — dystans: ${dist}, score: ${score}</span>
-        </div>
-    `;
-}).join('');
-const isCurrent = radarTarget && g.key === radarTarget.key;
-                const label = `${g.mobs.length}x ${g.mainRanga}`;
-                const dist = (g.bestPathDistance ?? '?');
-                const score = (typeof g.score !== 'undefined') ? g.score : '?';
+            const gx = offsetX + (gw.x * scale) + (scale / 2);
+            const gy = offsetY + (gw.y * scale) + (scale / 2);
 
-                return `
-                    <div style="
-                        padding:3px 0;
-                        border-bottom:1px solid rgba(255,255,255,0.06);
-                        color:${isCurrent ? '#00e5ff' : '#d7d7d7'};
-                        font-weight:${isCurrent ? 'bold' : 'normal'};
-                    ">
-                        ${isCurrent ? '🎯 ' : '• '}
-                        ${label}
-                        <span style="color:#999;"> — dystans: ${dist}, score: ${score}</span>
-                    </div>
-                `;
-            }).join('');
+            ctx.beginPath();
+            ctx.arc(gx, gy, Math.max(2.5, scale * 0.45), 0, 2 * Math.PI);
+            ctx.fillStyle = gw.reachable ? '#ffd54f' : '#666666';
+            ctx.fill();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#000000';
+            ctx.stroke();
+
+            if (!compactMode && gw.targetMap) {
+                const label = String(gw.targetMap).slice(0, 18);
+                ctx.font = `${Math.max(9, Math.floor(scale * 1.6))}px Arial`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+
+                const tx = gx + 6;
+                const ty = gy - 8;
+                const tw = ctx.measureText(label).width;
+                const th = 12;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.68)';
+                ctx.fillRect(tx - 2, ty - th / 2, tw + 4, th);
+
+                ctx.fillStyle = gw.reachable ? '#ffd54f' : '#aaaaaa';
+                ctx.fillText(label, tx, ty);
+            }
         }
     }
-} catch (e) {}   }
-// Przejścia
-if (showGateways) {
-    let distMap = buildDistanceMapFromHero();
-    let gateways = getCurrentMapGatewaysForRadar(distMap) || [];
 
-    for (const gw of gateways) {
-        if (!gw || !gw.x && gw.x !== 0 || !gw.y && gw.y !== 0) continue;
+    // Potwory
+    let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+    let rangaColors = { normal: '#ff5252', elite1: '#ff9800', elite2: '#ba68c8', hero: '#00e5ff' };
+    let validMobs = [];
 
-        const gx = offsetX + (gw.x * scale) + (scale / 2);
-        const gy = offsetY + (gw.y * scale) + (scale / 2);
+    for (let id in npcs) {
+        let n = npcs[id].d || npcs[id];
+        if (!n || n.dead || n.del || n.delete) continue;
+        if (n.type !== 2 && n.type !== 3 && n.type !== 11) continue;
 
-        ctx.beginPath();
-        ctx.arc(gx, gy, Math.max(2.5, scale * 0.45), 0, 2 * Math.PI);
-        ctx.fillStyle = gw.reachable ? '#ffd54f' : '#666666';
-        ctx.fill();
-
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = '#000000';
-        ctx.stroke();
-
-        if (!compactMode && gw.targetMap) {
-            const label = String(gw.targetMap).slice(0, 18);
-            ctx.font = `${Math.max(9, Math.floor(scale * 1.6))}px Arial`;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-
-            const tx = gx + 6;
-            const ty = gy - 8;
-            const tw = ctx.measureText(label).width;
-            const th = 12;
-
-            ctx.fillStyle = 'rgba(0,0,0,0.68)';
-            ctx.fillRect(tx - 2, ty - th / 2, tw + 4, th);
-
-            ctx.fillStyle = gw.reachable ? '#ffd54f' : '#aaaaaa';
-            ctx.fillText(label, tx, ty);
-        }
-    }
-}
-   // Potwory + grupy
-let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
-
-let validMobs = [];
-// Wizualne grupy na radarze (z cache)
-for (const g of radarGroups) {
-    if (!g || !g.mobs || !g.mobs.length) continue;
-
-    let avgX = 0;
-    let avgY = 0;
-    for (const m of g.mobs) {
-        avgX += m.x;
-        avgY += m.y;
-    }
-    avgX /= g.mobs.length;
-    avgY /= g.mobs.length;
-
-    const gx = offsetX + (avgX * scale) + (scale / 2);
-    const gy = offsetY + (avgY * scale) + (scale / 2);
-    const isCurrent = radarTarget && g.key === radarTarget.key;
-
-    const radius = Math.max(6, scale * (1.1 + g.mobs.length * 0.35));
-
-    ctx.beginPath();
-    ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
-    ctx.strokeStyle = isCurrent ? '#00e5ff' : 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = isCurrent ? 2.5 : 1.2;
-    ctx.stroke();
-
-    if (isCurrent) {
-        ctx.beginPath();
-        ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = 'rgba(0,229,255,0.10)';
-        ctx.fill();
-    }
-}
-
-    // podpis na mapie tylko dla aktualnego targetu
-    if (isCurrent) {
-        const label = `${g.mobs.length}x ${g.mainRanga}`;
-        ctx.font = `${Math.max(10, Math.floor(scale * 1.8))}px Arial`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-
-        const tx = gx + radius + 4;
-        const ty = gy;
-        const tw = ctx.measureText(label).width;
-        const th = 14;
-
-        ctx.fillStyle = 'rgba(0,0,0,0.78)';
-        ctx.fillRect(tx - 3, ty - th / 2, tw + 6, th);
-
-        ctx.fillStyle = '#00e5ff';
-        ctx.fillText(label, tx, ty);
-    }
-}
-
-for (let id in npcs) {
-    let n = npcs[id].d || npcs[id];
-    if (!n || n.dead || n.del || n.delete) continue;
-
-    if (n.type === 2 || n.type === 3 || n.type === 11) {
         let isReachable = false;
         for (let dx = -1; dx <= 1; dx++) {
             for (let dy = -1; dy <= 1; dy++) {
@@ -10424,94 +10325,102 @@ for (let id in npcs) {
             if (isReachable) break;
         }
 
-        n.ranga = getMobRank(n);
-        n.__reachable = isReachable;
-        validMobs.push(n);
+        const ranga = typeof getMobRank === 'function' ? getMobRank(n) : 'normal';
 
-        // nadal rysujemy pojedyncze punkty
+        validMobs.push({
+            id: n.id || id,
+            x: n.x,
+            y: n.y,
+            wt: parseInt(n.wt, 10) || 0,
+            type: n.type,
+            ranga,
+            grp: n.grp,
+            nick: (n.nick || n.name || 'Potwór').replace(/<[^>]*>?/gm, '').trim(),
+            __reachable: isReachable
+        });
+
         if (!isReachable) {
             drawDot(n.x, n.y, '#333333', 0.8);
         } else {
-            drawDot(n.x, n.y, rangaColors[n.ranga] || "#ff5252", 1.15);
+            drawDot(n.x, n.y, rangaColors[ranga] || '#ff5252', 1.1);
         }
     }
-}
 
+    // Wizualne grupy na radarze
+    for (const g of radarGroups) {
+        if (!g || !g.mobs || !g.mobs.length) continue;
 
-  // Rysowanie dynamicznej trasy do expowiska (REALNA ŚCIEŻKA PO TERENIE)
-if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
-    let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
+        let avgX = 0;
+        let avgY = 0;
+        for (const m of g.mobs) {
+            avgX += m.x;
+            avgY += m.y;
+        }
+        avgX /= g.mobs.length;
+        avgY /= g.mobs.length;
 
-    if (targetNpc) {
-        let pathTargetX = targetNpc.x;
-        let pathTargetY = targetNpc.y;
+        const gx = offsetX + (avgX * scale) + (scale / 2);
+        const gy = offsetY + (avgY * scale) + (scale / 2);
+        const isCurrent = radarTarget && g.key === radarTarget.key;
+        const radius = Math.max(6, scale * (1.1 + g.mobs.length * 0.35));
 
-        // Jeśli mamy aktualny target grupy, próbujemy rysować do bestStand zamiast do środka moba
-        try {
-            let distMap = buildDistanceMapFromHero();
-            let validMobs = [];
+        ctx.beginPath();
+        ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
+        ctx.strokeStyle = isCurrent ? '#00e5ff' : 'rgba(255,255,255,0.22)';
+        ctx.lineWidth = isCurrent ? 2.5 : 1.2;
+        ctx.stroke();
 
-            for (let id in npcs) {
-                let n = npcs[id].d || npcs[id];
-                if (!n || n.dead || n.del || n.delete) continue;
+        if (isCurrent) {
+            ctx.beginPath();
+            ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
+            ctx.fillStyle = 'rgba(0,229,255,0.10)';
+            ctx.fill();
 
-                if (n.type === 2 || n.type === 3 || n.type === 11) {
-                    n.ranga = getMobRank(n);
-                    validMobs.push(n);
-                }
-            }
+            const label = `${g.mobs.length}x ${g.mainRanga}`;
+            ctx.font = `${Math.max(10, Math.floor(scale * 1.8))}px Arial`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
 
-            let serverGroups = buildServerMobGroups(validMobs, distMap);
-            let lockedGroup = serverGroups.find(g => g.key === window.expCurrentTargetGroupKey);
+            const tx = gx + radius + 4;
+            const ty = gy;
+            const tw = ctx.measureText(label).width;
+            const th = 14;
 
-            if (lockedGroup && lockedGroup.bestStand) {
-                pathTargetX = lockedGroup.bestStand.x;
-                pathTargetY = lockedGroup.bestStand.y;
-            }
-        } catch (e) {}
+            ctx.fillStyle = 'rgba(0,0,0,0.78)';
+            ctx.fillRect(tx - 3, ty - th / 2, tw + 6, th);
 
+            ctx.fillStyle = '#00e5ff';
+            ctx.fillText(label, tx, ty);
+        }
+    }
+
+    // Trasa do aktualnego targetu
+    if (window.isExping && radarTarget && radarTarget.bestStand) {
         let realPath = buildPathToTarget(
             Engine.hero.d.x,
             Engine.hero.d.y,
-            pathTargetX,
-            pathTargetY
+            radarTarget.bestStand.x,
+            radarTarget.bestStand.y
         );
 
         if (realPath && realPath.length > 1) {
             ctx.beginPath();
-
             for (let i = 0; i < realPath.length; i++) {
                 const p = realPath[i];
                 const px = offsetX + (p.x * scale) + (scale / 2);
                 const py = offsetY + (p.y * scale) + (scale / 2);
-
                 if (i === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
             }
-
-            ctx.strokeStyle = "rgba(0, 229, 255, 0.85)";
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 4]);
             ctx.stroke();
             ctx.setLineDash([]);
-        } else {
-            // awaryjnie, jeśli nie da się wyliczyć ścieżki
-            ctx.beginPath();
-            ctx.moveTo(offsetX + (Engine.hero.d.x * scale) + (scale/2), offsetY + (Engine.hero.d.y * scale) + (scale/2));
-            ctx.lineTo(offsetX + (targetNpc.x * scale) + (scale/2), offsetY + (targetNpc.y * scale) + (scale/2));
-            ctx.strokeStyle = "rgba(0, 229, 255, 0.35)";
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([3, 5]);
-            ctx.stroke();
-            ctx.setLineDash([]);
         }
-
-        // Pogrubienie aktualnego celu
-        drawDot(targetNpc.x, targetNpc.y, "#00e5ff", 2.0);
     }
-}
 
-    // GRACZ — zawsze widoczny, z obwódką
+    // GRACZ
     ctx.beginPath();
     ctx.arc(
         offsetX + (Engine.hero.d.x * scale) + (scale / 2),
@@ -10536,8 +10445,47 @@ if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTa
     );
     ctx.fillStyle = '#00e5ff';
     ctx.fill();
-}
 
+    // Panel info pod mapą
+    try {
+        const infoPanel = document.getElementById('margoRadarInfoPanel');
+        if (infoPanel) {
+            const serverGroups = [...radarGroups];
+
+            serverGroups.sort((a, b) => {
+                const ad = a.bestPathDistance ?? 9999;
+                const bd = b.bestPathDistance ?? 9999;
+                if (radarTarget && a.key === radarTarget.key && b.key !== radarTarget.key) return -1;
+                if (radarTarget && b.key === radarTarget.key && a.key !== radarTarget.key) return 1;
+                return ad - bd;
+            });
+
+            if (!serverGroups.length) {
+                infoPanel.innerHTML = '<div style="color:#777;">Brak wykrytych grup.</div>';
+            } else {
+                infoPanel.innerHTML = serverGroups.map(g => {
+                    const isCurrent = radarTarget && g.key === radarTarget.key;
+                    const label = `${g.mobs.length}x ${g.mainRanga}`;
+                    const dist = g.bestPathDistance ?? '?';
+                    const score = typeof g.score !== 'undefined' ? g.score : '?';
+
+                    return `
+                        <div style="
+                            padding:3px 0;
+                            border-bottom:1px solid rgba(255,255,255,0.06);
+                            color:${isCurrent ? '#00e5ff' : '#d7d7d7'};
+                            font-weight:${isCurrent ? 'bold' : 'normal'};
+                        ">
+                            ${isCurrent ? '🎯 CEL: ' : '• '}
+                            ${label}
+                            <span style="color:#999;"> — dystans: ${dist}, score: ${score}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+    } catch (e) {}
+}
 // Główna pętla taktująca
 setInterval(() => {
     initFloatingRadarUI();
