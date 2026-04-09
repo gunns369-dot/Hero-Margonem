@@ -6582,10 +6582,7 @@ window.clearExpMaps = clearExpMaps;
                 if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
                 return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button></div></div></div>`;
             } else {
-                ...
-            }
-        };
-    };
+
 
     window.renderExpMaps = () => {
         let c = document.getElementById('expMapList');
@@ -10073,7 +10070,7 @@ function renderTacticalRadar() {
     let ctx = canvas.getContext('2d');
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
-    
+
     // Obliczanie skali by mapa idealnie wypełniła obszar
     let scale = Math.min(canvas.width / w, canvas.height / h);
     let offsetX = (canvas.width - (w * scale)) / 2;
@@ -10085,7 +10082,7 @@ function renderTacticalRadar() {
         ctx.fillStyle = color;
         ctx.fillRect(offsetX + (x * scale), offsetY + (y * scale), scale, scale);
     }
-    
+
     function drawDot(x, y, color, sizeMult) {
         ctx.beginPath();
         ctx.arc(offsetX + (x * scale) + (scale/2), offsetY + (y * scale) + (scale/2), (scale/2) * sizeMult, 0, 2 * Math.PI);
@@ -10097,9 +10094,9 @@ function renderTacticalRadar() {
     for(let y = 0; y < h; y++) {
         for(let x = 0; x < w; x++) {
             if (window.margoWalkableMask.has(`${x}_${y}`)) {
-                drawRect(x, y, '#1b3b22'); 
+                drawRect(x, y, '#1b3b22');
             } else {
-                drawRect(x, y, '#050505'); 
+                drawRect(x, y, '#050505');
             }
         }
     }
@@ -10125,7 +10122,7 @@ function renderTacticalRadar() {
 
             if (!isReachable) {
                 drawDot(n.x, n.y, '#333333', 0.8);
-                continue; 
+                continue;
             }
 
             let wt = parseInt(n.wt, 10) || 0;
@@ -10135,7 +10132,7 @@ function renderTacticalRadar() {
                 else if (wt === 12 || wt === 2) ranga = "elite2";
                 else if (wt >= 13 || wt >= 3) ranga = "hero";
             }
-            
+
             drawDot(n.x, n.y, rangaColors[ranga], 1.2);
         }
     }
@@ -10151,7 +10148,7 @@ function renderTacticalRadar() {
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 4]); // Przerywana
             ctx.stroke();
-            ctx.setLineDash([]); 
+            ctx.setLineDash([]);
 
             // Pogrubienie aktualnego celu (żeby wiedzieć do kogo biegnie w grupie)
             drawDot(targetNpc.x, targetNpc.y, "#00e5ff", 2.0);
