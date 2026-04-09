@@ -5494,7 +5494,9 @@ function getAllCandidateExpMaps() {
   function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
-
+    if (typeof updateWalkableArea === 'function') {
+        updateWalkableArea();
+    }
     // --- 0. PRIORYTET: AUTO-SPRZEDAŻ I AUTO-POTY ---
     if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) {
         return; // Bot stoi w miejscu, oddając kontrolę systemom miejskim
@@ -10161,7 +10163,7 @@ function renderTacticalRadar() {
         let n = npcs[id].d || npcs[id];
         if (!n || n.dead || n.del || n.delete) continue;
 
-        if (n.type === 2 || n.type === 3) {
+       if (n.type === 2 || n.type === 3 || n.type === 11) {
             let isReachable = false;
             for(let dx = -1; dx <= 1; dx++) {
                 for(let dy = -1; dy <= 1; dy++) {
