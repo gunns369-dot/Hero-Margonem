@@ -5860,6 +5860,8 @@ if (
 
     // --- SKANOWANIE POTWORÓW (KOSIARKA V14 - Z GRUPAMI) ---
     if (!window.expMonsterCache) window.expMonsterCache = new Map();
+      if (!window.expRedMapMemory) window.expRedMapMemory = {};
+if (!window.expRedMapKilled) window.expRedMapKilled = {};
 
     let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
     let currentVisibleNpcs = [];
@@ -5875,17 +5877,42 @@ if (
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    currentVisibleNpcs.forEach(n => {
-        if (n.type === 4 || n.type < 2) return;
-        if (n.dead || n.del || n.delete) {
-            window.expMonsterCache.delete(n.id);
-        } else {
-            window.expMonsterCache.set(n.id, {
-                id: n.id, x: n.x, y: n.y, wt: n.wt, type: n.type, grp: n.grp, lvl: n.lvl,
-                nick: n.nick || n.name || "Potwór"
-            });
+currentVisibleNpcs.forEach(n => {
+    if (n.type === 4 || n.type < 2) return;
+
+    const currMapName = Engine.map.d.name;
+    const isRedMapNow = Engine.map.d.pvp === 2;
+
+    if (n.dead || n.del || n.delete) {
+        window.expMonsterCache.delete(n.id);
+
+        if (isRedMapNow) {
+            if (!window.expRedMapKilled[currMapName]) window.expRedMapKilled[currMapName] = new Set();
+            window.expRedMapKilled[currMapName].add(String(n.id));
+
+            if (window.expRedMapMemory[currMapName]) {
+                delete window.expRedMapMemory[currMapName][String(n.id)];
+            }
         }
-    });
+    } else {
+        const mobData = {
+            id: n.id, x: n.x, y: n.y, wt: n.wt, type: n.type, grp: n.grp, lvl: n.lvl,
+            nick: n.nick || n.name || "Potwór"
+        };
+
+        window.expMonsterCache.set(n.id, mobData);
+
+        if (isRedMapNow) {
+            if (!window.expRedMapMemory[currMapName]) window.expRedMapMemory[currMapName] = {};
+            if (!window.expRedMapKilled[currMapName]) window.expRedMapKilled[currMapName] = new Set();
+
+            // nie zapisuj ponownie zabitych
+            if (!window.expRedMapKilled[currMapName].has(String(n.id))) {
+                window.expRedMapMemory[currMapName][String(n.id)] = mobData;
+            }
+        }
+    }
+});
 
    window.expMonsterCache.forEach((cachedMob, id) => {
     let distToCached = Math.abs(hx - cachedMob.x) + Math.abs(hy - cachedMob.y);
@@ -5907,7 +5934,15 @@ if (
     }
 });
 
-    const arr = Array.from(window.expMonsterCache.values());
+  const currMapName = Engine.map.d.name;
+const isRedMapNow = Engine.map.d.pvp === 2;
+
+let arr;
+if (isRedMapNow && window.expRedMapMemory[currMapName]) {
+    arr = Object.values(window.expRedMapMemory[currMapName]);
+} else {
+    arr = Array.from(window.expMonsterCache.values());
+}
 
     let dangerousSpots = [];
     arr.forEach(n => {
@@ -6159,25 +6194,34 @@ const isRedMap = Engine.map?.d?.pvp === 2;
 // więcej skanów na czerwonych mapach (ograniczona widoczność)
 const emptyScanLimit = isRedMap ? 14 : 8;
 
+      if (isRedMapNow) {
+    const remembered = window.expRedMapMemory[currMapName]
+        ? Object.keys(window.expRedMapMemory[currMapName]).length
+        : 0;
+
+    if (remembered > 0) {
+        expEmptyScans = 0;
+        if (displayTarget) {
+            displayTarget.innerText = `Czerwona mapa: pamiętam ${remembered} potw. — czyszczę dalej`;
+        }
+        expLastActionTime = now + 200;
+        return;
+    }
+}
+      
 expEmptyScans++;
 
-if (displayTarget) {
-    displayTarget.innerText = `Czysto. Skanowanie... (${expEmptyScans}/${emptyScanLimit})`;
-}
+// Po świeżo zakończonej walce nie przechodź od razu w "mapa pusta",
+// ale bez sztucznego odkrywania mapy ruchem.
+if (window.expPostBattleSearchUntil && now < window.expPostBattleSearchUntil) {
+    expEmptyScans = 0;
 
-if (expEmptyScans < emptyScanLimit) {
-    if (isRedMap && expEmptyScans % 3 === 0) {
-    // lekki ruch żeby odkryć moby poza LOS
-    let rx = Engine.hero.d.x + (Math.random() > 0.5 ? 3 : -3);
-    let ry = Engine.hero.d.y + (Math.random() > 0.5 ? 3 : -3);
+    if (displayTarget) {
+        let left = Math.max(0, Math.ceil((window.expPostBattleSearchUntil - now) / 1000));
+        displayTarget.innerText = `Doszukuję potworów po walce... (${left}s)`;
+    }
 
-    Engine.hero.autoGoTo({
-        x: Math.max(0, rx),
-        y: Math.max(0, ry)
-    });
-}
-    // na czerwonych mapach skanuj wolniej i dokładniej
-    expLastActionTime = now + (isRedMap ? 320 : 220);
+    expLastActionTime = now + 180;
     return;
 }
 
