@@ -1269,15 +1269,6 @@ function pickNextReachableMapFromRoute(currentSysMap) {
         if (window.__bannedMaps && window.__bannedMaps[checkMap] && Date.now() < window.__bannedMaps[checkMap]) continue;
         let door = reachableDoors.find(g => g.targetMap.toLowerCase() === checkMap.toLowerCase());
         if (door) return { nextMap: checkMap, door: door };
-
-        // Fallback: jeśli bezpośredniego przejścia nie ma, szukaj mapy z trasy, do której istnieje ścieżka
-        // i wejdź pierwszym osiągalnym krokiem tej ścieżki (np. alternatywną jaskinią).
-        let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, checkMap) : null;
-        if (path && path.length > 1) {
-            let firstHop = path[1];
-            let hopDoor = reachableDoors.find(g => g.targetMap.toLowerCase() === firstHop.toLowerCase());
-            if (hopDoor) return { nextMap: firstHop, door: hopDoor, finalTarget: checkMap, viaPath: path };
-        }
     }
     return null;
 }
@@ -5736,27 +5727,29 @@ function pickNextUnclearedExpMap(currMap, mapsPool) {
     const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
     const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable);
     const now = Date.now();
-    const mapsSet = new Set(mapsPool);
-    let best = null;
+    const orderedCandidates = [];
+    const currIdx = mapsPool.indexOf(currMap);
 
-    for (const candidate of mapsPool) {
+    if (currIdx !== -1) {
+        for (let i = 1; i <= mapsPool.length; i++) {
+            const idx = (currIdx + i) % mapsPool.length;
+            orderedCandidates.push(mapsPool[idx]);
+        }
+    } else {
+        orderedCandidates.push(...mapsPool);
+    }
+
+    for (let i = 0; i < orderedCandidates.length; i++) {
+        const candidate = orderedCandidates[i];
         if (!candidate || candidate === currMap) continue;
         if (isMapTemporarilyCleared(candidate)) continue;
         if (window.__bannedMaps && window.__bannedMaps[candidate] && now < window.__bannedMaps[candidate]) continue;
 
-        const path = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate) : null;
-        if (!path || path.length < 2) continue;
-
-        const nextHop = path[1];
-        // Jeśli pierwszy krok prowadzi na mapę expowiska, która już była czyszczona,
-        // pomijamy taki wariant, żeby nie wracać na "świeżo wyczyszczoną" mapę.
-        if (mapsSet.has(nextHop) && isMapTemporarilyCleared(nextHop)) continue;
-
-        let door = reachableDoors.find(g => (g.targetMap || "").toLowerCase() === String(nextHop).toLowerCase()) || null;
+        let door = reachableDoors.find(g => (g.targetMap || "").toLowerCase() === String(candidate).toLowerCase()) || null;
 
         // Fallback: wspieramy ręcznie zapisane przejścia z bazy nawet jeśli radar ich nie wykrył
-        if (!door && typeof globalGateways !== 'undefined' && globalGateways[currMap] && globalGateways[currMap][nextHop]) {
-            const baseDoor = globalGateways[currMap][nextHop];
+        if (!door && typeof globalGateways !== 'undefined' && globalGateways[currMap] && globalGateways[currMap][candidate]) {
+            const baseDoor = globalGateways[currMap][candidate];
             let reachable = false;
             for (let dx = -1; dx <= 1; dx++) {
                 for (let dy = -1; dy <= 1; dy++) {
@@ -5772,28 +5765,25 @@ function pickNextUnclearedExpMap(currMap, mapsPool) {
                 door = {
                     x: baseDoor.x,
                     y: baseDoor.y,
-                    targetMap: nextHop,
+                    targetMap: candidate,
                     pathDistance: distMap.get(k) ?? 999
                 };
             }
         }
 
-        // Tylko mapy, do których istnieje realnie dostępne pierwsze przejście
+        // Przechodzimy tylko bezpośrednio na mapy z kolejności map.
         if (!door) continue;
 
-        const score = (door.pathDistance ?? 999) * 1000 + path.length;
-        if (!best || score < best.score) {
-            best = {
-                targetMap: candidate,
-                nextHop,
-                door,
-                path,
-                score
-            };
-        }
+        return {
+            targetMap: candidate,
+            nextHop: candidate,
+            door,
+            path: [currMap, candidate],
+            score: i + 1
+        };
     }
 
-    return best;
+    return null;
 }
 
 function areAllExpMapsTemporarilyCleared(mapsPool) {
