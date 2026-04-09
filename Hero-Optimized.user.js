@@ -6048,7 +6048,7 @@ if (
     expAntiLagTime = now + getAntiLagDelay();
 }
 
-// --- SKANOWANIE POTWORÓW (KOSIARKA V15 - Z ODRZUTEM NIEDOSTĘPNYCH) ---
+// --- SKANOWANIE POTWORÓW (KOSIARKA V15 - INTELIGENTNA PAMIĘĆ Z ODRZUTEM NIEDOSTĘPNYCH) ---
     if (!window.expMonsterCache) window.expMonsterCache = new Map();
 
     let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
@@ -6199,7 +6199,14 @@ if (
 
     let target = targetGroup && targetGroup.bestTargetMob ? targetGroup.bestTargetMob : null;
 
-    // --- INTELIGENTNA PAMIĘĆ ---
+    if (targetGroup && targetGroup.bestTargetMob && Number.isFinite(targetGroup.bestPathDistance)) {
+        window.expCurrentTargetGroupKey = targetGroup.key;
+        window.expTargetLockTime = now + (Engine.map.d.pvp === 2 ? 8000 : 5000);
+        expPinnedMap = currMapName;
+        expPinnedMapUntil = now + (Engine.map.d.pvp === 2 ? 20000 : 10000);
+    }
+
+    // --- INTELIGENTNA PAMIĘĆ WIDZIANYCH POTWORÓW ---
     const liveCount = validMobs.length;
     const mapStillHasWork = liveCount > 0;
 
@@ -6220,12 +6227,13 @@ if (
         expLastActionTime = now + 150;
         return;
     }
+
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (target) {
         const targetDist = targetGroup.bestPathDistance;
 
         if (expEmptyScans > 0) {
-            window.logExp(\`✨ Zauważono potwory! Wracam do pracy.\`, "#8bc34a");
+            if (window.logExp) window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
             expEmptyScans = 0;
             expLastActionTime = now + 80;
             return;
@@ -6239,14 +6247,14 @@ if (
                 if (now < nextAllowedClickTime) return;
 
                 if (expCurrentTargetId !== target.id) {
-                    window.logExp(\`🏃 Cel: \${targetGroup.label} (Dystans: \${targetDist}, Score: \${targetGroup.score})\`, "#00e5ff");
+                    if (window.logExp) window.logExp(`🏃 Cel: ${targetGroup.label} (Dystans: ${targetDist}, Score: ${targetGroup.score})`, "#00e5ff");
                     expCurrentTargetId = target.id;
                     window.expCurrentTargetGroupKey = targetGroup.key;
 
                     let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
                     window.expTargetLockTime = now + randomLockSeconds;
                 }
-                if (displayTarget) displayTarget.innerText = \`Biegnę do: \${targetGroup.label} | dystans: \${targetDist} | score: \${targetGroup.score}\`;
+                if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} | dystans: ${targetDist} | score: ${targetGroup.score}`;
 
                 Engine.hero.autoGoTo({ x: targetGroup.bestStand.x, y: targetGroup.bestStand.y });
                 nextAllowedClickTime = now + 350;
@@ -6267,16 +6275,17 @@ if (
 
                     if (timeStandingStill > 3000) {
                         window.expConsecutiveStucks = (window.expConsecutiveStucks || 0) + 1;
-                        window.logExp(\`🚨 Zablokowałem się w drodze do: \${target.nick}. Próba (\${window.expConsecutiveStucks}/3)\`, "#ff5252");
+                        if (window.logExp) window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Próba (${window.expConsecutiveStucks}/3)`, "#ff5252");
+                        
                         let badCoordKey = target.x + "_" + target.y;
                         window.expUnreachableMobs.add(badCoordKey);
                         expCurrentTargetId = null;
                         window.expTargetLockTime = 0;
                         window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                        if(typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                        if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
                         if (window.expConsecutiveStucks >= 3) {
-                            window.logExp(\`🚧 Zbyt wiele blokad z rzędu! Uznaję mapę za niedostępną i idę dalej.\`, "#ff9800");
+                            if (window.logExp) window.logExp(`🚧 Zbyt wiele blokad z rzędu! Uznaję mapę za niedostępną i idę dalej.`, "#ff9800");
                             if (!window.mapClearTimes) window.mapClearTimes = {};
                             window.mapClearTimes[Engine.map.d.name] = Date.now(); 
                             window.expConsecutiveStucks = 0; 
@@ -6305,7 +6314,7 @@ if (
 
         // --- WALKA ---
         if (targetDist <= 1) {
-            if (displayTarget) displayTarget.innerText = \`Walka: \${targetGroup.label}\`;
+            if (displayTarget) displayTarget.innerText = `Walka: ${targetGroup.label}`;
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
@@ -6322,128 +6331,61 @@ if (
         }
         return;
     }
-// --- ZAAWANSOWANY SMART ROAM: ZAPISANIE W PAMIĘCI ---
-// Po wejściu na mapę czekamy dłużej, aż bohater wyjdzie z przejścia
-// i potwory zdążą się dociągnąć.
-if (window.expMapLoadGraceUntil && now < window.expMapLoadGraceUntil) {
-    expEmptyScans = 0;
+
+    // Tylko gdy mapa jest NAPRAWDĘ PUSTA, zaczynamy liczyć skany do zmiany:
+    expEmptyScans++;
     if (displayTarget) {
-        let left = Math.max(0, Math.ceil((window.expMapLoadGraceUntil - now) / 1000));
-        displayTarget.innerText = `Ładowanie mapy... (${left}s)`;
-    }
-    expLastActionTime = now + 150;
-    return;
-}
-
-// Dodatkowy bezpiecznik: nie oznaczaj mapy jako pustej, jeśli bohater
-// nadal stoi na przejściu albo tuż po zejściu z niego.
-if (isOnGateway(hx, hy)) {
-    expEmptyScans = 0;
-    if (displayTarget) displayTarget.innerText = `Schodzę z przejścia...`;
-    expLastActionTime = now + 150;
-    return;
-}
-
-// Jeśli nadal pamiętamy / widzimy robotę na tej mapie, nie wolno jej oznaczać jako pustej.
-// --- INTELIGENTNA PAMIĘĆ ---
-// Jeśli nie masz widocznego CELU, ale wiesz, że na tej mapie są jeszcze potwory (bo je mijałeś)
-if (mapStillHasWork && !target) {
-    expEmptyScans = 0; // Resetujemy odliczanie! Mamy misję.
-
-    if (displayTarget) {
-        displayTarget.innerText = `Biegnę do zapamiętanego potwora... (W pamięci: ${liveCount + rememberedCount})`;
+        displayTarget.innerText = isRedMapNow
+            ? `Czysto. Skanowanie... (${expEmptyScans}/14)`
+            : `Czysto. Skanowanie... (${expEmptyScans}/8)`;
     }
 
-    // Wyciągamy pierwszego lepszego zapamiętanego moba z listy
-    let memoryMob = null;
-    if (isRedMapNow && window.expRedMapMemory[currMapName]) {
-        let memIds = Object.keys(window.expRedMapMemory[currMapName]);
-        if(memIds.length > 0) memoryMob = window.expRedMapMemory[currMapName][memIds[0]];
-    } else if (arr && arr.length > 0) {
-        memoryMob = arr[0]; // Pierwszy mob z ogólnego cache
+    const emptyScanLimit = isRedMapNow ? 14 : 8;
+    if (expEmptyScans < emptyScanLimit) {
+        expLastActionTime = now + (isRedMapNow ? 320 : 220);
+        return;
     }
 
-    // Jeśli udało się go namierzyć, wykonujemy płynny bieg w jego stronę!
-    if (memoryMob && typeof Engine.hero.autoGoTo === 'function') {
-        
-        // Anti-Stuck i płynność: nie spamujemy klikaniem
-        if (now > nextAllowedClickTime) {
-            let stepX = Math.max(0, memoryMob.x + (Math.random() > 0.5 ? 1 : -1));
-            let stepY = Math.max(0, memoryMob.y + (Math.random() > 0.5 ? 1 : -1));
-            
-            Engine.hero.autoGoTo({ x: stepX, y: stepY });
-            nextAllowedClickTime = now + 400; // Krótki ping
-            window.expLastMoveTx = stepX; 
-            window.expLastMoveTy = stepY;
+    if (now < expMapTransitionCooldown) return;
+
+    let expRouteMaps = botSettings.exp.mapOrder || [];
+    if (!expRouteMaps.length) {
+        expEmptyScans = 0;
+        expLastActionTime = now + 1500;
+        return;
+    }
+
+    // Zapamiętujemy, że obecna mapa jest wyczyszczona
+    if (!window.mapClearTimes) window.mapClearTimes = {};
+
+    markMapTemporarilyCleared(currMap);
+
+    if (window.logExp) {
+        window.logExp(`🗺️ Mapa [${currMap}] pusta! Pomijam ją przez 5 minut.`, "#ba68c8");
+    }
+
+    let uncheckedMaps = expRouteMaps.filter(m => !window.mapClearTimes[m]);
+
+    if (uncheckedMaps.length === 0) {
+        if (Engine.map.d.pvp === 2 && expRouteMaps.length > 1) {
+            if (window.logExp) window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
+            let nextIdx = (expRouteMaps.indexOf(currMap) + 1) % expRouteMaps.length;
+            let safeMap = expRouteMaps[nextIdx];
+            if (safeMap) {
+                delete window.mapClearTimes[safeMap];
+                expMapTransitionCooldown = now + 500;
+                return;
+            }
         }
+
+        if (window.logExp) window.logExp("⏳ Pętla ukończona (Wszystkie mapy z listy wyczyszczone). Czekam 45 sekund na respawn...", "#ffb300");
+        expMapTransitionCooldown = now + 45000;
+        window.mapClearTimes = {};
+        return;
     }
 
-    expLastActionTime = now + 150;
+    expLastActionTime = now + 200;
     return;
-}
-
-// Tylko gdy mapa jest NAPRAWDĘ PUSTA, zaczynamy liczyć skany do zmiany:
-expEmptyScans++;
-if (displayTarget) {
-    displayTarget.innerText = `Czysto. Upewniam się... (${expEmptyScans}/${isRedMapNow ? 14 : 8})`;
-}
-
-expEmptyScans++;
-if (displayTarget) {
-    displayTarget.innerText = isRedMapNow
-        ? `Czysto. Skanowanie... (${expEmptyScans}/14)`
-        : `Czysto. Skanowanie... (${expEmptyScans}/8)`;
-}
-
-const emptyScanLimit = isRedMapNow ? 14 : 8;
-if (expEmptyScans < emptyScanLimit) {
-    expLastActionTime = now + (isRedMapNow ? 320 : 220);
-    return;
-}
-
-if (now < expMapTransitionCooldown) return;
-
-let expRouteMaps = botSettings.exp.mapOrder || [];
-if (!expRouteMaps.length) {
-    expEmptyScans = 0;
-    expLastActionTime = now + 1500;
-    return;
-}
-
-// Zapamiętujemy, że obecna mapa jest wyczyszczona
-if (!window.mapClearTimes) window.mapClearTimes = {};
-
-// dopiero tutaj mapa naprawdę jest pusta
-markMapTemporarilyCleared(currMap);
-
-if (window.logExp) {
-    window.logExp(`🗺️ Mapa [${currMap}] pusta! Pomijam ją przez 5 minut.`, "#ba68c8");
-}
-
-let uncheckedMaps = expRouteMaps.filter(m => !window.mapClearTimes[m]);
-
-// Jeśli nie ma już żadnych map do sprawdzenia
-if (uncheckedMaps.length === 0) {
-    if (Engine.map.d.pvp === 2 && expRouteMaps.length > 1) {
-        window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
-        let nextIdx = (expRouteMaps.indexOf(currMap) + 1) % expRouteMaps.length;
-        let safeMap = expRouteMaps[nextIdx];
-        if (safeMap) {
-            delete window.mapClearTimes[safeMap];
-            expMapTransitionCooldown = now + 500;
-            return;
-        }
-    }
-
-    window.logExp("⏳ Pętla ukończona (Wszystkie mapy z listy wyczyszczone). Czekam 45 sekund na respawn...", "#ffb300");
-    expMapTransitionCooldown = now + 45000;
-    window.mapClearTimes = {};
-    return;
-}
-
-// Przekazujemy kontrolę wyżej w następnym cyklu
-expLastActionTime = now + 200;
-return;
 } // KRYTYCZNE ZAMKNIĘCIE FUNKCJI
 
 setInterval(runExpLogic, 150);
