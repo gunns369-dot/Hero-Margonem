@@ -2467,6 +2467,7 @@ window.executeRushStep = function() {
             window.rushLastY = Engine.hero.d.y;
             stuckCount = 0;
             window.rushGatewayArrivalTime = 0;
+            window.rushGateLastClickAt = 0;
 
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
@@ -2552,12 +2553,15 @@ window.executeRushStep = function() {
             return;
         }
 
-        if (dist === 1 || dist === 0) {
-            safeGoTo(exactX, exactY, false);
-        }
-
         if (!window.rushGatewayArrivalTime) {
             window.rushGatewayArrivalTime = Date.now();
+        }
+
+        if (!window.rushGateLastClickAt) window.rushGateLastClickAt = 0;
+        const gateRetryMs = 2800;
+        if ((dist === 1 || dist === 0) && (Date.now() - window.rushGateLastClickAt > gateRetryMs)) {
+            safeGoTo(exactX, exactY, false);
+            window.rushGateLastClickAt = Date.now();
         }
 
         if (Date.now() - window.rushGatewayArrivalTime > 3500) {
@@ -5676,6 +5680,100 @@ function getAllCandidateExpMaps() {
     const maps = botSettings?.exp?.mapOrder || [];
     return Array.isArray(maps) ? [...maps] : [];
 }
+function getPathToAdjacentTile(targetX, targetY, distMap) {
+    if (!(window.margoWalkableMask instanceof Set)) return null;
+    if (!distMap) distMap = buildDistanceMapFromHero();
+
+    const candidates = [];
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const nx = targetX + dx;
+            const ny = targetY + dy;
+            const key = `${nx}_${ny}`;
+            if (distMap.has(key)) {
+                candidates.push({x:nx, y:ny, dist: distMap.get(key)});
+            }
+        }
+    }
+    if (!candidates.length) return null;
+    candidates.sort((a,b)=>a.dist-b.dist);
+    const dest = candidates[0];
+
+    // Rekonstrukcja po mapie odległości (najkrótsza ścieżka)
+    const path = [];
+    let cx = dest.x, cy = dest.y;
+    let safety = 0;
+    const dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,-1],[-1,1],[1,-1]];
+    while (safety++ < 2000) {
+        path.push([cx, cy]);
+        const ck = `${cx}_${cy}`;
+        const cd = distMap.get(ck);
+        if (cd === 0) break;
+        let next = null;
+        for (const [dx,dy] of dirs) {
+            const nx = cx + dx, ny = cy + dy;
+            const nk = `${nx}_${ny}`;
+            if (!distMap.has(nk)) continue;
+            const nd = distMap.get(nk);
+            if (nd < cd && (!next || nd < next.d)) next = {x:nx,y:ny,d:nd};
+        }
+        if (!next) break;
+        cx = next.x; cy = next.y;
+    }
+    path.reverse();
+    return { path, stand: dest };
+}
+
+function pickBestExpTarget(validMobs, distMap) {
+    if (!validMobs || !validMobs.length) return null;
+    const groups = buildServerMobGroups(validMobs, distMap) || [];
+    if (!groups.length) {
+        validMobs.sort((a,b)=>a.dist-b.dist);
+        return { mob: validMobs[0], groupKey: null };
+    }
+
+    const rankBonus = { normal: 0, elite1: 4, elite2: 10, hero: 16 };
+    for (const g of groups) {
+        const gSize = g.mobs?.length || 1;
+        const d = g.bestPathDistance ?? 9999;
+        const bonus = rankBonus[g.mainRanga] || 0;
+        g.score = d - (gSize * 2.2) - bonus;
+    }
+
+    groups.sort((a,b)=>a.score-b.score);
+    const best = groups[0];
+    return { mob: best.bestTargetMob || best.mobs[0], groupKey: best.key, group: best };
+}
+
+function maybeStepOutFromGatewayAfterEntry() {
+    const now = Date.now();
+    if (!window.expMapEnteredAt || now - window.expMapEnteredAt > 4500) return;
+    if (window.expDidStepOutAfterEntry) return;
+    if (!Engine || !Engine.hero || !Engine.map) return;
+
+    const hx = Engine.hero.d.x, hy = Engine.hero.d.y;
+    let gws = [];
+    if (typeof Engine.map.getGateways === 'function') {
+        try { gws = Engine.map.getGateways().getList().map(g=>g.d||g); } catch(e) {}
+    }
+    if (!gws.length && Engine.map.gateways) {
+        try { gws = Array.from(Engine.map.gateways.values()).map(g=>g.d||g); } catch(e) { gws = Object.values(Engine.map.gateways).map(g=>g.d||g); }
+    }
+
+    const nearGw = gws.find(g => g && Math.abs((g.x ?? g.rx) - hx) <= 1 && Math.abs((g.y ?? g.ry) - hy) <= 1);
+    if (!nearGw) { window.expDidStepOutAfterEntry = true; return; }
+
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+    for (const [dx,dy] of dirs) {
+        const nx = hx + dx, ny = hy + dy;
+        if (typeof Engine.map.checkCollision === 'function' && Engine.map.checkCollision(nx, ny)) continue;
+        if (typeof window.safeGoTo === 'function') window.safeGoTo(nx, ny, false);
+        else if (typeof Engine.hero.autoGoTo === 'function') Engine.hero.autoGoTo({x:nx, y:ny});
+        window.expDidStepOutAfterEntry = true;
+        window.expStepOutTs = now;
+        return;
+    }
+}
 function hasNearbyReachableMobsForExp(maxDistance = 12) {
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.map || !Engine.npcs) return false;
 
@@ -5733,6 +5831,9 @@ function runExpLogic() {
         }
         window.lastExpMap = currMap;
         window.mapCooldown = now + (isExpMap ? 3200 : 800);
+        window.expMapEnteredAt = now;
+        window.expDidStepOutAfterEntry = false;
+        window.expCurrentTargetGroupKey = null;
         window.isRushing = false;
         expEmptyScans = 0;
         expCurrentTargetId = null;
@@ -5789,10 +5890,12 @@ function runExpLogic() {
         }
         if (reachable) validMobs.push({ ...mob, dist: bestDist });
     }
-    validMobs.sort((a, b) => a.dist - b.dist);
-    let target = validMobs[0];
+    const bestChoice = pickBestExpTarget(validMobs, distMap);
+    let target = bestChoice ? bestChoice.mob : null;
+    window.expCurrentTargetGroupKey = bestChoice ? bestChoice.groupKey : null;
 
     // --- LOGIKA RUCHU I WALKI ---
+    maybeStepOutFromGatewayAfterEntry();
     if (isExpMap && target) {
         setExpBerserkState(true);
         let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
@@ -6006,10 +6109,10 @@ function runExpLogic() {
 
                 let timeStandingStill = now - window.expTargetPursuitStart;
 
-                if (timeStandingStill > 2500) {
+                if ((window.expMapEnteredAt && now - window.expMapEnteredAt < 5000) ? false : (timeStandingStill > 3200)) {
                     if (now >= nextAllowedClickTime) {
                         window.expConsecutiveStucks = (window.expConsecutiveStucks || 0) + 1;
-                        if (window.logExp) window.logExp(`🚨 Zacięcie w drodze do: ${target.nick}. Próba (${window.expConsecutiveStucks}/4)`, "#ff5252");
+                        if (window.logExp && now > (window._lastMoveStuckLog || 0)) { window.logExp(`🚨 Zacięcie w drodze do: ${target.nick}. Próba (${window.expConsecutiveStucks}/4)`, "#ff5252"); window._lastMoveStuckLog = now + 1800; }
                         window.expTargetPursuitStart = now; 
 
                         if (window.expConsecutiveStucks >= 4) {
@@ -10164,18 +10267,20 @@ function renderTacticalRadar() {
     ctx.fill();
 // --- RYSOWANIE LINII DO CELU ---
         if (window.isExping && window.expLastMoveTx >= 0) {
-            let heroRadarX = offsetX + (Engine.hero.d.x * scale) + (scale / 2);
-            let heroRadarY = offsetY + (Engine.hero.d.y * scale) + (scale / 2);
-            let targetRadarX = offsetX + (window.expLastMoveTx * scale) + (scale / 2);
-            let targetRadarY = offsetY + (window.expLastMoveTy * scale) + (scale / 2);
-
-            ctx.beginPath();
-            ctx.moveTo(heroRadarX, heroRadarY);
-            ctx.lineTo(targetRadarX, targetRadarY);
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)';
-            ctx.setLineDash([5, 5]);
-            ctx.stroke();
-            ctx.setLineDash([]);
+            const pathData = getPathToAdjacentTile(window.expLastMoveTx, window.expLastMoveTy, buildDistanceMapFromHero());
+            if (pathData && pathData.path && pathData.path.length) {
+                ctx.beginPath();
+                const [sx, sy] = pathData.path[0];
+                ctx.moveTo(offsetX + (sx * scale) + (scale / 2), offsetY + (sy * scale) + (scale / 2));
+                for (let i = 1; i < pathData.path.length; i++) {
+                    const [px, py] = pathData.path[i];
+                    ctx.lineTo(offsetX + (px * scale) + (scale / 2), offsetY + (py * scale) + (scale / 2));
+                }
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)';
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
         }
 
             // Celownik na potworze
