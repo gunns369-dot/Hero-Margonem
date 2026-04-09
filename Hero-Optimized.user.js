@@ -5752,21 +5752,23 @@ window.expConsecutiveStucks = 0;
                 if (typeof window._g === 'function') window._g('fight&a=quit');
             }
             return;
-    } else if (window.expWasInBattle) {
+} else if (window.expWasInBattle) {
     window.expWasInBattle = false;
 
     expEmptyScans = 0;
-    expSearchAfterKillUntil = now + (Engine.map?.d?.pvp === 2 ? 5000 : 2500);
 
-    // nie odpinaj mapy po jednym killu
+    // bardzo krótka pauza po walce, tylko żeby odświeżyły się dane
+    expSearchAfterKillUntil = now + 700;
+
+    // dalej czyścimy tę samą mapę
     expPinnedMap = Engine.map.d.name;
-    expPinnedMapUntil = now + (Engine.map?.d?.pvp === 2 ? 20000 : 9000);
+    expPinnedMapUntil = now + (Engine.map?.d?.pvp === 2 ? 20000 : 10000);
 
     expCurrentTargetId = null;
     window.expCurrentTargetGroupKey = null;
     window.expTargetLockTime = 0;
 
-    expLastActionTime = now + 500;
+    expLastActionTime = now + 120;
     return;
 }
     } catch (e) {}
@@ -6080,11 +6082,11 @@ if (targetGroup && targetGroup.bestTargetMob && Number.isFinite(targetGroup.best
     if (target) {
 const targetDist = targetGroup.bestPathDistance;
 
-     if (expEmptyScans > 0 || (window.expPostBattleSearchUntil && now < window.expPostBattleSearchUntil)) {
+   if (expEmptyScans > 0 || (expSearchAfterKillUntil && now < expSearchAfterKillUntil)) {
     window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
     expEmptyScans = 0;
-    window.expPostBattleSearchUntil = 0;
-    expLastActionTime = now + 300;
+    expSearchAfterKillUntil = 0;
+    expLastActionTime = now + 120;
     return;
 }
 
@@ -6230,7 +6232,8 @@ const emptyScanLimit = isRedMap ? 14 : 8;
 if (
     expPinnedMap === currMapName &&
     now < expPinnedMapUntil &&
-    mapStillHasWork
+    mapStillHasWork &&
+    !target
 ) {
     expEmptyScans = 0;
 
@@ -6240,36 +6243,23 @@ if (
             : `Czyszczę mapę do końca...`;
     }
 
-    expLastActionTime = now + 180;
+    expLastActionTime = now + 120;
     return;
 }
 
-// Krótki search mode po walce — bez zmiany mapy
+// Krótki bufor po walce — tylko na odświeżenie danych, bez sztucznego kręcenia się
 if (expSearchAfterKillUntil && now < expSearchAfterKillUntil) {
     expEmptyScans = 0;
 
     if (displayTarget) {
-        displayTarget.innerText = `Doszukuję reszty potworów...`;
+        displayTarget.innerText = `Szukam kolejnej grupy...`;
     }
 
-    expLastActionTime = now + 180;
-    return;
-}    
-expEmptyScans++;
-
-// Po świeżo zakończonej walce nie przechodź od razu w "mapa pusta",
-// ale bez sztucznego odkrywania mapy ruchem.
-if (window.expPostBattleSearchUntil && now < window.expPostBattleSearchUntil) {
-    expEmptyScans = 0;
-
-    if (displayTarget) {
-        let left = Math.max(0, Math.ceil((window.expPostBattleSearchUntil - now) / 1000));
-        displayTarget.innerText = `Doszukuję potworów po walce... (${left}s)`;
-    }
-
-    expLastActionTime = now + 180;
+    expLastActionTime = now + 80;
     return;
 }
+expEmptyScans++;
+
 
 if (now < expMapTransitionCooldown) return;
 
