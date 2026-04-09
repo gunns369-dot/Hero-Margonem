@@ -5717,25 +5717,84 @@ function getAllCandidateExpMaps() {
 function pickNextUnclearedExpMap(currMap, mapsPool) {
     if (!Array.isArray(mapsPool) || mapsPool.length === 0) return null;
 
-    const currIdx = mapsPool.indexOf(currMap);
-    const ordered = [];
+    const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
+    const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable);
+    const now = Date.now();
+    let best = null;
 
-    if (currIdx >= 0) {
-        for (let i = 1; i <= mapsPool.length; i++) {
-            ordered.push(mapsPool[(currIdx + i) % mapsPool.length]);
-        }
-    } else {
-        ordered.push(...mapsPool);
-    }
-
-    for (const candidate of ordered) {
+    for (const candidate of mapsPool) {
         if (!candidate || candidate === currMap) continue;
         if (isMapTemporarilyCleared(candidate)) continue;
-        const p = getShortestPath(currMap, candidate);
-        if (p && p.length > 1) return candidate;
+        if (window.__bannedMaps && window.__bannedMaps[candidate] && now < window.__bannedMaps[candidate]) continue;
+
+        const path = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate) : null;
+        if (!path || path.length < 2) continue;
+
+        const nextHop = path[1];
+        let door = reachableDoors.find(g => (g.targetMap || "").toLowerCase() === String(nextHop).toLowerCase()) || null;
+
+        // Fallback: wspieramy ręcznie zapisane przejścia z bazy nawet jeśli radar ich nie wykrył
+        if (!door && typeof globalGateways !== 'undefined' && globalGateways[currMap] && globalGateways[currMap][nextHop]) {
+            const baseDoor = globalGateways[currMap][nextHop];
+            let reachable = false;
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (distMap.has(`${baseDoor.x + dx}_${baseDoor.y + dy}`)) {
+                        reachable = true;
+                        break;
+                    }
+                }
+                if (reachable) break;
+            }
+            if (reachable) {
+                const k = `${baseDoor.x}_${baseDoor.y}`;
+                door = {
+                    x: baseDoor.x,
+                    y: baseDoor.y,
+                    targetMap: nextHop,
+                    pathDistance: distMap.get(k) ?? 999
+                };
+            }
+        }
+
+        // Tylko mapy, do których istnieje realnie dostępne pierwsze przejście
+        if (!door) continue;
+
+        const score = (door.pathDistance ?? 999) * 1000 + path.length;
+        if (!best || score < best.score) {
+            best = {
+                targetMap: candidate,
+                nextHop,
+                door,
+                path,
+                score
+            };
+        }
     }
 
-    return null;
+    return best;
+}
+
+function areAllExpMapsTemporarilyCleared(mapsPool) {
+    if (!Array.isArray(mapsPool) || mapsPool.length === 0) return false;
+    return mapsPool.every(m => m && isMapTemporarilyCleared(m));
+}
+
+function getNearestKnownSafeExpMap(currMap, mapsPool) {
+    if (!Array.isArray(mapsPool) || mapsPool.length === 0) return null;
+    window.expMapPvpCache = window.expMapPvpCache || {};
+
+    const safeCandidates = mapsPool.filter(m => m && window.expMapPvpCache[m] !== 2);
+    if (safeCandidates.length === 0) return null;
+
+    let best = null;
+    for (const mapName of safeCandidates) {
+        const p = typeof getShortestPath === 'function' ? getShortestPath(currMap, mapName) : null;
+        if (!p || p.length === 0) continue;
+        const score = p.length;
+        if (!best || score < best.score) best = { map: mapName, score };
+    }
+    return best ? best.map : null;
 }
 function getPathToAdjacentTile(targetX, targetY, distMap) {
     if (!(window.margoWalkableMask instanceof Set)) return null;
@@ -5876,6 +5935,8 @@ function runExpLogic() {
     const currMap = Engine.map.d.name;
     let mapsPool = botSettings.exp.mapOrder || [];
     const isExpMap = mapsPool.includes(currMap);
+    window.expMapPvpCache = window.expMapPvpCache || {};
+    window.expMapPvpCache[currMap] = Engine.map?.d?.pvp;
 
     // Zarządzanie historią map i cooldownami
     if (window.lastExpMap !== currMap) {
@@ -6021,7 +6082,8 @@ function runExpLogic() {
             }
         }
 
-        let bestTargetMap = pickNextUnclearedExpMap(currMap, mapsPool);
+        const bestTransit = pickNextUnclearedExpMap(currMap, mapsPool);
+        let bestTargetMap = bestTransit ? (bestTransit.nextHop || bestTransit.targetMap) : null;
 
         if (!bestTargetMap) {
             const fallbackRoute = pickNextReachableMapFromRoute(currMap);
@@ -6038,8 +6100,47 @@ function runExpLogic() {
                 expLastLoggedTransitMap = bestTargetMap;
             }
             expLastLoggedTargetId = null;
+            window.expAllMapsClearedAt = 0;
+            window.expWaitingSafeMap = null;
             window.rushToMap(bestTargetMap);
             expLastActionTime = now + 1000;
+        } else if (!bestTargetMap && areAllExpMapsTemporarilyCleared(mapsPool)) {
+            // Wszystkie mapy wyczyszczone: czekamy na bezpiecznej mapie i po minucie ponawiamy obieg.
+            if (!window.expAllMapsClearedAt) {
+                window.expAllMapsClearedAt = now;
+                if (window.logExp) window.logExp("✅ Wyczyściłem wszystkie mapy. Szukam bezpiecznej mapy i czekam 1 minutę na resp.", "#4db6ac");
+            }
+
+            const isRedMap = Engine.map?.d?.pvp === 2;
+            if (isRedMap && !window.isRushing) {
+                const safeMap = getNearestKnownSafeExpMap(currMap, mapsPool);
+                if (safeMap && safeMap !== currMap) {
+                    window.expWaitingSafeMap = safeMap;
+                    if (window.logExp) window.logExp(`🛡️ Mapa czerwona. Przenoszę się na bezpieczną mapę: [${safeMap}]`, "#81d4fa");
+                    window.rushToMap(safeMap);
+                    expLastActionTime = now + 1000;
+                    return;
+                }
+            }
+
+            const waitMs = 60 * 1000;
+            const elapsed = now - window.expAllMapsClearedAt;
+            if (elapsed < waitMs) {
+                if (!window.expLastWaitLogAt || now - window.expLastWaitLogAt > 12000) {
+                    const leftSec = Math.max(0, Math.ceil((waitMs - elapsed) / 1000));
+                    if (window.logExp) window.logExp(`⏳ Czekam na odrodzenie potworów... (${leftSec}s)`, "#90a4ae");
+                    window.expLastWaitLogAt = now;
+                }
+                return;
+            }
+
+            if (window.logExp) window.logExp("🔁 Minęła minuta — wracam sprawdzić mapy expowiska.", "#4fc3f7");
+            window.mapClearTimes = {};
+            window.expAllMapsClearedAt = 0;
+            window.expLastWaitLogAt = 0;
+            window.expWaitingSafeMap = null;
+            expEmptyScans = 0;
+            return;
         } else if (!bestTargetMap && !isExpMap) {
             // Backtracking (Cofanie się)
             let back = window.expMapHistory?.pop();
