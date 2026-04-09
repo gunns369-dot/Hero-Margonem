@@ -6264,11 +6264,20 @@ if (!expRouteMaps.length) {
 
 // Zapamiętujemy, że obecna mapa jest wyczyszczona
 if (!window.mapClearTimes) window.mapClearTimes = {};
-      if (mapStillHasWork) {
+
+// jeśli mapa nadal ma robotę, nie oznaczaj jej jako pustej
+if (mapStillHasWork && !target) {
     expEmptyScans = 0;
-    expLastActionTime = now + 180;
+    if (displayTarget) {
+        displayTarget.innerText = isRedMapNow
+            ? `Czyszczę mapę do końca... (pamięć: ${rememberedCount})`
+            : `Czyszczę mapę do końca...`;
+    }
+    expLastActionTime = now + 100;
     return;
 }
+
+// dopiero tutaj mapa naprawdę jest pusta
 markMapTemporarilyCleared(currMap);
 
 if (window.logExp) {
@@ -6299,10 +6308,9 @@ if (uncheckedMaps.length === 0) {
 // Przekazujemy kontrolę wyżej w następnym cyklu
 expLastActionTime = now + 200;
 return;
-} // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
+} // KRYTYCZNE ZAMKNIĘCIE FUNKCJI
 
 setInterval(runExpLogic, 150);
-
     // --- BAZA DANYCH PROFILI EXPOWISK ---
 
     window.saveCurrentExpProfile = function() {
