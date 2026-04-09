@@ -6268,11 +6268,13 @@ if (!window.mapClearTimes) window.mapClearTimes = {};
 // jeśli mapa nadal ma robotę, nie oznaczaj jej jako pustej
 if (mapStillHasWork && !target) {
     expEmptyScans = 0;
+
     if (displayTarget) {
         displayTarget.innerText = isRedMapNow
             ? `Czyszczę mapę do końca... (pamięć: ${rememberedCount})`
             : `Czyszczę mapę do końca...`;
     }
+
     expLastActionTime = now + 100;
     return;
 }
