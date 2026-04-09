@@ -6041,42 +6041,45 @@ if (expEmptyScans < 8) {
 
 if (now < expMapTransitionCooldown) return;
 
-    let mapsPool = botSettings.exp.mapOrder || [];
-    if (!mapsPool.length) {
-        expEmptyScans = 0;
-        expLastActionTime = now + 1500;
-        return;
-    }
+let expRouteMaps = botSettings.exp.mapOrder || [];
+if (!expRouteMaps.length) {
+    expEmptyScans = 0;
+    expLastActionTime = now + 1500;
+    return;
+}
 
-    // Zapamiętujemy, że obecna mapa jest wyczyszczona
-    if (!window.mapClearTimes) window.mapClearTimes = {};
-    markMapTemporarilyCleared(currMap);
-    if (window.logExp) {
+// Zapamiętujemy, że obecna mapa jest wyczyszczona
+if (!window.mapClearTimes) window.mapClearTimes = {};
+markMapTemporarilyCleared(currMap);
+
+if (window.logExp) {
     window.logExp(`🗺️ Mapa [${currMap}] pusta! Pomijam ją przez 5 minut.`, "#ba68c8");
 }
-    let uncheckedMaps = mapsPool.filter(m => !window.mapClearTimes[m]);
 
-    // Jeśli nie ma już żadnych map do sprawdzenia
-    if (uncheckedMaps.length === 0) {
-        if (Engine.map.d.pvp === 2 && mapsPool.length > 1) {
-            window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
-            let nextIdx = (mapsPool.indexOf(currMap) + 1) % mapsPool.length;
-            let safeMap = mapsPool[nextIdx];
-            if (safeMap) {
-                delete window.mapClearTimes[safeMap];
-                expMapTransitionCooldown = now + 500;
-                return;
-            }
+let uncheckedMaps = expRouteMaps.filter(m => !window.mapClearTimes[m]);
+
+// Jeśli nie ma już żadnych map do sprawdzenia
+if (uncheckedMaps.length === 0) {
+    if (Engine.map.d.pvp === 2 && expRouteMaps.length > 1) {
+        window.logExp("🔴 Czerwona mapa! Przechodzę na kolejną, aby bezpiecznie przeczekać na resp.", "#ff5252");
+        let nextIdx = (expRouteMaps.indexOf(currMap) + 1) % expRouteMaps.length;
+        let safeMap = expRouteMaps[nextIdx];
+        if (safeMap) {
+            delete window.mapClearTimes[safeMap];
+            expMapTransitionCooldown = now + 500;
+            return;
         }
-        window.logExp("⏳ Pętla ukończona (Wszystkie mapy z listy wyczyszczone). Czekam 45 sekund na respawn...", "#ffb300");
-        expMapTransitionCooldown = now + 45000;
-        window.mapClearTimes = {}; // Resetujemy pamięć po odczekaniu, żeby bot poleciał pętlę od nowa!
-        return;
     }
 
-   // Przekazujemy kontrolę wyżej w następnym cyklu - bot ułoży cel na nową jaskinię i od razu do niej pobiegnie.
-    expLastActionTime = now + 200;
+    window.logExp("⏳ Pętla ukończona (Wszystkie mapy z listy wyczyszczone). Czekam 45 sekund na respawn...", "#ffb300");
+    expMapTransitionCooldown = now + 45000;
+    window.mapClearTimes = {};
     return;
+}
+
+// Przekazujemy kontrolę wyżej w następnym cyklu
+expLastActionTime = now + 200;
+return;
 } // KRYTYCZNE ZAMKNIĘCIE FUNKCJI (To tutaj gra pękała!)
 
 setInterval(runExpLogic, 150);
