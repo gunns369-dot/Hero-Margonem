@@ -6391,17 +6391,47 @@ if (isOnGateway(hx, hy)) {
 }
 
 // Jeśli nadal pamiętamy / widzimy robotę na tej mapie, nie wolno jej oznaczać jako pustej.
+// --- INTELIGENTNA PAMIĘĆ ---
+// Jeśli nie masz widocznego CELU, ale wiesz, że na tej mapie są jeszcze potwory (bo je mijałeś)
 if (mapStillHasWork && !target) {
-    expEmptyScans = 0;
+    expEmptyScans = 0; // Resetujemy odliczanie! Mamy misję.
 
     if (displayTarget) {
-        displayTarget.innerText = isRedMapNow
-            ? `Czyszczę mapę do końca... (pamięć: ${rememberedCount})`
-            : `Czyszczę mapę do końca...`;
+        displayTarget.innerText = `Biegnę do zapamiętanego potwora... (W pamięci: ${liveCount + rememberedCount})`;
     }
 
-    expLastActionTime = now + 100;
+    // Wyciągamy pierwszego lepszego zapamiętanego moba z listy
+    let memoryMob = null;
+    if (isRedMapNow && window.expRedMapMemory[currMapName]) {
+        let memIds = Object.keys(window.expRedMapMemory[currMapName]);
+        if(memIds.length > 0) memoryMob = window.expRedMapMemory[currMapName][memIds[0]];
+    } else if (arr && arr.length > 0) {
+        memoryMob = arr[0]; // Pierwszy mob z ogólnego cache
+    }
+
+    // Jeśli udało się go namierzyć, wykonujemy płynny bieg w jego stronę!
+    if (memoryMob && typeof Engine.hero.autoGoTo === 'function') {
+        
+        // Anti-Stuck i płynność: nie spamujemy klikaniem
+        if (now > nextAllowedClickTime) {
+            let stepX = Math.max(0, memoryMob.x + (Math.random() > 0.5 ? 1 : -1));
+            let stepY = Math.max(0, memoryMob.y + (Math.random() > 0.5 ? 1 : -1));
+            
+            Engine.hero.autoGoTo({ x: stepX, y: stepY });
+            nextAllowedClickTime = now + 400; // Krótki ping
+            window.expLastMoveTx = stepX; 
+            window.expLastMoveTy = stepY;
+        }
+    }
+
+    expLastActionTime = now + 150;
     return;
+}
+
+// Tylko gdy mapa jest NAPRAWDĘ PUSTA, zaczynamy liczyć skany do zmiany:
+expEmptyScans++;
+if (displayTarget) {
+    displayTarget.innerText = `Czysto. Upewniam się... (${expEmptyScans}/${isRedMapNow ? 14 : 8})`;
 }
 
 expEmptyScans++;
@@ -7015,11 +7045,96 @@ window.clearExpMaps = clearExpMaps;
         }).join('');
     };
 
+window.renderMapOrderList = () => {
+        let c = document.getElementById('heroMapListContainer');
+        if (!c) return;
+
+        let hero = document.getElementById('selHero').value;
+        if (!hero || !heroMapOrder[hero] || heroMapOrder[hero].length === 0) {
+            c.innerHTML = '<div style="padding:5px;text-align:center;color:#777;">Wybierz herosa, by zobaczyć trasę</div>';
+            return;
+        }
+
+        let currentMap = lastMapName;
+        // Obliczamy dystanse raz, dla całej mapy, co naprawi "brak dojścia"
+        let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
+        let allGateways = typeof getCurrentMapGatewaysForRadar === 'function' ? getCurrentMapGatewaysForRadar(distMap) : [];
+
+        c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
+            let safeMapName = mapName.replace(/'/g, "\\'");
+
+            if (editingGatewayFor === mapName) {
+                let defaultX = "";
+                let defaultY = "";
+                let refDoor = globalGateways[currentMap] && globalGateways[currentMap][mapName];
+
+                if (refDoor) {
+                    defaultX = refDoor.x;
+                    defaultY = refDoor.y;
+                }
+
+                return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;">
+                    <div style="display:flex; flex-direction:column; gap:4px; padding:2px;">
+                        <span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+                            <label style="color:#a99a75; font-size:10px; margin:0;">X:
+                                <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;">
+                            </label>
+                            <label style="color:#a99a75; font-size:10px; margin:0;">Y:
+                                <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;">
+                            </label>
+                            <button class="btn-sepia" style="flex-grow:1;"
+                                onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;"
+                                title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button>
+                        </div>
+                        <div style="display:flex; gap:4px; margin-top:4px;">
+                            <button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button>
+                            <button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button>
+                        </div>
+                    </div>
+                </div>`;
+            } else {
+                const inBase = isMapKnownInGatewayBase(mapName);
+                
+                // Sprawdzamy czy to wejście jest aktualnie osiągalne z miejsca gdzie stoisz
+                const liveDoor = allGateways.find(g => g.targetMap.toLowerCase() === mapName.toLowerCase() && g.reachable);
+                const doorDistance = liveDoor ? liveDoor.pathDistance : "?";
+                
+                const baseBadge = inBase
+                    ? `<span style="color:#81c784; font-size:10px; margin-left:4px;" title="${liveDoor ? `Odległość do bramy: ${doorDistance}` : `Nie widzę bramy z obecnego punktu`}"><br>[BAZA${liveDoor ? ' ✔' : ''}]</span>`
+                    : `<span style="color:#ef9a9a; font-size:10px; margin-left:4px;"><br>[BRAK ZAPISU]</span>`;
+
+                const mapColor = inBase ? (liveDoor ? "#4caf50" : "#aed581") : "#ef9a9a";
+
+                return `<div class="list-item">
+                    <div class="map-name-wrap">
+                        <span class="btn-del-map" onclick="window.removeHeroMapFromOrder(${index})">✖</span>
+                        <span class="map-name" style="color:${mapColor}; font-weight:bold;">
+                            ${index + 1}. ${mapName} ${baseBadge}
+                        </span>
+                    </div>
+                    <div class="buttons-wrapper">
+                        <input type="number"
+                               min="1"
+                               max="${heroMapOrder[hero].length}"
+                               value="${index + 1}"
+                               onchange="window.changeMapOrder(${index}, this.value)"
+                               style="width:42px; text-align:center; font-size:10px; padding:2px; background:#111; color:#d4af37; border:1px solid #444; border-radius:4px;">
+                        <button class="icon-btn" onclick="window.openInlineEditor('${safeMapName}')" title="Ręczna edycja kordów">🚪</button>
+                    </div>
+                </div>`;
+            }
+        }).join('');
+    };
+
     window.renderExpMaps = () => {
         let c = document.getElementById('expMapList');
         if (!c) return;
 
         let currentMap = lastMapName;
+        // Obliczamy dystanse raz, żeby uniknąć laga
+        let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
+        let allGateways = typeof getCurrentMapGatewaysForRadar === 'function' ? getCurrentMapGatewaysForRadar(distMap) : [];
 
         c.innerHTML = botSettings.exp.mapOrder.map((mapName, index) => {
             let safeMapName = mapName.replace(/'/g, "\\'");
@@ -7056,11 +7171,16 @@ window.clearExpMaps = clearExpMaps;
                 </div>`;
             } else {
                 const inBase = isMapKnownInGatewayBase(mapName);
+                
+                // Sprawdzamy czy to wejście jest aktualnie osiągalne z miejsca gdzie stoisz
+                const liveDoor = allGateways.find(g => g.targetMap.toLowerCase() === mapName.toLowerCase() && g.reachable);
+                const doorDistance = liveDoor ? liveDoor.pathDistance : "?";
+                
                 const baseBadge = inBase
-                    ? `<span style="color:#81c784; font-size:10px; margin-left:4px;">[BAZA]</span>`
-                    : `<span style="color:#ef9a9a; font-size:10px; margin-left:4px;">[BRAK]</span>`;
+                    ? `<span style="color:#81c784; font-size:10px; margin-left:4px;" title="${liveDoor ? `Odległość do bramy: ${doorDistance}` : `Nie widzę bramy z obecnego punktu`}">[BAZA${liveDoor ? ' ✔' : ''}]</span>`
+                    : `<span style="color:#ef9a9a; font-size:10px; margin-left:4px;">[BRAK ZAPISU]</span>`;
 
-                const mapColor = inBase ? "#81c784" : "#ef9a9a";
+                const mapColor = inBase ? (liveDoor ? "#4caf50" : "#aed581") : "#ef9a9a";
 
                 return `<div class="list-item">
                     <div class="map-name-wrap">
