@@ -1095,7 +1095,119 @@ let opacityValue = 0.95;
 
     }
 
+// --- BRAKUJĄCE FUNKCJE POMOCNICZE (Przywrócone) ---
+    function getMobRank(n) {
+        if (!n) return "normal";
+        let wt = parseInt(n.wt, 10) || 0;
+        if (n.type === 2) {
+            if (wt === 11 || wt === 1) return "elite1";
+            if (wt === 12 || wt === 2) return "elite2";
+            if (wt >= 13 || wt >= 3) return "hero";
+        }
+        return "normal";
+    }
 
+    function getRankValue(r) {
+        if (r === 'hero') return 4;
+        if (r === 'elite2') return 3;
+        if (r === 'elite1') return 2;
+        return 1;
+    }
+
+    function buildServerMobGroups(validMobs, distMap) {
+        let groups = [];
+        let processed = new Set();
+        validMobs.forEach(mob => {
+            if (processed.has(mob.id)) return;
+            let group = { key: mob.grp || mob.id, mobs: [mob], mainRanga: mob.ranga, bestTargetMob: mob, bestPathDistance: 9999, bestStand: null };
+            processed.add(mob.id);
+            validMobs.forEach(otherMob => {
+                if (mob.id !== otherMob.id && !processed.has(otherMob.id)) {
+                    if ((mob.grp && mob.grp === otherMob.grp) || (Math.abs(mob.x - otherMob.x) <= 2 && Math.abs(mob.y - otherMob.y) <= 2)) {
+                        group.mobs.push(otherMob);
+                        processed.add(otherMob.id);
+                        if (getRankValue(otherMob.ranga) > getRankValue(group.mainRanga)) group.mainRanga = otherMob.ranga;
+                    }
+                }
+            });
+            let bestDist = Infinity; let bestStand = null; let bestMob = null;
+            group.mobs.forEach(m => {
+                let dirs = [[0,1],[0,-1],[1,0],[-1,0],[-1,-1],[1,-1],[-1,1],[1,1]];
+                for (let d of dirs) {
+                    let nx = m.x + d[0]; let ny = m.y + d[1]; let key = `${nx}_${ny}`;
+                    if (distMap.has(key)) {
+                        let dVal = distMap.get(key);
+                        if (dVal < bestDist) { bestDist = dVal; bestStand = {x: nx, y: ny}; bestMob = m; }
+                    }
+                }
+            });
+            group.bestPathDistance = bestDist; group.bestStand = bestStand; group.bestTargetMob = bestMob || group.mobs[0];
+            group.label = `${group.mobs.length}x ${group.mainRanga}`;
+            groups.push(group);
+        });
+        return groups;
+    }
+
+    function getCurrentMapGatewaysForRadar(distMap) {
+        let found = [];
+        if (typeof Engine === 'undefined' || !Engine.map) return found;
+        let gws = (Engine.map.gateways) ? Engine.map.gateways : ((Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
+        let gwsList = [];
+        try { if (typeof gws.values === 'function') gwsList = Array.from(gws.values()); else gwsList = Object.values(gws); }
+        catch(e) { for (let key in gws) { if (gws.hasOwnProperty(key)) gwsList.push(gws[key]); } }
+
+        gwsList.forEach(gw => {
+            let data = gw.d || gw;
+            if (!data || data.x === undefined || data.y === undefined) return;
+            let isReachable = false; let bestStand = null; let minDist = Infinity;
+            let dirs = [[0,0], [0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [-1,1], [1,-1]];
+            for(let d of dirs) {
+                let nx = data.x + d[0]; let ny = data.y + d[1]; let k = `${nx}_${ny}`;
+                if(distMap.has(k)) {
+                    isReachable = true; let dist = distMap.get(k);
+                    if(dist < minDist) { minDist = dist; bestStand = {x: nx, y: ny}; }
+                }
+            }
+            let cleanName = (data.name || data.targetName || data.title || data.tooltip || "").toString().replace(/<[^>]*>?/gm, '').split('\n')[0].replace("Przejście do:", "").trim();
+            found.push({ x: data.x, y: data.y, targetMap: cleanName, reachable: isReachable, stand: bestStand, pathDistance: minDist });
+        });
+        return found;
+    }
+
+    function getBestReachableGatewayToMap(targetMap) {
+        let distMap = buildDistanceMapFromHero();
+        let all = getCurrentMapGatewaysForRadar(distMap);
+        let valid = all.filter(g => g.targetMap.toLowerCase() === targetMap.toLowerCase() && g.reachable);
+        if(valid.length === 0) return null;
+        valid.sort((a,b) => a.pathDistance - b.pathDistance);
+        return valid[0];
+    }
+
+    function markGatewayAsBlocked(currentSysMap, nextMap, duration) {
+        window.__bannedMaps = window.__bannedMaps || {};
+        window.__bannedMaps[nextMap] = Date.now() + duration;
+    }
+
+    function pickNextReachableMapFromRoute(currentSysMap) {
+        let hero = document.getElementById('selHero') ? document.getElementById('selHero').value : null;
+        let mapList = botSettings.exp.mapOrder;
+        if (!mapList || mapList.length === 0) { if (hero && heroMapOrder[hero]) mapList = heroMapOrder[hero]; }
+        if (!mapList || mapList.length === 0) return null;
+
+        let distMap = buildDistanceMapFromHero();
+        let reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable);
+        let currIdx = mapList.indexOf(currentSysMap);
+        if(currIdx === -1) return null;
+
+        for(let i = 1; i < mapList.length; i++) {
+            let checkIdx = (currIdx + i) % mapList.length;
+            let checkMap = mapList[checkIdx];
+            let door = reachableDoors.find(g => g.targetMap.toLowerCase() === checkMap.toLowerCase());
+            if (door) return { nextMap: checkMap, door: door };
+        }
+        return null;
+    }
+    // --------------------------------------------------------
 
     // ==========================================
 
