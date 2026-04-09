@@ -10118,14 +10118,15 @@ function isMapKnownInGatewayBase(mapName) {
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
     let win = document.getElementById('margoRadarWindow');
-    // Rysuj tylko gdy radar jest załadowany i widoczny
     if (!canvas || !win || win.style.display === 'none' || typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
     let ctx = canvas.getContext('2d');
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
 
-    // Obliczanie skali by mapa idealnie wypełniła obszar
+    const compactMode = !!window.radarCompactMode;
+    const showGateways = !!window.radarShowGateways;
+
     let scale = Math.min(canvas.width / w, canvas.height / h);
     let offsetX = (canvas.width - (w * scale)) / 2;
     let offsetY = (canvas.height - (h * scale)) / 2;
@@ -10154,7 +10155,45 @@ function renderTacticalRadar() {
             }
         }
     }
+// Przejścia
+if (showGateways) {
+    let distMap = buildDistanceMapFromHero();
+    let gateways = getCurrentMapGatewaysForRadar(distMap) || [];
 
+    for (const gw of gateways) {
+        if (!gw || !gw.x && gw.x !== 0 || !gw.y && gw.y !== 0) continue;
+
+        const gx = offsetX + (gw.x * scale) + (scale / 2);
+        const gy = offsetY + (gw.y * scale) + (scale / 2);
+
+        ctx.beginPath();
+        ctx.arc(gx, gy, Math.max(2.5, scale * 0.45), 0, 2 * Math.PI);
+        ctx.fillStyle = gw.reachable ? '#ffd54f' : '#666666';
+        ctx.fill();
+
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#000000';
+        ctx.stroke();
+
+        if (!compactMode && gw.targetMap) {
+            const label = String(gw.targetMap).slice(0, 18);
+            ctx.font = `${Math.max(9, Math.floor(scale * 1.6))}px Arial`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            const tx = gx + 6;
+            const ty = gy - 8;
+            const tw = ctx.measureText(label).width;
+            const th = 12;
+
+            ctx.fillStyle = 'rgba(0,0,0,0.68)';
+            ctx.fillRect(tx - 2, ty - th / 2, tw + 4, th);
+
+            ctx.fillStyle = gw.reachable ? '#ffd54f' : '#aaaaaa';
+            ctx.fillText(label, tx, ty);
+        }
+    }
+}
    // Potwory + grupy
 let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
 let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
@@ -10195,7 +10234,7 @@ try {
     let distMap = buildDistanceMapFromHero();
     let serverGroups = buildServerMobGroups(validMobs.filter(m => m.__reachable), distMap);
 
-    ctx.font = `${Math.max(9, Math.floor(scale * 1.8))}px Arial`;
+    ctx.font = `${Math.max(9, Math.floor(scale * 1.55))}px Arial`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
@@ -10204,29 +10243,34 @@ try {
 
         const gx = offsetX + (g.bestStand.x * scale) + (scale / 2);
         const gy = offsetY + (g.bestStand.y * scale) + (scale / 2);
+        const isCurrent = g.key === window.expCurrentTargetGroupKey;
 
-        // obwódka grupy
         ctx.beginPath();
-        ctx.arc(gx, gy, Math.max(4, scale * 0.95), 0, 2 * Math.PI);
-        ctx.strokeStyle = g.key === window.expCurrentTargetGroupKey ? '#00e5ff' : '#ffffff55';
-        ctx.lineWidth = g.key === window.expCurrentTargetGroupKey ? 2 : 1;
+        ctx.arc(gx, gy, Math.max(3, scale * 0.7), 0, 2 * Math.PI);
+        ctx.strokeStyle = isCurrent ? '#00e5ff' : '#ffffff44';
+        ctx.lineWidth = isCurrent ? 2 : 1;
         ctx.stroke();
 
-        // etykieta grupy tylko dla większych grup albo celu
-        if (g.mobs.length > 1 || g.key === window.expCurrentTargetGroupKey) {
-            const label = `${g.mobs.length}x ${g.mainRanga}`;
-            const tx = gx + 6;
-            const ty = gy - 8;
+        // Compact: pokazuj tylko aktualny target
+        if (compactMode && !isCurrent) continue;
 
-            const tw = ctx.measureText(label).width;
-            const th = 12;
+        // Normalny tryb: podpisuj tylko większe grupy lub aktualny target
+        if (!compactMode && g.mobs.length < 3 && !isCurrent) continue;
 
-            ctx.fillStyle = 'rgba(0,0,0,0.72)';
-            ctx.fillRect(tx - 2, ty - th / 2, tw + 4, th);
+        const label = compactMode
+            ? `${g.mobs.length}x`
+            : `${g.mobs.length}x ${g.mainRanga}`;
 
-            ctx.fillStyle = g.key === window.expCurrentTargetGroupKey ? '#00e5ff' : '#e0d8c0';
-            ctx.fillText(label, tx, ty);
-        }
+        const tx = gx + 6;
+        const ty = gy - 8;
+        const tw = ctx.measureText(label).width;
+        const th = 12;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.72)';
+        ctx.fillRect(tx - 2, ty - th / 2, tw + 4, th);
+
+        ctx.fillStyle = isCurrent ? '#00e5ff' : '#e0d8c0';
+        ctx.fillText(label, tx, ty);
     }
 } catch (e) {}
 
