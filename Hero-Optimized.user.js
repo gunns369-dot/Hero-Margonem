@@ -9587,15 +9587,24 @@ function initFloatingRadarUI() {
     `;
     win.appendChild(header);
 
-    let canvasWrap = document.createElement('div');
-    canvasWrap.style.cssText = 'flex:1; position:relative; overflow:hidden; background:#000; cursor:crosshair;';
-    let canvas = document.createElement('canvas');
-    canvas.id = 'margoRadarCanvas';
-    canvas.style.cssText = 'display:block; position:absolute; top:0; left:0;';
-    canvasWrap.appendChild(canvas);
-    win.appendChild(canvasWrap);
+   let canvasWrap = document.createElement('div');
+canvasWrap.id = 'margoRadarCanvasWrap';
+canvasWrap.style.cssText = 'flex:1; min-height:120px; position:relative; overflow:hidden; background:#000; cursor:crosshair;';
 
-    document.body.appendChild(win);
+let canvas = document.createElement('canvas');
+canvas.id = 'margoRadarCanvas';
+canvas.style.cssText = 'display:block; position:absolute; top:0; left:0;';
+canvasWrap.appendChild(canvas);
+win.appendChild(canvasWrap);
+
+// Panel info pod mapą
+let infoPanel = document.createElement('div');
+infoPanel.id = 'margoRadarInfoPanel';
+infoPanel.style.cssText = 'height:72px; overflow:auto; background:#0b0b0b; border-top:1px solid #222; color:#d7d7d7; font:11px Tahoma,sans-serif; padding:6px 8px; box-sizing:border-box;';
+infoPanel.innerHTML = '<div style="color:#777;">Brak danych grup.</div>';
+win.appendChild(infoPanel);
+
+document.body.appendChild(win);
 
     toggleBtn.onclick = (e) => {
         e.preventDefault();
@@ -9613,12 +9622,20 @@ function initFloatingRadarUI() {
     const gatewaysToggle = document.getElementById('radarGatewaysToggle');
 
     compactToggle.checked = !!window.radarCompactMode;
+    const infoPanelInit = document.getElementById('margoRadarInfoPanel');
+if (infoPanelInit) {
+    infoPanelInit.style.display = window.radarCompactMode ? 'none' : 'block';
+}
     gatewaysToggle.checked = !!window.radarShowGateways;
 
-    compactToggle.onchange = () => {
-        window.radarCompactMode = compactToggle.checked;
-    };
+   compactToggle.onchange = () => {
+    window.radarCompactMode = compactToggle.checked;
 
+    const infoPanel = document.getElementById('margoRadarInfoPanel');
+    if (infoPanel) {
+        infoPanel.style.display = compactToggle.checked ? 'none' : 'block';
+    }
+};
     gatewaysToggle.onchange = () => {
         window.radarShowGateways = gatewaysToggle.checked;
     };
@@ -9642,12 +9659,12 @@ function initFloatingRadarUI() {
 
     document.addEventListener('mouseup', () => isDragging = false);
 
-    const resizeObserver = new ResizeObserver(() => {
-        canvas.width = canvasWrap.clientWidth;
-        canvas.height = canvasWrap.clientHeight;
-    });
-    resizeObserver.observe(canvasWrap);
-
+   const resizeObserver = new ResizeObserver(() => {
+    canvas.width = canvasWrap.clientWidth;
+    canvas.height = canvasWrap.clientHeight;
+});
+resizeObserver.observe(win);
+resizeObserver.observe(canvasWrap);
     canvas.addEventListener('mousedown', (e) => {
         if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
@@ -10154,7 +10171,46 @@ function renderTacticalRadar() {
                 drawRect(x, y, '#050505');
             }
         }
+ // Panel info pod mapą
+try {
+    const infoPanel = document.getElementById('margoRadarInfoPanel');
+    if (infoPanel) {
+        let distMap = buildDistanceMapFromHero();
+        let serverGroups = buildServerMobGroups(validMobs.filter(m => m.__reachable), distMap) || [];
+
+        serverGroups.sort((a, b) => {
+            const ad = a.bestPathDistance ?? 9999;
+            const bd = b.bestPathDistance ?? 9999;
+            if (a.key === window.expCurrentTargetGroupKey && b.key !== window.expCurrentTargetGroupKey) return -1;
+            if (b.key === window.expCurrentTargetGroupKey && a.key !== window.expCurrentTargetGroupKey) return 1;
+            return ad - bd;
+        });
+
+        if (!serverGroups.length) {
+            infoPanel.innerHTML = '<div style="color:#777;">Brak wykrytych grup.</div>';
+        } else {
+            infoPanel.innerHTML = serverGroups.map(g => {
+                const isCurrent = g.key === window.expCurrentTargetGroupKey;
+                const label = `${g.mobs.length}x ${g.mainRanga}`;
+                const dist = (g.bestPathDistance ?? '?');
+                const score = (typeof g.score !== 'undefined') ? g.score : '?';
+
+                return `
+                    <div style="
+                        padding:3px 0;
+                        border-bottom:1px solid rgba(255,255,255,0.06);
+                        color:${isCurrent ? '#00e5ff' : '#d7d7d7'};
+                        font-weight:${isCurrent ? 'bold' : 'normal'};
+                    ">
+                        ${isCurrent ? '🎯 ' : '• '}
+                        ${label}
+                        <span style="color:#999;"> — dystans: ${dist}, score: ${score}</span>
+                    </div>
+                `;
+            }).join('');
+        }
     }
+} catch (e) {}   }
 // Przejścia
 if (showGateways) {
     let distMap = buildDistanceMapFromHero();
@@ -10199,6 +10255,68 @@ let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engin
 let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
 
 let validMobs = [];
+    // Wizualne grupy na radarze
+let radarGroups = [];
+try {
+    let distMap = buildDistanceMapFromHero();
+    radarGroups = buildServerMobGroups(validMobs.filter(m => m.__reachable), distMap) || [];
+} catch (e) {
+    radarGroups = [];
+}
+
+for (const g of radarGroups) {
+    if (!g || !g.mobs || !g.mobs.length) continue;
+
+    // środek grupy liczony z pozycji mobów
+    let avgX = 0;
+    let avgY = 0;
+    for (const m of g.mobs) {
+        avgX += m.x;
+        avgY += m.y;
+    }
+    avgX /= g.mobs.length;
+    avgY /= g.mobs.length;
+
+    const gx = offsetX + (avgX * scale) + (scale / 2);
+    const gy = offsetY + (avgY * scale) + (scale / 2);
+    const isCurrent = g.key === window.expCurrentTargetGroupKey;
+
+    // promień zależny od wielkości grupy
+    const radius = Math.max(6, scale * (1.1 + g.mobs.length * 0.35));
+
+    ctx.beginPath();
+    ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = isCurrent ? '#00e5ff' : 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = isCurrent ? 2.5 : 1.2;
+    ctx.stroke();
+
+    // delikatne wypełnienie targetu
+    if (isCurrent) {
+        ctx.beginPath();
+        ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = 'rgba(0,229,255,0.10)';
+        ctx.fill();
+    }
+
+    // podpis na mapie tylko dla aktualnego targetu
+    if (isCurrent) {
+        const label = `${g.mobs.length}x ${g.mainRanga}`;
+        ctx.font = `${Math.max(10, Math.floor(scale * 1.8))}px Arial`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+
+        const tx = gx + radius + 4;
+        const ty = gy;
+        const tw = ctx.measureText(label).width;
+        const th = 14;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.78)';
+        ctx.fillRect(tx - 3, ty - th / 2, tw + 6, th);
+
+        ctx.fillStyle = '#00e5ff';
+        ctx.fillText(label, tx, ty);
+    }
+}
 
 for (let id in npcs) {
     let n = npcs[id].d || npcs[id];
@@ -10229,58 +10347,7 @@ for (let id in npcs) {
     }
 }
 
-// Legenda grup na mapie (czytelna lista zamiast podpisów wszędzie)
-try {
-    let distMap = buildDistanceMapFromHero();
-    let serverGroups = buildServerMobGroups(validMobs.filter(m => m.__reachable), distMap);
 
-    // Zliczanie grup wg składu: np. "2x normal", "3x elite2"
-    let summary = new Map();
-
-    for (const g of serverGroups) {
-        if (!g || !g.mobs || !g.mobs.length) continue;
-
-        const label = `${g.mobs.length}x ${g.mainRanga || 'normal'}`;
-        summary.set(label, (summary.get(label) || 0) + 1);
-    }
-
-    const entries = [...summary.entries()]
-        .sort((a, b) => {
-            const getCount = s => parseInt(String(s).split('x')[0], 10) || 0;
-            return getCount(b[0]) - getCount(a[0]);
-        });
-
-    if (entries.length > 0) {
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-
-        const title = 'Grupy na mapie:';
-        const lines = entries.map(([label, count]) => `${count}× ${label}`);
-
-        let maxWidth = ctx.measureText(title).width;
-        for (const line of lines) {
-            maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
-        }
-
-        const lineH = 14;
-        const boxX = offsetX + 8;
-        const boxY = offsetY + 8;
-        const boxW = maxWidth + 12;
-        const boxH = 8 + lineH * (lines.length + 1);
-
-        ctx.fillStyle = 'rgba(0,0,0,0.72)';
-        ctx.fillRect(boxX, boxY, boxW, boxH);
-
-        ctx.fillStyle = '#00e5ff';
-        ctx.fillText(title, boxX + 6, boxY + 4);
-
-        ctx.fillStyle = '#e0d8c0';
-        lines.forEach((line, i) => {
-            ctx.fillText(line, boxX + 6, boxY + 4 + lineH * (i + 1));
-        });
-    }
-} catch (e) {}
   // Rysowanie dynamicznej trasy do expowiska (REALNA ŚCIEŻKA PO TERENIE)
 if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
     let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
