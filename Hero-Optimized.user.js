@@ -994,6 +994,12 @@ let opacityValue = 0.95;
     let positionHistory = [];
 
     let lastMapName = "";
+    const getCurrentMapName = () => {
+        if (typeof Engine !== 'undefined' && Engine.map && Engine.map.d && Engine.map.d.name) {
+            return Engine.map.d.name;
+        }
+        return lastMapName;
+    };
 
 
 
@@ -1553,6 +1559,8 @@ let attackInterval = null;
     function attackTarget(npcId) {
 
         if (attackInterval) clearInterval(attackInterval);
+        let lastManualAttackAt = 0;
+        let manualAttackIssued = false;
 
 
 
@@ -1633,6 +1641,7 @@ let attackInterval = null;
 
 
             if (dist > 1) {
+                manualAttackIssued = false;
 
                 let now = Date.now();
 
@@ -1646,11 +1655,16 @@ let attackInterval = null;
 
             } else {
 
-                if (Engine.npcs && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(targetId);
+                let now = Date.now();
+                if (!manualAttackIssued || now - lastManualAttackAt > 2500) {
+                    if (Engine.npcs && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(targetId);
 
-                let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
+                    let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
+                    if (confirmBtn && confirmBtn.innerText.toLowerCase().includes("zaatakuj")) confirmBtn.click();
 
-                if (confirmBtn && confirmBtn.innerText.toLowerCase().includes("zaatakuj")) confirmBtn.click();
+                    manualAttackIssued = true;
+                    lastManualAttackAt = now;
+                }
 
             }
 
@@ -2176,7 +2190,7 @@ function autoDetectEngineData() {
     // RUSH MODE (PŁYNNY RUCH)
     // ==========================================
     window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null, resumePatrol = false) {
-        let currentSysMap = lastMapName;
+        let currentSysMap = getCurrentMapName();
         if (currentSysMap === targetMapName) {
             if (x !== null && y !== null) safeGoTo(x, y, false);
             if (resumePatrol) {
@@ -2297,7 +2311,7 @@ window.executeRushStep = function() {
         if (window._lastRushTick && nowRush - window._lastRushTick < 400) return;
         window._lastRushTick = nowRush;
         if (!isRushing && !window.isRushing) return;
-        let currentSysMap = lastMapName;
+        let currentSysMap = getCurrentMapName();
 
         if (currentSysMap === rushTarget) {
             isRushing = false;
@@ -2478,7 +2492,7 @@ window.executeRushStep = function() {
     window.checkRushArrival = function() {
         if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
 
-        let currentSysMap = lastMapName;
+        let currentSysMap = getCurrentMapName();
         if (currentSysMap === rushTarget) {
             window.executeRushStep();
             return;
@@ -2652,7 +2666,7 @@ window.executeRushStep = function() {
     }
 window.handleTeleportNPC = function(targetMap) {
         if (!isRushing && !isPatrolling && !window.isExping) return;
-        let currentSysMap = lastMapName;
+        let currentSysMap = getCurrentMapName();
         let tp = ZAKONNICY[currentSysMap];
         if (!tp) return;
 
@@ -5834,6 +5848,11 @@ function runExpLogic() {
         window.expMapEnteredAt = now;
         window.expDidStepOutAfterEntry = false;
         window.expCurrentTargetGroupKey = null;
+        window.expLastMoveTx = null;
+        window.expLastMoveTy = null;
+        window.expLastMoveAt = 0;
+        window.expLastMoveHeroX = null;
+        window.expLastMoveHeroY = null;
         window.isRushing = false;
         expEmptyScans = 0;
         expCurrentTargetId = null;
@@ -5914,9 +5933,21 @@ function runExpLogic() {
 
         window.expStandStillStart = null;
         if (now > nextAllowedClickTime) {
-            window.safeGoTo(target.x, target.y, false);
+            const targetChanged = window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y;
+            const isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
+            const heroUnchanged = window.expLastMoveHeroX === hx && window.expLastMoveHeroY === hy;
+            const isStuck = heroUnchanged && window.expLastMoveAt && (now - window.expLastMoveAt > 1600);
+
+            if (targetChanged || !isMoving || isStuck) {
+                window.safeGoTo(target.x, target.y, false);
+                window.expLastMoveTx = target.x;
+                window.expLastMoveTy = target.y;
+                window.expLastMoveAt = now;
+            }
+
+            window.expLastMoveHeroX = hx;
+            window.expLastMoveHeroY = hy;
             nextAllowedClickTime = now + 600;
-            window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
         }
         return;
     }
