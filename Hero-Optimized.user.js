@@ -6582,20 +6582,7 @@ window.clearExpMaps = clearExpMaps;
                 if (refDoor) { defaultX = refDoor.x; defaultY = refDoor.y; }
                 return `<div class="list-item active-route" style="flex-direction:column; align-items:stretch;"><div style="display:flex; flex-direction:column; gap:4px; padding:2px;"><span style="color:#d4af37; font-weight:bold; font-size:11px;">🚪 Bramo-Zapis: ${mapName}</span><div style="display:flex; justify-content:space-between; align-items:center; gap:4px;"><label style="color:#a99a75; font-size:10px; margin:0;">X: <input type="number" id="gw_edit_x" value="${defaultX}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><label style="color:#a99a75; font-size:10px; margin:0;">Y: <input type="number" id="gw_edit_y" value="${defaultY}" style="width:35px; padding:2px; font-size:10px; text-align:center;"></label><button class="btn-sepia" style="flex-grow:1;" onclick="document.getElementById('gw_edit_x').value = Engine.hero.d.x; document.getElementById('gw_edit_y').value = Engine.hero.d.y;" title="Pobiera koordynaty z obecnej postaci">📍 Stąd</button></div><div style="display:flex; gap: 4px; margin-top: 4px;"><button class="btn-sepia btn-go-sepia" style="flex-grow:1;" onclick="window.saveInlineGateway('${safeMapName}')">ZAPISZ</button><button class="btn-sepia" style="background:#8e0000; width:30px;" onclick="window.cancelInlineGateway()">✖</button></div></div></div>`;
             } else {
-               
-function isMapKnownInGatewayBase(mapName) {
-    if (!mapName || !window.globalGateways) return false;
 
-    if (window.globalGateways[mapName]) return true;
-
-    for (let fromMap in window.globalGateways) {
-        if (window.globalGateways[fromMap] && window.globalGateways[fromMap][mapName]) {
-            return true;
-        }
-    }
-
-    return false;
-}
   window.renderExpMaps = () => {
     let c = document.getElementById('expMapList');
     if (!c) return;
