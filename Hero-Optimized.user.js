@@ -1114,6 +1114,64 @@ function getRankValue(r) {
     return 1;
 }
 
+function buildDistanceMapFromHero() {
+    if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return new Map();
+
+    if (!(window.margoWalkableMask instanceof Set)) {
+        window.margoWalkableMask = new Set();
+    }
+
+    if (window.margoWalkableMask.size === 0 && typeof updateWalkableArea === 'function') {
+        updateWalkableArea();
+    }
+
+    const w = Engine.map.d.x;
+    const h = Engine.map.d.y;
+    const getKey = (x, y) => `${x}_${y}`;
+    const distMap = new Map();
+
+    const startX = Engine.hero.d.x;
+    const startY = Engine.hero.d.y;
+
+    const startKey = getKey(startX, startY);
+    const q = [[startX, startY]];
+    distMap.set(startKey, 0);
+
+    const dirs = [
+        [0,1],[0,-1],[1,0],[-1,0],
+        [1,1],[-1,-1],[-1,1],[1,-1]
+    ];
+
+    while (q.length > 0) {
+        const [cx, cy] = q.shift();
+        const baseDist = distMap.get(getKey(cx, cy));
+
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nk = getKey(nx, ny);
+
+            if (!(window.margoWalkableMask instanceof Set)) continue;
+            if (!window.margoWalkableMask.has(nk)) continue;
+            if (distMap.has(nk)) continue;
+
+            if (Math.abs(dx) === 1 && Math.abs(dy) === 1) {
+                if (Engine.map.col.check(cx + dx, cy) && Engine.map.col.check(cx, cy + dy)) {
+                    continue;
+                }
+            }
+
+            distMap.set(nk, baseDist + 1);
+            q.push([nx, ny]);
+        }
+    }
+
+    return distMap;
+}
+
+
 function buildServerMobGroups(validMobs, distMap) {
     let groups = [];
     let processed = new Set();
@@ -1216,7 +1274,6 @@ function isMapKnownInGatewayBase(mapName) {
     return false;
 }
 // --- KONIEC BRAKUJĄCYCH FUNKCJI ---
-
     // ==========================================
 
     // INICJALIZACJA
