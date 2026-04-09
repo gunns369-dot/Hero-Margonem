@@ -1656,7 +1656,7 @@ let attackInterval = null;
             } else {
 
                 let now = Date.now();
-                if (!manualAttackIssued || now - lastManualAttackAt > 2500) {
+                if (!manualAttackIssued || now - lastManualAttackAt > 6000) {
                     if (Engine.npcs && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(targetId);
 
                     let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
@@ -5129,6 +5129,8 @@ let expMapEnteredAt = 0;
 let expLastMapName = "";
 
 let expEmptyScans = 0;
+let expLastLoggedTargetId = null;
+let expLastLoggedTransitMap = null;
 
 let expCurrentMapOrderIndex = -1;
 
@@ -5856,6 +5858,8 @@ function runExpLogic() {
         window.isRushing = false;
         expEmptyScans = 0;
         expCurrentTargetId = null;
+        expLastLoggedTargetId = null;
+        expLastLoggedTransitMap = null;
         if (window.expMonsterCache) window.expMonsterCache.clear();
         if (window.logExp) window.logExp(isExpMap ? `🕒 Wszedłem na expowisko [${currMap}]` : `📍 Tranzyt przez [${currMap}]`, "#90caf9");
         return;
@@ -5912,10 +5916,17 @@ function runExpLogic() {
     const bestChoice = pickBestExpTarget(validMobs, distMap);
     let target = bestChoice ? bestChoice.mob : null;
     window.expCurrentTargetGroupKey = bestChoice ? bestChoice.groupKey : null;
+    expCurrentTargetId = target ? (target.id || null) : null;
 
     // --- LOGIKA RUCHU I WALKI ---
     maybeStepOutFromGatewayAfterEntry();
     if (isExpMap && target) {
+        if (window.logExp && expLastLoggedTargetId !== String(target.id)) {
+            const rankLabel = target.ranga ? ` (${target.ranga})` : "";
+            window.logExp(`🎯 Cel: ${target.nick || "Potwór"}${rankLabel} [${target.x}, ${target.y}]`, "#ffd54f");
+            expLastLoggedTargetId = String(target.id);
+            expLastLoggedTransitMap = null;
+        }
         setExpBerserkState(true);
         let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
 
@@ -5958,6 +5969,14 @@ function runExpLogic() {
         expEmptyScans++;
         if (expEmptyScans < 8 && isExpMap) return; // Czekaj na resp
 
+        if (isExpMap && validMobs.length === 0) {
+            markMapTemporarilyCleared(currMap);
+            if (window.logExp && window._lastClearedMapLog !== currMap) {
+                window.logExp(`🧹 Mapa wyczyszczona: [${currMap}] — szukam kolejnego expowiska.`, "#81c784");
+                window._lastClearedMapLog = currMap;
+            }
+        }
+
         let bestTargetMap = null;
         let minLen = Infinity;
         mapsPool.filter(m => !isMapTemporarilyCleared(m)).forEach(m => {
@@ -5970,6 +5989,11 @@ function runExpLogic() {
                 window.logExp(`🏃 Bieg do: [${bestTargetMap}]`, "#90caf9");
                 window._lastTransitMapLog = bestTargetMap;
             }
+            if (window.logExp && expLastLoggedTransitMap !== bestTargetMap) {
+                window.logExp(`🧭 Aktualny cel mapy: [${bestTargetMap}]`, "#64b5f6");
+                expLastLoggedTransitMap = bestTargetMap;
+            }
+            expLastLoggedTargetId = null;
             window.rushToMap(bestTargetMap);
             expLastActionTime = now + 1000;
         } else if (!bestTargetMap && !isExpMap) {
