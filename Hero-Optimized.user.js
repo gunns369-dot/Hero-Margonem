@@ -2292,6 +2292,10 @@ function autoDetectEngineData() {
     };
 
 window.executeRushStep = function() {
+    // Blokada spamu silnika Rush (max raz na 400ms)
+        let nowRush = Date.now();
+        if (window._lastRushTick && nowRush - window._lastRushTick < 400) return;
+        window._lastRushTick = nowRush;
         if (!isRushing && !window.isRushing) return;
         let currentSysMap = lastMapName;
 
@@ -5705,77 +5709,142 @@ function hasNearbyReachableMobsForExp(maxDistance = 12) {
     return false;
 }
 function runExpLogic() {
-        if (!window.isExping) return;
-        if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
+    if (!window.isExping) return;
+    if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
 
-        if (Engine.hero.d.path && Engine.hero.d.path.length > 0) return;
-        if (Engine.battle && Engine.battle.show) return;
+    if (Engine.hero.d.path && Engine.hero.d.path.length > 0) return;
+    if (Engine.battle && Engine.battle.show) return;
 
-        if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) {
-            return;
-        }
+    if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) return;
 
-        const currMap = Engine.map.d.name;
-        let mapsPool = botSettings.exp.mapOrder || [];
-        const isExpMap = mapsPool.includes(currMap);
+    const now = Date.now();
+    const currMap = Engine.map.d.name;
+    let mapsPool = botSettings.exp.mapOrder || [];
+    const isExpMap = mapsPool.includes(currMap);
 
-        if (window.lastExpMap !== currMap) {
-            // Historia map do cofania się ze ślepych zaułków
-            if (!window.expMapHistory) window.expMapHistory = [];
-            if (window.lastExpMap) {
-                if (window.expMapHistory.length === 0 || window.expMapHistory[window.expMapHistory.length - 1] !== window.lastExpMap) {
-                    window.expMapHistory.push(window.lastExpMap);
-                    if (window.expMapHistory.length > 10) window.expMapHistory.shift();
-                } else if (window.expMapHistory.length > 0 && window.expMapHistory[window.expMapHistory.length - 1] === currMap) {
-                    window.expMapHistory.pop(); 
-                }
+    // Zarządzanie historią map i cooldownami
+    if (window.lastExpMap !== currMap) {
+        if (!window.expMapHistory) window.expMapHistory = [];
+        if (window.lastExpMap) {
+            if (window.expMapHistory.length === 0 || window.expMapHistory[window.expMapHistory.length - 1] !== window.lastExpMap) {
+                window.expMapHistory.push(window.lastExpMap);
+                if (window.expMapHistory.length > 10) window.expMapHistory.shift();
             }
-
-            window.lastExpMap = currMap;
-            window.mapCooldown = Date.now() + (isExpMap ? 3200 : 800); 
-            window.isRushing = false;
-            expEmptyScans = 0;
-            expCurrentTargetId = null;
-            
-            // Opróżnianie cache'u potworów na wejście na NOWĄ mapę
-            if (window.expMonsterCache) window.expMonsterCache.clear();
-
-            if (window.logExp) {
-                if (isExpMap) window.logExp(`🕒 Wszedłem na expowisko [${currMap}] - skanuję...`, "#90caf9");
-                else window.logExp(`📍 Tranzyt przez [${currMap}]... szukam trasy.`, "#78909c");
-            }
-            return;
         }
+        window.lastExpMap = currMap;
+        window.mapCooldown = now + (isExpMap ? 3200 : 800);
+        window.isRushing = false;
+        expEmptyScans = 0;
+        expCurrentTargetId = null;
+        if (window.expMonsterCache) window.expMonsterCache.clear();
+        if (window.logExp) window.logExp(isExpMap ? `🕒 Wszedłem na expowisko [${currMap}]` : `📍 Tranzyt przez [${currMap}]`, "#90caf9");
+        return;
+    }
 
-        if (window.mapCooldown && Date.now() < window.mapCooldown) return;
+    if (window.mapCooldown && now < window.mapCooldown) return;
+    if (now < expLastActionTime) return;
 
-        const now = Date.now();
-        let hx = Engine.hero.d.x;
-        let hy = Engine.hero.d.y;
+    let hx = Engine.hero.d.x;
+    let hy = Engine.hero.d.y;
 
-        let hp = Engine.hero.d.hp !== undefined ? parseInt(Engine.hero.d.hp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.hp) : 100);
-        let maxhp = Engine.hero.d.maxhp !== undefined ? parseInt(Engine.hero.d.maxhp) : (Engine.hero.d.warrior_stats ? parseInt(Engine.hero.d.warrior_stats.maxhp) : 100);
-        
-        if (window.isRegeneratingToFull || (hp / maxhp) * 100 < 40) {
+    // --- PAMIĘĆ POTWORÓW I FILTR RADARU ---
+    if (!window.expMonsterCache) window.expMonsterCache = new Map();
+    let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+    let currentlyVisibleIds = new Set();
+    
+    // Skanowanie tego co widać
+    for (let key in npcsData) {
+        let n = npcsData[key]?.d || npcsData[key];
+        if (!n || n.type === 4 || n.type < 2 || n.dead || n.del || n.delete) continue;
+        if (parseInt(n.lvl) < botSettings.exp.minLvl || parseInt(n.lvl) > botSettings.exp.maxLvl) continue;
+
+        let ranga = getMobRank(n);
+        if (ranga === "normal" && !botSettings.exp.normal) continue;
+        if (ranga === "elite1" && !botSettings.exp.elite) continue;
+        if (ranga === "elite2" && !botSettings.berserk.e2) continue;
+        if (ranga === "hero" && !botSettings.berserk.hero) continue;
+
+        currentlyVisibleIds.add(n.id || key);
+        window.expMonsterCache.set(n.id || key, { id: n.id || key, x: n.x, y: n.y, nick: n.nick || n.name });
+    }
+
+    // Usuwanie z pamięci mobów, które powinny być blisko, a ich nie ma (ktoś ubił)
+    for (let [id, mob] of window.expMonsterCache.entries()) {
+        if (Math.max(Math.abs(hx - mob.x), Math.abs(hy - mob.y)) <= 10 && !currentlyVisibleIds.has(id)) {
+            window.expMonsterCache.delete(id);
+        }
+    }
+
+    // Wybór celu na podstawie Radaru (omijanie ścian)
+    let distMap = buildDistanceMapFromHero();
+    let validMobs = [];
+    for (let [id, mob] of window.expMonsterCache.entries()) {
+        let bestDist = Infinity;
+        let reachable = false;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const sk = `${mob.x + dx}_${mob.y + dy}`;
+                if (distMap.has(sk)) { reachable = true; bestDist = Math.min(bestDist, distMap.get(sk)); }
+            }
+        }
+        if (reachable) validMobs.push({ ...mob, dist: bestDist });
+    }
+    validMobs.sort((a, b) => a.dist - b.dist);
+    let target = validMobs[0];
+
+    // --- LOGIKA RUCHU I WALKI ---
+    if (isExpMap && target) {
+        setExpBerserkState(true);
+        let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
+
+        if (exactDist <= 1) { // Jesteśmy przy celu
+            if (!window.expStandStillStart) window.expStandStillStart = now;
+            if (now - window.expStandStillStart > 2000) { // Berserk zaciął się
+                if (window.logExp) window.logExp(`⚔️ Wymuszam atak na: ${target.nick}`, "#ffeb3b");
+                if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
+                else window._g(`fight&a=attack&id=${target.id}`);
+                window.expStandStillStart = now;
+            }
             if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
             return;
         }
 
-        // --- BACKTRACKING I TRANZYT ---
-        if (!isExpMap) {
-            if (mapsPool.length === 0) return;
+        window.expStandStillStart = null;
+        if (now > nextAllowedClickTime) {
+            window.safeGoTo(target.x, target.y, false);
+            nextAllowedClickTime = now + 600;
+            window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
+        }
+        return;
+    }
 
-            let bestTarget = null;
-            let bestLen = Infinity;
+    // --- TRANZYT / ZMIANA MAPY ---
+    setExpBerserkState(false);
+    if (!isExpMap || validMobs.length === 0) {
+        expEmptyScans++;
+        if (expEmptyScans < 8 && isExpMap) return; // Czekaj na resp
 
-            for (const m of mapsPool) {
-                const p = typeof getShortestPath === 'function' ? getShortestPath(currMap, m) : null;
-                if (p && p.length > 0 && p.length < bestLen) {
-                    bestLen = p.length;
-                    bestTarget = m;
-                }
+        let bestTargetMap = null;
+        let minLen = Infinity;
+        mapsPool.filter(m => !isMapTemporarilyCleared(m)).forEach(m => {
+            const p = getShortestPath(currMap, m);
+            if (p && p.length < minLen) { minLen = p.length; bestTargetMap = m; }
+        });
+
+        if (bestTargetMap && !window.isRushing) {
+            if (window.logExp && window._lastTransitMapLog !== bestTargetMap) {
+                window.logExp(`🏃 Bieg do: [${bestTargetMap}]`, "#90caf9");
+                window._lastTransitMapLog = bestTargetMap;
             }
-
+            window.rushToMap(bestTargetMap);
+            expLastActionTime = now + 1000;
+        } else if (!bestTargetMap && !isExpMap) {
+            // Backtracking (Cofanie się)
+            let back = window.expMapHistory?.pop();
+            if (back) window.rushToMap(back);
+        }
+    }
+}
             let currentlyRushing = (typeof isRushing !== 'undefined' ? isRushing : false) || window.isRushing;
             
             if (bestTarget) {
@@ -10093,24 +10162,21 @@ function renderTacticalRadar() {
     );
     ctx.fillStyle = '#00e5ff';
     ctx.fill();
-
-    // --- WIZUALIZACJA TRASY NA RADARZE (LINIA DO CELU) ---
-        let heroX = offsetX + (Engine.hero.d.x * scale) + (scale / 2);
-        let heroY = offsetY + (Engine.hero.d.y * scale) + (scale / 2);
-
-        if (window.isExping && typeof window.expLastMoveTx !== 'undefined' && window.expLastMoveTx >= 0 && window.expLastMoveTy >= 0) {
-            // Linia do potwora (EXP)
-            let targetX = offsetX + (window.expLastMoveTx * scale) + (scale / 2);
-            let targetY = offsetY + (window.expLastMoveTy * scale) + (scale / 2);
+// --- RYSOWANIE LINII DO CELU ---
+        if (window.isExping && window.expLastMoveTx >= 0) {
+            let heroRadarX = offsetX + (Engine.hero.d.x * scale) + (scale / 2);
+            let heroRadarY = offsetY + (Engine.hero.d.y * scale) + (scale / 2);
+            let targetRadarX = offsetX + (window.expLastMoveTx * scale) + (scale / 2);
+            let targetRadarY = offsetY + (window.expLastMoveTy * scale) + (scale / 2);
 
             ctx.beginPath();
-            ctx.moveTo(heroX, heroY);
-            ctx.lineTo(targetX, targetY);
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.8)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]);
+            ctx.moveTo(heroRadarX, heroRadarY);
+            ctx.lineTo(targetRadarX, targetRadarY);
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)';
+            ctx.setLineDash([5, 5]);
             ctx.stroke();
             ctx.setLineDash([]);
+        }
 
             // Celownik na potworze
             ctx.beginPath();
