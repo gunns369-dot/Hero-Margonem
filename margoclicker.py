@@ -52,13 +52,27 @@ def click():
         # Tryb zalecany: vx/vy = współrzędne względem viewportu gry
         vx = request.args.get('vx')
         vy = request.args.get('vy')
+        ax = request.args.get('ax')
+        ay = request.args.get('ay')
+        topbar = request.args.get('topbar')
 
-        if vx is not None and vy is not None:
+        if ax is not None and ay is not None:
+            # Priorytet: absolut z wyliczenia przeglądarki (uwzględnia pasek na górze i tryb okna)
+            x = float(ax)
+            y = float(ay)
+            mode = "browser_absolute"
+        elif vx is not None and vy is not None:
             viewport_x = float(vx)
             viewport_y = float(vy)
             origin_x, origin_y = _get_browser_client_origin()
             x = origin_x + viewport_x
             y = origin_y + viewport_y
+            # Dodatkowy fallback dla nietypowych managerów okien / ramek:
+            if topbar is not None and origin_x == 0 and origin_y == 0:
+                try:
+                    y += max(0.0, float(topbar))
+                except Exception:
+                    pass
             mode = "viewport"
         else:
             x = float(request.args.get('x'))
