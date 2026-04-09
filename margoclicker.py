@@ -56,12 +56,7 @@ def click():
         ay = request.args.get('ay')
         topbar = request.args.get('topbar')
 
-        if ax is not None and ay is not None:
-            # Priorytet: absolut z wyliczenia przeglądarki (uwzględnia pasek na górze i tryb okna)
-            x = float(ax)
-            y = float(ay)
-            mode = "browser_absolute"
-        elif vx is not None and vy is not None:
+        if vx is not None and vy is not None:
             viewport_x = float(vx)
             viewport_y = float(vy)
             origin_x, origin_y = _get_browser_client_origin()
@@ -74,6 +69,11 @@ def click():
                 except Exception:
                     pass
             mode = "viewport"
+        elif ax is not None and ay is not None:
+            # Fallback: absolut z wyliczenia JS (gdyby viewport nie był dostępny)
+            x = float(ax)
+            y = float(ay)
+            mode = "browser_absolute"
         else:
             x = float(request.args.get('x'))
             y = float(request.args.get('y'))
