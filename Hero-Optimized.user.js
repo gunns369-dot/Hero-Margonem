@@ -5793,7 +5793,7 @@ expAttackLockUntil = 0;
         return false;
     };
 
-  // Anti-Lag tylko gdy bot realnie próbuje gdzieś iść.
+// Anti-Lag tylko gdy bot realnie próbuje gdzieś iść.
 // Gdy czeka na respawn / pusta mapa / cooldown przejścia, NIE wolno go ruszać.
 if (
     window.isExping &&
@@ -5806,7 +5806,7 @@ if (
     expLastY = hy;
     expAntiLagTime = now + getAntiLagDelay();
     window.expGatewayStandTime = 0;
-if (hx !== expLastX || hy !== expLastY) {
+} else if (hx !== expLastX || hy !== expLastY) {
     expLastX = hx;
     expLastY = hy;
     expAntiLagTime = now + getAntiLagDelay();
@@ -5835,7 +5835,6 @@ if (hx !== expLastX || hy !== expLastY) {
             window.expLastMoveTy = -1;
             window.expGatewayStandTime = 0;
 
-            // po krótkim odlagowaniu spróbuj wrócić do logiki rush/exp
             setTimeout(() => {
                 if (window.isExping) {
                     window.isRushing = false;
