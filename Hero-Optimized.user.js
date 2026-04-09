@@ -5542,7 +5542,7 @@ function hasNearbyReachableMobsForExp(maxDistance = 12) {
     window.mapCooldown = Date.now() + 3200;
 
     // Osobny znacznik: do kiedy nie wolno uznać mapy za pustą
-    window.expMapLoadGraceUntil = Date.now() + 4500;
+    window.expMapLoadGraceUntil = Date.now() + (Engine.map.d.pvp === 2 ? 8000 : 4500);
 
     window.isRushing = false;
     expEmptyScans = 0;
@@ -5806,30 +5806,47 @@ if (
     expLastY = hy;
     expAntiLagTime = now + getAntiLagDelay();
     window.expGatewayStandTime = 0;
-} else if (hx !== expLastX || hy !== expLastY) {
+if (hx !== expLastX || hy !== expLastY) {
     expLastX = hx;
     expLastY = hy;
     expAntiLagTime = now + getAntiLagDelay();
     window.expGatewayStandTime = 0;
 } else if (now > expAntiLagTime) {
-        if (isOnGateway(hx, hy)) {
-            if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
-            if (now - window.expGatewayStandTime > 12000) {
-                window.logExp(`[Anti-Lag] Zacięcie na bramie. Odbiegam...`, "#ff9800");
-                let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
-                let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
-                Engine.hero.autoGoTo({ x: stepX, y: stepY });
-                expAntiLagTime = now + 2000; expMapTransitionCooldown = now + 2000; expLastActionTime = now + 500;
-                expCurrentTargetId = null;
-window.expCurrentTargetGroupKey = null;
-window.expLastMoveTx = -1;
-window.expLastMoveTy = -1;
-                window.expGatewayStandTime = 0;
-            }
-            return;
+    if (isOnGateway(hx, hy)) {
+        if (!window.expGatewayStandTime) window.expGatewayStandTime = now;
+
+        // szybciej reaguj na zacięcie dokładnie na przejściu
+        if (now - window.expGatewayStandTime > 3500) {
+            window.logExp(`[Anti-Lag] Zacięcie na bramie. Odlagowuję postać...`, "#ff9800");
+
+            let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 2 : -2));
+            let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 2 : -2));
+
+            if (typeof stopPatrol === 'function') stopPatrol(false);
+            Engine.hero.autoGoTo({ x: stepX, y: stepY });
+
+            expAntiLagTime = now + 1800;
+            expMapTransitionCooldown = now + 1800;
+            expLastActionTime = now + 400;
+
+            expCurrentTargetId = null;
+            window.expCurrentTargetGroupKey = null;
+            window.expLastMoveTx = -1;
+            window.expLastMoveTy = -1;
+            window.expGatewayStandTime = 0;
+
+            // po krótkim odlagowaniu spróbuj wrócić do logiki rush/exp
+            setTimeout(() => {
+                if (window.isExping) {
+                    window.isRushing = false;
+                }
+            }, 700);
         }
-        expAntiLagTime = now + getAntiLagDelay();
+        return;
     }
+
+    expAntiLagTime = now + getAntiLagDelay();
+}
 
     // --- SKANOWANIE POTWORÓW (KOSIARKA V14 - Z GRUPAMI) ---
     if (!window.expMonsterCache) window.expMonsterCache = new Map();
@@ -5860,16 +5877,25 @@ window.expLastMoveTy = -1;
         }
     });
 
-    window.expMonsterCache.forEach((cachedMob, id) => {
-        let distToCached = Math.abs(hx - cachedMob.x) + Math.abs(hy - cachedMob.y);
-        if (distToCached <= 14) {
-            let isCurrentlyVisible = currentVisibleNpcs.some(v => v.id == id && !v.dead && !v.del);
-            if (!isCurrentlyVisible) {
-                window.expMonsterCache.delete(id);
-                if (expCurrentTargetId === id) expCurrentTargetId = null;
+   window.expMonsterCache.forEach((cachedMob, id) => {
+    let distToCached = Math.abs(hx - cachedMob.x) + Math.abs(hy - cachedMob.y);
+
+    // na czerwonych mapach dłużej trzymamy pamięć mobów, bo widoczność jest ograniczona
+    const visibilityRadius = (Engine.map.d.pvp === 2) ? 9 : 14;
+
+    if (distToCached <= visibilityRadius) {
+        let isCurrentlyVisible = currentVisibleNpcs.some(v => v.id == id && !v.dead && !v.del);
+        if (!isCurrentlyVisible) {
+            if (Engine.map.d.pvp === 2) {
+                // na czerwonych nie usuwaj od razu z pamięci
+                return;
             }
+
+            window.expMonsterCache.delete(id);
+            if (expCurrentTargetId === id) expCurrentTargetId = null;
         }
-    });
+    }
+});
 
     const arr = Array.from(window.expMonsterCache.values());
 
@@ -6114,10 +6140,30 @@ if (isOnGateway(hx, hy)) {
     return;
 }
 
+const isRedMap = Engine.map?.d?.pvp === 2;
+
+// więcej skanów na czerwonych mapach (ograniczona widoczność)
+const emptyScanLimit = isRedMap ? 14 : 8;
+
 expEmptyScans++;
-if (displayTarget) displayTarget.innerText = `Czysto. Skanowanie... (${expEmptyScans}/8)`;
-if (expEmptyScans < 8) {
-    expLastActionTime = now + 220;
+
+if (displayTarget) {
+    displayTarget.innerText = `Czysto. Skanowanie... (${expEmptyScans}/${emptyScanLimit})`;
+}
+
+if (expEmptyScans < emptyScanLimit) {
+    if (isRedMap && expEmptyScans % 3 === 0) {
+    // lekki ruch żeby odkryć moby poza LOS
+    let rx = Engine.hero.d.x + (Math.random() > 0.5 ? 3 : -3);
+    let ry = Engine.hero.d.y + (Math.random() > 0.5 ? 3 : -3);
+
+    Engine.hero.autoGoTo({
+        x: Math.max(0, rx),
+        y: Math.max(0, ry)
+    });
+}
+    // na czerwonych mapach skanuj wolniej i dokładniej
+    expLastActionTime = now + (isRedMap ? 320 : 220);
     return;
 }
 
@@ -9663,7 +9709,29 @@ function initFloatingRadarUI() {
         };
         return;
     }
+if (!window.__radarButtonFixInstalled) {
+    window.__radarButtonFixInstalled = true;
 
+    document.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('#btnToggleRadar');
+        if (!btn) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        let win = document.getElementById('margoRadarWindow');
+        if (!win) {
+            if (typeof initFloatingRadarUI === 'function') {
+                initFloatingRadarUI();
+                win = document.getElementById('margoRadarWindow');
+            }
+        }
+
+        if (win) {
+            win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
+        }
+    }, true);
+}
     win = document.createElement('div');
     win.id = 'margoRadarWindow';
     win.style.cssText = 'display:none; position:fixed; top:50px; right:50px; width:350px; height:350px; background:#0a0a0a; border:2px solid #333; border-radius:6px; z-index:999998; resize:both; overflow:hidden; box-shadow:0 0 20px rgba(0,0,0,0.9); flex-direction:column;';
