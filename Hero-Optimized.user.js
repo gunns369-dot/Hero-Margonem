@@ -4907,9 +4907,10 @@ let expLastActionTime = 0;
 
 let expCurrentTargetId = null;
 
-
-
 let expLastX = -1;
+    let expPinnedMap = "";
+let expPinnedMapUntil = 0;
+let expSearchAfterKillUntil = 0;
 
 let expLastY = -1;
 
@@ -5534,18 +5535,22 @@ function hasNearbyReachableMobsForExp(maxDistance = 12) {
     }
 
     // --- 1. ZABEZPIECZENIE PRZED ZACIĘCIEM W DRZWIACH (MAP COOLDOWN) ---
-    if (window.lastExpMap !== Engine.map.d.name) {
+   if (window.lastExpMap !== Engine.map.d.name) {
     window.lastExpMap = Engine.map.d.name;
 
-    // Dłuższy cooldown po wejściu z przejścia:
-    // najpierw bohater musi wyjść z bramy, potem dopiero dociągają się moby
     window.mapCooldown = Date.now() + 3200;
-
-    // Osobny znacznik: do kiedy nie wolno uznać mapy za pustą
-    window.expMapLoadGraceUntil = Date.now() + (Engine.map.d.pvp === 2 ? 8000 : 4500);
+    window.expMapLoadGraceUntil = Date.now() + (Engine.map.d.pvp === 2 ? 6500 : 4500);
 
     window.isRushing = false;
     expEmptyScans = 0;
+
+    expCurrentTargetId = null;
+    window.expCurrentTargetGroupKey = null;
+    window.expTargetLockTime = 0;
+
+    expPinnedMap = Engine.map.d.name;
+    expPinnedMapUntil = Date.now() + (Engine.map.d.pvp === 2 ? 25000 : 12000);
+    expSearchAfterKillUntil = 0;
 
     if (window.logExp) {
         window.logExp(`🕒 Weszłem na mapę [${Engine.map.d.name}] - czekam na dociągnięcie potworów...`, "#90caf9");
@@ -5747,20 +5752,21 @@ window.expConsecutiveStucks = 0;
                 if (typeof window._g === 'function') window._g('fight&a=quit');
             }
             return;
-     } else if (window.expWasInBattle) {
+    } else if (window.expWasInBattle) {
     window.expWasInBattle = false;
 
-    // Po walce nie uznawaj od razu mapy za pustą.
-    // Daj botowi chwilę na doszukanie kolejnych grup.
-    window.expPostBattleSearchUntil = now + (Engine.map?.d?.pvp === 2 ? 5000 : 3500);
-
     expEmptyScans = 0;
+    expSearchAfterKillUntil = now + (Engine.map?.d?.pvp === 2 ? 5000 : 2500);
+
+    // nie odpinaj mapy po jednym killu
+    expPinnedMap = Engine.map.d.name;
+    expPinnedMapUntil = now + (Engine.map?.d?.pvp === 2 ? 20000 : 9000);
+
     expCurrentTargetId = null;
     window.expCurrentTargetGroupKey = null;
     window.expTargetLockTime = 0;
-    expAttackLockUntil = 0;
 
-    expLastActionTime = now + 700;
+    expLastActionTime = now + 500;
     return;
 }
     } catch (e) {}
@@ -5943,6 +5949,12 @@ if (isRedMapNow && window.expRedMapMemory[currMapName]) {
 } else {
     arr = Array.from(window.expMonsterCache.values());
 }
+      const rememberedCount = isRedMapNow && window.expRedMapMemory[currMapName]
+    ? Object.keys(window.expRedMapMemory[currMapName]).length
+    : 0;
+
+const liveCount = Array.isArray(arr) ? arr.length : 0;
+const mapStillHasWork = (rememberedCount > 0) || (liveCount > 0);
 
     let dangerousSpots = [];
     arr.forEach(n => {
@@ -6056,8 +6068,14 @@ if (nearbySmallCleanup.length > 0) {
     targetGroup = serverGroups.length > 0 ? serverGroups[0] : null;
 }
 
-let target = targetGroup ? targetGroup.bestTargetMob : null;
+let target = targetGroup && targetGroup.bestTargetMob ? targetGroup.bestTargetMob : null;
 
+if (targetGroup && targetGroup.bestTargetMob && Number.isFinite(targetGroup.bestPathDistance)) {
+    window.expCurrentTargetGroupKey = targetGroup.key;
+    window.expTargetLockTime = now + (Engine.map.d.pvp === 2 ? 8000 : 5000);
+    expPinnedMap = currMapName;
+    expPinnedMapUntil = now + (Engine.map.d.pvp === 2 ? 20000 : 10000);
+}
     // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (target) {
 const targetDist = targetGroup.bestPathDistance;
@@ -6066,7 +6084,6 @@ const targetDist = targetGroup.bestPathDistance;
     window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
     expEmptyScans = 0;
     window.expPostBattleSearchUntil = 0;
-    window.expPostBattleNudgeAt = 0;
     expLastActionTime = now + 300;
     return;
 }
@@ -6208,7 +6225,36 @@ const emptyScanLimit = isRedMap ? 14 : 8;
         return;
     }
 }
-      
+  // Jeśli ta mapa jest przypięta do czyszczenia i nadal pamiętamy / widzimy potwory,
+// nie wolno jej uznać za pustą.
+if (
+    expPinnedMap === currMapName &&
+    now < expPinnedMapUntil &&
+    mapStillHasWork
+) {
+    expEmptyScans = 0;
+
+    if (displayTarget) {
+        displayTarget.innerText = isRedMapNow
+            ? `Czyszczę mapę do końca... (pamięć: ${rememberedCount})`
+            : `Czyszczę mapę do końca...`;
+    }
+
+    expLastActionTime = now + 180;
+    return;
+}
+
+// Krótki search mode po walce — bez zmiany mapy
+if (expSearchAfterKillUntil && now < expSearchAfterKillUntil) {
+    expEmptyScans = 0;
+
+    if (displayTarget) {
+        displayTarget.innerText = `Doszukuję reszty potworów...`;
+    }
+
+    expLastActionTime = now + 180;
+    return;
+}    
 expEmptyScans++;
 
 // Po świeżo zakończonej walce nie przechodź od razu w "mapa pusta",
@@ -6236,6 +6282,11 @@ if (!expRouteMaps.length) {
 
 // Zapamiętujemy, że obecna mapa jest wyczyszczona
 if (!window.mapClearTimes) window.mapClearTimes = {};
+      if (mapStillHasWork) {
+    expEmptyScans = 0;
+    expLastActionTime = now + 180;
+    return;
+}
 markMapTemporarilyCleared(currMap);
 
 if (window.logExp) {
