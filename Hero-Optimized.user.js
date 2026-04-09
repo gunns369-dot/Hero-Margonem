@@ -5747,11 +5747,22 @@ window.expConsecutiveStucks = 0;
                 if (typeof window._g === 'function') window._g('fight&a=quit');
             }
             return;
-        } else if (window.expWasInBattle) {
-            window.expWasInBattle = false;
-            expLastActionTime = now + 1500;
-            return;
-        }
+     } else if (window.expWasInBattle) {
+    window.expWasInBattle = false;
+
+    // Po walce nie uznawaj od razu mapy za pustą.
+    // Daj botowi chwilę na doszukanie kolejnych grup.
+    window.expPostBattleSearchUntil = now + (Engine.map?.d?.pvp === 2 ? 5000 : 3500);
+
+    expEmptyScans = 0;
+    expCurrentTargetId = null;
+    window.expCurrentTargetGroupKey = null;
+    window.expTargetLockTime = 0;
+    expAttackLockUntil = 0;
+
+    expLastActionTime = now + 700;
+    return;
+}
     } catch (e) {}
 
     const wantNormal = document.getElementById('expN')?.checked ?? botSettings.exp.normal;
@@ -6016,10 +6027,14 @@ let target = targetGroup ? targetGroup.bestTargetMob : null;
     if (target) {
 const targetDist = targetGroup.bestPathDistance;
 
-        if (expEmptyScans > 0) {
-            window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
-            expEmptyScans = 0; expLastActionTime = now + 1000; return;
-        }
+     if (expEmptyScans > 0 || (window.expPostBattleSearchUntil && now < window.expPostBattleSearchUntil)) {
+    window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
+    expEmptyScans = 0;
+    window.expPostBattleSearchUntil = 0;
+    window.expPostBattleNudgeAt = 0;
+    expLastActionTime = now + 300;
+    return;
+}
 
         if (targetDist > 1) {
             expAttackLockUntil = 0;
