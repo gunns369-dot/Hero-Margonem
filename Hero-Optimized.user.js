@@ -5714,12 +5714,29 @@ function getAllCandidateExpMaps() {
     return Array.isArray(maps) ? [...maps] : [];
 }
 
+function getCurrentExpHuntMaps() {
+    const routeMaps = getAllCandidateExpMaps();
+    const activeProfileName = botSettings?.exp?.activeProfileName;
+    const profiles = Array.isArray(botSettings?.expProfiles) ? botSettings.expProfiles : [];
+    const activeProfile = profiles.find(p => p?.name === activeProfileName);
+
+    // Priorytet: mapy z aktywnego profilu (czyste expowiska), bez map tranzytowych.
+    if (activeProfile && Array.isArray(activeProfile.maps) && activeProfile.maps.length > 0) {
+        const clean = [...new Set(activeProfile.maps.filter(Boolean))];
+        if (clean.length > 0) return clean;
+    }
+
+    // Fallback: aktualna trasa użytkownika.
+    return [...new Set(routeMaps.filter(Boolean))];
+}
+
 function pickNextUnclearedExpMap(currMap, mapsPool) {
     if (!Array.isArray(mapsPool) || mapsPool.length === 0) return null;
 
     const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
     const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable);
     const now = Date.now();
+    const mapsSet = new Set(mapsPool);
     let best = null;
 
     for (const candidate of mapsPool) {
@@ -5731,6 +5748,10 @@ function pickNextUnclearedExpMap(currMap, mapsPool) {
         if (!path || path.length < 2) continue;
 
         const nextHop = path[1];
+        // Jeśli pierwszy krok prowadzi na mapę expowiska, która już była czyszczona,
+        // pomijamy taki wariant, żeby nie wracać na "świeżo wyczyszczoną" mapę.
+        if (mapsSet.has(nextHop) && isMapTemporarilyCleared(nextHop)) continue;
+
         let door = reachableDoors.find(g => (g.targetMap || "").toLowerCase() === String(nextHop).toLowerCase()) || null;
 
         // Fallback: wspieramy ręcznie zapisane przejścia z bazy nawet jeśli radar ich nie wykrył
@@ -5933,7 +5954,7 @@ function runExpLogic() {
 
     const now = Date.now();
     const currMap = Engine.map.d.name;
-    let mapsPool = botSettings.exp.mapOrder || [];
+    let mapsPool = getCurrentExpHuntMaps();
     const isExpMap = mapsPool.includes(currMap);
     window.expMapPvpCache = window.expMapPvpCache || {};
     window.expMapPvpCache[currMap] = Engine.map?.d?.pvp;
@@ -6083,7 +6104,7 @@ function runExpLogic() {
         }
 
         const bestTransit = pickNextUnclearedExpMap(currMap, mapsPool);
-        let bestTargetMap = bestTransit ? (bestTransit.nextHop || bestTransit.targetMap) : null;
+        let bestTargetMap = bestTransit ? bestTransit.targetMap : null;
 
         if (!bestTargetMap) {
             const fallbackRoute = pickNextReachableMapFromRoute(currMap);
