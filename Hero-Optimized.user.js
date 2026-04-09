@@ -1167,6 +1167,8 @@ function loadData() {
 
         let s2 = localStorage.getItem('hero_global_gateways_v20'); if (s2) globalGateways = JSON.parse(s2);
         let s3 = localStorage.getItem('hero_map_order_v20'); if (s3) heroMapOrder = JSON.parse(s3);
+    window.globalGateways = globalGateways;
+window.heroMapOrder = heroMapOrder;
     }
 
 
@@ -10056,13 +10058,12 @@ function isGatewayBlocked(fromMap, toMap) {
     return candidates[0];
 }
 function isMapKnownInGatewayBase(mapName) {
-    if (!mapName || !window.globalGateways) return false;
+    if (!mapName || !globalGateways) return false;
 
-    // Sprawdź, czy mapa istnieje jako źródło lub jako cel w bazie
-    if (window.globalGateways[mapName]) return true;
+    if (globalGateways[mapName]) return true;
 
-    for (let fromMap in window.globalGateways) {
-        if (window.globalGateways[fromMap] && window.globalGateways[fromMap][mapName]) {
+    for (let fromMap in globalGateways) {
+        if (globalGateways[fromMap] && globalGateways[fromMap][mapName]) {
             return true;
         }
     }
