@@ -9553,6 +9553,17 @@ window.radarGroupsCacheTime = 0;
 window.radarGroupsCacheMap = "";
 window.radarTargetInfo = null;
 
+    function toggleRadar() {
+    const win = document.getElementById('margoRadarWindow');
+    if (!win) return;
+
+    if (win.style.display === 'none' || !win.style.display) {
+        win.style.display = 'flex';
+    } else {
+        win.style.display = 'none';
+    }
+}
+
 function initFloatingRadarUI() {
     let toggleBtn = document.getElementById('btnToggleRadar');
     if (!toggleBtn) return;
