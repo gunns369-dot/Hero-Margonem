@@ -2322,7 +2322,7 @@ function autoDetectEngineData() {
         let currentDistance = path ? path.length : 999;
 
         // --- MĄDRE ZWOJE TELEPORTACJI Z KALKULATOREM TRASY ---
-        let tps = window.getAvailableTeleports();
+      let tps = (window.isExping && botSettings.exp.useTeleportsEq) ? window.getAvailableTeleports() : [];
         let bestTp = null;
         // Wymagamy skrócenia trasy przynajmniej o 1 mapę, żeby opłacało się zużyć zwój (np. z 4 map na 2)
         let bestDist = currentDistance - 1;
@@ -3113,6 +3113,7 @@ function initGUI() {
                         <div style="border-top:1px solid #333; padding-top:6px; margin-top:4px;">
                             <label style="color:#ff5252; font-size:10px; cursor:pointer; display:block; margin-bottom:4px;" title="Ucieka na 10 minut z czerwonej mapy, gdy gracz jest bliżej niż 6 kratek"><input type="checkbox" id="pvpFlee" ${botSettings.exp.pvpFlee ? 'checked' : ''}> 🏃 Uciekaj z map PvP</label>
                             <label style="color:#00acc1; font-size:10px; cursor:pointer; display:block;" title="Wymusza tryb F11 przy starcie bota i wyłącza przy zatrzymaniu."><input type="checkbox" id="autoFullscreen" ${botSettings.exp.autoFullscreen ? 'checked' : ''}> 🖥️ Auto-Pełny Ekran (F11)</label>
+                            <label style="color:#e040fb; font-size:10px; cursor:pointer; display:block; margin-top:4px;" title="Zezwala na używanie zwojów teleportacji z ekwipunku podczas expienia."><input type="checkbox" id="useTeleportsEq" ${botSettings.exp.useTeleportsEq ? 'checked' : ''}> 📜 Używaj teleportów z EQ (tylko w EXP)</label>
                         </div>
                     </div>
                     <div class="accordion-header" id="accRoute" onclick="toggleSettingsAcc('accRoute')" style="background: rgba(0, 150, 136, 0.2); border-color: #009688; color: #009688; margin-top: 5px; margin-bottom: 0;">▼ TRASA EXPOWISKA (SMART-ROAM)</div>
@@ -3578,6 +3579,8 @@ if (!botSettings.berserk) {
         if (botSettings.exp.chatAlertStopBot === undefined) { botSettings.exp.chatAlertStopBot = false; saveSettings(); }
         if (botSettings.exp.autoFullscreen === undefined) { botSettings.exp.autoFullscreen = true; saveSettings(); }
         bindChange('autoFullscreen', (e) => { botSettings.exp.autoFullscreen = e.target.checked; saveSettings(); });
+        if (botSettings.exp.useTeleportsEq === undefined) { botSettings.exp.useTeleportsEq = true; saveSettings(); }
+bindChange('useTeleportsEq', (e) => { botSettings.exp.useTeleportsEq = e.target.checked; saveSettings(); });
         bindChange('chatAlert', (e) => { botSettings.exp.chatAlert = e.target.checked; saveSettings(); if (e.target.checked && Notification.permission !== "granted") Notification.requestPermission(); });
         bindChange('chatAlertStopBot', (e) => { botSettings.exp.chatAlertStopBot = e.target.checked; saveSettings(); });
 
@@ -6033,304 +6036,123 @@ if (
     expAntiLagTime = now + getAntiLagDelay();
 }
 
-// --- SKANOWANIE POTWORÓW (KOSIARKA V15 - INTELIGENTNA PAMIĘĆ Z ODRZUTEM NIEDOSTĘPNYCH) ---
-    if (!window.expMonsterCache) window.expMonsterCache = new Map();
-
+// --- SKANOWANIE POTWORÓW (UPROSZCZONA KOSIARKA WZOROWANA NA PATROLU) ---
     let npcsData = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-    let currentVisibleNpcs = [];
-    for (let key in npcsData) {
-        let npcObj = npcsData[key];
-        let n = npcObj?.d || npcObj;
-        if (n) {
-            n.id = n.id || key;
-            currentVisibleNpcs.push(n);
-        }
-    }
-
+    let validMobs = [];
+    
     const bE2 = document.getElementById('berserkE2')?.checked || (botSettings.berserk && botSettings.berserk.e2);
     const bHero = document.getElementById('berserkHero')?.checked || (botSettings.berserk && botSettings.berserk.hero);
 
-    currentVisibleNpcs.forEach(n => {
-        if (n.type === 4 || n.type < 2) return;
-
-        if (n.dead || n.del || n.delete) {
-            window.expMonsterCache.delete(n.id);
-        } else {
-            const mobData = {
-                id: n.id, x: n.x, y: n.y, wt: n.wt, type: n.type, grp: n.grp, lvl: n.lvl,
-                nick: n.nick || n.name || "Potwór"
-            };
-            window.expMonsterCache.set(n.id, mobData);
-        }
-    });
-
-    // Pamięć: czyszczenie mobów
-    window.expMonsterCache.forEach((cachedMob, id) => {
-        let distToCached = Math.max(Math.abs(hx - cachedMob.x), Math.abs(hy - cachedMob.y));
-        if (distToCached <= 12) {
-            let isCurrentlyVisible = currentVisibleNpcs.some(v => v.id == id && !v.dead && !v.del);
-            if (!isCurrentlyVisible) {
-                window.expMonsterCache.delete(id);
-                if (expCurrentTargetId === id) expCurrentTargetId = null;
-            }
-        }
-    });
-
-    let arr = Array.from(window.expMonsterCache.values());
-    let dangerousSpots = [];
-    
-    arr.forEach(n => {
-        let wt = parseInt(n.wt, 10);
-        let ranga = "normal";
-        if (n.type === 2) {
-            if (wt === 11 || wt === 1) ranga = "elite1";
-            else if (wt === 12 || wt === 2) ranga = "elite2";
-            else if (wt >= 13 || wt >= 3) ranga = "hero";
-        }
-        if ((ranga === "elite2" && !bE2) || (ranga === "hero" && !bHero)) {
-            dangerousSpots.push({x: n.x, y: n.y});
-        }
-    });
-
-    let validMobs = [];
-    const distMap = buildDistanceMapFromHero();
-
-    arr.forEach(n => {
-        let coordKey = n.x + "_" + n.y;
-        if (window.expUnreachableMobs.has(coordKey)) {
-            window.expMonsterCache.delete(n.id); // TWARDE USUNIĘCIE zablokowanych mobów!
-            return;
-        }
+    for (let key in npcsData) {
+        let n = npcsData[key]?.d || npcsData[key];
+        if (!n || n.type === 4 || n.type < 2 || n.dead || n.del || n.delete) continue;
 
         let lvl = parseInt(n.lvl, 10);
-        if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) return;
+        if (isNaN(lvl) || lvl <= 0 || lvl < minL || lvl > maxL) continue;
 
-        let wt = parseInt(n.wt, 10);
-        let ranga = getMobRank(n);
+        let ranga = typeof getMobRank === 'function' ? getMobRank(n) : "normal";
 
-        if (ranga === "normal" && !wantNormal) return;
-        if (ranga === "elite1" && !wantElite) return;
-        if (ranga === "elite2" && !bE2) return;
-        if (ranga === "hero" && !bHero) return;
+        if (ranga === "normal" && !wantNormal) continue;
+        if (ranga === "elite1" && !wantElite) continue;
+        if (ranga === "elite2" && !bE2) continue;
+        if (ranga === "hero" && !bHero) continue;
 
-        let isSafeToAttack = true;
-        for (let spot of dangerousSpots) {
-            if (Math.abs(n.x - spot.x) <= 2 && Math.abs(n.y - spot.y) <= 2) {
-                isSafeToAttack = false;
-                break;
-            }
-        }
-        if (!isSafeToAttack) return;
+        // Omijanie mobów w miejscach w których bot już się zaciął
+        let coordKey = n.x + "_" + n.y;
+        if (window.expUnreachableMobs && window.expUnreachableMobs.has(coordKey)) continue;
 
-        let isReachable = false;
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                const sk = `${n.x + dx}_${n.y + dy}`;
-                if (window.margoWalkableMask.has(sk) && distMap.has(sk)) {
-                    isReachable = true;
-                    break;
-                }
-            }
-            if (isReachable) break;
-        }
-
-        // Odrzucenie potworów za ścianą, do których fizycznie nie da się dojść
-        if (!isReachable) {
-            window.expMonsterCache.delete(n.id);
-            return;
-        }
+        let dist = Math.abs(hx - n.x) + Math.abs(hy - n.y);
 
         validMobs.push({
-            id: n.id,
+            id: n.id || key,
             x: n.x,
             y: n.y,
-            wt: wt,
-            type: n.type,
+            dist: dist,
             ranga: ranga,
-            grp: n.grp,
-            nick: n.nick.replace(/<[^>]*>?/gm, '').trim(),
-            isLocked: false
+            nick: (n.nick || n.name || "Potwór").replace(/<[^>]*>?/gm, '').trim()
         });
-    });
-
-    let serverGroups = typeof buildServerMobGroups === 'function' ? buildServerMobGroups(validMobs, distMap) : [];
-
-    serverGroups = serverGroups.filter(g => !(g.mobs.length === 1 && g.bestPathDistance > 50 && g.mainRanga === "normal"));
-
-    serverGroups.forEach(g => {
-        if (g.key === window.expCurrentTargetGroupKey && now < (window.expTargetLockTime || 0)) {
-            g.isLocked = true;
-            const rarityBonusMap = { normal: 0, elite1: 8, elite2: 14, hero: 22 };
-            g.score = g.bestPathDistance - (g.mobs.length * 5) - (rarityBonusMap[g.mainRanga] || 0) - 10;
-        }
-    });
-
-    serverGroups.sort((a, b) => {
-        if (a.isLocked && !b.isLocked) return -1;
-        if (b.isLocked && !a.isLocked) return 1;
-        if (a.score !== b.score) return a.score - b.score;
-        if (a.bestPathDistance !== b.bestPathDistance) return a.bestPathDistance - b.bestPathDistance;
-        return String(a.key).localeCompare(String(b.key));
-    });
-
-    let targetGroup = null;
-    const nearbySmallCleanup = serverGroups.filter(g => g.bestPathDistance <= 8 && g.mobs.length <= 2).sort((a, b) => a.bestPathDistance - b.bestPathDistance);
-
-    if (nearbySmallCleanup.length > 0) {
-        targetGroup = nearbySmallCleanup[0];
-    } else {
-        targetGroup = serverGroups.length > 0 ? serverGroups[0] : null;
     }
 
-    let target = targetGroup && targetGroup.bestTargetMob ? targetGroup.bestTargetMob : null;
+    // Sortowanie potworów: najbliższe najpierw
+    validMobs.sort((a, b) => a.dist - b.dist);
 
-    if (targetGroup && targetGroup.bestTargetMob && Number.isFinite(targetGroup.bestPathDistance)) {
-        window.expCurrentTargetGroupKey = targetGroup.key;
-        window.expTargetLockTime = now + (Engine.map.d.pvp === 2 ? 8000 : 5000);
-        expPinnedMap = currMapName;
-        expPinnedMapUntil = now + (Engine.map.d.pvp === 2 ? 20000 : 10000);
-    }
+    let target = validMobs.length > 0 ? validMobs[0] : null;
 
-   // --- INTELIGENTNA PAMIĘĆ WIDZIANYCH POTWORÓW ---
-    const liveCount = validMobs.length;
-    const mapStillHasWork = liveCount > 0;
-
-    if (mapStillHasWork && !target) {
-        expEmptyScans = 0; 
-        if (displayTarget) displayTarget.innerText = `Biegnę do zapamiętanego potwora... (W pamięci: ${liveCount})`;
-
-        let memoryMob = validMobs[0]; 
-
-        if (memoryMob) {
-            if (now > nextAllowedClickTime) {
-                if (typeof window.safeGoTo === 'function') window.safeGoTo(memoryMob.x, memoryMob.y, false);
-                else Engine.hero.autoGoTo({ x: memoryMob.x, y: memoryMob.y });
-                nextAllowedClickTime = now + 400;
-                window.expLastMoveTx = memoryMob.x; 
-                window.expLastMoveTy = memoryMob.y;
-            }
-        }
-        expLastActionTime = now + 150;
-        return;
-    }
-
-    // --- LOGIKA CELU I KONTROLA ZATRZYMANIA ---
     if (target) {
-        const targetDist = targetGroup.bestPathDistance;
+        expEmptyScans = 0;
+        if (displayTarget) displayTarget.innerText = `Biegnę do: ${target.nick} (Dystans: ${target.dist})`;
 
-        if (expEmptyScans > 0) {
-            if (window.logExp) window.logExp(`✨ Zauważono potwory! Wracam do pracy.`, "#8bc34a");
-            expEmptyScans = 0;
-            expLastActionTime = now + 80;
-            return;
-        }
-
-        if (targetDist > 1) {
-            expAttackLockUntil = 0;
-            let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
-
-            if (isNewDestination) {
-                if (now < nextAllowedClickTime) return;
-
-                if (expCurrentTargetId !== target.id) {
-                    if (window.logExp) window.logExp(`🏃 Cel: ${targetGroup.label} (Dystans: ${targetDist}, Score: ${targetGroup.score})`, "#00e5ff");
-                    expCurrentTargetId = target.id;
-                    window.expCurrentTargetGroupKey = targetGroup.key;
-
-                    let randomLockSeconds = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
-                    window.expTargetLockTime = now + randomLockSeconds;
-                }
-                if (displayTarget) displayTarget.innerText = `Biegnę do: ${targetGroup.label} | dystans: ${targetDist} | score: ${targetGroup.score}`;
-
-                // Niezawodny bieg pod cel (Naprawa błędu z "bestStand null")
-                let goX = targetGroup.bestStand ? targetGroup.bestStand.x : target.x;
-                let goY = targetGroup.bestStand ? targetGroup.bestStand.y : target.y;
-                
-                if (typeof window.safeGoTo === 'function') window.safeGoTo(goX, goY, false);
-                else Engine.hero.autoGoTo({ x: goX, y: goY });
-
-                nextAllowedClickTime = now + 350;
-
-                window.expLastMoveTx = target.x; window.expLastMoveTy = target.y;
-                window.expPursuitLastX = hx; window.expPursuitLastY = hy;
-                window.expTargetPursuitStart = now;
-                window.expMoveLockUntil = now + 800;
-            } else {
-                if (now > window.expMoveLockUntil) {
-                    if (hx !== window.expPursuitLastX || hy !== window.expPursuitLastY) {
-                        window.expPursuitLastX = hx;
-                        window.expPursuitLastY = hy;
-                        window.expTargetPursuitStart = now;
-                    }
-
-                    let timeStandingStill = now - window.expTargetPursuitStart;
-
-                    if (timeStandingStill > 3000) {
-                        window.expConsecutiveStucks = (window.expConsecutiveStucks || 0) + 1;
-                        if (window.logExp) window.logExp(`🚨 Zablokowałem się w drodze do: ${target.nick}. Próba (${window.expConsecutiveStucks}/3)`, "#ff5252");
-                        
-                        let badCoordKey = target.x + "_" + target.y;
-                        window.expUnreachableMobs.add(badCoordKey);
-                        expCurrentTargetId = null;
-                        window.expTargetLockTime = 0;
-                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
-                        if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
-
-                        if (window.expConsecutiveStucks >= 3) {
-                            if (window.logExp) window.logExp(`🚧 Zbyt wiele blokad z rzędu! Uznaję mapę za niedostępną i idę dalej.`, "#ff9800");
-                            if (!window.mapClearTimes) window.mapClearTimes = {};
-                            window.mapClearTimes[Engine.map.d.name] = Date.now(); 
-                            window.expConsecutiveStucks = 0; 
-                            if (window.expMonsterCache) window.expMonsterCache.clear(); 
-                        } else {
-                            let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
-                            let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-                            
-                            if (typeof window.safeGoTo === 'function') window.safeGoTo(rx, ry, false);
-                            else Engine.hero.autoGoTo({ x: rx, y: ry });
-                        }
-
-                        expLastActionTime = now + 1000;
-                        return;
-                    }
-
-                    if (timeStandingStill > 1000 && (now % 1000 < 150)) {
-                        if (now >= nextAllowedClickTime) {
-                            let goX = targetGroup.bestStand ? targetGroup.bestStand.x : target.x;
-                            let goY = targetGroup.bestStand ? targetGroup.bestStand.y : target.y;
-                            
-                            if (typeof window.safeGoTo === 'function') window.safeGoTo(goX, goY, false);
-                            else Engine.hero.autoGoTo({ x: goX, y: goY });
-                            
-                            nextAllowedClickTime = now + 350;
-                        }
-                    }
-                }
-            }
-            expLastActionTime = now + 100;
-            return;
-        }
-
-        // --- WALKA ---
-        if (targetDist <= 1) {
-            if (displayTarget) displayTarget.innerText = `Walka: ${targetGroup.label}`;
+        // WALKA - Dystans 1 kratka
+        if (target.dist <= 1) {
             window.expLastMoveTx = -1; window.expLastMoveTy = -1; window.expMoveLockUntil = 0;
             if (isHeroMoving && typeof Engine.hero.stop === 'function') Engine.hero.stop();
 
             if (expAttackLockUntil === 0) {
                 expAttackLockUntil = now + ((botSettings.berserk && botSettings.berserk.enabled) ? 2500 : 0);
             } else if (now > expAttackLockUntil) {
+                // Cios by wyzwolić walkę
+                if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
+                else if (typeof window._g === 'function') window._g(`fight&a=attack&id=${target.id}`);
+                
+                // Jiggle w miejscu (Anty-zwiecha okna walki)
                 let stepX = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
                 let stepY = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
-                Engine.hero.autoGoTo({ x: stepX, y: stepY });
+                if (typeof window.safeGoTo === 'function') window.safeGoTo(stepX, stepY, false);
+                else Engine.hero.autoGoTo({ x: stepX, y: stepY });
+
                 expAttackLockUntil = now + 2500; expLastActionTime = now + 800;
-                return;
             }
-            expLastActionTime = now + 100;
+            return;
         }
+
+        // PODCHODZENIE (RUCH) - Czysta logika Patrolu bez udziwnień
+        if (now > nextAllowedClickTime) {
+            let isNewDestination = (window.expLastMoveTx !== target.x || window.expLastMoveTy !== target.y);
+
+            if (isNewDestination) {
+                window.expLastMoveTx = target.x;
+                window.expLastMoveTy = target.y;
+                window.expPursuitLastX = hx;
+                window.expPursuitLastY = hy;
+                window.expTargetPursuitStart = now;
+                window.expConsecutiveStucks = 0;
+            }
+
+            if (typeof window.safeGoTo === 'function') window.safeGoTo(target.x, target.y, false);
+            else Engine.hero.autoGoTo({ x: target.x, y: target.y });
+            
+            nextAllowedClickTime = now + 350;
+
+            // Zabezpieczenie przed staniem w miejscu (Anti-Stuck podchodzenia)
+            if (!isHeroMoving && hx === window.expPursuitLastX && hy === window.expPursuitLastY) {
+                if (now - window.expTargetPursuitStart > 2500) {
+                    window.expConsecutiveStucks = (window.expConsecutiveStucks || 0) + 1;
+                    if (window.logExp) window.logExp(`🚨 Zacięcie w drodze do: ${target.nick}. Próba (${window.expConsecutiveStucks}/4)`, "#ff5252");
+                    window.expTargetPursuitStart = now;
+
+                    if (window.expConsecutiveStucks >= 4) {
+                        if (window.logExp) window.logExp(`🚧 Potwór nieosiągalny (za ścianą)! Ignoruję go.`, "#ff9800");
+                        if(!window.expUnreachableMobs) window.expUnreachableMobs = new Set();
+                        window.expUnreachableMobs.add(target.x + "_" + target.y);
+                        window.expLastMoveTx = -1; window.expLastMoveTy = -1;
+                        if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                    } else {
+                        let rx = Math.max(0, hx + (Math.random() > 0.5 ? 1 : -1));
+                        let ry = Math.max(0, hy + (Math.random() > 0.5 ? 1 : -1));
+                        if (typeof window.safeGoTo === 'function') window.safeGoTo(rx, ry, false);
+                        else Engine.hero.autoGoTo({ x: rx, y: ry });
+                        nextAllowedClickTime = now + 600;
+                    }
+                }
+            } else {
+                window.expPursuitLastX = hx;
+                window.expPursuitLastY = hy;
+                window.expTargetPursuitStart = now;
+            }
+        }
+        expLastActionTime = now + 100;
         return;
     }
-
     // Tylko gdy mapa jest NAPRAWDĘ PUSTA, zaczynamy liczyć skany do zmiany:
     expEmptyScans++;
     if (displayTarget) {
