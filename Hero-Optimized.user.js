@@ -10155,59 +10155,153 @@ function renderTacticalRadar() {
         }
     }
 
-    // Potwory
-    let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
-    let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
+   // Potwory + grupy
+let npcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+let rangaColors = { "normal": "#ff5252", "elite1": "#ff9800", "elite2": "#ba68c8", "hero": "#00e5ff" };
 
-    for (let id in npcs) {
-        let n = npcs[id].d || npcs[id];
-        if (!n || n.dead || n.del || n.delete) continue;
+let validMobs = [];
 
-       if (n.type === 2 || n.type === 3 || n.type === 11) {
-            let isReachable = false;
-            for(let dx = -1; dx <= 1; dx++) {
-                for(let dy = -1; dy <= 1; dy++) {
-                    if(window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
-                        isReachable = true; break;
-                    }
+for (let id in npcs) {
+    let n = npcs[id].d || npcs[id];
+    if (!n || n.dead || n.del || n.delete) continue;
+
+    if (n.type === 2 || n.type === 3 || n.type === 11) {
+        let isReachable = false;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                if (window.margoWalkableMask.has(`${n.x + dx}_${n.y + dy}`)) {
+                    isReachable = true;
+                    break;
                 }
-                if(isReachable) break;
             }
+            if (isReachable) break;
+        }
 
-            if (!isReachable) {
-                drawDot(n.x, n.y, '#333333', 0.8);
-                continue;
-            }
+        n.ranga = getMobRank(n);
+        n.__reachable = isReachable;
+        validMobs.push(n);
 
-            let wt = parseInt(n.wt, 10) || 0;
-            let ranga = "normal";
-            if (n.type === 2) {
-                if (wt === 11 || wt === 1) ranga = "elite1";
-                else if (wt === 12 || wt === 2) ranga = "elite2";
-                else if (wt >= 13 || wt >= 3) ranga = "hero";
-            }
-
-            drawDot(n.x, n.y, rangaColors[ranga], 1.2);
+        // nadal rysujemy pojedyncze punkty
+        if (!isReachable) {
+            drawDot(n.x, n.y, '#333333', 0.8);
+        } else {
+            drawDot(n.x, n.y, rangaColors[n.ranga] || "#ff5252", 1.15);
         }
     }
+}
 
-    // Rysowanie dynamicznej trasy do expowiska (Wizualizacja celu)
-    if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
-        let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
-        if (targetNpc) {
+// Nakładka grup
+try {
+    let distMap = buildDistanceMapFromHero();
+    let serverGroups = buildServerMobGroups(validMobs.filter(m => m.__reachable), distMap);
+
+    ctx.font = `${Math.max(9, Math.floor(scale * 1.8))}px Arial`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    for (const g of serverGroups) {
+        if (!g.bestStand) continue;
+
+        const gx = offsetX + (g.bestStand.x * scale) + (scale / 2);
+        const gy = offsetY + (g.bestStand.y * scale) + (scale / 2);
+
+        // obwódka grupy
+        ctx.beginPath();
+        ctx.arc(gx, gy, Math.max(4, scale * 0.95), 0, 2 * Math.PI);
+        ctx.strokeStyle = g.key === window.expCurrentTargetGroupKey ? '#00e5ff' : '#ffffff55';
+        ctx.lineWidth = g.key === window.expCurrentTargetGroupKey ? 2 : 1;
+        ctx.stroke();
+
+        // etykieta grupy tylko dla większych grup albo celu
+        if (g.mobs.length > 1 || g.key === window.expCurrentTargetGroupKey) {
+            const label = `${g.mobs.length}x ${g.mainRanga}`;
+            const tx = gx + 6;
+            const ty = gy - 8;
+
+            const tw = ctx.measureText(label).width;
+            const th = 12;
+
+            ctx.fillStyle = 'rgba(0,0,0,0.72)';
+            ctx.fillRect(tx - 2, ty - th / 2, tw + 4, th);
+
+            ctx.fillStyle = g.key === window.expCurrentTargetGroupKey ? '#00e5ff' : '#e0d8c0';
+            ctx.fillText(label, tx, ty);
+        }
+    }
+} catch (e) {}
+
+  // Rysowanie dynamicznej trasy do expowiska (REALNA ŚCIEŻKA PO TERENIE)
+if (window.isExping && typeof expCurrentTargetId !== 'undefined' && expCurrentTargetId) {
+    let targetNpc = npcs[expCurrentTargetId] ? (npcs[expCurrentTargetId].d || npcs[expCurrentTargetId]) : null;
+
+    if (targetNpc) {
+        let pathTargetX = targetNpc.x;
+        let pathTargetY = targetNpc.y;
+
+        // Jeśli mamy aktualny target grupy, próbujemy rysować do bestStand zamiast do środka moba
+        try {
+            let distMap = buildDistanceMapFromHero();
+            let validMobs = [];
+
+            for (let id in npcs) {
+                let n = npcs[id].d || npcs[id];
+                if (!n || n.dead || n.del || n.delete) continue;
+
+                if (n.type === 2 || n.type === 3 || n.type === 11) {
+                    n.ranga = getMobRank(n);
+                    validMobs.push(n);
+                }
+            }
+
+            let serverGroups = buildServerMobGroups(validMobs, distMap);
+            let lockedGroup = serverGroups.find(g => g.key === window.expCurrentTargetGroupKey);
+
+            if (lockedGroup && lockedGroup.bestStand) {
+                pathTargetX = lockedGroup.bestStand.x;
+                pathTargetY = lockedGroup.bestStand.y;
+            }
+        } catch (e) {}
+
+        let realPath = buildPathToTarget(
+            Engine.hero.d.x,
+            Engine.hero.d.y,
+            pathTargetX,
+            pathTargetY
+        );
+
+        if (realPath && realPath.length > 1) {
+            ctx.beginPath();
+
+            for (let i = 0; i < realPath.length; i++) {
+                const p = realPath[i];
+                const px = offsetX + (p.x * scale) + (scale / 2);
+                const py = offsetY + (p.y * scale) + (scale / 2);
+
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+
+            ctx.strokeStyle = "rgba(0, 229, 255, 0.85)";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        } else {
+            // awaryjnie, jeśli nie da się wyliczyć ścieżki
             ctx.beginPath();
             ctx.moveTo(offsetX + (Engine.hero.d.x * scale) + (scale/2), offsetY + (Engine.hero.d.y * scale) + (scale/2));
             ctx.lineTo(offsetX + (targetNpc.x * scale) + (scale/2), offsetY + (targetNpc.y * scale) + (scale/2));
-            ctx.strokeStyle = "rgba(0, 229, 255, 0.7)"; // Świecąca cyjanowa linia
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]); // Przerywana
+            ctx.strokeStyle = "rgba(0, 229, 255, 0.35)";
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 5]);
             ctx.stroke();
             ctx.setLineDash([]);
-
-            // Pogrubienie aktualnego celu (żeby wiedzieć do kogo biegnie w grupie)
-            drawDot(targetNpc.x, targetNpc.y, "#00e5ff", 2.0);
         }
+
+        // Pogrubienie aktualnego celu
+        drawDot(targetNpc.x, targetNpc.y, "#00e5ff", 2.0);
     }
+}
 
     // GRACZ — zawsze widoczny, z obwódką
     ctx.beginPath();
