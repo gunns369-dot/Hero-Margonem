@@ -1674,23 +1674,6 @@ let attackInterval = null;
             if (!window.RouteCombatFSM || window.RouteCombatFSM.canAutoAttack()) window._g(`fight&a=attack&id=${targetId}`); // Wymuś start
         }
 
-        let lastForceAttackAt = 0;
-        const forceAttackPulse = () => {
-            let now = Date.now();
-            if (now - lastForceAttackAt < 350) return;
-            lastForceAttackAt = now;
-
-            try {
-                if (!window.RouteCombatFSM || window.RouteCombatFSM.canAutoAttack()) {
-                    if (typeof window._g === 'function') window._g(`fight&a=attack&id=${targetId}`);
-                    if (Engine?.npcs?.interact) Engine.npcs.interact(targetId);
-                    if (Engine?.npcs?.clickNpc) Engine.npcs.clickNpc(targetId);
-                }
-            } catch(e) {}
-        };
-
-
-
         attackInterval = setInterval(() => {
 
             if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d) return;
@@ -1744,9 +1727,6 @@ let attackInterval = null;
             let dist = Math.max(Math.abs(hx - tx), Math.abs(hy - ty));
 
 
-
-            // Pchamy atak cyklicznie nawet gdy postać jeszcze dochodzi.
-            forceAttackPulse();
 
             if (dist > 1) {
                 manualAttackIssued = false;
@@ -6409,6 +6389,7 @@ function runExpLogic() {
         window.expLastMoveAt = 0;
         window.expLastMoveHeroX = null;
         window.expLastMoveHeroY = null;
+        window.expMeleeFailByTarget = {};
         window.isRushing = false;
         expEmptyScans = 0;
         expCurrentTargetId = null;
@@ -6510,7 +6491,8 @@ function runExpLogic() {
         window._expModeLogKey = modeKey;
     }
     const shouldFightHere = isExpMap || temporaryExpMode;
-    setExpBerserkState(isExpMap && !window.isRushing);
+    const shouldKeepBerserkInRoute = !!(isExpMap && !window.isRushing && !isMapTemporarilyCleared(currMap));
+    setExpBerserkState(shouldKeepBerserkInRoute);
     if (window.RouteCombatFSM) {
         window.RouteCombatFSM.update({
             running: !!window.isExping,
@@ -6534,10 +6516,24 @@ function runExpLogic() {
         if (exactDist <= 1) { // Jesteśmy przy celu
             if (!window.expStandStillStart) window.expStandStillStart = now;
             if (now - window.expStandStillStart > 2000) { // Berserk zaciął się
+                window.expMeleeFailByTarget = window.expMeleeFailByTarget || {};
+                const targetKey = String(target.id || `${target.x}_${target.y}`);
+                window.expMeleeFailByTarget[targetKey] = (window.expMeleeFailByTarget[targetKey] || 0) + 1;
+
                 ActionExecutor.run('ATTACK', { targetId: target.id }, () => {
                     if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
                     else window._g(`fight&a=attack&id=${target.id}`);
                 });
+
+                if (window.expMeleeFailByTarget[targetKey] >= 3) {
+                    const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+                    if (window.expMonsterCache) window.expMonsterCache.delete(target.id);
+                    window.expLastTargetNotFoundAt = Date.now();
+                    HeroLogger.emit('WARN', 'ATTACK_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} po ${window.expMeleeFailByTarget[targetKey]} nieudanych próbach (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
+                    window.expStandStillStart = null;
+                    return;
+                }
+
                 window.expStandStillStart = now;
             }
             if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
@@ -6545,6 +6541,10 @@ function runExpLogic() {
         }
 
         window.expStandStillStart = null;
+        if (window.expMeleeFailByTarget && target?.id != null) {
+            const targetKey = String(target.id);
+            if (window.expMeleeFailByTarget[targetKey]) delete window.expMeleeFailByTarget[targetKey];
+        }
         if (now > nextAllowedClickTime) {
             const adjacent = getPathToAdjacentTile(target.x, target.y, distMap);
             const moveX = adjacent?.stand?.x ?? target.x;
