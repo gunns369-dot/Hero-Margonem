@@ -6476,19 +6476,25 @@ function runExpLogic() {
     window.expCurrentTargetGroupKey = bestChoice ? bestChoice.groupKey : null;
     expCurrentTargetId = target ? (target.id || null) : null;
 
-    if (!isExpMap) {
+    const berserkEnabledNow = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
+    const allowTransitFight = !!(botSettings?.berserk?.userEnabled && berserkEnabledNow);
+    if (!isExpMap && allowTransitFight) {
         temporaryExpMode = hasNearbyReachableMobsForExp(10);
         if (temporaryExpMode) {
             const tmpKey = `${currMap}|tmp-on`;
             if (window._expModeLogKey !== tmpKey) {
-                console.log(`[EXP][mode] ${currMap}: temporaryExpMode=ON (moby w zasięgu tranzytu)`);
+                HeroLogger.emit('INFO', 'TRANSIT_TEMP_EXP_ON', `Tranzyt: wykryto moby w zasięgu na mapie [${currMap}] — tymczasowo walczę.`, "#ffd54f", { category: 'ROUTE', dedupeMs: 2000 });
                 window._expModeLogKey = tmpKey;
             }
         }
+    } else if (!isExpMap && !allowTransitFight) {
+        temporaryExpMode = false;
     }
     const modeKey = `${currMap}|exp:${isExpMap}|tmp:${temporaryExpMode}`;
     if (window._expModeLogKey !== modeKey) {
-        console.log(`[EXP][mode] ${currMap}: isExpMap=${isExpMap}, temporaryExpMode=${temporaryExpMode}`);
+        const modeLabel = isExpMap ? 'EXP' : 'TRANZYT';
+        const transitLabel = allowTransitFight ? 'ON' : 'OFF';
+        HeroLogger.emit('DEBUG', 'EXP_MODE', `Mapa=[${currMap}] tryb=${modeLabel} temporaryExpMode=${temporaryExpMode} transitFight=${transitLabel}`, "#a99a75", { category: 'ROUTE', dedupeMs: 1500 });
         window._expModeLogKey = modeKey;
     }
     const shouldFightHere = isExpMap || temporaryExpMode;
