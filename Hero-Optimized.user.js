@@ -1122,9 +1122,18 @@ function getRankValue(r) {
 
 function buildDistanceMapFromHero() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return new Map();
+    const currentMapName = Engine?.map?.d?.name || "";
 
     if (!(window.margoWalkableMask instanceof Set)) {
         window.margoWalkableMask = new Set();
+    }
+
+    if (window._walkMaskMapName !== currentMapName) {
+        window.margoWalkableMask.clear();
+        if (typeof updateWalkableArea === 'function') {
+            console.log(`[EXP][walkmask] Odświeżam maskę przejścia dla mapy: ${currentMapName}`);
+            updateWalkableArea();
+        }
     }
 
     if (window.margoWalkableMask.size === 0 && typeof updateWalkableArea === 'function') {
@@ -3673,11 +3682,17 @@ expEmptyScans = 0;
             if (typeof window.logExp === 'function') window.logExp("🚀 Uruchomiono tryb automatyczny!", "#4caf50");
 
             if (botSettings.berserk) {
-                botSettings.berserk.userEnabled = true;
-                botSettings.berserk.enabled = false; // Aktywacja dopiero po wejściu na mapę z kolejności map.
-                if (chk) chk.checked = false;
+                const prevUserEnabled = !!botSettings.berserk.userEnabled;
+                const chkState = chk ? !!chk.checked : prevUserEnabled;
+                botSettings.berserk.userEnabled = chkState;
+                const currMap = Engine?.map?.d?.name || "";
+                const mapsPool = typeof getCurrentExpHuntMaps === 'function' ? getCurrentExpHuntMaps() : (botSettings?.exp?.mapOrder || []);
+                const isExpMap = new Set((mapsPool || []).map(normMapName)).has(normMapName(currMap));
+                if (isExpMap && botSettings.berserk.userEnabled) {
+                    botSettings.berserk.enabled = true;
+                    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                }
                 saveSettings();
-                if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
             }
         } else {
             this.innerHTML = "▶ START";
@@ -5672,12 +5687,17 @@ function getAntiLagDelay() {
 
 }
 
-    function isMapInSelectedExpowisko(mapName) {
+function isMapInSelectedExpowisko(mapName) {
 
     const maps = botSettings?.exp?.mapOrder || [];
 
-    return Array.isArray(maps) && maps.includes(mapName);
+    const mapNorm = normMapName(mapName);
+    return Array.isArray(maps) && maps.some(m => normMapName(m) === mapNorm);
 
+}
+
+function normMapName(s) {
+    return String(s || "").normalize("NFC").trim().toLowerCase();
 }
 
 function setExpBerserkState(shouldEnable) {
@@ -5695,8 +5715,7 @@ function setExpBerserkState(shouldEnable) {
 
 
     if (currentEnabled === shouldBeEnabled) return;
-
-
+    console.log(`[EXP][berserk] ${currentEnabled ? "ON" : "OFF"} -> ${shouldBeEnabled ? "ON" : "OFF"}`);
 
     botSettings.berserk.enabled = shouldBeEnabled;
 
@@ -5725,8 +5744,9 @@ function setExpBerserkState(shouldEnable) {
     const maps = botSettings?.exp?.mapOrder || [];
 
     if (!maps.length) return null;
-
-    if (maps.includes(currMap)) return { path: [currMap], targetMap: currMap };
+    const currNorm = normMapName(currMap);
+    const exactCurrInPool = maps.find(m => normMapName(m) === currNorm) || currMap;
+    if (maps.some(m => normMapName(m) === currNorm)) return { path: [exactCurrInPool], targetMap: exactCurrInPool };
 
 
 
@@ -5807,25 +5827,30 @@ function getCurrentExpHuntMaps() {
     const profiles = Array.isArray(botSettings?.expProfiles) ? botSettings.expProfiles : [];
     const activeProfile = profiles.find(p => p?.name === activeProfileName);
 
-    // Priorytet: mapy z aktywnego profilu (czyste expowiska), bez map tranzytowych.
+    // Priorytet: aktualna trasa użytkownika (mapOrder).
+    if (Array.isArray(routeMaps) && routeMaps.length > 0) {
+        return [...new Set(routeMaps.filter(Boolean))];
+    }
+
+    // Fallback: mapy aktywnego profilu.
     if (activeProfile && Array.isArray(activeProfile.maps) && activeProfile.maps.length > 0) {
         const clean = [...new Set(activeProfile.maps.filter(Boolean))];
         if (clean.length > 0) return clean;
     }
 
-    // Fallback: aktualna trasa użytkownika.
-    return [...new Set(routeMaps.filter(Boolean))];
+    return [];
 }
 
 function pickNextUnclearedExpMap(currMap, mapsPool) {
     if (!Array.isArray(mapsPool) || mapsPool.length === 0) return null;
 
     const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
-    const allowedLower = new Set(mapsPool.map(m => String(m).toLowerCase()));
-    const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable && allowedLower.has(String(g.targetMap || "").toLowerCase()));
+    const allowedLower = new Set(mapsPool.map(m => normMapName(m)));
+    const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable && allowedLower.has(normMapName(g.targetMap || "")));
     const now = Date.now();
     const orderedCandidates = [];
-    const currIdx = mapsPool.indexOf(currMap);
+    const currNorm = normMapName(currMap);
+    const currIdx = mapsPool.findIndex(m => normMapName(m) === currNorm);
 
     if (currIdx !== -1) {
         for (let i = 1; i <= mapsPool.length; i++) {
@@ -5838,11 +5863,11 @@ function pickNextUnclearedExpMap(currMap, mapsPool) {
 
     for (let i = 0; i < orderedCandidates.length; i++) {
         const candidate = orderedCandidates[i];
-        if (!candidate || candidate === currMap) continue;
+        if (!candidate || normMapName(candidate) === currNorm) continue;
         if (isMapTemporarilyCleared(candidate)) continue;
         if (window.__bannedMaps && window.__bannedMaps[candidate] && now < window.__bannedMaps[candidate]) continue;
 
-        let door = reachableDoors.find(g => (g.targetMap || "").toLowerCase() === String(candidate).toLowerCase()) || null;
+        let door = reachableDoors.find(g => normMapName(g.targetMap || "") === normMapName(candidate)) || null;
 
         // Fallback: wspieramy ręcznie zapisane przejścia z bazy nawet jeśli radar ich nie wykrył
         if (!door && typeof globalGateways !== 'undefined' && globalGateways[currMap] && globalGateways[currMap][candidate]) {
@@ -6008,6 +6033,13 @@ function hasNearbyReachableMobsForExp(maxDistance = 12) {
 
         // tylko normal / elite / hero
         if (n.type !== 2 && n.type !== 3 && n.type !== 11) continue;
+        const lvl = parseInt(n.lvl, 10) || 0;
+        if (lvl < botSettings.exp.minLvl || lvl > botSettings.exp.maxLvl) continue;
+        const ranga = getMobRank(n);
+        if (ranga === "normal" && !botSettings.exp.normal) continue;
+        if (ranga === "elite1" && !botSettings.exp.elite) continue;
+        if (ranga === "elite2" && !botSettings.berserk.e2) continue;
+        if (ranga === "hero" && !botSettings.berserk.hero) continue;
 
         // szukamy pola dojścia obok moba
         let bestDist = Infinity;
@@ -6088,7 +6120,7 @@ function requestGatewayRefresh(reason = 'loop', forceNow = false) {
 
 function getExpAllowedMapSet() {
     const maps = getCurrentExpHuntMaps();
-    return new Set((maps || []).map(m => String(m).toLowerCase()));
+    return new Set((maps || []).map(m => normMapName(m)));
 }
 
 function runExpLogic() {
@@ -6103,7 +6135,9 @@ function runExpLogic() {
     const now = Date.now();
     const currMap = Engine.map.d.name;
     let mapsPool = getCurrentExpHuntMaps();
-    const isExpMap = mapsPool.includes(currMap);
+    const poolSet = new Set((mapsPool || []).map(normMapName));
+    const isExpMap = poolSet.has(normMapName(currMap));
+    let temporaryExpMode = false;
     window.expDecisionInfo = `Mapa: ${currMap} | tryb: ${isExpMap ? "EXP" : "TRANZYT"}`;
     requestGatewayRefresh("run-exp");
     window.expMapPvpCache = window.expMapPvpCache || {};
@@ -6191,9 +6225,27 @@ function runExpLogic() {
     window.expCurrentTargetGroupKey = bestChoice ? bestChoice.groupKey : null;
     expCurrentTargetId = target ? (target.id || null) : null;
 
+    if (!isExpMap) {
+        temporaryExpMode = hasNearbyReachableMobsForExp(10);
+        if (temporaryExpMode) {
+            const tmpKey = `${currMap}|tmp-on`;
+            if (window._expModeLogKey !== tmpKey) {
+                console.log(`[EXP][mode] ${currMap}: temporaryExpMode=ON (moby w zasięgu tranzytu)`);
+                window._expModeLogKey = tmpKey;
+            }
+        }
+    }
+    const modeKey = `${currMap}|exp:${isExpMap}|tmp:${temporaryExpMode}`;
+    if (window._expModeLogKey !== modeKey) {
+        console.log(`[EXP][mode] ${currMap}: isExpMap=${isExpMap}, temporaryExpMode=${temporaryExpMode}`);
+        window._expModeLogKey = modeKey;
+    }
+    const shouldFightHere = isExpMap || temporaryExpMode;
+    setExpBerserkState(isExpMap && !window.isRushing);
+
     // --- LOGIKA RUCHU I WALKI ---
     maybeStepOutFromGatewayAfterEntry();
-    if (isExpMap && target) {
+    if (shouldFightHere && target) {
         window.expDecisionInfo = `Cel mob: ${(target.nick || "Potwór")} [${target.x},${target.y}]`;
         if (window.logExp && expLastLoggedTargetId !== String(target.id)) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
@@ -6201,7 +6253,6 @@ function runExpLogic() {
             expLastLoggedTargetId = String(target.id);
             expLastLoggedTransitMap = null;
         }
-        setExpBerserkState(true);
         let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
 
         if (exactDist <= 1) { // Jesteśmy przy celu
@@ -6241,10 +6292,12 @@ function runExpLogic() {
     }
 
     // --- TRANZYT / ZMIANA MAPY ---
-    setExpBerserkState(false);
     if (!isExpMap || validMobs.length === 0) {
         expEmptyScans++;
-        if (expEmptyScans < 8 && isExpMap) return; // Czekaj na resp
+        if (expEmptyScans < 8 && isExpMap) {
+            window.expDecisionInfo = `Mapa exp pusta chwilowo: ${currMap} (resp)`;
+            return; // Czekaj na resp (berserk zostaje ON na exp mapie)
+        }
 
         if (isExpMap && validMobs.length === 0) {
             markMapTemporarilyCleared(currMap);
@@ -10037,6 +10090,7 @@ function isCollisionSafe(x, y) {
 function updateWalkableArea() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return;
 
+    if (!(window.margoWalkableMask instanceof Set)) window.margoWalkableMask = new Set();
     window.margoWalkableMask.clear();
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
@@ -10066,13 +10120,23 @@ function updateWalkableArea() {
             }
         }
     }
+    window._walkMaskMapName = Engine?.map?.d?.name || "";
 }
 
 function buildDistanceMapFromHero() {
     if (typeof Engine === 'undefined' || !Engine.map || !Engine.hero) return new Map();
+    const currentMapName = Engine?.map?.d?.name || "";
 
     if (!(window.margoWalkableMask instanceof Set)) {
         window.margoWalkableMask = new Set();
+    }
+
+    if (window._walkMaskMapName !== currentMapName) {
+        window.margoWalkableMask.clear();
+        if (typeof updateWalkableArea === 'function') {
+            console.log(`[EXP][walkmask] Odświeżam maskę przejścia dla mapy: ${currentMapName}`);
+            updateWalkableArea();
+        }
     }
 
     if (window.margoWalkableMask.size === 0 && typeof updateWalkableArea === 'function') {
