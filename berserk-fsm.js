@@ -1,10 +1,10 @@
 class HeroRouteCombatFSM {
   constructor(initial = {}) {
     this.state = {
-      onExpMap: false,
-      routeStarted: false,
+      running: false,
+      currentTask: 'IDLE',
+      inRouteMap: false,
       berserkCheckbox: false,
-      outOfRoute: true,
       berserkActive: false,
       trapDetected: false,
       trapSolveStarted: false,
@@ -20,7 +20,7 @@ class HeroRouteCombatFSM {
   }
 
   shouldEnableBerserk() {
-    return !!(this.state.onExpMap && this.state.routeStarted && this.state.berserkCheckbox && !this.state.outOfRoute);
+    return !!(this.state.running && this.state.currentTask === 'EXP' && this.state.inRouteMap && this.state.berserkCheckbox);
   }
 
   syncBerserk(reason = 'sync') {
@@ -36,17 +36,25 @@ class HeroRouteCombatFSM {
     }
   }
 
-  setRouteStarted(v, reason = 'route') {
-    this.state.routeStarted = !!v;
+  setRunning(v, reason = 'route') {
+    this.state.running = !!v;
+    if (!v) {
+      this.state.currentTask = 'IDLE';
+      this.state.inRouteMap = false;
+    }
     this.log(v ? 'route_start' : 'route_stop', { reason });
-    if (!v) this.state.outOfRoute = true;
     this.syncBerserk(reason);
   }
 
-  onMapChange(isExpMap) {
-    this.state.onExpMap = !!isExpMap;
-    this.state.outOfRoute = !isExpMap;
-    this.log('map_change', { isExpMap: !!isExpMap });
+  setTask(task) {
+    this.state.currentTask = task;
+    this.log('task_change', { task });
+    this.syncBerserk('task_change');
+  }
+
+  onMapChange(isInRouteMap) {
+    this.state.inRouteMap = !!isInRouteMap;
+    this.log('map_change', { isInRouteMap: !!isInRouteMap });
     this.syncBerserk('map_change');
   }
 
@@ -76,6 +84,12 @@ class HeroRouteCombatFSM {
       this.state.fullscreenByBot = false;
       this.log('fullscreen_off');
     }
+  }
+
+  detectManualBerserkState(active) {
+    this.state.berserkActive = !!active;
+    this.log('manual_detect', { active: !!active });
+    this.syncBerserk('manual_detect');
   }
 
   autoAttack() {
