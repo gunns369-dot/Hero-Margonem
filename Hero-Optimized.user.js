@@ -3934,6 +3934,17 @@ bindChange('useTeleportsEq', (e) => { botSettings.exp.useTeleportsEq = e.target.
                 if (typeof window.renderExpMaps === 'function') window.renderExpMaps();
             });
         }
+        function syncBerserkToggleVisual() {
+            const chk = document.getElementById('berserkEnabled');
+            if (!chk) return;
+            const desiredAuto = !!botSettings?.berserk?.userEnabled;
+            const activeNow = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
+            chk.checked = desiredAuto;
+            chk.title = desiredAuto
+                ? (activeNow ? 'Berserk aktywny' : 'Berserk auto-aktywny (chwilowo OFF poza EXP/trasą)')
+                : 'Berserk wyłączony';
+        }
+
         // Nowa, ostateczna funkcja do wysyłania komend natywnego Berserka bezpośrednio do gry
         window.updateServerBerserk = function() {
             if (typeof window._g !== 'function') return;
@@ -3971,6 +3982,7 @@ bindChange('useTeleportsEq', (e) => { botSettings.exp.useTeleportsEq = e.target.
                     }
                 }
             } catch(e) {}
+            syncBerserkToggleVisual();
         };
 
         if (botSettings.autosell && typeof botSettings.autosell.onlyTunia === 'undefined') { botSettings.autosell.onlyTunia = false; saveSettings(); }
@@ -5424,12 +5436,12 @@ const BerserkController = {
         const active = !!(Engine?.settings?.d?.fight_auto_solo || botSettings?.berserk?.enabled);
         if (!!nextState === active) return false;
         const action = nextState ? 'BERSERK_ON' : 'BERSERK_OFF';
-        return ActionExecutor.run('TOGGLE_BERSERK', { state: !!nextState }, () => {
+        return ActionExecutor.runWithRetry('TOGGLE_BERSERK', { state: !!nextState }, () => {
             botSettings.berserk.enabled = !!nextState;
             saveSettings();
             if (window.updateServerBerserk) window.updateServerBerserk();
             HeroLogger.emit('INFO', action, `${nextState ? 'Włączono' : 'Wyłączono'} berserka (reason=${reason})`, "#ff9800", { category: 'BERSERK' });
-        });
+        }, { retries: 2, baseDelay: 350 });
     },
     syncObservedState(reason = 'observe') {
         const observedActive = !!Engine?.settings?.d?.fight_auto_solo;
@@ -6503,7 +6515,7 @@ function runExpLogic() {
         window.RouteCombatFSM.update({
             running: !!window.isExping,
             currentTask: (window.autoSellState?.active ? 'AUTOSELL' : (window.autoPotState?.active ? 'AUTOPOT' : 'EXP')),
-            inRouteMap: !!isExpMap
+            inRouteMap: !!(isExpMap && !window.isRushing)
         }, isExpMap ? 'in_route' : 'out_of_route');
     }
 
@@ -9310,16 +9322,35 @@ window.openShopAsync = async (namePart) => {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F11', code: 'F11', keyCode: 122, which: 122, bubbles: true }));
             document.dispatchEvent(new KeyboardEvent('keyup', { key: 'F11', code: 'F11', keyCode: 122, which: 122, bubbles: true }));
         }
-        function ensureFullscreenOnForTrap() {
+        async function ensureFullscreenOnForTrap() {
             const isBrowserFullscreen = !!document.fullscreenElement;
             if (isBrowserFullscreen || window.__fullscreenByBotForTrap) return;
-            emitF11();
+            let switched = false;
+            try {
+                const root = document.documentElement;
+                if (root && root.requestFullscreen) {
+                    await root.requestFullscreen();
+                    switched = !!document.fullscreenElement;
+                }
+            } catch (e) {}
+            if (!switched) {
+                emitF11();
+            }
             window.__fullscreenByBotForTrap = true;
             HeroLogger.emit('INFO', 'FULLSCREEN_ON', 'Włączono pełny ekran przed pierwszą akcją zapadki.', "#4fc3f7");
         }
-        function ensureFullscreenOffAfterTrap() {
+        async function ensureFullscreenOffAfterTrap() {
             if (!window.__fullscreenByBotForTrap) return;
-            emitF11();
+            let switched = false;
+            try {
+                if (document.fullscreenElement && document.exitFullscreen) {
+                    await document.exitFullscreen();
+                    switched = !document.fullscreenElement;
+                }
+            } catch (e) {}
+            if (!switched) {
+                emitF11();
+            }
             window.__fullscreenByBotForTrap = false;
             HeroLogger.emit('INFO', 'FULLSCREEN_OFF', 'Wyłączono pełny ekran po zapadce i wznowieniu ruchu.', "#4fc3f7");
         }
@@ -9417,10 +9448,13 @@ window.openShopAsync = async (namePart) => {
 
             // 1. ZAMKNIĘCIE ZAPADKI I WZNOWIENIE PRACY
             if (!fullWin && !preWin) {
+                if (window.__fullscreenByBotForTrap && window.__captchaPhase === "none") {
+                    await ensureFullscreenOffAfterTrap();
+                }
                 if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre") {
                     window.__captchaPhase = "resuming";
                     window.__trapSolveStarted = false;
-                    ensureFullscreenOffAfterTrap();
+                    await ensureFullscreenOffAfterTrap();
                     let delay = randomDelay(1000, 2000);
                     if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
@@ -9461,7 +9495,7 @@ window.openShopAsync = async (namePart) => {
                 window.__captchaPhase = "pre";
                 window.__captchaLock = true;
                 if (!window.__trapSolveStarted) {
-                    ensureFullscreenOnForTrap();
+                    await ensureFullscreenOnForTrap();
                     window.__trapSolveStarted = true;
                 }
                 await sleep(randomDelay(800, 1500));
@@ -9482,7 +9516,7 @@ window.openShopAsync = async (namePart) => {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
                 if (!window.__trapSolveStarted) {
-                    ensureFullscreenOnForTrap();
+                    await ensureFullscreenOnForTrap();
                     window.__trapSolveStarted = true;
                 }
 
