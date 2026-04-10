@@ -984,6 +984,7 @@ let opacityValue = 0.95;
             mapOrder: JSON.parse(localStorage.getItem('exp_map_order_v64') || '[]')
 
         },
+        logging: { level: 'INFO', dedupeWindowMs: 6000 },
 
         expProfiles: loadedProfiles
 
@@ -2683,27 +2684,42 @@ window.executeRushStep = function() {
         if (!window.rushGateLastClickAt) window.rushGateLastClickAt = 0;
         const gateRetryMs = 2800;
         if ((dist === 1 || dist === 0) && (Date.now() - window.rushGateLastClickAt > gateRetryMs)) {
-            safeGoTo(exactX, exactY, false);
+            ActionExecutor.runWithRetry('PASS_GATE', { x: exactX, y: exactY, targetMap: nextMap }, () => safeGoTo(exactX, exactY, false), { retries: 2, baseDelay: 220 });
             window.rushGateLastClickAt = Date.now();
         }
 
         if (Date.now() - window.rushGatewayArrivalTime > 3500) {
-            if (window.logHero) window.logHero("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
-            if (window.logExp) window.logExp("⚠️ Brama zacięta. Robię krok w tył...", "#ffb300");
+            const stateKey = `${currentSysMap}->${nextMap}@${exactX},${exactY}`;
+            if (GateRecovery.state.key !== stateKey) GateRecovery.state = { key: stateKey, attempts: 0, blockedUntil: 0 };
+            GateRecovery.state.attempts++;
+            HeroLogger.emit('WARN', 'GATE_BLOCKED', `Brama zajęta (${GateRecovery.state.attempts})`, "#ffb300", { dedupeMs: 2800 });
 
             window.__movementLock = Date.now() + 1500;
-            let dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
-            for (let d of dirs) {
-                let nx = cx + d[0];
-                let ny = cy + d[1];
-                if (typeof Engine.map.checkCollision === 'function' && !Engine.map.checkCollision(nx, ny)) {
-                    if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
-                    else if (typeof Engine.hero.autoWalk === 'function') Engine.hero.autoWalk(nx, ny);
-                    else window._g(`walk=${nx},${ny}`);
-                    break;
+            const attempts = GateRecovery.state.attempts;
+            let moved = false;
+            if (attempts === 1) {
+                // krótki wait + retry kliknięcia
+            } else if (attempts === 2) {
+                moved = GateRecovery.tryStep(cx, cy, [[0,1], [0,-1]]);
+                HeroLogger.emit('INFO', 'RECOVERY_STEP', `GateRecovery: krok w tył`, "#ffcc80");
+            } else if (attempts === 3) {
+                moved = GateRecovery.tryStep(cx, cy, [[1,0], [-1,0], [1,1], [-1,-1]]);
+                HeroLogger.emit('INFO', 'RECOVERY_STEP', `GateRecovery: krok w bok`, "#ffcc80");
+            } else if (attempts === 4) {
+                moved = GateRecovery.tryStep(cx, cy, [[1,-1], [-1,1], [0,1], [0,-1]]);
+                HeroLogger.emit('INFO', 'RECOVERY_STEP', `GateRecovery: krok alternatywny`, "#ffcc80");
+            } else {
+                moved = GateRecovery.tryStep(cx, cy, [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]);
+                if (typeof markGatewayAsBlocked === 'function' && attempts >= 6) {
+                    markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+                    HeroLogger.emit('WARN', 'RECOVERY_STEP', `GateRecovery: oznaczam bramę jako czasowo zablokowaną`, "#ff8a65");
+                    GateRecovery.state.attempts = 0;
+                    window.executeRushStep();
+                    return;
                 }
             }
-            window.rushGatewayArrivalTime = Date.now() + 1500;
+            if (!moved && attempts > 2) HeroLogger.emit('DEBUG', 'RECOVERY_STEP', `Brak wolnego pola dla recovery.`);
+            window.rushGatewayArrivalTime = Date.now() + 1200 + Math.floor(Math.random() * 500);
         }
         
         clearTimeout(rushInterval);
@@ -3654,7 +3670,9 @@ if (btnExp) {
         window.isExping = !window.isExping;
         const chk = document.getElementById('berserkEnabled');
 
-       if (window.isExping) {
+        if (window.isExping) {
+            window.expRunId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`;
+            window.expCycleId = 0;
             this.innerHTML = "⏹ STOP";
             this.style.borderColor = "#f44336";
             this.style.color = "#f44336";
@@ -3685,16 +3703,11 @@ expEmptyScans = 0;
                 const prevUserEnabled = !!botSettings.berserk.userEnabled;
                 const chkState = chk ? !!chk.checked : prevUserEnabled;
                 botSettings.berserk.userEnabled = chkState;
-                const currMap = Engine?.map?.d?.name || "";
-                const mapsPool = typeof getCurrentExpHuntMaps === 'function' ? getCurrentExpHuntMaps() : (botSettings?.exp?.mapOrder || []);
-                const isExpMap = new Set((mapsPool || []).map(normMapName)).has(normMapName(currMap));
-                if (isExpMap && botSettings.berserk.userEnabled) {
-                    botSettings.berserk.enabled = true;
-                    if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
-                }
                 saveSettings();
+                if (window.BerserkController) window.BerserkController.onStart();
             }
         } else {
+            window.expRunId = null;
             this.innerHTML = "▶ START";
             this.style.borderColor = "#4caf50";
             this.style.color = "#4caf50";
@@ -3705,7 +3718,7 @@ expEmptyScans = 0;
 
             if (typeof window.logExp === 'function') window.logExp("🛑 Zatrzymano tryb automatyczny.", "#f44336");
 
-            if (botSettings.berserk) { botSettings.berserk.userEnabled = false; botSettings.berserk.enabled = false; if (chk) chk.checked = false; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); }
+            if (window.BerserkController) window.BerserkController.onStop();
         }
     });
 }
@@ -3725,10 +3738,11 @@ expEmptyScans = 0;
 
 // Inicjalizacja braku zmiennej, jeśli to pierwszy start z nową aktualizacją
 if (!botSettings.berserk) {
-            botSettings.berserk = { enabled: false, userEnabled: false, common: true, e1: false, e2: false, hero: false, minLvlOffset: -20, maxLvlOffset: 100 };
+            botSettings.berserk = { enabled: false, userEnabled: false, common: true, e1: false, e2: false, hero: false, minLvlOffset: -20, maxLvlOffset: 100, disableBerserkOnStop: false };
             saveSettings();
         }
         if (botSettings.berserk.userEnabled === undefined) botSettings.berserk.userEnabled = botSettings.berserk.enabled;
+        if (botSettings.berserk.disableBerserkOnStop === undefined) botSettings.berserk.disableBerserkOnStop = false;
 
         if (!botSettings.autoheal) { botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" }; saveSettings(); }
         if (!botSettings.autopot) { botSettings.autopot = { enabled: false, stacks: 14 }; saveSettings(); }
@@ -3955,7 +3969,11 @@ bindChange('useTeleportsEq', (e) => { botSettings.exp.useTeleportsEq = e.target.
         bindChange('autosellCapacity', (e) => { botSettings.autosell.maxCapacity = parseInt(e.target.value) || 42; saveSettings(); });
         bindChange('autosellOnlyTunia', (e) => { botSettings.autosell.onlyTunia = e.target.checked; saveSettings(); });
 
-        bindChange('berserkEnabled', (e) => { botSettings.berserk.userEnabled = e.target.checked; botSettings.berserk.enabled = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
+        bindChange('berserkEnabled', (e) => {
+            botSettings.berserk.userEnabled = e.target.checked;
+            saveSettings();
+            if (window.BerserkController) window.BerserkController.syncDesiredState();
+        });
         bindChange('berserkCommon', (e) => { botSettings.berserk.common = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
         bindChange('berserkE1', (e) => { botSettings.berserk.e1 = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
         bindChange('berserkE2', (e) => { botSettings.berserk.e2 = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
@@ -5261,6 +5279,200 @@ window.lastHeroExpLevel = 0;
 
 window.mapClearTimes = window.mapClearTimes || {};
 
+window.expRunId = null;
+window.expCycleId = 0;
+
+const HeroLogger = {
+    levels: { DEBUG: 10, INFO: 20, WARN: 30, ERROR: 40 },
+    counters: new Map(),
+    getLevel() {
+        return ((botSettings?.logging?.level || 'INFO') + '').toUpperCase();
+    },
+    shouldLog(level) {
+        return (this.levels[level] || 20) >= (this.levels[this.getLevel()] || 20);
+    },
+    emit(level, event, msg, color = "#a99a75", opts = {}) {
+        if (!this.shouldLog(level)) return;
+        const now = Date.now();
+        const dedupeMs = opts.dedupeMs ?? (botSettings?.logging?.dedupeWindowMs ?? 6000);
+        const key = `${level}:${event}:${msg}`;
+        const bucket = this.counters.get(key) || { at: 0, count: 0 };
+        bucket.count++;
+        if (now - bucket.at < dedupeMs && level === "WARN") {
+            this.counters.set(key, bucket);
+            return;
+        }
+        const suffix = (bucket.count > 1 && now - bucket.at < dedupeMs * 2) ? ` (x${bucket.count})` : "";
+        this.counters.set(key, { at: now, count: 0 });
+        const prefix = `[${level}][${event}]${window.expRunId ? `[run:${window.expRunId}]` : ''}[cycle:${window.expCycleId || 0}]`;
+        if (window.logExp) window.logExp(`${prefix} ${msg}${suffix}`, color);
+    }
+};
+
+const ActionExecutor = {
+    recent: new Map(),
+    throttles: { MOVE: 380, ATTACK: 850, PASS_GATE: 1200, TOGGLE_BERSERK: 1800 },
+    makeKey(type, payload) {
+        if (type === 'ATTACK') return `ATTACK:${payload?.targetId}`;
+        if (type === 'MOVE') return `MOVE:${payload?.x}:${payload?.y}`;
+        if (type === 'PASS_GATE') return `PASS_GATE:${payload?.x}:${payload?.y}:${payload?.targetMap || ''}`;
+        if (type === 'TOGGLE_BERSERK') return `TOGGLE_BERSERK:${payload?.state ? 1 : 0}`;
+        return `${type}:${JSON.stringify(payload || {})}`;
+    },
+    run(type, payload, fn, opt = {}) {
+        const now = Date.now();
+        const key = opt.idempotencyKey || this.makeKey(type, payload);
+        const last = this.recent.get(key) || 0;
+        const throttle = opt.throttleMs ?? this.throttles[type] ?? 500;
+        if (now - last < throttle) {
+            HeroLogger.emit('DEBUG', 'ACTION_SKIPPED_BY_THROTTLE', `${type} ${key}`);
+            return false;
+        }
+        this.recent.set(key, now);
+        fn();
+        HeroLogger.emit('INFO', 'ACTION_SENT', `${type} ${key}`, "#90caf9");
+        return true;
+    },
+    runWithRetry(type, payload, fn, opt = {}) {
+        const retries = opt.retries ?? 3;
+        const baseDelay = opt.baseDelay ?? 250;
+        for (let i = 0; i <= retries; i++) {
+            const ok = this.run(type, payload, fn, opt);
+            if (ok) return true;
+            const backoff = baseDelay * Math.pow(2, i) + Math.floor(Math.random() * 120);
+            if (i < retries) {
+                setTimeout(() => this.run(type, payload, fn, opt), backoff);
+            }
+        }
+        return false;
+    }
+};
+
+const BerserkController = {
+    desiredBerserk: false,
+    observedBerserkActive: false,
+    ownedByBot: false,
+    pendingConfirmUntil: 0,
+    retries: 0,
+    maxRetries: 3,
+    syncDesiredState() {
+        this.desiredBerserk = !!(botSettings?.berserk?.userEnabled);
+    },
+    observe() {
+        this.observedBerserkActive = !!(Engine?.settings?.d?.fight_auto_solo || botSettings?.berserk?.enabled);
+        return this.observedBerserkActive;
+    },
+    tryEnable() {
+        this.syncDesiredState();
+        if (!this.desiredBerserk || this.observe()) return;
+        if (Date.now() < this.pendingConfirmUntil || this.retries >= this.maxRetries) return;
+        const sent = ActionExecutor.run('TOGGLE_BERSERK', { state: true }, () => {
+            botSettings.berserk.enabled = true;
+            saveSettings();
+            if (window.updateServerBerserk) window.updateServerBerserk();
+            this.ownedByBot = true;
+            this.retries++;
+            this.pendingConfirmUntil = Date.now() + (900 + Math.floor(Math.random() * 250));
+            HeroLogger.emit('INFO', 'BERSERK_ON', `Próba aktywacji berserka (${this.retries}/${this.maxRetries})`, "#ff9800");
+        });
+        if (!sent) return;
+    },
+    onStart() {
+        this.syncDesiredState();
+        this.retries = 0;
+        this.pendingConfirmUntil = 0;
+        if (this.desiredBerserk && !this.observe()) this.tryEnable();
+    },
+    onStop() {
+        this.syncDesiredState();
+        const shouldDisable = !!botSettings?.berserk?.disableBerserkOnStop;
+        if (!(shouldDisable && this.ownedByBot)) return;
+        ActionExecutor.run('TOGGLE_BERSERK', { state: false }, () => {
+            botSettings.berserk.enabled = false;
+            if (window.updateServerBerserk) window.updateServerBerserk();
+            HeroLogger.emit('INFO', 'BERSERK_OFF', `Wyłączono berserka na STOP (ownedByBot=true)`, "#ff9800");
+        });
+        this.ownedByBot = false;
+    }
+};
+window.BerserkController = BerserkController;
+
+const MonsterMemory = {
+    items: new Map(),
+    keyFor(mapId, n) {
+        const fallback = `${(n.nick || n.name || 'mob').toLowerCase()}:${n.x}:${n.y}`;
+        return `${mapId}|${n.id || fallback}`;
+    },
+    upsertVisible(mapId, n, priorityClass = 'normal') {
+        const k = this.keyFor(mapId, n);
+        const prev = this.items.get(k) || { seenCount: 0, failCount: 0, aliveScore: 0 };
+        this.items.set(k, { ...prev, id: n.id, nick: n.nick || n.name, x: n.x, y: n.y, mapId, lastSeenAt: Date.now(), seenCount: prev.seenCount + 1, failCount: 0, aliveScore: 1, priorityClass, cooldownUntil: 0 });
+        return this.items.get(k);
+    },
+    decay(mapId, isRedMap) {
+        const now = Date.now();
+        const ttl = isRedMap ? 120000 : 45000;
+        for (const [k, m] of this.items.entries()) {
+            if (!k.startsWith(`${mapId}|`)) continue;
+            const age = now - (m.lastSeenAt || 0);
+            if (age > ttl || m.failCount >= 4) { this.items.delete(k); continue; }
+            m.aliveScore = Math.max(0, m.aliveScore - (isRedMap ? 0.03 : 0.08));
+        }
+    },
+    onTargetNotFound(mapId, targetId) {
+        const key = [...this.items.keys()].find(k => k.startsWith(`${mapId}|`) && this.items.get(k)?.id == targetId);
+        if (!key) return null;
+        const m = this.items.get(key);
+        m.failCount = (m.failCount || 0) + 1;
+        m.aliveScore = Math.max(0, (m.aliveScore || 1) - 0.35);
+        m.cooldownUntil = Date.now() + 2600 + (m.failCount * 700);
+        if (m.failCount >= 4) this.items.delete(key);
+        return m;
+    }
+};
+
+const GateRecovery = {
+    state: { key: '', attempts: 0, blockedUntil: 0 },
+    tryStep(cx, cy, dirs) {
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx, ny = cy + dy;
+            if (typeof Engine.map.checkCollision === 'function' && Engine.map.checkCollision(nx, ny)) continue;
+            ActionExecutor.run('MOVE', { x: nx, y: ny }, () => {
+                if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                else if (Engine?.hero?.autoWalk) Engine.hero.autoWalk(nx, ny);
+                else if (window._g) window._g(`walk=${nx},${ny}`);
+            }, { throttleMs: 320 });
+            return true;
+        }
+        return false;
+    }
+};
+
+window.expDryRunSimulation = function(type = 'gate-stuck-x5') {
+    const out = [];
+    const push = (m) => { out.push(m); HeroLogger.emit('DEBUG', 'SIM', m, '#b39ddb'); };
+    if (type === 'gate-stuck-x5') {
+        GateRecovery.state = { key: 'sim', attempts: 0, blockedUntil: 0 };
+        for (let i = 0; i < 5; i++) {
+            GateRecovery.state.attempts++;
+            push(`attempt=${GateRecovery.state.attempts}`);
+        }
+    } else if (type === 'target-missing') {
+        MonsterMemory.items.clear();
+        MonsterMemory.upsertVisible('sim-map', { id: 1, x: 5, y: 5, nick: 'Mob' }, 'normal');
+        for (let i = 0; i < 4; i++) {
+            const st = MonsterMemory.onTargetNotFound('sim-map', 1);
+            push(`fail=${st?.failCount || 'deleted'}`);
+        }
+    } else if (type === 'berserk-start-stop') {
+        BerserkController.desiredBerserk = true;
+        BerserkController.observedBerserkActive = false;
+        BerserkController.onStart();
+        BerserkController.onStop();
+        push(`ownedByBot=${BerserkController.ownedByBot}`);
+    }
+    return out;
+};
 
 
 
@@ -5268,37 +5480,16 @@ window.mapClearTimes = window.mapClearTimes || {};
 
 
     window.logExp = function(msg, color="#a99a75") {
-
-
-
         let consoleDiv = document.getElementById('expConsole');
-
-
-
         if (!consoleDiv) return;
-
-
-
         let time = new Date().toLocaleTimeString('pl-PL', {hour12: false});
-
-
-
         let entry = document.createElement('div');
-
-
-
         entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${msg}</span>`;
-
-
-
         consoleDiv.appendChild(entry);
-
-
-
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
-
-
-
+        if (typeof msg === 'string' && msg.toLowerCase().includes('nie znaleziono przeciwnika')) {
+            window.expLastTargetNotFoundAt = Date.now();
+        }
     };
 
 
@@ -5701,42 +5892,12 @@ function normMapName(s) {
 }
 
 function setExpBerserkState(shouldEnable) {
-
-    if (!botSettings?.berserk) return;
-
-    if (!botSettings.berserk.userEnabled) return;
-
-
-
-    const shouldBeEnabled = !!shouldEnable;
-
-    const currentEnabled = !!botSettings.berserk.enabled;
-
-
-
-    if (currentEnabled === shouldBeEnabled) return;
-    console.log(`[EXP][berserk] ${currentEnabled ? "ON" : "OFF"} -> ${shouldBeEnabled ? "ON" : "OFF"}`);
-
-    botSettings.berserk.enabled = shouldBeEnabled;
-
-
-
-    const chk = document.getElementById('berserkEnabled');
-
-    if (chk) chk.checked = shouldBeEnabled;
-
-
-
-    saveSettings();
-
-
-
-    if (typeof window.updateServerBerserk === 'function') {
-
-        window.updateServerBerserk();
-
+    if (!botSettings?.berserk || !window.BerserkController) return;
+    window.BerserkController.syncDesiredState();
+    window.BerserkController.observe();
+    if (shouldEnable && window.BerserkController.desiredBerserk && !window.BerserkController.observedBerserkActive) {
+        window.BerserkController.tryEnable();
     }
-
 }
 
     function getClosestExpMapPath(currMap) {
@@ -5988,7 +6149,13 @@ function pickBestExpTarget(validMobs, distMap) {
     }
 
     groups.sort((a,b)=>a.score-b.score);
-    const best = groups[0];
+    let best = groups[0];
+    if (window.expCurrentTargetId != null) {
+        const currentGroup = groups.find(g => (g.bestTargetMob?.id || g.mobs?.[0]?.id) == window.expCurrentTargetId);
+        if (currentGroup && best && (currentGroup.score <= best.score + 1.8)) {
+            best = currentGroup; // histereza przełączania celu
+        }
+    }
     return { mob: best.bestTargetMob || best.mobs[0], groupKey: best.key, group: best };
 }
 
@@ -6133,6 +6300,7 @@ function runExpLogic() {
     if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) return;
 
     const now = Date.now();
+    window.expCycleId = (window.expCycleId || 0) + 1;
     const currMap = Engine.map.d.name;
     let mapsPool = getCurrentExpHuntMaps();
     const poolSet = new Set((mapsPool || []).map(normMapName));
@@ -6168,7 +6336,7 @@ function runExpLogic() {
         expLastLoggedTargetId = null;
         expLastLoggedTransitMap = null;
         if (window.expMonsterCache) window.expMonsterCache.clear();
-        if (window.logExp) window.logExp(isExpMap ? `🕒 Wszedłem na expowisko [${currMap}]` : `📍 Tranzyt przez [${currMap}]`, "#90caf9");
+        HeroLogger.emit('INFO', 'STATE_CHANGE', isExpMap ? `Wszedłem na expowisko [${currMap}]` : `Tranzyt przez [${currMap}]`, "#90caf9");
         return;
     }
 
@@ -6196,9 +6364,11 @@ function runExpLogic() {
         if (ranga === "hero" && !botSettings.berserk.hero) continue;
 
         currentlyVisibleIds.add(n.id || key);
-        window.expMonsterCache.set(n.id || key, { id: n.id || key, x: n.x, y: n.y, nick: n.nick || n.name });
+        const memoryEntry = MonsterMemory.upsertVisible(currMap, n, ranga);
+        window.expMonsterCache.set(n.id || key, { id: n.id || key, x: n.x, y: n.y, nick: n.nick || n.name, ranga, mmKey: memoryEntry?.key });
     }
 
+    MonsterMemory.decay(currMap, Engine?.map?.d?.pvp === 2);
     // Usuwanie z pamięci mobów, które powinny być blisko, a ich nie ma (ktoś ubił)
     for (let [id, mob] of window.expMonsterCache.entries()) {
         if (Math.max(Math.abs(hx - mob.x), Math.abs(hy - mob.y)) <= 10 && !currentlyVisibleIds.has(id)) {
@@ -6222,6 +6392,13 @@ function runExpLogic() {
     }
     const bestChoice = pickBestExpTarget(validMobs, distMap);
     let target = bestChoice ? bestChoice.mob : null;
+    if (target && window.expLastTargetNotFoundAt && now - window.expLastTargetNotFoundAt < 2200) {
+        const upd = MonsterMemory.onTargetNotFound(currMap, target.id);
+        if (upd?.cooldownUntil && now < upd.cooldownUntil) {
+            HeroLogger.emit('WARN', 'TARGET_NOT_FOUND', `Cel ${target.nick || target.id} oznaczony cooldown (${upd.failCount})`, "#ffb74d", { dedupeMs: 2200 });
+            target = null;
+        }
+    }
     window.expCurrentTargetGroupKey = bestChoice ? bestChoice.groupKey : null;
     expCurrentTargetId = target ? (target.id || null) : null;
 
@@ -6249,7 +6426,7 @@ function runExpLogic() {
         window.expDecisionInfo = `Cel mob: ${(target.nick || "Potwór")} [${target.x},${target.y}]`;
         if (window.logExp && expLastLoggedTargetId !== String(target.id)) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
-            window.logExp(`🎯 Cel: ${target.nick || "Potwór"}${rankLabel} [${target.x}, ${target.y}]`, "#ffd54f");
+            HeroLogger.emit('INFO', 'TARGET_SELECTED', `Cel: ${target.nick || "Potwór"}${rankLabel} [${target.x}, ${target.y}]`, "#ffd54f");
             expLastLoggedTargetId = String(target.id);
             expLastLoggedTransitMap = null;
         }
@@ -6258,9 +6435,10 @@ function runExpLogic() {
         if (exactDist <= 1) { // Jesteśmy przy celu
             if (!window.expStandStillStart) window.expStandStillStart = now;
             if (now - window.expStandStillStart > 2000) { // Berserk zaciął się
-                if (window.logExp) window.logExp(`⚔️ Wymuszam atak na: ${target.nick}`, "#ffeb3b");
-                if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
-                else window._g(`fight&a=attack&id=${target.id}`);
+                ActionExecutor.run('ATTACK', { targetId: target.id }, () => {
+                    if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
+                    else window._g(`fight&a=attack&id=${target.id}`);
+                });
                 window.expStandStillStart = now;
             }
             if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
@@ -6278,7 +6456,7 @@ function runExpLogic() {
             const isStuck = heroUnchanged && window.expLastMoveAt && (now - window.expLastMoveAt > 1600);
 
             if (targetChanged || !isMoving || isStuck) {
-                window.safeGoTo(moveX, moveY, false);
+                ActionExecutor.run('MOVE', { x: moveX, y: moveY }, () => window.safeGoTo(moveX, moveY, false));
                 window.expLastMoveTx = moveX;
                 window.expLastMoveTy = moveY;
                 window.expLastMoveAt = now;
