@@ -6001,17 +6001,25 @@ window.expMoveLockUntil = 0;
 
 window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 
-    function isMapTemporarilyCleared(mapName) {
+function getMapClearKey(mapName) {
+    if (!mapName) return "";
+    if (typeof normMapName === 'function') return normMapName(mapName);
+    return String(mapName).trim().toLowerCase();
+}
+
+function isMapTemporarilyCleared(mapName) {
     if (!mapName) return false;
     if (!window.mapClearTimes) window.mapClearTimes = {};
 
-    const ts = window.mapClearTimes[mapName];
+    const mapKey = getMapClearKey(mapName);
+    const ts = window.mapClearTimes[mapKey] || window.mapClearTimes[mapName];
     if (!ts) return false;
 
     // 5 minut
     const ttl = 5 * 60 * 1000;
 
     if (Date.now() - ts > ttl) {
+        delete window.mapClearTimes[mapKey];
         delete window.mapClearTimes[mapName];
         return false;
     }
@@ -6022,7 +6030,11 @@ window.expUnreachableMobs = window.expUnreachableMobs || new Set();
 function markMapTemporarilyCleared(mapName) {
     if (!mapName) return;
     if (!window.mapClearTimes) window.mapClearTimes = {};
-    window.mapClearTimes[mapName] = Date.now();
+    const now = Date.now();
+    const mapKey = getMapClearKey(mapName);
+    window.mapClearTimes[mapKey] = now;
+    // Backward compatibility ze starszym formatem klucza.
+    window.mapClearTimes[mapName] = now;
 }
 
 function getAllCandidateExpMaps() {
