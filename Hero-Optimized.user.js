@@ -9315,6 +9315,7 @@ window.openShopAsync = async (namePart) => {
         window.__captchaLock = false;
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
+        window.__wasBerserkBeforeCaptcha = false;
         window.__fullscreenByBotForTrap = false;
         window.__trapSolveStarted = false;
 
@@ -9464,10 +9465,14 @@ window.openShopAsync = async (namePart) => {
                             let btn = document.getElementById('btnStartExp');
                             if (btn) btn.click();
                         }
+                        if (window.__wasBerserkBeforeCaptcha && window.BerserkController?.setBotBerserkState) {
+                            window.BerserkController.setBotBerserkState(true, 'captcha_resume');
+                        }
                         if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling && !window.isRushing) {
                             let btn = document.getElementById('btnStartStop');
                             if (btn) btn.click();
                         }
+                        window.__wasBerserkBeforeCaptcha = false;
                         window.__captchaPhase = "none";
                     }, delay);
                 }
@@ -9479,6 +9484,7 @@ window.openShopAsync = async (namePart) => {
                 HeroLogger.emit('INFO', 'TRAP_DETECTED', 'Wykryto zapadkę/captcha.', "#ffeb3b");
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
+                window.__wasBerserkBeforeCaptcha = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
 
                 if (window.isExping) {
                     let btn = document.getElementById('btnStartExp');
@@ -9491,11 +9497,13 @@ window.openShopAsync = async (namePart) => {
             }
 
             // 3. OBSŁUGA MAŁEGO OKNA
+            if (preWin && !window.__fullscreenByBotForTrap) {
+                await ensureFullscreenOnForTrap();
+            }
             if (preWin && !fullWin && window.__captchaPhase !== "pre") {
                 window.__captchaPhase = "pre";
                 window.__captchaLock = true;
                 if (!window.__trapSolveStarted) {
-                    await ensureFullscreenOnForTrap();
                     window.__trapSolveStarted = true;
                 }
                 await sleep(randomDelay(800, 1500));
