@@ -5433,10 +5433,13 @@ const BerserkController = {
     },
     syncObservedState(reason = 'observe') {
         const observedActive = !!Engine?.settings?.d?.fight_auto_solo;
+        const expectedByBot = !!botSettings?.berserk?.enabled;
+        const observedChanged = (this._lastObservedActive !== undefined) && (this._lastObservedActive !== observedActive);
+        this._lastObservedActive = observedActive;
         if (!window.RouteCombatFSM) return;
-        const prev = !!window.RouteCombatFSM.state.berserkActive;
-        window.RouteCombatFSM.update({ berserkActive: observedActive }, `${reason}_detected`, { skipEvaluate: true });
-        if (prev !== observedActive) {
+        const effectiveActive = !!(observedActive || expectedByBot);
+        window.RouteCombatFSM.update({ berserkActive: effectiveActive }, `${reason}_detected`, { skipEvaluate: true });
+        if (observedChanged && observedActive !== expectedByBot) {
             HeroLogger.emit('INFO', observedActive ? 'BERSERK_DETECTED' : 'BERSERK_DETECTED_OFF', `Wykryto ${observedActive ? 'ręcznie włączonego' : 'ręcznie wyłączonego'} berserka w grze.`, '#ffcc80', { category: 'BERSERK' });
         }
         window.RouteCombatFSM.evaluate(reason);
@@ -6346,6 +6349,17 @@ function getExpAllowedMapSet() {
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
+    const currMapEarly = Engine.map.d.name;
+    const mapsPoolEarly = getCurrentExpHuntMaps();
+    const poolSetEarly = new Set((mapsPoolEarly || []).map(normMapName));
+    const isExpMapEarly = poolSetEarly.has(normMapName(currMapEarly));
+    if (window.RouteCombatFSM) {
+        window.RouteCombatFSM.update({
+            running: !!window.isExping,
+            currentTask: (window.autoSellState?.active ? 'AUTOSELL' : (window.autoPotState?.active ? 'AUTOPOT' : 'EXP')),
+            inRouteMap: !!isExpMapEarly
+        }, isExpMapEarly ? 'exp_tick_in_route' : 'exp_tick_out_of_route');
+    }
 
     if (Engine.hero.d.path && Engine.hero.d.path.length > 0) return;
     if (Engine.battle && Engine.battle.show) return;
