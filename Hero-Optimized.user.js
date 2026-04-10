@@ -1651,6 +1651,7 @@ let attackInterval = null;
 
 
     function attackTarget(npcId) {
+        if (window.RouteCombatFSM && !window.RouteCombatFSM.canAutoAttack()) return;
 
         if (attackInterval) clearInterval(attackInterval);
         let lastManualAttackAt = 0;
@@ -1670,7 +1671,7 @@ let attackInterval = null;
             window._g(`settings&action=update&id=34&v=1`); // Włącz Berserka
             window._g(`settings&action=update&id=34&key=elite&v=1`); // Bij Elity
             window._g(`settings&action=update&id=34&key=elite2&v=1`); // Bij Elity 2 i Herosów
-            window._g(`fight&a=attack&id=${targetId}`); // Wymuś start
+            if (!window.RouteCombatFSM || window.RouteCombatFSM.canAutoAttack()) window._g(`fight&a=attack&id=${targetId}`); // Wymuś start
         }
 
         let lastForceAttackAt = 0;
@@ -1680,9 +1681,11 @@ let attackInterval = null;
             lastForceAttackAt = now;
 
             try {
-                if (typeof window._g === 'function') window._g(`fight&a=attack&id=${targetId}`);
-                if (Engine?.npcs?.interact) Engine.npcs.interact(targetId);
-                if (Engine?.npcs?.clickNpc) Engine.npcs.clickNpc(targetId);
+                if (!window.RouteCombatFSM || window.RouteCombatFSM.canAutoAttack()) {
+                    if (typeof window._g === 'function') window._g(`fight&a=attack&id=${targetId}`);
+                    if (Engine?.npcs?.interact) Engine.npcs.interact(targetId);
+                    if (Engine?.npcs?.clickNpc) Engine.npcs.clickNpc(targetId);
+                }
             } catch(e) {}
         };
 
@@ -1762,9 +1765,11 @@ let attackInterval = null;
 
                 let now = Date.now();
                 if (!manualAttackIssued || now - lastManualAttackAt > 1200) {
-                    if (Engine.npcs && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(targetId);
-                    if (Engine.npcs && typeof Engine.npcs.clickNpc === 'function') Engine.npcs.clickNpc(targetId);
-                    if (typeof window._g === 'function') window._g(`fight&a=attack&id=${targetId}`);
+                    if (!window.RouteCombatFSM || window.RouteCombatFSM.canAutoAttack()) {
+                        if (Engine.npcs && typeof Engine.npcs.interact === 'function') Engine.npcs.interact(targetId);
+                        if (Engine.npcs && typeof Engine.npcs.clickNpc === 'function') Engine.npcs.clickNpc(targetId);
+                        if (typeof window._g === 'function') window._g(`fight&a=attack&id=${targetId}`);
+                    }
 
                     let confirmBtn = document.querySelector(".green.button, .podejdz-btn, .zaatakuj-btn");
                     if (confirmBtn && confirmBtn.innerText.toLowerCase().includes("zaatakuj")) confirmBtn.click();
@@ -3698,13 +3703,15 @@ expEmptyScans = 0;
             expCurrentMapOrderIndex = -1;
             window.expGlobalTargetMap = null;
             if (typeof window.logExp === 'function') window.logExp("🚀 Uruchomiono tryb automatyczny!", "#4caf50");
+            HeroLogger.emit('INFO', 'ROUTE_START', 'START ekspienia/trasy', "#4caf50");
 
             if (botSettings.berserk) {
                 const prevUserEnabled = !!botSettings.berserk.userEnabled;
                 const chkState = chk ? !!chk.checked : prevUserEnabled;
                 botSettings.berserk.userEnabled = chkState;
                 saveSettings();
-                if (window.BerserkController) window.BerserkController.onStart();
+                if (window.RouteCombatFSM) window.RouteCombatFSM.syncFromSettings();
+                if (window.BerserkController) window.BerserkController.onStart('route_start');
             }
         } else {
             window.expRunId = null;
@@ -3717,8 +3724,9 @@ expEmptyScans = 0;
             if (typeof stopPatrol === 'function') stopPatrol(true); // Wciska fizyczny hamulec na mapie
 
             if (typeof window.logExp === 'function') window.logExp("🛑 Zatrzymano tryb automatyczny.", "#f44336");
+            HeroLogger.emit('INFO', 'ROUTE_STOP', 'STOP ekspienia/trasy', "#f44336");
 
-            if (window.BerserkController) window.BerserkController.onStop();
+            if (window.BerserkController) window.BerserkController.onStop('route_stop');
         }
     });
 }
@@ -3743,6 +3751,7 @@ if (!botSettings.berserk) {
         }
         if (botSettings.berserk.userEnabled === undefined) botSettings.berserk.userEnabled = botSettings.berserk.enabled;
         if (botSettings.berserk.disableBerserkOnStop === undefined) botSettings.berserk.disableBerserkOnStop = false;
+        if (window.RouteCombatFSM) window.RouteCombatFSM.syncFromSettings();
 
         if (!botSettings.autoheal) { botSettings.autoheal = { enabled: false, threshold: 80, ignoreItems: "Zielona pietruszka\nKandyzowane wisienki w cukrze", unidItems: "Czarna perła życia" }; saveSettings(); }
         if (!botSettings.autopot) { botSettings.autopot = { enabled: false, stacks: 14 }; saveSettings(); }
@@ -3972,7 +3981,7 @@ bindChange('useTeleportsEq', (e) => { botSettings.exp.useTeleportsEq = e.target.
         bindChange('berserkEnabled', (e) => {
             botSettings.berserk.userEnabled = e.target.checked;
             saveSettings();
-            if (window.BerserkController) window.BerserkController.syncDesiredState();
+            if (window.RouteCombatFSM) window.RouteCombatFSM.update({ berserkCheckbox: !!e.target.checked }, 'checkbox_change');
         });
         bindChange('berserkCommon', (e) => { botSettings.berserk.common = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
         bindChange('berserkE1', (e) => { botSettings.berserk.e1 = e.target.checked; saveSettings(); if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk(); });
@@ -5309,6 +5318,50 @@ const HeroLogger = {
     }
 };
 
+const RouteCombatFSM = {
+    state: {
+        routeStarted: false,
+        onExpMap: false,
+        berserkCheckbox: false,
+        outOfRoute: false,
+        berserkActive: false
+    },
+    syncFromSettings() {
+        this.state.berserkCheckbox = !!(botSettings?.berserk?.userEnabled);
+        this.state.berserkActive = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
+    },
+    update(partial = {}, reason = 'sync') {
+        this.state = { ...this.state, ...partial };
+        this.evaluate(reason);
+    },
+    shouldEnableBerserk() {
+        return !!(this.state.routeStarted && this.state.onExpMap && this.state.berserkCheckbox && !this.state.outOfRoute);
+    },
+    evaluate(reason = 'sync') {
+        const shouldEnable = this.shouldEnableBerserk();
+        const currentlyActive = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
+        this.state.berserkActive = currentlyActive;
+        if (shouldEnable && !currentlyActive) {
+            if (window.BerserkController?.setBotBerserkState) window.BerserkController.setBotBerserkState(true, reason);
+            return;
+        }
+        if (!shouldEnable && currentlyActive) {
+            if (window.BerserkController?.setBotBerserkState) window.BerserkController.setBotBerserkState(false, reason);
+            return;
+        }
+        HeroLogger.emit('DEBUG', 'BERSERK_EVAL', `Noop reason=${reason} shouldEnable=${shouldEnable} active=${currentlyActive}`);
+    },
+    canAutoAttack() {
+        const berserkOn = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
+        if (!berserkOn) {
+            HeroLogger.emit('INFO', 'ATTACK_SUPPRESSED', 'Zablokowano auto-atak, bo berserk jest OFF.', "#ffb74d");
+            return false;
+        }
+        return true;
+    }
+};
+window.RouteCombatFSM = RouteCombatFSM;
+
 const ActionExecutor = {
     recent: new Map(),
     throttles: { MOVE: 380, ATTACK: 850, PASS_GATE: 1200, TOGGLE_BERSERK: 1800 },
@@ -5320,6 +5373,7 @@ const ActionExecutor = {
         return `${type}:${JSON.stringify(payload || {})}`;
     },
     run(type, payload, fn, opt = {}) {
+        if (type === 'ATTACK' && window.RouteCombatFSM && !window.RouteCombatFSM.canAutoAttack()) return false;
         const now = Date.now();
         const key = opt.idempotencyKey || this.makeKey(type, payload);
         const last = this.recent.get(key) || 0;
@@ -5349,50 +5403,23 @@ const ActionExecutor = {
 };
 
 const BerserkController = {
-    desiredBerserk: false,
-    observedBerserkActive: false,
-    ownedByBot: false,
-    pendingConfirmUntil: 0,
-    retries: 0,
-    maxRetries: 3,
-    syncDesiredState() {
-        this.desiredBerserk = !!(botSettings?.berserk?.userEnabled);
-    },
-    observe() {
-        this.observedBerserkActive = !!(Engine?.settings?.d?.fight_auto_solo || botSettings?.berserk?.enabled);
-        return this.observedBerserkActive;
-    },
-    tryEnable() {
-        this.syncDesiredState();
-        if (!this.desiredBerserk || this.observe()) return;
-        if (Date.now() < this.pendingConfirmUntil || this.retries >= this.maxRetries) return;
-        const sent = ActionExecutor.run('TOGGLE_BERSERK', { state: true }, () => {
-            botSettings.berserk.enabled = true;
+    setBotBerserkState(nextState, reason = 'fsm') {
+        const active = !!(Engine?.settings?.d?.fight_auto_solo || botSettings?.berserk?.enabled);
+        if (!!nextState === active) return false;
+        const action = nextState ? 'BERSERK_ON' : 'BERSERK_OFF';
+        return ActionExecutor.run('TOGGLE_BERSERK', { state: !!nextState }, () => {
+            botSettings.berserk.enabled = !!nextState;
             saveSettings();
             if (window.updateServerBerserk) window.updateServerBerserk();
-            this.ownedByBot = true;
-            this.retries++;
-            this.pendingConfirmUntil = Date.now() + (900 + Math.floor(Math.random() * 250));
-            HeroLogger.emit('INFO', 'BERSERK_ON', `Próba aktywacji berserka (${this.retries}/${this.maxRetries})`, "#ff9800");
+            HeroLogger.emit('INFO', action, `${nextState ? 'Włączono' : 'Wyłączono'} berserka (reason=${reason})`, "#ff9800");
         });
-        if (!sent) return;
     },
-    onStart() {
-        this.syncDesiredState();
-        this.retries = 0;
-        this.pendingConfirmUntil = 0;
-        if (this.desiredBerserk && !this.observe()) this.tryEnable();
+    onStart(reason = 'route_start') {
+        if (window.RouteCombatFSM) window.RouteCombatFSM.update({ routeStarted: true }, reason);
     },
-    onStop() {
-        this.syncDesiredState();
-        const shouldDisable = !!botSettings?.berserk?.disableBerserkOnStop;
-        if (!(shouldDisable && this.ownedByBot)) return;
-        ActionExecutor.run('TOGGLE_BERSERK', { state: false }, () => {
-            botSettings.berserk.enabled = false;
-            if (window.updateServerBerserk) window.updateServerBerserk();
-            HeroLogger.emit('INFO', 'BERSERK_OFF', `Wyłączono berserka na STOP (ownedByBot=true)`, "#ff9800");
-        });
-        this.ownedByBot = false;
+    onStop(reason = 'route_stop') {
+        if (window.RouteCombatFSM) window.RouteCombatFSM.update({ routeStarted: false, outOfRoute: true }, reason);
+        this.setBotBerserkState(false, reason);
     }
 };
 window.BerserkController = BerserkController;
@@ -5465,11 +5492,11 @@ window.expDryRunSimulation = function(type = 'gate-stuck-x5') {
             push(`fail=${st?.failCount || 'deleted'}`);
         }
     } else if (type === 'berserk-start-stop') {
-        BerserkController.desiredBerserk = true;
-        BerserkController.observedBerserkActive = false;
-        BerserkController.onStart();
-        BerserkController.onStop();
-        push(`ownedByBot=${BerserkController.ownedByBot}`);
+        if (window.RouteCombatFSM) {
+            window.RouteCombatFSM.update({ routeStarted: true, onExpMap: true, berserkCheckbox: true, outOfRoute: false }, 'sim_start');
+            window.RouteCombatFSM.update({ onExpMap: false }, 'sim_map_change');
+            push(`berserkEnabled=${!!botSettings?.berserk?.enabled}`);
+        }
     }
     return out;
 };
@@ -5892,12 +5919,8 @@ function normMapName(s) {
 }
 
 function setExpBerserkState(shouldEnable) {
-    if (!botSettings?.berserk || !window.BerserkController) return;
-    window.BerserkController.syncDesiredState();
-    window.BerserkController.observe();
-    if (shouldEnable && window.BerserkController.desiredBerserk && !window.BerserkController.observedBerserkActive) {
-        window.BerserkController.tryEnable();
-    }
+    if (!botSettings?.berserk || !window.RouteCombatFSM) return;
+    window.RouteCombatFSM.update({ onExpMap: !!shouldEnable }, shouldEnable ? 'exp_map_enter' : 'exp_map_leave');
 }
 
     function getClosestExpMapPath(currMap) {
@@ -6336,7 +6359,13 @@ function runExpLogic() {
         expLastLoggedTargetId = null;
         expLastLoggedTransitMap = null;
         if (window.expMonsterCache) window.expMonsterCache.clear();
-        HeroLogger.emit('INFO', 'STATE_CHANGE', isExpMap ? `Wszedłem na expowisko [${currMap}]` : `Tranzyt przez [${currMap}]`, "#90caf9");
+        HeroLogger.emit('INFO', 'MAP_CHANGE', isExpMap ? `Wszedłem na expowisko [${currMap}]` : `Tranzyt przez [${currMap}]`, "#90caf9");
+        if (window.RouteCombatFSM) {
+            window.RouteCombatFSM.update({
+                onExpMap: !!isExpMap,
+                outOfRoute: !isExpMap
+            }, isExpMap ? 'map_change_exp' : 'map_change_out_of_route');
+        }
         return;
     }
 
@@ -6419,6 +6448,7 @@ function runExpLogic() {
     }
     const shouldFightHere = isExpMap || temporaryExpMode;
     setExpBerserkState(isExpMap && !window.isRushing);
+    if (window.RouteCombatFSM) window.RouteCombatFSM.update({ outOfRoute: !isExpMap }, isExpMap ? 'in_route' : 'out_of_route');
 
     // --- LOGIKA RUCHU I WALKI ---
     maybeStepOutFromGatewayAfterEntry();
@@ -9216,6 +9246,26 @@ window.openShopAsync = async (namePart) => {
         window.__captchaLock = false;
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
+        window.__fullscreenByBotForTrap = false;
+        window.__trapSolveStarted = false;
+
+        function emitF11() {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F11', code: 'F11', keyCode: 122, which: 122, bubbles: true }));
+            document.dispatchEvent(new KeyboardEvent('keyup', { key: 'F11', code: 'F11', keyCode: 122, which: 122, bubbles: true }));
+        }
+        function ensureFullscreenOnForTrap() {
+            const isBrowserFullscreen = !!document.fullscreenElement;
+            if (isBrowserFullscreen || window.__fullscreenByBotForTrap) return;
+            emitF11();
+            window.__fullscreenByBotForTrap = true;
+            HeroLogger.emit('INFO', 'FULLSCREEN_ON', 'Włączono pełny ekran przed pierwszą akcją zapadki.', "#4fc3f7");
+        }
+        function ensureFullscreenOffAfterTrap() {
+            if (!window.__fullscreenByBotForTrap) return;
+            emitF11();
+            window.__fullscreenByBotForTrap = false;
+            HeroLogger.emit('INFO', 'FULLSCREEN_OFF', 'Wyłączono pełny ekran po zapadce i wznowieniu ruchu.', "#4fc3f7");
+        }
 
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -9312,6 +9362,8 @@ window.openShopAsync = async (namePart) => {
             if (!fullWin && !preWin) {
                 if (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre") {
                     window.__captchaPhase = "resuming";
+                    window.__trapSolveStarted = false;
+                    ensureFullscreenOffAfterTrap();
                     let delay = randomDelay(1000, 2000);
                     if (window.logExp) window.logExp(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
@@ -9333,6 +9385,7 @@ window.openShopAsync = async (namePart) => {
 
             // 2. ZAPISANIE STANU BOTA
             if (window.__captchaPhase === "none") {
+                HeroLogger.emit('INFO', 'TRAP_DETECTED', 'Wykryto zapadkę/captcha.', "#ffeb3b");
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
 
@@ -9350,6 +9403,10 @@ window.openShopAsync = async (namePart) => {
             if (preWin && !fullWin && window.__captchaPhase !== "pre") {
                 window.__captchaPhase = "pre";
                 window.__captchaLock = true;
+                if (!window.__trapSolveStarted) {
+                    ensureFullscreenOnForTrap();
+                    window.__trapSolveStarted = true;
+                }
                 await sleep(randomDelay(800, 1500));
 
                 let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
@@ -9367,6 +9424,10 @@ window.openShopAsync = async (namePart) => {
             if (fullWin && window.__captchaPhase !== "solving" && window.__captchaPhase !== "manual_waiting") {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
+                if (!window.__trapSolveStarted) {
+                    ensureFullscreenOnForTrap();
+                    window.__trapSolveStarted = true;
+                }
 
                 if (botSettings.exp?.captchaAlert || botSettings.discord?.alerts?.captcha) {
                     if (!window.__lastCaptchaNotif || Date.now() - window.__lastCaptchaNotif > 15000) {
