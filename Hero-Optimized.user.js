@@ -1247,9 +1247,78 @@ function getBestReachableGatewayToMap(targetMap) {
     return valid[0];
 }
 
+function pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap) {
+    if (!baseDoor || !distMap) return null;
+    const candidates = Array.isArray(baseDoor.allCoords) && baseDoor.allCoords.length
+        ? baseDoor.allCoords
+        : [[baseDoor.x, baseDoor.y]];
+
+    let best = null;
+    for (const coord of candidates) {
+        if (!Array.isArray(coord) || coord.length < 2) continue;
+        const x = parseInt(coord[0], 10);
+        const y = parseInt(coord[1], 10);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+        let bestLocal = Infinity;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const k = `${x + dx}_${y + dy}`;
+                if (distMap.has(k)) bestLocal = Math.min(bestLocal, distMap.get(k));
+            }
+        }
+
+        if (!Number.isFinite(bestLocal)) continue;
+        if (!best || bestLocal < best.pathDistance) {
+            best = { x, y, pathDistance: bestLocal };
+        }
+    }
+
+    return best;
+}
+
+window.__bannedEdges = window.__bannedEdges || {};
+
+function cleanupExpiredEdgeBans(now = Date.now()) {
+    window.__bannedEdges = window.__bannedEdges || {};
+    for (let from in window.__bannedEdges) {
+        if (!window.__bannedEdges[from] || typeof window.__bannedEdges[from] !== 'object') {
+            delete window.__bannedEdges[from];
+            continue;
+        }
+        for (let to in window.__bannedEdges[from]) {
+            const until = window.__bannedEdges[from][to];
+            if (!until || now >= until) delete window.__bannedEdges[from][to];
+        }
+        if (Object.keys(window.__bannedEdges[from]).length === 0) delete window.__bannedEdges[from];
+    }
+}
+
+function banEdge(from, to, durationMs = 30000) {
+    if (!from || !to) return;
+    window.__bannedEdges = window.__bannedEdges || {};
+    if (!window.__bannedEdges[from]) window.__bannedEdges[from] = {};
+    const expiresAt = Date.now() + Math.max(1000, durationMs || 0);
+    window.__bannedEdges[from][to] = expiresAt;
+    if (window.logHero) window.logHero(`⛔ Blokuję przejście: [${from}] → [${to}] na ${Math.round((expiresAt - Date.now()) / 1000)}s`, '#ff9800');
+}
+
+function isEdgeBanned(from, to, now = Date.now()) {
+    if (!from || !to) return false;
+    window.__bannedEdges = window.__bannedEdges || {};
+    const until = window.__bannedEdges[from] ? window.__bannedEdges[from][to] : 0;
+    if (!until) return false;
+    if (now >= until) {
+        delete window.__bannedEdges[from][to];
+        if (Object.keys(window.__bannedEdges[from]).length === 0) delete window.__bannedEdges[from];
+        return false;
+    }
+    return true;
+}
+
 function markGatewayAsBlocked(currentSysMap, nextMap, duration) {
-    window.__bannedMaps = window.__bannedMaps || {};
-    window.__bannedMaps[nextMap] = Date.now() + duration;
+    cleanupExpiredEdgeBans();
+    banEdge(currentSysMap, nextMap, duration || 30000);
 }
 
 function pickNextReachableMapFromRoute(currentSysMap, allowedMaps) {
@@ -2370,24 +2439,40 @@ window.executeRushStep = function() {
         let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
         let currentDistance = path ? path.length : 999;
 
-        // --- ZWOJE TELEPORTACJI (Tylko EXP i tylko jeśli ptaszek zaznaczony) ---
-        let tps = (window.isExping && botSettings.exp.useTeleportsEq) ? window.getAvailableTeleports() : [];
+        if (!path) {
+            if (window.logExp) window.logExp(`🧩 Brak trasy [${currentSysMap}] → [${rushTarget}], odświeżam bazę przejść...`, '#ffb74d');
+            if (typeof refreshGatewayBaseFromStorage === 'function') refreshGatewayBaseFromStorage();
+            if (typeof autoLearnGateways === 'function') autoLearnGateways();
+            if (typeof requestGatewayRefresh === 'function') requestGatewayRefresh('rush-no-path', true);
+            path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
+            currentDistance = path ? path.length : 999;
+        }
+
+        // --- ZWOJE TELEPORTACJI (Tylko EXP + histereza) ---
+        const canTryEqTeleport = !!(path && window.isExping && botSettings.exp.useTeleportsEq);
+        let tps = canTryEqTeleport ? window.getAvailableTeleports() : [];
         let bestTp = null;
-        let bestDist = currentDistance - 1;
+        const minSavedMaps = 3;
+        let bestDist = currentDistance;
 
         for (let tp of tps) {
-            if (tp.map === currentSysMap) continue; 
+            if (tp.map === currentSysMap) continue;
             let tpPath = typeof getShortestPath === 'function' ? getShortestPath(tp.map, rushTarget) : null;
             if (tpPath && tpPath.length < bestDist) {
                 bestDist = tpPath.length;
                 bestTp = tp;
-            } else if (tp.map.toLowerCase() === rushTarget.toLowerCase()) {
+            } else if (tp.map.toLowerCase() === rushTarget.toLowerCase() && 0 < bestDist) {
                 bestDist = 0;
                 bestTp = tp;
             }
         }
 
-        if (bestTp) {
+        const lastEqTpAt = window.__lastEqTeleportAt || 0;
+        const eqTpCooldown = 30000;
+        const eqTeleportReady = Date.now() - lastEqTpAt >= eqTpCooldown;
+        const savesEnough = bestTp && (bestDist <= currentDistance - minSavedMaps);
+
+        if (bestTp && eqTeleportReady && savesEnough) {
             if (window._lastRushNextMap !== bestTp.map) {
                 let msg = `📜 Używam zwoju: ${bestTp.map}! (Trasa skraca się z ${currentDistance} do ${bestDist} map)`;
                 if (window.logExp) window.logExp(msg, "#e040fb");
@@ -2395,6 +2480,8 @@ window.executeRushStep = function() {
                 window._lastRushNextMap = bestTp.map;
             }
             clearTimeout(rushInterval);
+            window.__lastEqTeleportAt = Date.now();
+            window.expMapHistory = [];
             window.useItemById(bestTp.id);
             rushInterval = setTimeout(window.executeRushStep, 2500);
             return;
@@ -2449,22 +2536,15 @@ window.executeRushStep = function() {
                 targetY = liveDoor.y;
                 doorInfo = "(Zasięg radaru)";
             } else if (baseDoor) {
-                // TWARDE SPRAWDZENIE PAMIĘCI BAZY: Czy drzwi faktycznie są osiągalne ze strony, na której stoimy?
                 let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
-                let isReachable = false;
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        if (distMap.has(`${baseDoor.x + dx}_${baseDoor.y + dy}`)) {
-                            isReachable = true; break;
-                        }
-                    }
-                    if (isReachable) break;
-                }
+                let bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
+                    ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+                    : null;
 
-                if (isReachable) {
-                    targetX = baseDoor.x;
-                    targetY = baseDoor.y;
-                    doorInfo = "(Z pamięci bazy)";
+                if (bestBaseCoord) {
+                    targetX = bestBaseCoord.x;
+                    targetY = bestBaseCoord.y;
+                    doorInfo = `(Z pamięci bazy, d=${bestBaseCoord.pathDistance})`;
                 }
             }
 
@@ -2536,20 +2616,13 @@ window.executeRushStep = function() {
             exactX = liveDoor.x;
             exactY = liveDoor.y;
         } else if (baseDoor) {
-            // Twarde sprawdzenie przed dobiciem
             let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
-            let isReachable = false;
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dy = -1; dy <= 1; dy++) {
-                    if (distMap.has(`${baseDoor.x + dx}_${baseDoor.y + dy}`)) {
-                        isReachable = true; break;
-                    }
-                }
-                if (isReachable) break;
-            }
-            if (isReachable) {
-                exactX = baseDoor.x;
-                exactY = baseDoor.y;
+            let bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
+                ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+                : null;
+            if (bestBaseCoord) {
+                exactX = bestBaseCoord.x;
+                exactY = bestBaseCoord.y;
             }
         }
 
@@ -2679,9 +2752,14 @@ window.executeRushStep = function() {
 
             if (globalGateways[u]) {
                 for (let v in globalGateways[u]) {
-                    // --- NOWOŚĆ: SPRAWDZENIE CZARNEJ LISTY ---
-                    if (window.__bannedMaps && window.__bannedMaps[v] && Date.now() < window.__bannedMaps[v]) {
-                        continue; // Brama jest uszkodzona/zamknięta - udajemy, że jej nie ma!
+                    cleanupExpiredEdgeBans();
+                    const nowBan = Date.now();
+                    if (typeof isEdgeBanned === 'function' && isEdgeBanned(u, v, nowBan)) {
+                        continue;
+                    }
+                    // Map-level bany (np. PvP flee), ale nie blokuj finalnego celu ścieżki.
+                    if (v !== end && window.__bannedMaps && window.__bannedMaps[v] && nowBan < window.__bannedMaps[v]) {
+                        continue;
                     }
 
                     let penalty = 1;
@@ -5769,23 +5847,15 @@ function pickNextUnclearedExpMap(currMap, mapsPool) {
         // Fallback: wspieramy ręcznie zapisane przejścia z bazy nawet jeśli radar ich nie wykrył
         if (!door && typeof globalGateways !== 'undefined' && globalGateways[currMap] && globalGateways[currMap][candidate]) {
             const baseDoor = globalGateways[currMap][candidate];
-            let reachable = false;
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dy = -1; dy <= 1; dy++) {
-                    if (distMap.has(`${baseDoor.x + dx}_${baseDoor.y + dy}`)) {
-                        reachable = true;
-                        break;
-                    }
-                }
-                if (reachable) break;
-            }
-            if (reachable) {
-                const k = `${baseDoor.x}_${baseDoor.y}`;
+            const bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
+                ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+                : null;
+            if (bestBaseCoord) {
                 door = {
-                    x: baseDoor.x,
-                    y: baseDoor.y,
+                    x: bestBaseCoord.x,
+                    y: bestBaseCoord.y,
                     targetMap: candidate,
-                    pathDistance: distMap.get(k) ?? 999
+                    pathDistance: bestBaseCoord.pathDistance
                 };
             }
         }
@@ -6252,14 +6322,36 @@ function runExpLogic() {
             expEmptyScans = 0;
             return;
         } else if (!bestTargetMap) {
-            // Backtracking (Cofanie się), np. gdy utknęliśmy na ślepej mapie.
-            let back = window.expMapHistory?.pop();
+            // Backtracking tylko do map osiągalnych i niezbannowanych map-level.
+            let back = null;
+            while (window.expMapHistory && window.expMapHistory.length) {
+                const candidate = window.expMapHistory.pop();
+                if (!candidate) continue;
+                if (window.__bannedMaps && window.__bannedMaps[candidate] && Date.now() < window.__bannedMaps[candidate]) continue;
+                const backPath = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate) : null;
+                if (backPath && backPath.length > 0) {
+                    back = candidate;
+                    break;
+                }
+            }
+
+            if (!back) {
+                const nearestExpPath = getClosestExpMapPath(currMap);
+                if (nearestExpPath?.targetMap) back = nearestExpPath.targetMap;
+            }
+            if (!back) {
+                back = getNearestKnownSafeExpMap(currMap, mapsPool);
+            }
+
             if (back) {
                 if (window.logExp && window._lastTransitMapLog !== back) {
-                    window.logExp(`↩️ Brak dalszego przejścia. Wracam na mapę: [${back}]`, "#ffb74d");
+                    window.logExp(`↩️ Brak dalszego przejścia. Wracam na osiągalną mapę: [${back}]`, "#ffb74d");
                     window._lastTransitMapLog = back;
                 }
                 window.rushToMap(back);
+            } else {
+                if (window.logExp) window.logExp("🛑 Brak osiągalnej mapy do backtracku. Zatrzymuję EXP.", "#e53935");
+                window.isExping = false;
             }
         }
     }
@@ -10135,34 +10227,49 @@ function getCurrentMapGatewaysForRadar(distMap) {
         found.push({ x, y, targetMap: cleanTarget, reachable: isReachable, stand: bestStand, pathDistance: minDist });
     };
 
-    let gwsList = [];
-    if (typeof Engine.map.getGateways === 'function') {
+    let scannedGateways = [];
+    if (typeof requestGatewayRefresh === 'function') {
+        scannedGateways = requestGatewayRefresh('gateway-radar', false) || [];
+    }
+    if (!scannedGateways.length && typeof HeroScannerModule !== 'undefined' && typeof HeroScannerModule.scanCurrentMap === 'function') {
         try {
-            gwsList = Engine.map.getGateways().getList().map(g => g.d || g);
+            scannedGateways = HeroScannerModule.scanCurrentMap(currentMap, typeof ZAKONNICY !== 'undefined' ? ZAKONNICY : null) || [];
         } catch (e) {
-            gwsList = [];
+            scannedGateways = [];
         }
     }
 
-    if (!gwsList.length) {
-        let gws = (Engine.map.gateways) ? Engine.map.gateways : ((Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
-        try { if (typeof gws.values === 'function') gwsList = Array.from(gws.values()); else gwsList = Object.values(gws); }
-        catch(e) { for (let key in gws) { if (gws.hasOwnProperty(key)) gwsList.push(gws[key]); } }
-        gwsList = gwsList.map(g => g.d || g);
-    }
-
-    for (const data of gwsList) {
-        if (!data) continue;
-        const px = data.x !== undefined ? data.x : data.rx;
-        const py = data.y !== undefined ? data.y : data.ry;
-        const targetMap = data.name || data.targetName || data.title || data.tooltip;
-        pushGateway(px, py, targetMap);
-    }
-
-    const scannedGateways = requestGatewayRefresh('gateway-radar', false) || [];
     for (const gw of scannedGateways) {
         if (!gw) continue;
-        pushGateway(gw.x, gw.y, gw.targetMap);
+        const gx = gw.x !== undefined ? gw.x : gw.rx;
+        const gy = gw.y !== undefined ? gw.y : gw.ry;
+        pushGateway(gx, gy, gw.targetMap || gw.name || gw.title || gw.tooltip);
+    }
+
+    if (!found.length) {
+        let gwsList = [];
+        if (typeof Engine.map.getGateways === 'function') {
+            try {
+                gwsList = Engine.map.getGateways().getList().map(g => g.d || g);
+            } catch (e) {
+                gwsList = [];
+            }
+        }
+
+        if (!gwsList.length) {
+            let gws = (Engine.map.gateways) ? Engine.map.gateways : ((Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
+            try { if (typeof gws.values === 'function') gwsList = Array.from(gws.values()); else gwsList = Object.values(gws); }
+            catch(e) { for (let key in gws) { if (gws.hasOwnProperty(key)) gwsList.push(gws[key]); } }
+            gwsList = gwsList.map(g => g.d || g);
+        }
+
+        for (const data of gwsList) {
+            if (!data) continue;
+            const px = data.x !== undefined ? data.x : data.rx;
+            const py = data.y !== undefined ? data.y : data.ry;
+            const targetMap = data.name || data.targetName || data.title || data.tooltip;
+            pushGateway(px, py, targetMap);
+        }
     }
 
     const dedup = new Map();
