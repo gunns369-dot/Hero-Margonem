@@ -1252,14 +1252,18 @@ function markGatewayAsBlocked(currentSysMap, nextMap, duration) {
     window.__bannedMaps[nextMap] = Date.now() + duration;
 }
 
-function pickNextReachableMapFromRoute(currentSysMap) {
+function pickNextReachableMapFromRoute(currentSysMap, allowedMaps) {
     let hero = document.getElementById('selHero') ? document.getElementById('selHero').value : null;
-    let mapList = (typeof botSettings !== 'undefined' && botSettings.exp) ? botSettings.exp.mapOrder : [];
+    let mapList = Array.isArray(allowedMaps) && allowedMaps.length ? [...allowedMaps] : [];
+    if (!mapList.length) {
+        mapList = (typeof botSettings !== 'undefined' && botSettings.exp) ? botSettings.exp.mapOrder : [];
+    }
     if ((!mapList || mapList.length === 0) && typeof heroMapOrder !== 'undefined') { if (hero && heroMapOrder[hero]) mapList = heroMapOrder[hero]; }
     if (!mapList || mapList.length === 0) return null;
 
+    const allowedLower = new Set(mapList.map(m => String(m).toLowerCase()));
     let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
-    let reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable);
+    let reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable && allowedLower.has(String(g.targetMap || '').toLowerCase()));
     let currIdx = mapList.indexOf(currentSysMap);
     if(currIdx === -1) return null;
 
@@ -1267,7 +1271,7 @@ function pickNextReachableMapFromRoute(currentSysMap) {
         let checkIdx = (currIdx + i) % mapList.length;
         let checkMap = mapList[checkIdx];
         if (window.__bannedMaps && window.__bannedMaps[checkMap] && Date.now() < window.__bannedMaps[checkMap]) continue;
-        let door = reachableDoors.find(g => g.targetMap.toLowerCase() === checkMap.toLowerCase());
+        let door = reachableDoors.find(g => String(g.targetMap || '').toLowerCase() === String(checkMap).toLowerCase());
         if (door) return { nextMap: checkMap, door: door };
     }
     return null;
@@ -2470,7 +2474,7 @@ window.executeRushStep = function() {
                 let fallback = null;
                 // Tylko jak biega rutynowo w Expie, szukamy następnej mapy z listy
                 if (window.isExping && botSettings.exp && botSettings.exp.mapOrder) {
-                    fallback = typeof pickNextReachableMapFromRoute === 'function' ? pickNextReachableMapFromRoute(currentSysMap) : null;
+                    fallback = typeof pickNextReachableMapFromRoute === 'function' ? pickNextReachableMapFromRoute(currentSysMap, window.isExping ? getCurrentExpHuntMaps() : null) : null;
                 }
 
                 if (fallback && fallback.nextMap && fallback.door) {
@@ -5739,7 +5743,8 @@ function pickNextUnclearedExpMap(currMap, mapsPool) {
     if (!Array.isArray(mapsPool) || mapsPool.length === 0) return null;
 
     const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
-    const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable);
+    const allowedLower = new Set(mapsPool.map(m => String(m).toLowerCase()));
+    const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable && allowedLower.has(String(g.targetMap || "").toLowerCase()));
     const now = Date.now();
     const orderedCandidates = [];
     const currIdx = mapsPool.indexOf(currMap);
@@ -5825,22 +5830,28 @@ function getPathToAdjacentTile(targetX, targetY, distMap) {
     if (!(window.margoWalkableMask instanceof Set)) return null;
     if (!distMap) distMap = buildDistanceMapFromHero();
 
+    const heroX = Engine?.hero?.d?.x;
+    const heroY = Engine?.hero?.d?.y;
     const candidates = [];
+
     for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
             const nx = targetX + dx;
             const ny = targetY + dy;
             const key = `${nx}_${ny}`;
-            if (distMap.has(key)) {
-                candidates.push({x:nx, y:ny, dist: distMap.get(key)});
-            }
+            if (!distMap.has(key)) continue;
+            const dist = distMap.get(key);
+            const cheb = (heroX == null || heroY == null) ? dist : Math.max(Math.abs(heroX - nx), Math.abs(heroY - ny));
+            candidates.push({ x: nx, y: ny, dist, cheb });
         }
     }
+
     if (!candidates.length) return null;
-    candidates.sort((a,b)=>a.dist-b.dist);
+    candidates.sort((a, b) => (a.dist - b.dist) || (a.cheb - b.cheb));
+
     const dest = candidates[0];
 
-    // Rekonstrukcja po mapie odległości (najkrótsza ścieżka)
     const path = [];
     let cx = dest.x, cy = dest.y;
     let safety = 0;
@@ -5947,6 +5958,69 @@ function hasNearbyReachableMobsForExp(maxDistance = 12) {
 
     return false;
 }
+function getGatewayRefreshState() {
+    if (!window.expGatewayRefreshState) {
+        window.expGatewayRefreshState = {
+            mapName: '',
+            lastScanAt: 0,
+            pendingRescan: false,
+            retryUntil: 0,
+            cache: []
+        };
+    }
+    return window.expGatewayRefreshState;
+}
+
+function requestGatewayRefresh(reason = 'loop', forceNow = false) {
+    const state = getGatewayRefreshState();
+    const currentMap = Engine?.map?.d?.name || '';
+    if (!currentMap || typeof HeroScannerModule === 'undefined' || typeof HeroScannerModule.scanCurrentMap !== 'function') return state.cache || [];
+
+    const now = Date.now();
+    if (state.mapName !== currentMap) {
+        state.mapName = currentMap;
+        state.lastScanAt = 0;
+        state.pendingRescan = false;
+        state.retryUntil = now + 2500;
+        state.cache = [];
+    }
+
+    const minGap = forceNow ? 0 : 500;
+    if (now - state.lastScanAt < minGap) return state.cache || [];
+
+    state.lastScanAt = now;
+    let scanned = [];
+    try {
+        scanned = HeroScannerModule.scanCurrentMap(currentMap, typeof ZAKONNICY !== 'undefined' ? ZAKONNICY : null) || [];
+    } catch (e) {
+        scanned = [];
+    }
+
+    if (scanned.length) {
+        state.cache = scanned;
+        state.pendingRescan = false;
+        state.retryUntil = 0;
+    } else {
+        if (state.retryUntil === 0) state.retryUntil = now + 2500;
+        if (now < state.retryUntil) {
+            state.pendingRescan = true;
+            setTimeout(() => {
+                if (!window.isExping && !window.isRushing) return;
+                requestGatewayRefresh('retry', true);
+            }, 220);
+        } else {
+            state.pendingRescan = false;
+        }
+    }
+
+    return state.cache || [];
+}
+
+function getExpAllowedMapSet() {
+    const maps = getCurrentExpHuntMaps();
+    return new Set((maps || []).map(m => String(m).toLowerCase()));
+}
+
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
@@ -5960,6 +6034,8 @@ function runExpLogic() {
     const currMap = Engine.map.d.name;
     let mapsPool = getCurrentExpHuntMaps();
     const isExpMap = mapsPool.includes(currMap);
+    window.expDecisionInfo = `Mapa: ${currMap} | tryb: ${isExpMap ? "EXP" : "TRANZYT"}`;
+    requestGatewayRefresh("run-exp");
     window.expMapPvpCache = window.expMapPvpCache || {};
     window.expMapPvpCache[currMap] = Engine.map?.d?.pvp;
 
@@ -6048,6 +6124,7 @@ function runExpLogic() {
     // --- LOGIKA RUCHU I WALKI ---
     maybeStepOutFromGatewayAfterEntry();
     if (isExpMap && target) {
+        window.expDecisionInfo = `Cel mob: ${(target.nick || "Potwór")} [${target.x},${target.y}]`;
         if (window.logExp && expLastLoggedTargetId !== String(target.id)) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
             window.logExp(`🎯 Cel: ${target.nick || "Potwór"}${rankLabel} [${target.x}, ${target.y}]`, "#ffd54f");
@@ -6108,6 +6185,7 @@ function runExpLogic() {
         }
 
         const bestTransit = pickNextUnclearedExpMap(currMap, mapsPool);
+        window.expDecisionInfo = `Mapa pusta: ${currMap} -> szukam przejścia w trasie`;
         let bestTargetMap = bestTransit ? bestTransit.targetMap : null;
 
         // Jeśli startujemy poza expowiskiem, dobijamy najpierw do najbliższej mapy z kolejności.
@@ -6117,7 +6195,7 @@ function runExpLogic() {
         }
 
         if (!bestTargetMap) {
-            const fallbackRoute = pickNextReachableMapFromRoute(currMap);
+            const fallbackRoute = pickNextReachableMapFromRoute(currMap, mapsPool);
             if (fallbackRoute?.nextMap) bestTargetMap = fallbackRoute.nextMap;
         }
 
@@ -6133,6 +6211,7 @@ function runExpLogic() {
             expLastLoggedTargetId = null;
             window.expAllMapsClearedAt = 0;
             window.expWaitingSafeMap = null;
+            window.expDecisionInfo = `Tranzyt do mapy: ${bestTargetMap}`;
             window.rushToMap(bestTargetMap);
             expLastActionTime = now + 1000;
         } else if (!bestTargetMap && areAllExpMapsTemporarilyCleared(mapsPool)) {
@@ -10032,37 +10111,81 @@ function refreshRadarGroupsCache(force = false) {
 function getCurrentMapGatewaysForRadar(distMap) {
     let found = [];
     if (typeof Engine === 'undefined' || !Engine.map) return found;
-    
+
+    const currentMap = Engine?.map?.d?.name || '';
+    const onlyExpMaps = window.isExping ? getExpAllowedMapSet() : null;
+    const toCleanName = (raw) => String(raw || '').replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]*>?/gm, '').split('\n')[0].replace('Przejście do:', '').replace('Przejście do ', '').split('Przejście dostępne')[0].trim();
+
+    const pushGateway = (x, y, targetMap) => {
+        if (x === undefined || y === undefined) return;
+        const cleanTarget = toCleanName(targetMap);
+        if (!cleanTarget) return;
+        if (onlyExpMaps && !onlyExpMaps.has(cleanTarget.toLowerCase())) return;
+
+        let isReachable = false; let bestStand = null; let minDist = Infinity;
+        let dirs = [[0,0], [0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [-1,1], [1,-1]];
+        for (let d of dirs) {
+            let nx = x + d[0]; let ny = y + d[1]; let k = `${nx}_${ny}`;
+            if (distMap && distMap.has(k)) {
+                isReachable = true;
+                let dist = distMap.get(k);
+                if (dist < minDist) { minDist = dist; bestStand = {x: nx, y: ny}; }
+            }
+        }
+        found.push({ x, y, targetMap: cleanTarget, reachable: isReachable, stand: bestStand, pathDistance: minDist });
+    };
+
     let gwsList = [];
     if (typeof Engine.map.getGateways === 'function') {
-        gwsList = Engine.map.getGateways().getList().map(g => g.d || g);
-    } else {
+        try {
+            gwsList = Engine.map.getGateways().getList().map(g => g.d || g);
+        } catch (e) {
+            gwsList = [];
+        }
+    }
+
+    if (!gwsList.length) {
         let gws = (Engine.map.gateways) ? Engine.map.gateways : ((Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
         try { if (typeof gws.values === 'function') gwsList = Array.from(gws.values()); else gwsList = Object.values(gws); }
         catch(e) { for (let key in gws) { if (gws.hasOwnProperty(key)) gwsList.push(gws[key]); } }
         gwsList = gwsList.map(g => g.d || g);
     }
 
-    gwsList.forEach(data => {
-        if (!data) return;
-        let px = data.x !== undefined ? data.x : data.rx;
-        let py = data.y !== undefined ? data.y : data.ry;
-        if (px === undefined || py === undefined) return;
-        
-        let isReachable = false; let bestStand = null; let minDist = Infinity;
-        let dirs = [[0,0], [0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [-1,1], [1,-1]];
-        for(let d of dirs) {
-            let nx = px + d[0]; let ny = py + d[1]; let k = `${nx}_${ny}`;
-            if(distMap && distMap.has(k)) {
-                isReachable = true; let dist = distMap.get(k);
-                if(dist < minDist) { minDist = dist; bestStand = {x: nx, y: ny}; }
-            }
+    for (const data of gwsList) {
+        if (!data) continue;
+        const px = data.x !== undefined ? data.x : data.rx;
+        const py = data.y !== undefined ? data.y : data.ry;
+        const targetMap = data.name || data.targetName || data.title || data.tooltip;
+        pushGateway(px, py, targetMap);
+    }
+
+    const scannedGateways = requestGatewayRefresh('gateway-radar', false) || [];
+    for (const gw of scannedGateways) {
+        if (!gw) continue;
+        pushGateway(gw.x, gw.y, gw.targetMap);
+    }
+
+    const dedup = new Map();
+    for (const gw of found) {
+        const key = `${gw.x}_${gw.y}_${String(gw.targetMap).toLowerCase()}`;
+        if (!dedup.has(key)) {
+            dedup.set(key, gw);
+            continue;
         }
-        let cleanName = (data.name || data.targetName || data.title || data.tooltip || "").toString().replace(/<[^>]*>?/gm, '').split('\n')[0].replace("Przejście do:", "").trim();
-        found.push({ x: px, y: py, targetMap: cleanName, reachable: isReachable, stand: bestStand, pathDistance: minDist });
-    });
-    return found;
+        const prev = dedup.get(key);
+        if ((gw.pathDistance ?? 9999) < (prev.pathDistance ?? 9999)) {
+            dedup.set(key, gw);
+        }
+    }
+
+    if (window.isExping && currentMap) {
+        const allowed = onlyExpMaps || new Set();
+        return [...dedup.values()].filter(g => allowed.has(String(g.targetMap || '').toLowerCase()));
+    }
+
+    return [...dedup.values()];
 }
+
 
 function renderTacticalRadar() {
     let canvas = document.getElementById('margoRadarCanvas');
@@ -10325,6 +10448,7 @@ function renderTacticalRadar() {
     try {
         const infoPanel = document.getElementById('margoRadarInfoPanel');
         if (infoPanel) {
+            const decisionText = window.expDecisionInfo ? `<div style="padding:4px 0 6px 0; color:#9adcf7; border-bottom:1px solid rgba(255,255,255,0.09); margin-bottom:4px;">🧠 ${window.expDecisionInfo}</div>` : '';
             const serverGroups = [...radarGroups];
 
             serverGroups.sort((a, b) => {
@@ -10336,9 +10460,9 @@ function renderTacticalRadar() {
             });
 
             if (!serverGroups.length) {
-                infoPanel.innerHTML = '<div style="color:#777;">Brak wykrytych grup.</div>';
+                infoPanel.innerHTML = decisionText + '<div style="color:#777;">Brak wykrytych grup.</div>';
             } else {
-                infoPanel.innerHTML = serverGroups.map(g => {
+                infoPanel.innerHTML = decisionText + serverGroups.map(g => {
                     const isCurrent = radarTarget && g.key === radarTarget.key;
                     const label = `${g.mobs.length}x ${g.mainRanga}`;
                     const dist = g.bestPathDistance ?? '?';
