@@ -2383,7 +2383,8 @@ function autoDetectEngineData() {
         for (let item of items) {
             if (!item || item.del || item.dead) continue;
 
-            const stats = window.parseStatString(item.stat);
+            const itemStat = String(item.stat || item._cachedStats?.stat || "");
+            const stats = window.parseStatString(itemStat);
             if (!stats.teleport) continue;
 
             // Wyciągamy [mapId, x, y, mapName]
@@ -2391,26 +2392,32 @@ function autoDetectEngineData() {
             if (!mapName) continue;
 
             // Sprawdzenie wymaganego levela
-            let reqLvl = parseInt(stats.reqLvl || stats.reqlvl || 0);
+            let reqLvl = parseInt(stats.reqLvl || stats.reqlvl || stats.lvl || 0);
             if (reqLvl && heroLvl < reqLvl) continue;
 
             // Wyrównanie wielkości liter do bazy pathfindera
             let exactMapName = allMapNames.find(k => k.toLowerCase() === mapName.trim().toLowerCase()) || mapName.trim();
             if (!allMapNames.includes(exactMapName)) exactMapName = exactMapName.replace(/\b\w/g, c => c.toUpperCase());
 
-            tps.push({ id: item.id, map: exactMapName, item: item });
+            const itemId = item.id || item._cachedStats?.id;
+            if (!itemId) continue;
+            tps.push({ id: itemId, map: exactMapName, item: item });
         }
         return tps;
     };
 
     window.useItemById = function(itemId) {
         try {
-            if (typeof Engine !== 'undefined' && Engine.items && typeof Engine.items.useItem === 'function') {
+            let itemObj = null;
+            if (typeof Engine !== 'undefined' && Engine.heroEquipment && typeof Engine.heroEquipment.getHItems === 'function') {
+                let itemsList = Engine.heroEquipment.getHItems() || {};
+                itemObj = Object.values(itemsList).find(i => (i?.d || i)?.id == itemId) || null;
+            }
+
+            if (itemObj && typeof Engine !== 'undefined' && Engine.heroEquipment && typeof Engine.heroEquipment.sendUseRequest === 'function') {
+                Engine.heroEquipment.sendUseRequest(itemObj);
+            } else if (typeof Engine !== 'undefined' && Engine.items && typeof Engine.items.useItem === 'function') {
                 Engine.items.useItem(itemId);
-            } else if (typeof Engine !== 'undefined' && Engine.heroEquipment && typeof Engine.heroEquipment.sendUseRequest === 'function') {
-                let itemsList = typeof Engine.heroEquipment.getHItems === 'function' ? Engine.heroEquipment.getHItems() : {};
-                let itemObj = Object.values(itemsList).find(i => (i.d||i).id == itemId);
-                if (itemObj) Engine.heroEquipment.sendUseRequest(itemObj);
             } else {
                 window._g(`moveitem&st=1&id=${itemId}`);
             }
@@ -6557,7 +6564,7 @@ function runExpLogic() {
         const targetLogKey = String(bestChoice?.groupKey || target.id || `${target.x}_${target.y}`);
         if (window.logExp && expLastLoggedTargetId !== targetLogKey) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
-            HeroLogger.emit('INFO', 'TARGET_SELECTED', `🎯 Podchodzę: ${target.nick || "Potwór"}${rankLabel} • grupa: ${targetGroupSize}-os.`, "#ffd54f");
+            window.logExp(`🎯 Podchodzę: ${target.nick || "Potwór"}${rankLabel} • grupa: ${targetGroupSize}-os.`, "#ffd54f");
             expLastLoggedTargetId = targetLogKey;
             expLastLoggedTransitMap = null;
         }
