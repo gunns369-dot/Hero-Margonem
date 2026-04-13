@@ -13,6 +13,25 @@
 (function() {
     'use strict';
 
+    const HERO_LOG = {
+        info(message, details) {
+            if (details !== undefined) console.log(`ℹ️ [HERO] ${message}`, details);
+            else console.log(`ℹ️ [HERO] ${message}`);
+        },
+        success(message, details) {
+            if (details !== undefined) console.log(`✅ [HERO] ${message}`, details);
+            else console.log(`✅ [HERO] ${message}`);
+        },
+        warn(message, details) {
+            if (details !== undefined) console.warn(`⚠️ [HERO] ${message}`, details);
+            else console.warn(`⚠️ [HERO] ${message}`);
+        },
+        error(message, details) {
+            if (details !== undefined) console.error(`❌ [HERO] ${message}`, details);
+            else console.error(`❌ [HERO] ${message}`);
+        }
+    };
+
  // ==========================================
         // SILNIK ANTI-THROTTLE V3 (NIESKOŃCZONOŚĆ) - Omijanie uśpienia kart
         // ==========================================
@@ -102,7 +121,7 @@
                 }
             };
 
-            console.log("%c[System] Anti-Throttle V3 (Nieskończoność) Aktywny! Gra została odcięta od wiedzy o ukrytej karcie.", "color: #ff5252; font-weight: bold; font-size: 14px;");
+            HERO_LOG.success("Anti-Throttle V3 aktywny. Karta nie będzie usypiana.");
         }
         // ==========================================
    // WBUDOWANY SKANER PRZEJŚĆ (Agresywny Skaner Multi-Engine - z Twoją metodą NI)
@@ -148,7 +167,7 @@
                     // Jeśli znaleźliśmy przejścia Twoją metodą, natychmiast je zwracamy
                     if (foundGateways.length > 0) return foundGateways;
                 } catch(e) {
-                    console.log("%c[HERO] Skaner NI zawiódł, przechodzę do trybu zapasowego...", "color: orange;");
+                    HERO_LOG.warn("Skaner NI zawiódł — przełączam na tryb zapasowy.");
                 }
             }
 
@@ -321,16 +340,16 @@
                 let urlShops = 'https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/main/margoworld_shops_full_database.json';
                 let urlTooltips = 'https://raw.githubusercontent.com/gunns369-dot/Hero-Margonem/main/margoworld_tooltip_cache_full.json';
 
-                console.log("[Baza] Rozpoczęto pobieranie zewnętrznych baz danych...");
+                HERO_LOG.info("Rozpoczęto pobieranie zewnętrznych baz danych.");
                 let [resShops, resEq] = await Promise.all([fetch(urlShops), fetch(urlTooltips)]);
                 let rawShops = await resShops.json();
                 let rawEq = await resEq.json();
 
                 this.parseShops(rawShops);
                 this.parseEq(rawEq);
-                console.log(`[Baza] Pomyślnie załadowano: ${this.kupcy.length} kupców i ${this.ekwipunek.length} przedmiotów!`);
+                HERO_LOG.success(`Załadowano bazy: ${this.kupcy.length} kupców i ${this.ekwipunek.length} przedmiotów.`);
             } catch (e) {
-                console.error("[Baza] Błąd pobierania plików JSON. Sprawdź linki!", e);
+                HERO_LOG.error("Błąd pobierania plików JSON. Sprawdź linki.", e);
             }
         },
     parseShops: function(rawShops) {
@@ -885,7 +904,7 @@ let opacityValue = 0.95;
     if (!lsProfiles || lsProfiles.length !== window.defaultExpProfiles.length) {
         lsProfiles = JSON.parse(JSON.stringify(window.defaultExpProfiles));
         localStorage.setItem('exp_profiles_v64_4', JSON.stringify(lsProfiles));
-        console.log("%c[System] Baza expowisk zaktualizowana pomyślnie z kodu!", "color: #00e5ff; font-weight: bold;");
+        HERO_LOG.success("Baza expowisk została zaktualizowana z kodu.");
     }
     let loadedProfiles = lsProfiles;
     window.loadedProfiles = lsProfiles; // Globalne zabezpieczenie przed błędem ReferenceError
@@ -1132,7 +1151,7 @@ function buildDistanceMapFromHero() {
     if (window._walkMaskMapName !== currentMapName) {
         window.margoWalkableMask.clear();
         if (typeof updateWalkableArea === 'function') {
-            console.log(`[EXP][walkmask] Odświeżam maskę przejścia dla mapy: ${currentMapName}`);
+            HERO_LOG.info(`Odświeżam maskę przejścia dla mapy: ${currentMapName}`);
             updateWalkableArea();
         }
     }
@@ -1473,7 +1492,7 @@ window.heroMapOrder = heroMapOrder;
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
-        }).catch(e => console.error("[MargoNeuro] Błąd wysyłania na Discorda:", e));
+        }).catch(e => HERO_LOG.error("Błąd wysyłania na Discorda.", e));
     };
 
     function saveGateways() { localStorage.setItem('hero_global_gateways_v20', JSON.stringify(globalGateways)); }
@@ -1661,7 +1680,7 @@ let attackInterval = null;
 
         let targetId = parseInt(npcId, 10);
 
-        console.log(`%c[HERO] Cel namierzony (ID: ${targetId}). Włączam Kieszonkowego Berserka...`, "color: #f44336; font-weight: bold;");
+        HERO_LOG.info(`Cel namierzony (ID: ${targetId}). Włączam Kieszonkowego Berserka...`);
 
 
 
@@ -1688,7 +1707,7 @@ let attackInterval = null;
 
                 if (typeof window._g === 'function') window._g(`settings&action=update&id=34&v=0`);
 
-                console.log(`%c[HERO] Walka rozpoczęta. Berserk wyłączony.`, "color: #4caf50;");
+                HERO_LOG.success("Walka rozpoczęta. Berserk wyłączony.");
 
                 return;
 
@@ -2396,7 +2415,7 @@ function autoDetectEngineData() {
                 window._g(`moveitem&st=1&id=${itemId}`);
             }
         } catch (e) {
-            console.error("❌ Błąd użycia teleportu:", e);
+            HERO_LOG.error("Błąd użycia teleportu.", e);
         }
     };
 
@@ -2809,7 +2828,7 @@ window.handleTeleportNPC = function(targetMap) {
 
         if (dist > 1) {
             if (!Engine.hero.d.path || Engine.hero.d.path.length === 0) {
-                console.log(`%c[HERO] Podbiegam do Zakonnika na [${tp.x}, ${tp.y}]...`, "color: #9c27b0;");
+                HERO_LOG.info(`Podbiegam do Zakonnika na [${tp.x}, ${tp.y}]...`);
                 safeGoTo(tp.x, tp.y, false);
             }
             rescheduleTeleportCheck(targetMap);
@@ -4371,7 +4390,7 @@ selHero.addEventListener('change', (e) => {
 
             updateUI();
 
-            console.log(`%c[HERO] Trasa pętli ustawiona od mapy: ${mapName}`, "color: #4caf50;");
+            HERO_LOG.success(`Trasa pętli ustawiona od mapy: ${mapName}`);
 
         } else {
 
@@ -4383,7 +4402,7 @@ selHero.addEventListener('change', (e) => {
 
             if (path && path.length > 1) {
 
-                console.log(`%c[HERO] Znaleziono drogę. Biegne na wybraną mapę: ${mapName}`, "color: #00acc1; font-weight: bold;");
+                HERO_LOG.info(`Znaleziono drogę. Biegnę na wybraną mapę: ${mapName}`);
 
                 // Ustawiamy nowy index na przyszłość, żeby po dobiegnięciu kontynuował pętlę stamtąd
 
@@ -4399,7 +4418,7 @@ selHero.addEventListener('change', (e) => {
 
             } else {
 
-                console.log(`%c[HERO] Brak drogi! Stoisz na: [${currentSysMap}], a chcesz iść do [${mapName}]. Najpierw nagraj przejścia (🎥)!`, "color: #e53935; font-weight: bold;");
+                HERO_LOG.warn(`Brak drogi: jesteś na [${currentSysMap}], cel to [${mapName}]. Najpierw nagraj przejścia (🎥).`);
 
             }
 
@@ -7923,7 +7942,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
                 container.innerHTML = html || '<div style="padding:10px; color:#aaa; text-align:center;">Brak przedmiotów w tym przedziale poziomowym.</div>';
             } catch (e) {
-                console.error("Błąd rysowania Ekwipunku (Radar):", e);
+                HERO_LOG.error("Błąd rysowania Ekwipunku (Radar).", e);
                 let container = document.getElementById('eqListContent');
                 if (container) container.innerHTML = '<div style="padding:10px; color:#ff5252; text-align:center;">Wystąpił błąd ładowania przedmiotów. Zerknij do konsoli (F12).</div>';
             }
@@ -9035,7 +9054,7 @@ window.openShopAsync = async (namePart) => {
                         const sleep = ms => new Promise(r => setTimeout(r, ms));
                         // KLUCZOWE: Odcinamy "(elita)" lub inne dopiski z bazy danych!
                         const targetName = (namePart || "").split('(')[0].trim().toLowerCase();
-                        console.log("🛒 [AUTO-SELL] Inicjacja dla:", namePart);
+                        HERO_LOG.info(`AUTO-SELL: inicjacja dla ${namePart}`);
 
                         // 1. ZABEZPIECZENIE MAPY (Czekamy, aż zniknie kran ładowania)
                         for (let w = 0; w < 50; w++) {
@@ -9057,11 +9076,11 @@ window.openShopAsync = async (namePart) => {
                         }
 
                         if (!npc) {
-                            console.warn("❌ [A] Brak NPC na mapie po załadowaniu:", namePart);
+                            HERO_LOG.warn(`AUTO-SELL [A]: brak NPC na mapie po załadowaniu (${namePart}).`);
                             return false;
                         }
 
-                        console.log(`🚶 [AUTO-SELL] Idę do ${npc.nick} (X: ${npc.x}, Y: ${npc.y})...`);
+                        HERO_LOG.info(`AUTO-SELL: idę do ${npc.nick} (X: ${npc.x}, Y: ${npc.y}).`);
 
                       // 3. DOJŚCIE DO NPC
                         let reached = false;
@@ -9095,11 +9114,11 @@ window.openShopAsync = async (namePart) => {
 
                         // KRYTYCZNE: Jeśli nie podszedł, nie ma sensu klikać w dialog z 10 kratek!
                         if (!reached) {
-                            console.warn("❌ [B] Bot nie mógł podejść do NPC (Dystans > 1). Omijam.");
+                            HERO_LOG.warn("AUTO-SELL [B]: bot nie mógł podejść do NPC (dystans > 1), omijam.");
                             return false;
                         }
 
-                        console.log("🛑 [AUTO-SELL] Odblokowuję stop...");
+                        HERO_LOG.info("AUTO-SELL: odblokowuję stop.");
                         if (Engine.hero) Engine.hero.stop = false;
 
                         await sleep(400);
@@ -9107,7 +9126,7 @@ window.openShopAsync = async (namePart) => {
                         // Jeśli to elita/potwór, walka zaraz włączy się sama
                         if (npc.type === 2 || npc.type === 3) return true;
 
-                        console.log("💬 [AUTO-SELL] Rozmowa...");
+                        HERO_LOG.info("AUTO-SELL: rozpoczynam rozmowę.");
 
                         // --- 1:1 TWÓJ KOD ROZMOWY ---
                         try { Engine.npcs?.clickNpc?.(npc.id); } catch(e) {}
@@ -9133,11 +9152,11 @@ window.openShopAsync = async (namePart) => {
                         }
 
                         if (!shopBtn) {
-                            console.warn("❌ [C] Brak opcji sklepu u:", npc.nick);
+                            HERO_LOG.warn(`AUTO-SELL [C]: brak opcji sklepu u ${npc.nick}.`);
                             return false;
                         }
 
-                        console.log("🛒 [AUTO-SELL] Otwieram sklep...");
+                        HERO_LOG.info("AUTO-SELL: otwieram sklep.");
                         try { shopBtn.click(); } catch(e){}
 
                         // 5. WERYFIKACJA OTWARCIA SKLEPU
@@ -9152,12 +9171,12 @@ window.openShopAsync = async (namePart) => {
                         }
 
                         if (!shopOpened) {
-                            console.warn("❌ [D] Kliknąłem opcję sklepu, ale sklep się nie otworzył.");
+                            HERO_LOG.warn("AUTO-SELL [D]: kliknięto opcję sklepu, ale okno się nie otworzyło.");
                             return false;
                         }
 
                         await sleep(500); // Twardy margines czasu na zsynchronizowanie plecaka z nowym oknem
-                        console.log("✅ [AUTO-SELL] Sklep otwarty pomyślnie.");
+                        HERO_LOG.success("AUTO-SELL: sklep otwarty pomyślnie.");
                         return true;
                     };
 } // <--- TEN JEDEN NAWIAS NAPRAWIA CAŁY SKRYPT!
@@ -10484,7 +10503,7 @@ function buildDistanceMapFromHero() {
     if (window._walkMaskMapName !== currentMapName) {
         window.margoWalkableMask.clear();
         if (typeof updateWalkableArea === 'function') {
-            console.log(`[EXP][walkmask] Odświeżam maskę przejścia dla mapy: ${currentMapName}`);
+            HERO_LOG.info(`Odświeżam maskę przejścia dla mapy: ${currentMapName}`);
             updateWalkableArea();
         }
     }
