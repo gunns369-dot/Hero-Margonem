@@ -6539,7 +6539,7 @@ function runExpLogic() {
     if (target && window.expLastTargetNotFoundAt && now - window.expLastTargetNotFoundAt < 2200) {
         const upd = MonsterMemory.onTargetNotFound(currMap, target.id);
         if (upd?.cooldownUntil && now < upd.cooldownUntil) {
-            HeroLogger.emit('WARN', 'TARGET_NOT_FOUND', `Cel ${target.nick || target.id} oznaczony cooldown (${upd.failCount})`, "#ffb74d", { dedupeMs: 2200 });
+            HeroLogger.emit('DEBUG', 'TARGET_NOT_FOUND', `Cel ${target.nick || target.id} oznaczony cooldown (${upd.failCount})`, "#ffb74d", { dedupeMs: 2200 });
             target = null;
         }
     }
@@ -6592,7 +6592,7 @@ function runExpLogic() {
             const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
             if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
             window.expLastTargetNotFoundAt = Date.now();
-            HeroLogger.emit('WARN', 'TARGET_UNREACHABLE_SKIP', `Pomijam cel ${target.nick || target.id} (powód: ${liveTargetMissing ? 'nie istnieje' : 'nieosiągalny/ściana'}, cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2200 });
+            HeroLogger.emit('DEBUG', 'TARGET_UNREACHABLE_SKIP', `Pomijam cel ${target.nick || target.id} (powód: ${liveTargetMissing ? 'nie istnieje' : 'nieosiągalny/ściana'}, cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2200 });
             return;
         }
 
@@ -6622,7 +6622,7 @@ function runExpLogic() {
                     const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     window.expLastTargetNotFoundAt = Date.now();
-                    HeroLogger.emit('WARN', 'ATTACK_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} po ${window.expMeleeFailByTarget[targetKey]} nieudanych próbach (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
+                    HeroLogger.emit('DEBUG', 'ATTACK_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} po ${window.expMeleeFailByTarget[targetKey]} nieudanych próbach (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
                     window.expStandStillStart = null;
                     return;
                 }
