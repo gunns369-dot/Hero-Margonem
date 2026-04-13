@@ -6514,6 +6514,7 @@ function runExpLogic() {
             target = null;
         }
     }
+    const targetGroupSize = Math.max(1, Number(bestChoice?.group?.mobs?.length) || 1);
     window.expCurrentTargetGroupKey = bestChoice ? bestChoice.groupKey : null;
     expCurrentTargetId = target ? (target.id || null) : null;
 
@@ -6553,10 +6554,11 @@ function runExpLogic() {
     maybeStepOutFromGatewayAfterEntry();
     if (shouldFightHere && target) {
         window.expDecisionInfo = `Cel mob: ${(target.nick || "Potwór")} [${target.x},${target.y}]`;
-        if (window.logExp && expLastLoggedTargetId !== String(target.id)) {
+        const targetLogKey = String(bestChoice?.groupKey || target.id || `${target.x}_${target.y}`);
+        if (window.logExp && expLastLoggedTargetId !== targetLogKey) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
-            HeroLogger.emit('INFO', 'TARGET_SELECTED', `Cel: ${target.nick || "Potwór"}${rankLabel} [${target.x}, ${target.y}]`, "#ffd54f");
-            expLastLoggedTargetId = String(target.id);
+            HeroLogger.emit('INFO', 'TARGET_SELECTED', `🎯 Podchodzę: ${target.nick || "Potwór"}${rankLabel} • grupa: ${targetGroupSize}-os.`, "#ffd54f");
+            expLastLoggedTargetId = targetLogKey;
             expLastLoggedTransitMap = null;
         }
         let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
