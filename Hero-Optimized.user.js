@@ -6577,6 +6577,20 @@ function runExpLogic() {
     // --- LOGIKA RUCHU I WALKI ---
     maybeStepOutFromGatewayAfterEntry();
     if (shouldFightHere && target) {
+        const liveNpcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
+        const liveTargetRaw = liveNpcs && (liveNpcs[target.id]?.d || liveNpcs[target.id]);
+        const liveTargetMissing = !liveTargetRaw || liveTargetRaw.dead || liveTargetRaw.del || liveTargetRaw.delete;
+        const targetPathData = getPathToAdjacentTile(target.x, target.y, distMap);
+
+        // Twardy bezpiecznik: jeżeli celu nie ma albo nie ma legalnego pola podejścia (np. mob w ścianie), pomijamy.
+        if (liveTargetMissing || !targetPathData?.stand) {
+            const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+            if (window.expMonsterCache) window.expMonsterCache.delete(target.id);
+            window.expLastTargetNotFoundAt = Date.now();
+            HeroLogger.emit('WARN', 'TARGET_UNREACHABLE_SKIP', `Pomijam cel ${target.nick || target.id} (powód: ${liveTargetMissing ? 'nie istnieje' : 'nieosiągalny/ściana'}, cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2200 });
+            return;
+        }
+
         window.expDecisionInfo = `Cel mob: ${(target.nick || "Potwór")} [${target.x},${target.y}]`;
         const targetLogKey = String(bestChoice?.groupKey || target.id || `${target.x}_${target.y}`);
         if (window.logExp && expLastLoggedTargetId !== targetLogKey) {
@@ -6620,9 +6634,8 @@ function runExpLogic() {
             if (window.expMeleeFailByTarget[targetKey]) delete window.expMeleeFailByTarget[targetKey];
         }
         if (now > nextAllowedClickTime) {
-            const adjacent = getPathToAdjacentTile(target.x, target.y, distMap);
-            const moveX = adjacent?.stand?.x ?? target.x;
-            const moveY = adjacent?.stand?.y ?? target.y;
+            const moveX = targetPathData.stand.x;
+            const moveY = targetPathData.stand.y;
             const targetChanged = window.expLastMoveTx !== moveX || window.expLastMoveTy !== moveY;
             const isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
             const heroUnchanged = window.expLastMoveHeroX === hx && window.expLastMoveHeroY === hy;
@@ -6644,6 +6657,22 @@ function runExpLogic() {
 
     // --- TRANZYT / ZMIANA MAPY ---
     if (!isExpMap || validMobs.length === 0) {
+        // Bezpiecznik: po zmianie mapy tranzytowej czasem silnik "staje" bez decyzji.
+        // Po krótkim timeoutcie wymuszamy ponowne obrane celu mapowego.
+        if (!isExpMap && !window.isRushing && window.expMapEnteredAt && (now - window.expMapEnteredAt > 4200)) {
+            const unclearedMaps = (mapsPool || []).filter(m => m && !isMapTemporarilyCleared(m));
+            const nearestExpPath = getClosestExpMapPath(currMap, unclearedMaps.length ? unclearedMaps : mapsPool);
+            if (nearestExpPath?.targetMap) {
+                if (window.logExp && window._lastTransitRecoverLog !== `${currMap}->${nearestExpPath.targetMap}`) {
+                    window.logExp(`🧭 [Recovery] Tranzyt zatrzymał się po zmianie mapy, ponawiam bieg do: [${nearestExpPath.targetMap}]`, "#ffb74d");
+                    window._lastTransitRecoverLog = `${currMap}->${nearestExpPath.targetMap}`;
+                }
+                window.rushToMap(nearestExpPath.targetMap);
+                expLastActionTime = now + 900;
+                return;
+            }
+        }
+
         expEmptyScans++;
         if (expEmptyScans < 8 && isExpMap) {
             window.expDecisionInfo = `Mapa exp pusta chwilowo: ${currMap} (resp)`;
@@ -6662,9 +6691,11 @@ function runExpLogic() {
         window.expDecisionInfo = `Mapa pusta: ${currMap} -> szukam przejścia w trasie`;
         let bestTargetMap = bestTransit ? bestTransit.targetMap : null;
 
-        // Jeśli startujemy poza expowiskiem, dobijamy najpierw do najbliższej mapy z kolejności.
+        // Jeśli startujemy poza expowiskiem, dobijamy najpierw do najbliższej mapy z kolejności,
+        // ale priorytetowo ignorujemy mapy świeżo wyczyszczone.
         if (!bestTargetMap && !isExpMap) {
-            const nearestExpPath = getClosestExpMapPath(currMap);
+            const unclearedMaps = (mapsPool || []).filter(m => m && !isMapTemporarilyCleared(m));
+            const nearestExpPath = getClosestExpMapPath(currMap, unclearedMaps.length ? unclearedMaps : mapsPool);
             if (nearestExpPath?.targetMap) bestTargetMap = nearestExpPath.targetMap;
         }
 
