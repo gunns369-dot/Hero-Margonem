@@ -5574,15 +5574,31 @@ window.expDryRunSimulation = function(type = 'gate-stuck-x5') {
 
 
 
+    function normalizeConsoleMessage(msg) {
+        let text = (msg ?? '').toString().trim();
+        text = text.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\u200D\s]+/gu, '').trim();
+        text = text.replace(/\s+/g, ' ');
+        if (!text) return 'INFO | (pusty komunikat)';
+
+        const lower = text.toLowerCase();
+        if (lower.includes('włączono') && lower.includes('berserk')) return 'INFO | Berserk: ON';
+        if (lower.includes('wyłączono') && lower.includes('berserk')) return 'INFO | Berserk: OFF';
+        if (lower.includes('uruchomiono tryb automatyczny')) return 'INFO | Bot: START';
+        if (lower.includes('zatrzymano tryb automatyczny')) return 'INFO | Bot: STOP';
+
+        return `INFO | ${text}`;
+    }
+
     window.logExp = function(msg, color="#a99a75") {
         let consoleDiv = document.getElementById('expConsole');
         if (!consoleDiv) return;
+        const normalizedMsg = normalizeConsoleMessage(msg);
         let time = new Date().toLocaleTimeString('pl-PL', {hour12: false});
         let entry = document.createElement('div');
-        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${msg}</span>`;
+        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${normalizedMsg}</span>`;
         consoleDiv.appendChild(entry);
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
-        if (typeof msg === 'string' && msg.toLowerCase().includes('nie znaleziono przeciwnika')) {
+        if (normalizedMsg.toLowerCase().includes('nie znaleziono przeciwnika')) {
             window.expLastTargetNotFoundAt = Date.now();
         }
     };
@@ -5591,9 +5607,10 @@ window.expDryRunSimulation = function(type = 'gate-stuck-x5') {
 window.logHero = function(msg, color="#a99a75") {
         let consoleDiv = document.getElementById('heroConsole');
         if (!consoleDiv) return;
+        const normalizedMsg = normalizeConsoleMessage(msg);
         let time = new Date().toLocaleTimeString('pl-PL', {hour12: false});
         let entry = document.createElement('div');
-        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${msg}</span>`;
+        entry.innerHTML = `<span style="color:#555;">[${time}]</span> <span style="color:${color};">${normalizedMsg}</span>`;
         consoleDiv.appendChild(entry);
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
     };
