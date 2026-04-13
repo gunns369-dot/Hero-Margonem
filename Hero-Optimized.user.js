@@ -5084,6 +5084,21 @@ function stopPatrol(hardStop = true) {
                 if (Engine.hero.d.path) Engine.hero.d.path = [];
             } catch(e) {}
         }
+
+        if (window.isExping) {
+            window.isExping = false;
+            window.expRunId = null;
+            const expBtn = document.getElementById('btnStartExp');
+            if (expBtn) {
+                expBtn.innerHTML = "▶ START";
+                expBtn.style.borderColor = "#4caf50";
+                expBtn.style.color = "#4caf50";
+            }
+            if (window.logExp) window.logExp("🛑 Zatrzymano tryb automatyczny.", "#f44336");
+            HeroLogger.emit('INFO', 'ROUTE_STOP', 'STOP ekspienia/trasy (stopPatrol)', "#f44336", { category: 'ROUTE' });
+        }
+
+        if (window.BerserkController?.onBotStop) window.BerserkController.onBotStop('stop_patrol');
     }
 
     function startPatrol() {
@@ -5362,7 +5377,7 @@ const RouteCombatFSM = {
         this.evaluate(reason);
     },
     shouldBerserkBeOn(ctx = this.state) {
-        return !!(ctx.running && ctx.currentTask === 'EXP' && ctx.inRouteMap && ctx.berserkCheckbox);
+        return !!(ctx.running && ctx.currentTask === 'EXP' && ctx.berserkCheckbox);
     },
     evaluate(reason = 'sync') {
         const shouldEnable = this.shouldBerserkBeOn();
@@ -5376,7 +5391,9 @@ const RouteCombatFSM = {
             if (window.BerserkController?.setBotBerserkState) window.BerserkController.setBotBerserkState(false, reason);
             return;
         }
-        HeroLogger.emit('DEBUG', 'BERSERK_EVAL', `Noop reason=${reason} shouldEnable=${shouldEnable} active=${currentlyActive}`, "#a99a75", { category: 'BERSERK' });
+        if (reason !== 'poll') {
+            HeroLogger.emit('DEBUG', 'BERSERK_EVAL', `Noop reason=${reason} shouldEnable=${shouldEnable} active=${currentlyActive}`, "#a99a75", { category: 'BERSERK', dedupeMs: 20000 });
+        }
     },
     canAutoAttack() {
         const berserkOn = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
