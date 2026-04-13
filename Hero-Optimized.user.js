@@ -6056,6 +6056,9 @@ function setExpBerserkState(shouldEnable) {
 window.expLastMoveTx = -1;
 
 window.expLastMoveTy = -1;
+window.expLastMoveCommandAt = 0;
+window.expTransitTempFightLogKey = null;
+window.expModeDebugLogKey = null;
 
 window.expMoveLockUntil = 0;
 
@@ -6459,6 +6462,7 @@ function runExpLogic() {
         window.expLastMoveTx = null;
         window.expLastMoveTy = null;
         window.expLastMoveAt = 0;
+        window.expLastMoveCommandAt = 0;
         window.expLastMoveHeroX = null;
         window.expLastMoveHeroY = null;
         window.expMeleeFailByTarget = {};
@@ -6502,9 +6506,10 @@ function runExpLogic() {
         if (ranga === "elite2" && !botSettings.berserk.e2) continue;
         if (ranga === "hero" && !botSettings.berserk.hero) continue;
 
-        currentlyVisibleIds.add(n.id || key);
+        const mobCacheKey = String(n.id ?? key);
+        currentlyVisibleIds.add(mobCacheKey);
         const memoryEntry = MonsterMemory.upsertVisible(currMap, n, ranga);
-        window.expMonsterCache.set(n.id || key, { id: n.id || key, x: n.x, y: n.y, nick: n.nick || n.name, ranga, mmKey: memoryEntry?.key });
+        window.expMonsterCache.set(mobCacheKey, { id: n.id ?? key, cacheKey: mobCacheKey, x: n.x, y: n.y, nick: n.nick || n.name, ranga, mmKey: memoryEntry?.key });
     }
 
     MonsterMemory.decay(currMap, Engine?.map?.d?.pvp === 2);
@@ -6548,20 +6553,20 @@ function runExpLogic() {
         temporaryExpMode = hasNearbyReachableMobsForExp(10);
         if (temporaryExpMode) {
             const tmpKey = `${currMap}|tmp-on`;
-            if (window._expModeLogKey !== tmpKey) {
+            if (window.expTransitTempFightLogKey !== tmpKey) {
                 HeroLogger.emit('INFO', 'TRANSIT_TEMP_EXP_ON', `Tranzyt: wykryto moby w zasięgu na mapie [${currMap}] — tymczasowo walczę.`, "#ffd54f", { category: 'ROUTE', dedupeMs: 2000 });
-                window._expModeLogKey = tmpKey;
+                window.expTransitTempFightLogKey = tmpKey;
             }
         }
     } else if (!isExpMap && !allowTransitFight) {
         temporaryExpMode = false;
     }
     const modeKey = `${currMap}|exp:${isExpMap}|tmp:${temporaryExpMode}`;
-    if (window._expModeLogKey !== modeKey) {
+    if (window.expModeDebugLogKey !== modeKey) {
         const modeLabel = isExpMap ? 'EXP' : 'TRANZYT';
         const transitLabel = allowTransitFight ? 'ON' : 'OFF';
         HeroLogger.emit('DEBUG', 'EXP_MODE', `Mapa=[${currMap}] tryb=${modeLabel} temporaryExpMode=${temporaryExpMode} transitFight=${transitLabel}`, "#a99a75", { category: 'ROUTE', dedupeMs: 1500 });
-        window._expModeLogKey = modeKey;
+        window.expModeDebugLogKey = modeKey;
     }
     const shouldFightHere = isExpMap || temporaryExpMode;
     const shouldKeepBerserkInRoute = !!(isExpMap && !window.isRushing && !isMapTemporarilyCleared(currMap));
@@ -6585,7 +6590,7 @@ function runExpLogic() {
         // Twardy bezpiecznik: jeżeli celu nie ma albo nie ma legalnego pola podejścia (np. mob w ścianie), pomijamy.
         if (liveTargetMissing || !targetPathData?.stand) {
             const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
-            if (window.expMonsterCache) window.expMonsterCache.delete(target.id);
+            if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
             window.expLastTargetNotFoundAt = Date.now();
             HeroLogger.emit('WARN', 'TARGET_UNREACHABLE_SKIP', `Pomijam cel ${target.nick || target.id} (powód: ${liveTargetMissing ? 'nie istnieje' : 'nieosiągalny/ściana'}, cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2200 });
             return;
@@ -6615,7 +6620,7 @@ function runExpLogic() {
 
                 if (window.expMeleeFailByTarget[targetKey] >= 3) {
                     const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
-                    if (window.expMonsterCache) window.expMonsterCache.delete(target.id);
+                    if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     window.expLastTargetNotFoundAt = Date.now();
                     HeroLogger.emit('WARN', 'ATTACK_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} po ${window.expMeleeFailByTarget[targetKey]} nieudanych próbach (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
                     window.expStandStillStart = null;
@@ -6640,12 +6645,14 @@ function runExpLogic() {
             const isMoving = Engine.hero.d.path && Engine.hero.d.path.length > 0;
             const heroUnchanged = window.expLastMoveHeroX === hx && window.expLastMoveHeroY === hy;
             const isStuck = heroUnchanged && window.expLastMoveAt && (now - window.expLastMoveAt > 1600);
+            const moveRetryTimedOut = !isMoving && window.expLastMoveCommandAt && (now - window.expLastMoveCommandAt > 1200);
 
-            if (targetChanged || !isMoving || isStuck) {
+            if (targetChanged || isStuck || moveRetryTimedOut) {
                 ActionExecutor.run('MOVE', { x: moveX, y: moveY }, () => window.safeGoTo(moveX, moveY, false));
                 window.expLastMoveTx = moveX;
                 window.expLastMoveTy = moveY;
                 window.expLastMoveAt = now;
+                window.expLastMoveCommandAt = now;
             }
 
             window.expLastMoveHeroX = hx;
