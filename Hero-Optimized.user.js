@@ -2513,7 +2513,7 @@ window.executeRushStep = function() {
         }
 
         // --- ZWOJE TELEPORTACJI (Tylko EXP + histereza) ---
-        const canTryEqTeleport = !!(path && window.isExping && botSettings.exp.useTeleportsEq);
+        const canTryEqTeleport = !!(path && (window.isExping || window.autoSellState?.active) && botSettings.exp.useTeleportsEq);
         let tps = canTryEqTeleport ? window.getAvailableTeleports() : [];
         let bestTp = null;
         const minSavedMaps = 3;
@@ -6695,7 +6695,7 @@ function runExpLogic() {
         const targetLogKey = String(bestChoice?.groupKey || target.id || `${target.x}_${target.y}`);
         if (window.logExp && expLastLoggedTargetId !== targetLogKey) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
-            window.logExp(`🎯 Podchodzę: ${target.nick || "Potwór"}${rankLabel} • grupa: ${targetGroupSize}-os.`, "#ffd54f");
+            window.logExp(`🎯 Podchodzę: ${target.nick || "Potwór"}${rankLabel}`, "#ffd54f");
             expLastLoggedTargetId = targetLogKey;
             expLastLoggedTransitMap = null;
         }
@@ -7736,6 +7736,7 @@ window.toggleTeleportLock = function(city, isChecked) {
             window.isRushingToShop = false;
             window.isRushing = true;
 
+            window.autoSellState.wasExpingBeforeSell = !!window.isExping;
             window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
             if (window.autoSellState.wasBerserkOn) {
                 botSettings.berserk.enabled = false;
@@ -8920,6 +8921,7 @@ if (isDead) {
                             window.isRushingToShop = false;
                             window.isRushing = true;
 
+                            window.autoSellState.wasExpingBeforeSell = !!window.isExping;
                             window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                             if (window.autoSellState.wasBerserkOn) {
                                 botSettings.berserk.enabled = false;
@@ -9139,7 +9141,7 @@ if (isDead) {
    // --- DAEMON: AUTO-SPRZEDAŻ Z LUDZKĄ MECHANIKĄ SPRZEDAŻY TOREB ---
     if (!window.autoSellDaemonInstalled) {
         window.autoSellDaemonInstalled = true;
-        window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0, failedNPCs: [], shopWaitStartTime: 0, targetNpc: null };
+        window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0, failedNPCs: [], shopWaitStartTime: 0, targetNpc: null, wasExpingBeforeSell: false, wasBerserkOn: false };
         window.runSuperSellerBagAndAccept = function(bagNo, delay = 250) {
             const root = typeof Engine !== 'undefined' && Engine.shop && Engine.shop.wnd && Engine.shop.wnd.$ ? Engine.shop.wnd.$[0] : document;
             const btn = root.querySelector(`.btn-num.grab-bag-${bagNo}`);
@@ -9184,6 +9186,7 @@ if (isDead) {
                     window.autoSellState.shopWaitStartTime = 0;
                     window.isRushingToShop = false;
                     window.isRushing = true;
+                    window.autoSellState.wasExpingBeforeSell = !!window.isExping;
                     window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
                     if (window.autoSellState.wasBerserkOn) {
                         botSettings.berserk.enabled = false;
@@ -9491,8 +9494,11 @@ window.openShopAsync = async (namePart) => {
                             if (window.logExp) window.logExp(msg, "#4caf50");
                         }
 
+                        const shouldRestoreBerserk = !!window.autoSellState.wasBerserkOn;
+                        const shouldResumeExp = !!window.autoSellState.wasExpingBeforeSell;
+
       // Pełny, bezwarunkowy Reset po zakończeniu sprzedaży
-                        window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0, failedNPCs: [], shopWaitStartTime: 0, targetNpc: null };
+                        window.autoSellState = { active: false, step: 0, oldGold: 0, bagToSell: 1, nextActionTime: 0, lastFreeSlots: 0, failedNPCs: [], shopWaitStartTime: 0, targetNpc: null, wasExpingBeforeSell: false, wasBerserkOn: false };
                         window.isExpSuspended = false;
                         window.isRushing = false;
                         window.isRushingToShop = false;
@@ -9504,11 +9510,16 @@ window.openShopAsync = async (namePart) => {
                         if (closeBtn) closeBtn.click();
 
                         // Awaryjnie upewniamy się, że bieg Exp zostanie wznowiony, jeśli był wcześniej aktywny
-                        if (window.autoSellState.wasBerserkOn) {
+                        if (shouldRestoreBerserk) {
                              botSettings.berserk.enabled = true;
                              let chkBerserk = document.getElementById('berserkEnabled');
                              if (chkBerserk) chkBerserk.checked = true;
                              if (typeof window.updateServerBerserk === 'function') window.updateServerBerserk();
+                        }
+
+                        if (shouldResumeExp && !window.isExping) {
+                            let btn = document.getElementById('btnStartExp');
+                            if (btn) btn.click();
                         }
                     }
                 }
