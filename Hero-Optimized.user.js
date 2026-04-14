@@ -2468,6 +2468,22 @@ window.executeRushStep = function() {
             if (typeof requestGatewayRefresh === 'function') requestGatewayRefresh('rush-no-path', true);
             path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
             currentDistance = path ? path.length : 999;
+
+            // Awaryjnie: jeśli jedyne znane przejścia są tymczasowo zbanowane, spróbuj zignorować bany krawędzi.
+            if (!path && typeof getShortestPath === 'function') {
+                const emergencyPath = getShortestPath(currentSysMap, rushTarget, { ignoreEdgeBans: true });
+                if (emergencyPath && emergencyPath.length > 1) {
+                    path = emergencyPath;
+                    currentDistance = path.length;
+                    const firstHop = path[1];
+                    if (window.__bannedEdges && window.__bannedEdges[currentSysMap] && firstHop) {
+                        delete window.__bannedEdges[currentSysMap][firstHop];
+                        if (Object.keys(window.__bannedEdges[currentSysMap]).length === 0) delete window.__bannedEdges[currentSysMap];
+                    }
+                    if (window.logExp) window.logExp(`🧭 Awaryjny powrót na trasę: [${currentSysMap}] → [${firstHop}] (pomijam chwilowe bany).`, '#66bb6a');
+                    if (window.logHero) window.logHero(`🧭 Awaryjny powrót na trasę: [${currentSysMap}] → [${firstHop}] (pomijam chwilowe bany).`, '#66bb6a');
+                }
+            }
         }
 
         // --- ZWOJE TELEPORTACJI (Tylko EXP + histereza) ---
@@ -2758,8 +2774,9 @@ window.executeRushStep = function() {
         }
     }
 
-    function getShortestPath(start, end) {
+    function getShortestPath(start, end, options = {}) {
         if (start === end) return [start];
+        const ignoreEdgeBans = !!(options && options.ignoreEdgeBans);
 
         if (!globalGateways || Object.keys(globalGateways).length === 0 || !globalGateways[start]) {
             refreshGatewayBaseFromStorage();
@@ -2793,7 +2810,7 @@ window.executeRushStep = function() {
                 for (let v in globalGateways[u]) {
                     cleanupExpiredEdgeBans();
                     const nowBan = Date.now();
-                    if (typeof isEdgeBanned === 'function' && isEdgeBanned(u, v, nowBan)) {
+                    if (!ignoreEdgeBans && typeof isEdgeBanned === 'function' && isEdgeBanned(u, v, nowBan)) {
                         continue;
                     }
                     // Map-level bany (np. PvP flee), ale nie blokuj finalnego celu ścieżki.
