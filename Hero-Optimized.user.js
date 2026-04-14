@@ -6651,6 +6651,13 @@ function runExpLogic() {
 
     // --- LOGIKA RUCHU I WALKI ---
     maybeStepOutFromGatewayAfterEntry();
+    const getStableExpTargetKey = (mob) => {
+        if (!mob) return null;
+        if (mob.cacheKey != null) return String(mob.cacheKey);
+        if (mob.id != null) return String(mob.id);
+        return `${mob.x}_${mob.y}_${mob.nick || 'mob'}`;
+    };
+
     if (shouldFightHere && target) {
         const liveNpcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
         const liveTargetRaw = liveNpcs && (liveNpcs[target.id]?.d || liveNpcs[target.id]);
@@ -6678,10 +6685,14 @@ function runExpLogic() {
         let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
 
         if (exactDist <= 1) { // Jesteśmy przy celu
+            const targetKey = getStableExpTargetKey(target);
+            if (window.expStandStillTargetKey !== targetKey) {
+                window.expStandStillTargetKey = targetKey;
+                window.expStandStillStart = now;
+            }
             if (!window.expStandStillStart) window.expStandStillStart = now;
             if (now - window.expStandStillStart > 2000) { // Berserk zaciął się
                 window.expMeleeFailByTarget = window.expMeleeFailByTarget || {};
-                const targetKey = String(target.id || `${target.x}_${target.y}`);
                 window.expMeleeFailByTarget[targetKey] = (window.expMeleeFailByTarget[targetKey] || 0) + 1;
                 HeroLogger.emit('DEBUG', 'ATTACK_WAIT_FOR_BERSERK', `Jestem przy celu ${target.nick || target.id} — czekam na autoatak berserka (próba=${window.expMeleeFailByTarget[targetKey]}).`, "#ffcc80", { category: 'COMBAT', dedupeMs: 1500 });
 
@@ -6692,6 +6703,7 @@ function runExpLogic() {
                     window.expLastTargetNotFoundAt = Date.now();
                     HeroLogger.emit('DEBUG', 'ATTACK_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} po ${window.expMeleeFailByTarget[targetKey]} nieudanych próbach (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
                     window.expStandStillStart = null;
+                    window.expStandStillTargetKey = null;
                     return;
                 }
 
@@ -6702,8 +6714,9 @@ function runExpLogic() {
         }
 
         window.expStandStillStart = null;
-        if (window.expMeleeFailByTarget && target?.id != null) {
-            const targetKey = String(target.id);
+        window.expStandStillTargetKey = null;
+        if (window.expMeleeFailByTarget) {
+            const targetKey = getStableExpTargetKey(target);
             if (window.expMeleeFailByTarget[targetKey]) delete window.expMeleeFailByTarget[targetKey];
         }
         if (now > nextAllowedClickTime) {
