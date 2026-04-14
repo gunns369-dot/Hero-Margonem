@@ -1210,19 +1210,45 @@ function buildDistanceMapFromHero() {
 function buildServerMobGroups(validMobs, distMap) {
     let groups = [];
     let processed = new Set();
-    validMobs.forEach(mob => {
-        if (processed.has(mob.id)) return;
-        let group = { key: mob.grp || mob.id, mobs: [mob], mainRanga: mob.ranga, bestTargetMob: mob, bestPathDistance: 9999, bestStand: null };
-        processed.add(mob.id);
-        validMobs.forEach(otherMob => {
-            if (mob.id !== otherMob.id && !processed.has(otherMob.id)) {
-                if ((mob.grp && mob.grp === otherMob.grp) || (Math.abs(mob.x - otherMob.x) <= 2 && Math.abs(mob.y - otherMob.y) <= 2)) {
-                    group.mobs.push(otherMob);
+    const isLinked = (a, b) => {
+        if (!a || !b || a.id === b.id) return false;
+        if (a.grp && b.grp && a.grp === b.grp) return true;
+        return Math.abs(a.x - b.x) <= 2 && Math.abs(a.y - b.y) <= 2;
+    };
+
+    validMobs.forEach(seedMob => {
+        if (processed.has(seedMob.id)) return;
+
+        const queue = [seedMob];
+        const cluster = [];
+        processed.add(seedMob.id);
+
+        while (queue.length) {
+            const current = queue.shift();
+            cluster.push(current);
+
+            validMobs.forEach(otherMob => {
+                if (processed.has(otherMob.id)) return;
+                if (isLinked(current, otherMob)) {
                     processed.add(otherMob.id);
-                    if (getRankValue(otherMob.ranga) > getRankValue(group.mainRanga)) group.mainRanga = otherMob.ranga;
+                    queue.push(otherMob);
                 }
-            }
+            });
+        }
+
+        let group = {
+            key: seedMob.grp || cluster.map(m => m.id).sort((a, b) => a - b).join("_"),
+            mobs: cluster,
+            mainRanga: cluster[0]?.ranga || seedMob.ranga,
+            bestTargetMob: seedMob,
+            bestPathDistance: 9999,
+            bestStand: null
+        };
+
+        cluster.forEach(otherMob => {
+            if (getRankValue(otherMob.ranga) > getRankValue(group.mainRanga)) group.mainRanga = otherMob.ranga;
         });
+
         let bestDist = Infinity; let bestStand = null; let bestMob = null;
         group.mobs.forEach(m => {
             let dirs = [[0,1],[0,-1],[1,0],[-1,0],[-1,-1],[1,-1],[-1,1],[1,1]];
@@ -9737,6 +9763,26 @@ window.openShopAsync = async (namePart) => {
     } // <--- TO JEST TA KLAMRA, KTÓRA WCZEŚNIEJ ZNIKNĘŁA!
 // --- CZĘŚĆ 2: DETEKCJA GRACZY (Smart Player Radar - Zbiorczy) ---
     window.alertedPlayersList = window.alertedPlayersList || new Set();
+    window.__playerThreatMemory = window.__playerThreatMemory || {};
+
+    function getNearestSafeMapFromCurrent(currMap) {
+        const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
+        const gateways = getCurrentMapGatewaysForRadar(distMap).filter(g => g?.reachable && g?.targetMap);
+        if (!gateways.length) return null;
+
+        window.expMapPvpCache = window.expMapPvpCache || {};
+        const safeKnown = gateways
+            .filter(g => window.expMapPvpCache[g.targetMap] !== 2)
+            .sort((a, b) => (a.pathDistance || 9999) - (b.pathDistance || 9999));
+
+        if (safeKnown.length > 0) return safeKnown[0].targetMap;
+
+        const unknownFirst = gateways
+            .filter(g => window.expMapPvpCache[g.targetMap] === undefined)
+            .sort((a, b) => (a.pathDistance || 9999) - (b.pathDistance || 9999));
+
+        return unknownFirst.length > 0 ? unknownFirst[0].targetMap : null;
+    }
 
     setInterval(() => {
         let isBotActive = window.isExping || (typeof isPatrolling !== 'undefined' && isPatrolling);
@@ -9752,31 +9798,47 @@ window.openShopAsync = async (namePart) => {
 
             let myNick = (Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "";
             const players = Object.values(others).filter(o => o?.isPlayer && o?.d?.nick && o.d.nick !== myNick).map(o => ({ id: o.d.id || o.id, nick: o.d.nick, lvl: o.d.lvl, x: o.d.x, y: o.d.y }));
+            const nowTs = Date.now();
 
             let currentIds = new Set(players.map(p => p.id));
             for (let id of window.alertedPlayersList) { if (!currentIds.has(id)) window.alertedPlayersList.delete(id); }
+            Object.keys(window.__playerThreatMemory).forEach(pid => { if (!currentIds.has(Number(pid))) delete window.__playerThreatMemory[pid]; });
 
             let newPlayers = [];
             players.forEach(p => { if (!window.alertedPlayersList.has(p.id)) { window.alertedPlayersList.add(p.id); newPlayers.push(p); } });
+
+            let isRedMap = Engine.map.d.pvp === 2;
+            let shouldFlee = false;
+            let threatPlayers = [];
+            let nearestThreatDist = Infinity;
+
+            if (isRedMap && botSettings.exp.pvpFlee) {
+                players.forEach(p => {
+                    let dist = Math.max(Math.abs(Engine.hero.d.x - p.x), Math.abs(Engine.hero.d.y - p.y));
+                    const mem = window.__playerThreatMemory[p.id] || { dist, ts: nowTs };
+                    const prevDist = Number(mem.dist);
+                    const isClosing = Number.isFinite(prevDist) && prevDist - dist >= 1;
+                    const closeThreat = dist <= 7;
+                    const chaseThreat = dist <= 8 && isClosing;
+                    if (closeThreat || chaseThreat) {
+                        shouldFlee = true;
+                        threatPlayers.push({ nick: p.nick, dist, chase: chaseThreat });
+                        if (dist < nearestThreatDist) nearestThreatDist = dist;
+                    }
+                    window.__playerThreatMemory[p.id] = { dist, ts: nowTs, x: p.x, y: p.y };
+                });
+            } else {
+                players.forEach(p => { window.__playerThreatMemory[p.id] = { dist: Math.max(Math.abs(Engine.hero.d.x - p.x), Math.abs(Engine.hero.d.y - p.y)), ts: nowTs, x: p.x, y: p.y }; });
+            }
 
             if (newPlayers.length > 0) {
                 let msgTitle = newPlayers.length === 1 ? `👁️ Wykryto Gracza!` : `👁️ Wykryto Graczy (${newPlayers.length})!`;
                 let msgBody = newPlayers.map(p => `- ${p.nick} (${p.lvl} lvl)`).join('\n');
                 let logBody = newPlayers.map(p => `${p.nick} (${p.lvl} lvl)`).join('<br> &nbsp;&nbsp;&nbsp; ↳ ');
 
-                let isRedMap = Engine.map.d.pvp === 2;
-                let shouldFlee = false;
-
-                // --- LOGIKA UCIECZKI Z MAP PVP ---
-                if (isRedMap && botSettings.exp.pvpFlee) {
-                    newPlayers.forEach(p => {
-                        let dist = Math.max(Math.abs(Engine.hero.d.x - p.x), Math.abs(Engine.hero.d.y - p.y));
-                        if (dist <= 6) shouldFlee = true; // Alarm poniżej 6 kratek!
-                    });
-                }
-
                 if (shouldFlee) {
-                    if (window.logExp) window.logExp(`🚨 UWAGA! Wróg < 6 kratek na mapie PvP! Ewakuacja na inną mapę!`, "#ff5252");
+                    const chased = threatPlayers.some(t => t.chase);
+                    if (window.logExp) window.logExp(`🚨 UWAGA! Wróg ${nearestThreatDist <= 7 ? "≤7" : "≤8"} kratek${chased ? " i goni" : ""} na mapie PvP! Ewakuacja!`, "#ff5252");
 
                     // Banujemy mapę w logice pętli na równe 10 minut
                     let banTime = Date.now() + 10 * 60 * 1000;
@@ -9788,14 +9850,19 @@ window.openShopAsync = async (namePart) => {
 
                     // Przerywamy obecną akcję i wymuszamy natychmiastowe obliczenie nowej drogi
                     expCurrentTargetId = null;
-window.expCurrentTargetGroupKey = null;
-window.expLastMoveTx = -1;
-window.expLastMoveTy = -1;
+                    window.expCurrentTargetGroupKey = null;
+                    window.expLastMoveTx = -1;
+                    window.expLastMoveTy = -1;
                     window.isRushing = false;
                     expMapTransitionCooldown = 0;
                     expLastActionTime = 0;
 
                     if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                    const nearestSafe = getNearestSafeMapFromCurrent(Engine.map.d.name);
+                    if (nearestSafe && nearestSafe !== Engine.map.d.name && typeof window.rushToMap === 'function') {
+                        window.logExp?.(`🛡️ Uciekam na najbliższą bezpieczną mapę: [${nearestSafe}]`, "#80cbc4");
+                        window.rushToMap(nearestSafe);
+                    }
                 } else {
                     // Tradycyjne powiadomienia i (ewentualne) zatrzymanie bota
                     if (checkBrowser) {
@@ -9814,8 +9881,30 @@ window.expLastMoveTy = -1;
                     }
                 }
             }
+            if (shouldFlee && newPlayers.length === 0) {
+                const chased = threatPlayers.some(t => t.chase);
+                if (window.logExp) window.logExp(`🚨 Pościg na PvP (${nearestThreatDist} kr.). Kontynuuję ewakuację${chased ? " (gracz się zbliża)" : ""}.`, "#ff7043");
+                let banTime = Date.now() + 10 * 60 * 1000;
+                window.__bannedMaps = window.__bannedMaps || {};
+                window.__bannedMaps[Engine.map.d.name] = banTime;
+                if (!window.mapClearTimes) window.mapClearTimes = {};
+                window.mapClearTimes[Engine.map.d.name] = banTime;
+                expCurrentTargetId = null;
+                window.expCurrentTargetGroupKey = null;
+                window.expLastMoveTx = -1;
+                window.expLastMoveTy = -1;
+                window.isRushing = false;
+                expMapTransitionCooldown = 0;
+                expLastActionTime = 0;
+                if (typeof Engine.hero.stop === 'function') Engine.hero.stop();
+                const nearestSafe = getNearestSafeMapFromCurrent(Engine.map.d.name);
+                if (nearestSafe && nearestSafe !== Engine.map.d.name && typeof window.rushToMap === 'function') {
+                    window.rushToMap(nearestSafe);
+                }
+            }
         } else if (!isBotActive) {
             window.alertedPlayersList.clear();
+            window.__playerThreatMemory = {};
         }
     }, 1000);
     // --- CZĘŚĆ 3: OBSERWATOR CZATU PRYWATNEGO (MutationObserver) ---
