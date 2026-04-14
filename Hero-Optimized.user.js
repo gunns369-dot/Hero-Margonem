@@ -5580,15 +5580,31 @@ window.expDryRunSimulation = function(type = 'gate-stuck-x5') {
         let text = (msg ?? '').toString().trim();
         text = text.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\u200D\s]+/gu, '').trim();
         text = text.replace(/\s+/g, ' ');
-        if (!text) return 'INFO | (pusty komunikat)';
+        if (!text) return '(pusty komunikat)';
 
         const lower = text.toLowerCase();
-        if (lower.includes('włączono') && lower.includes('berserk')) return 'INFO | Berserk: ON';
-        if (lower.includes('wyłączono') && lower.includes('berserk')) return 'INFO | Berserk: OFF';
-        if (lower.includes('uruchomiono tryb automatyczny')) return 'INFO | Bot: START';
-        if (lower.includes('zatrzymano tryb automatyczny')) return 'INFO | Bot: STOP';
+        if (lower.includes('włączono') && lower.includes('berserk')) return 'Berserk: ON';
+        if (lower.includes('wyłączono') && lower.includes('berserk')) return 'Berserk: OFF';
+        if (lower.includes('uruchomiono tryb automatyczny')) return 'Bot: START';
+        if (lower.includes('zatrzymano tryb automatyczny')) return 'Bot: STOP';
 
-        return `INFO | ${text}`;
+        // Czyści techniczne prefiksy loggera typu [INFO][GENERAL][EVENT][run:x][cycle:y]
+        text = text
+            .replace(/^\[(DEBUG|INFO|WARN|ERROR)\](\[[A-Z_]+\]){1,5}\s*/i, '')
+            .replace(/\[run:[^\]]+\]/gi, '')
+            .replace(/\[cycle:[^\]]+\]/gi, '')
+            .trim();
+
+        const cleanLower = text.toLowerCase();
+        if (cleanLower.includes('brama zajęta')) return 'Brama zajęta, ponawiam...';
+        if (cleanLower.includes('gaterecovery') && cleanLower.includes('krok')) return 'Próbuję obejść zajętą bramę.';
+        if (cleanLower.includes('gaterecovery') && cleanLower.includes('zablokowan')) return 'Brama chwilowo zablokowana.';
+        if (cleanLower.startsWith('task:')) {
+            const m = text.match(/task:\s*([a-z_]+)\s*->\s*([a-z_]+)/i);
+            if (m) return `Tryb: ${m[1].toUpperCase()} → ${m[2].toUpperCase()}`;
+        }
+
+        return text;
     }
 
     window.logExp = function(msg, color="#a99a75") {
@@ -6079,16 +6095,6 @@ function isMapTemporarilyCleared(mapName) {
     const mapKey = getMapClearKey(mapName);
     const ts = window.mapClearTimes[mapKey] || window.mapClearTimes[mapName];
     if (!ts) return false;
-
-    // 5 minut
-    const ttl = 5 * 60 * 1000;
-
-    if (Date.now() - ts > ttl) {
-        delete window.mapClearTimes[mapKey];
-        delete window.mapClearTimes[mapName];
-        return false;
-    }
-
     return true;
 }
 
