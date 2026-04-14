@@ -3699,6 +3699,7 @@ if (btnExp) {
 
            expCurrentTargetId = null;
 window.expCurrentTargetGroupKey = null;
+            window.expFocusTarget = null;
 expEmptyScans = 0;
             expAttackLockUntil = 0;
             expGatewayLockUntil = 0;
@@ -5317,6 +5318,7 @@ let expLastLoggedTransitMap = null;
 let expCurrentMapOrderIndex = -1;
 
 let expLastTargetSwitchAt = 0;
+const EXP_TARGET_FOCUS_LOCK_MS = 5600;
 
 
 
@@ -6466,6 +6468,7 @@ function runExpLogic() {
         window.expLastMoveHeroX = null;
         window.expLastMoveHeroY = null;
         window.expMeleeFailByTarget = {};
+        window.expFocusTarget = null;
         window.isRushing = false;
         expEmptyScans = 0;
         expCurrentTargetId = null;
@@ -6536,15 +6539,46 @@ function runExpLogic() {
     }
     const bestChoice = pickBestExpTarget(validMobs, distMap);
     let target = bestChoice ? bestChoice.mob : null;
+    let selectedGroupKey = bestChoice ? bestChoice.groupKey : null;
+    if (!window.expFocusTarget || window.expFocusTarget.map !== currMap) window.expFocusTarget = null;
+
+    if (window.expFocusTarget && window.expFocusTarget.id != null) {
+        const locked = validMobs.find(m => String(m.id) === String(window.expFocusTarget.id));
+        if (locked) {
+            target = locked;
+            const lockAge = now - (window.expFocusTarget.acquiredAt || now);
+            selectedGroupKey = bestChoice?.groupKey || window.expFocusTarget.groupKey || null;
+            if (window.expFocusTarget.lockedUntil && now < window.expFocusTarget.lockedUntil) {
+                HeroLogger.emit('DEBUG', 'TARGET_FOCUS_LOCK', `Focus aktywny: ${locked.nick || locked.id} (${Math.max(0, Math.ceil((window.expFocusTarget.lockedUntil - now) / 1000))}s)`, "#ffcc80", { category: 'COMBAT', dedupeMs: 1700 });
+            } else if (lockAge > EXP_TARGET_FOCUS_LOCK_MS) {
+                HeroLogger.emit('DEBUG', 'TARGET_FOCUS_STICKY', `Trzymam focus: ${locked.nick || locked.id} aż do zabicia.`, "#ffe082", { category: 'COMBAT', dedupeMs: 2600 });
+            }
+        } else {
+            window.expFocusTarget = null;
+        }
+    }
+
+    if (!window.expFocusTarget && target?.id != null) {
+        window.expFocusTarget = {
+            id: target.id,
+            map: currMap,
+            groupKey: selectedGroupKey || null,
+            acquiredAt: now,
+            lockedUntil: now + EXP_TARGET_FOCUS_LOCK_MS
+        };
+    }
+
     if (target && window.expLastTargetNotFoundAt && now - window.expLastTargetNotFoundAt < 2200) {
         const upd = MonsterMemory.onTargetNotFound(currMap, target.id);
         if (upd?.cooldownUntil && now < upd.cooldownUntil) {
             HeroLogger.emit('DEBUG', 'TARGET_NOT_FOUND', `Cel ${target.nick || target.id} oznaczony cooldown (${upd.failCount})`, "#ffb74d", { dedupeMs: 2200 });
+            if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
             target = null;
+            selectedGroupKey = null;
         }
     }
     const targetGroupSize = Math.max(1, Number(bestChoice?.group?.mobs?.length) || 1);
-    window.expCurrentTargetGroupKey = bestChoice ? bestChoice.groupKey : null;
+    window.expCurrentTargetGroupKey = selectedGroupKey;
     expCurrentTargetId = target ? (target.id || null) : null;
 
     const berserkEnabledNow = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
@@ -6591,6 +6625,7 @@ function runExpLogic() {
         if (liveTargetMissing || !targetPathData?.stand) {
             const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
             if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
+            if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
             window.expLastTargetNotFoundAt = Date.now();
             HeroLogger.emit('DEBUG', 'TARGET_UNREACHABLE_SKIP', `Pomijam cel ${target.nick || target.id} (powód: ${liveTargetMissing ? 'nie istnieje' : 'nieosiągalny/ściana'}, cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2200 });
             return;
@@ -6621,6 +6656,7 @@ function runExpLogic() {
                 if (window.expMeleeFailByTarget[targetKey] >= 3) {
                     const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
+                    if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
                     window.expLastTargetNotFoundAt = Date.now();
                     HeroLogger.emit('DEBUG', 'ATTACK_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} po ${window.expMeleeFailByTarget[targetKey]} nieudanych próbach (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
                     window.expStandStillStart = null;
