@@ -6653,11 +6653,7 @@ function runExpLogic() {
                 window.expMeleeFailByTarget = window.expMeleeFailByTarget || {};
                 const targetKey = String(target.id || `${target.x}_${target.y}`);
                 window.expMeleeFailByTarget[targetKey] = (window.expMeleeFailByTarget[targetKey] || 0) + 1;
-
-                ActionExecutor.run('ATTACK', { targetId: target.id }, () => {
-                    if (typeof Engine.npcs.interact === 'function') Engine.npcs.interact(target.id);
-                    else window._g(`fight&a=attack&id=${target.id}`);
-                });
+                HeroLogger.emit('DEBUG', 'ATTACK_WAIT_FOR_BERSERK', `Jestem przy celu ${target.nick || target.id} — czekam na autoatak berserka (próba=${window.expMeleeFailByTarget[targetKey]}).`, "#ffcc80", { category: 'COMBAT', dedupeMs: 1500 });
 
                 if (window.expMeleeFailByTarget[targetKey] >= 3) {
                     const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
