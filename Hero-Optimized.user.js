@@ -2158,10 +2158,11 @@ function autoDetectEngineData() {
             window.lastLoadedNick = Engine.hero.d.nick;
             let allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
 
-            if (allTps[window.lastLoadedNick]) {
-                botSettings.unlockedTeleports = allTps[window.lastLoadedNick];
+            const defaultTeleports = {"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false};
+            if (allTps[window.lastLoadedNick] && typeof allTps[window.lastLoadedNick] === 'object') {
+                botSettings.unlockedTeleports = { ...defaultTeleports, ...allTps[window.lastLoadedNick] };
             } else {
-                botSettings.unlockedTeleports = {"Thuzal":false, "Tuzmer":false, "Karka-han":false, "Werbin":false, "Torneg":false, "Ithan":false, "Eder":false};
+                botSettings.unlockedTeleports = { ...defaultTeleports };
             }
             if (typeof window.renderTeleportList === 'function' && document.getElementById('heroTeleportsGUI') && document.getElementById('heroTeleportsGUI').style.display !== 'none') {
                 window.renderTeleportList();
@@ -2536,7 +2537,9 @@ window.executeRushStep = function() {
         let tp = typeof ZAKONNICY !== 'undefined' ? ZAKONNICY[currentSysMap] : null;
         let baseDoor = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let isFakeDoor = baseDoor && tp && Math.abs(baseDoor.x - tp.x) <= 2 && Math.abs(baseDoor.y - tp.y) <= 2;
-        let isTeleportRoute = tp && (botSettings.unlockedTeleports[nextMap] || isFakeDoor);
+        let sourceUnlocked = !!(botSettings.unlockedTeleports && botSettings.unlockedTeleports[currentSysMap]);
+        let destinationUnlocked = !!(botSettings.unlockedTeleports && botSettings.unlockedTeleports[nextMap]);
+        let isTeleportRoute = tp && sourceUnlocked && (destinationUnlocked || isFakeDoor);
 
         if (isTeleportRoute) {
             if (window._lastRushNextMap !== nextMap) {
@@ -2811,7 +2814,8 @@ window.executeRushStep = function() {
                 }
             }
 
-            if (botSettings.useTeleports && ZAKONNICY[u]) {
+            const unlockedFromMap = !!(botSettings.unlockedTeleports && botSettings.unlockedTeleports[u]);
+            if (botSettings.useTeleports && ZAKONNICY[u] && unlockedFromMap) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
                         let alt = distances[u] + 2;
