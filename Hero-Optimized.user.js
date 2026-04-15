@@ -8952,6 +8952,9 @@ if (isDead) {
                             if (window.logHero) window.logHero("🎒 Za mało miejsca na potki! Najpierw idę sprzedać śmieci...", "#ffb300");
                             if (window.logExp) window.logExp("🎒 Za mało miejsca na potki! Najpierw idę sprzedać śmieci...", "#ffb300");
 
+                            const wasExpingBeforeSell = !!window.isExping;
+                            const wasBerserkOnBeforeSell = !!(botSettings.berserk && botSettings.berserk.enabled);
+
                             if (typeof stopPatrol === 'function') stopPatrol(true);
                             sessionStorage.removeItem('hero_autosell_ignore');
                             window.autoSellState.ignoreUntil = 0;
@@ -8962,8 +8965,8 @@ if (isDead) {
                             window.isRushingToShop = false;
                             window.isRushing = true;
 
-                            window.autoSellState.wasExpingBeforeSell = !!window.isExping;
-                            window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+                            window.autoSellState.wasExpingBeforeSell = wasExpingBeforeSell;
+                            window.autoSellState.wasBerserkOn = wasBerserkOnBeforeSell;
                             if (window.autoSellState.wasBerserkOn) {
                                 botSettings.berserk.enabled = false;
                                 let chkBerserk = document.getElementById('berserkEnabled');
@@ -9219,6 +9222,9 @@ if (isDead) {
 
                 const s = typeof window.getBagStats === 'function' ? window.getBagStats() : { freeSlots: 99, totalCapacity: 0 };
                 if (s.freeSlots <= 0 && s.totalCapacity > 0) {
+                    const wasExpingBeforeSell = !!window.isExping;
+                    const wasBerserkOnBeforeSell = !!(botSettings.berserk && botSettings.berserk.enabled);
+
                     if (typeof stopPatrol === 'function') stopPatrol(true);
                     window.autoSellState.active = true;
                     window.autoSellState.step = 1;
@@ -9227,8 +9233,8 @@ if (isDead) {
                     window.autoSellState.shopWaitStartTime = 0;
                     window.isRushingToShop = false;
                     window.isRushing = true;
-                    window.autoSellState.wasExpingBeforeSell = !!window.isExping;
-                    window.autoSellState.wasBerserkOn = botSettings.berserk && botSettings.berserk.enabled;
+                    window.autoSellState.wasExpingBeforeSell = wasExpingBeforeSell;
+                    window.autoSellState.wasBerserkOn = wasBerserkOnBeforeSell;
                     if (window.autoSellState.wasBerserkOn) {
                         botSettings.berserk.enabled = false;
                         let chkBerserk = document.getElementById('berserkEnabled');
