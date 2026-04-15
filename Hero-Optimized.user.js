@@ -5360,9 +5360,7 @@ let expLastMapName = "";
 
 let expEmptyScans = 0;
 let expLastLoggedTargetId = null;
-let expLastLoggedTargetAt = 0;
 let expLastLoggedTransitMap = null;
-const EXP_TARGET_LOG_COOLDOWN_MS = 10000;
 
 let expCurrentMapOrderIndex = -1;
 
@@ -6694,13 +6692,11 @@ function runExpLogic() {
         }
 
         window.expDecisionInfo = `Cel mob: ${(target.nick || "Potwór")} [${target.x},${target.y}]`;
-        const targetLogKey = `${target.nick || "Potwór"}|${target.ranga || ""}`;
-        const shouldLogTarget = (now - expLastLoggedTargetAt) >= EXP_TARGET_LOG_COOLDOWN_MS;
-        if (window.logExp && expLastLoggedTargetId !== targetLogKey && shouldLogTarget) {
+        const targetLogKey = getStableExpTargetKey(target) || `${target.nick || "Potwór"}|${target.ranga || ""}`;
+        if (window.logExp && expLastLoggedTargetId !== targetLogKey) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
             window.logExp(`🎯 Podchodzę: ${target.nick || "Potwór"}${rankLabel}`, "#ffd54f");
             expLastLoggedTargetId = targetLogKey;
-            expLastLoggedTargetAt = now;
             expLastLoggedTransitMap = null;
         }
         let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
@@ -6739,6 +6735,38 @@ function runExpLogic() {
         if (window.expMeleeFailByTarget) {
             const targetKey = getStableExpTargetKey(target);
             if (window.expMeleeFailByTarget[targetKey]) delete window.expMeleeFailByTarget[targetKey];
+        }
+        const approachTargetKey = getStableExpTargetKey(target);
+        const approachState = window.expApproachStuckState || (window.expApproachStuckState = {});
+        const sameTarget = approachState.targetKey === approachTargetKey;
+        if (!sameTarget) {
+            approachState.targetKey = approachTargetKey;
+            approachState.anchorX = hx;
+            approachState.anchorY = hy;
+            approachState.anchorAt = now;
+            approachState.failCount = 0;
+        } else {
+            const heroMoved = approachState.anchorX !== hx || approachState.anchorY !== hy;
+            if (heroMoved) {
+                approachState.anchorX = hx;
+                approachState.anchorY = hy;
+                approachState.anchorAt = now;
+                approachState.failCount = 0;
+            } else if (now - (approachState.anchorAt || now) > 2600) {
+                approachState.failCount = (approachState.failCount || 0) + 1;
+                approachState.anchorAt = now;
+                HeroLogger.emit('DEBUG', 'APPROACH_STUCK_RETRY', `Nie mogę dojść do celu ${target.nick || target.id} (próba=${approachState.failCount}).`, "#ffcc80", { category: 'COMBAT', dedupeMs: 1500 });
+
+                if (approachState.failCount >= 3) {
+                    const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+                    if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
+                    if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
+                    window.expLastTargetNotFoundAt = Date.now();
+                    HeroLogger.emit('DEBUG', 'APPROACH_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} — stoję w miejscu przy tym samym celu (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
+                    approachState.targetKey = null;
+                    return;
+                }
+            }
         }
         if (now > nextAllowedClickTime) {
             const moveX = targetPathData.stand.x;
