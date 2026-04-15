@@ -6851,7 +6851,10 @@ function runExpLogic() {
     expCurrentTargetId = target ? (target.id || null) : null;
 
     const berserkEnabledNow = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
-    const allowTransitFight = !!(botSettings?.berserk?.userEnabled && berserkEnabledNow);
+    // Domyślnie walczymy WYŁĄCZNIE na mapach z trasy expowiska.
+    // Opcja allowTransitFight jest ukrytym przełącznikiem awaryjnym (OFF by default),
+    // aby nie bić losowych mobów na mapach tranzytowych po teleportach.
+    const allowTransitFight = !!(botSettings?.exp?.allowTransitFight && botSettings?.berserk?.userEnabled && berserkEnabledNow);
     if (!isExpMap && allowTransitFight) {
         temporaryExpMode = hasNearbyReachableMobsForExp(10);
         if (temporaryExpMode) {
