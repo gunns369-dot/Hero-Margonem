@@ -5612,7 +5612,7 @@ const RouteCombatFSM = {
         this.evaluate(reason);
     },
     shouldBerserkBeOn(ctx = this.state) {
-        return !!(ctx.running && ctx.currentTask === 'EXP' && ctx.berserkCheckbox);
+        return !!(ctx.running && ctx.currentTask === 'EXP' && ctx.inRouteMap && ctx.berserkCheckbox);
     },
     evaluate(reason = 'sync') {
         const shouldEnable = this.shouldBerserkBeOn();
