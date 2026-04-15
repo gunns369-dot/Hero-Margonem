@@ -6824,20 +6824,20 @@ function runExpLogic() {
             }
         }
 
-        const bestTransit = pickNextUnclearedExpMap(currMap, mapsPool);
+        const unclearedMaps = (mapsPool || []).filter(m => m && !isMapTemporarilyCleared(m));
+        const bestTransit = pickNextUnclearedExpMap(currMap, unclearedMaps.length ? unclearedMaps : mapsPool);
         window.expDecisionInfo = `Mapa pusta: ${currMap} -> szukam przejścia w trasie`;
         let bestTargetMap = bestTransit ? bestTransit.targetMap : null;
 
         // Jeśli startujemy poza expowiskiem, dobijamy najpierw do najbliższej mapy z kolejności,
         // ale priorytetowo ignorujemy mapy świeżo wyczyszczone.
         if (!bestTargetMap && !isExpMap) {
-            const unclearedMaps = (mapsPool || []).filter(m => m && !isMapTemporarilyCleared(m));
             const nearestExpPath = getClosestExpMapPath(currMap, unclearedMaps.length ? unclearedMaps : mapsPool);
             if (nearestExpPath?.targetMap) bestTargetMap = nearestExpPath.targetMap;
         }
 
         if (!bestTargetMap) {
-            const fallbackRoute = pickNextReachableMapFromRoute(currMap, mapsPool);
+            const fallbackRoute = pickNextReachableMapFromRoute(currMap, unclearedMaps.length ? unclearedMaps : mapsPool);
             if (fallbackRoute?.nextMap) bestTargetMap = fallbackRoute.nextMap;
         }
 
@@ -6899,6 +6899,7 @@ function runExpLogic() {
             while (window.expMapHistory && window.expMapHistory.length) {
                 const candidate = window.expMapHistory.pop();
                 if (!candidate) continue;
+                if (isMapTemporarilyCleared(candidate)) continue;
                 if (window.__bannedMaps && window.__bannedMaps[candidate] && Date.now() < window.__bannedMaps[candidate]) continue;
                 const backPath = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate) : null;
                 if (backPath && backPath.length > 0) {
