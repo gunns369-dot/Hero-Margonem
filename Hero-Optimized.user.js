@@ -994,7 +994,7 @@ let opacityValue = 0.95;
         },
         {
             from: ["Wyspa Ingotia"],
-            to: ["Port Tuzmer"],
+            to: ["Port Tuzmer", "Tuzmer"],
             npcNickIncludes: ["lodka"],
             optionPatterns: {
                 boardShip: ["udaje sie na poklad", "na poklad poslańca", "na poklad poslanca"],
@@ -1003,7 +1003,7 @@ let opacityValue = 0.95;
         },
         {
             from: ["Posłaniec Śmierci", "Posłaniec Śmierci - Pokład", "Poslaniec Smierci", "Poslaniec Smierci - Poklad"],
-            to: ["Port Tuzmer"],
+            to: ["Port Tuzmer", "Tuzmer"],
             npcNickIncludes: ["oficer statku"],
             optionPatterns: {
                 mapSelect: ["wrocic do portu tuzmer", "wrocic do portu"],
@@ -2992,10 +2992,9 @@ window.handleTeleportNPC = function(targetMap) {
 
     function getSpecialTransportRoute(currentMap, targetMap) {
         if (!currentMap || !targetMap) return null;
-        const targetNorm = normalizeDialogText(targetMap);
         return SPECIAL_TRANSPORT_ROUTES.find(route =>
             mapMatchesAlias(currentMap, route.from) &&
-            (route.to || []).some(dst => normalizeDialogText(dst) === targetNorm)
+            mapMatchesAlias(targetMap, route.to)
         ) || null;
     }
 
@@ -5724,14 +5723,31 @@ const RouteCombatFSM = {
         const shouldEnable = this.shouldBerserkBeOn();
         const currentlyActive = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
         this.state.berserkActive = currentlyActive;
-        if (shouldEnable && !currentlyActive) {
-            if (window.BerserkController?.setBotBerserkState) window.BerserkController.setBotBerserkState(true, reason);
+
+        if (shouldEnable) {
+            this._disableRequestedAt = 0;
+            if (!currentlyActive && window.BerserkController?.setBotBerserkState) {
+                window.BerserkController.setBotBerserkState(true, reason);
+            }
             return;
         }
-        if (!shouldEnable && currentlyActive) {
+
+        if (currentlyActive) {
+            const now = Date.now();
+            if (!this._disableRequestedAt) {
+                this._disableRequestedAt = now;
+                if (reason !== 'poll') {
+                    HeroLogger.emit('DEBUG', 'BERSERK_HOLD_OFF', `Wstrzymuję wyłączenie berserka przez 1800ms (reason=${reason}).`, "#a99a75", { category: 'BERSERK', dedupeMs: 4000 });
+                }
+                return;
+            }
+            if (now - this._disableRequestedAt < 1800) return;
+            this._disableRequestedAt = 0;
             if (window.BerserkController?.setBotBerserkState) window.BerserkController.setBotBerserkState(false, reason);
             return;
         }
+
+        this._disableRequestedAt = 0;
         if (reason !== 'poll') {
             HeroLogger.emit('DEBUG', 'BERSERK_EVAL', `Noop reason=${reason} shouldEnable=${shouldEnable} active=${currentlyActive}`, "#a99a75", { category: 'BERSERK', dedupeMs: 20000 });
         }
