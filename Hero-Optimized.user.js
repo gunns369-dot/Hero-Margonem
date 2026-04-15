@@ -981,6 +981,7 @@ let opacityValue = 0.95;
             to: ["Archipelag Bremus An", "Wyspa Ingotia", "Wyspa Rem", "Wyspa Caneum", "Magradit", "Wyspa Wraków", "Agia Triada"],
             npcNickIncludes: ["kapitan fork la rush"],
             optionPatterns: {
+                boardShip: ["mozna zakupic u ciebie pewien bilet", "zakupic u ciebie pewien bilet", "mam chyba mdlosci od tego chybotliwego pokladu"],
                 mapSelect: ["poplynac na", "chcialabym poplynac na", "chcialbym poplynac na"],
                 confirm: ["no to w droge", "troche drogo", "skoro musze", "cale szczescie"]
             }
@@ -2976,7 +2977,10 @@ window.handleTeleportNPC = function(targetMap) {
         const currNorm = normalizeDialogText(currentMap);
         return (aliases || []).some(alias => {
             const a = normalizeDialogText(alias);
-            return currNorm === a || currNorm.includes(a) || a.includes(currNorm);
+            if (!a) return false;
+            // Celowo bez "a.includes(currNorm)" – powodowało fałszywe dopasowanie
+            // "Tuzmer" => "Port Tuzmer" i uruchamianie transportu na złej mapie.
+            return currNorm === a || currNorm.includes(a);
         });
     }
 
@@ -3019,7 +3023,9 @@ window.handleTeleportNPC = function(targetMap) {
     }
 
     function clickDialogOptionByPatterns(patterns) {
-        const options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
+        const options = Array.from(document.querySelectorAll(
+            '.dialogue-window-answer, .dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'
+        ));
         if (!options.length) return false;
         const normPatterns = (patterns || []).map(normalizeDialogText).filter(Boolean);
         if (!normPatterns.length) return false;
@@ -3045,8 +3051,8 @@ window.handleTeleportNPC = function(targetMap) {
 
         const tryPatterns = [
             [targetMap],
-            route.optionPatterns?.mapSelect || [],
             route.optionPatterns?.boardShip || [],
+            route.optionPatterns?.mapSelect || [],
             route.optionPatterns?.confirm || []
         ];
         for (const patterns of tryPatterns) {
