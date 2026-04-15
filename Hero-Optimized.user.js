@@ -996,6 +996,7 @@ let opacityValue = 0.95;
             from: ["Wyspa Ingotia"],
             to: ["Port Tuzmer", "Tuzmer"],
             npcNickIncludes: ["lodka"],
+            preferGateway: true,
             optionPatterns: {
                 boardShip: ["udaje sie na poklad", "na poklad poslańca", "na poklad poslanca"],
                 confirm: ["cale szczescie", "w droge", "powrot"]
@@ -3137,6 +3138,30 @@ window.handleTeleportNPC = function(targetMap) {
         return true;
     }
 
+    function resolveSpecialTransportGateway(currentMap, targetMap) {
+        let exactX = null, exactY = null;
+        const liveDoor = typeof getBestReachableGatewayToMap === 'function' ? getBestReachableGatewayToMap(targetMap) : null;
+        if (liveDoor && liveDoor.reachable) {
+            exactX = liveDoor.x;
+            exactY = liveDoor.y;
+        } else {
+            const baseDoor = globalGateways[currentMap] && globalGateways[currentMap][targetMap];
+            if (baseDoor) {
+                const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
+                const bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
+                    ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+                    : null;
+                if (bestBaseCoord) {
+                    exactX = bestBaseCoord.x;
+                    exactY = bestBaseCoord.y;
+                }
+            }
+        }
+
+        if (exactX === null || exactY === null) return null;
+        return { x: exactX, y: exactY };
+    }
+
     window.handleSpecialTransport = function(targetMap) {
         if (!isRushing && !isPatrolling && !window.isExping) return false;
         const currentMap = getCurrentMapName();
@@ -3146,6 +3171,22 @@ window.handleTeleportNPC = function(targetMap) {
         const routeKey = `${normalizeDialogText(currentMap)}=>${normalizeDialogText(targetMap)}`;
         if (!window.specialTransportState || window.specialTransportState.key !== routeKey) {
             window.specialTransportState = { key: routeKey, startedAt: Date.now() };
+        }
+
+        if (route.preferGateway) {
+            const gate = resolveSpecialTransportGateway(currentMap, targetMap);
+            if (gate) {
+                const hx = Number(Engine?.hero?.d?.x);
+                const hy = Number(Engine?.hero?.d?.y);
+                const dist = Math.max(Math.abs(hx - gate.x), Math.abs(hy - gate.y));
+                if (dist > 1) {
+                    safeGoTo(gate.x, gate.y, false);
+                } else {
+                    ActionExecutor.runWithRetry('PASS_GATE', { x: gate.x, y: gate.y, targetMap }, () => safeGoTo(gate.x, gate.y, false), { retries: 2, baseDelay: 220 });
+                }
+                rescheduleSpecialTransport(targetMap);
+                return true;
+            }
         }
 
         const tryPatterns = [
