@@ -5360,7 +5360,9 @@ let expLastMapName = "";
 
 let expEmptyScans = 0;
 let expLastLoggedTargetId = null;
+let expLastLoggedTargetAt = 0;
 let expLastLoggedTransitMap = null;
+const EXP_TARGET_LOG_COOLDOWN_MS = 10000;
 
 let expCurrentMapOrderIndex = -1;
 
@@ -6692,11 +6694,13 @@ function runExpLogic() {
         }
 
         window.expDecisionInfo = `Cel mob: ${(target.nick || "Potwór")} [${target.x},${target.y}]`;
-        const targetLogKey = String(bestChoice?.groupKey || target.id || `${target.x}_${target.y}`);
-        if (window.logExp && expLastLoggedTargetId !== targetLogKey) {
+        const targetLogKey = `${target.nick || "Potwór"}|${target.ranga || ""}`;
+        const shouldLogTarget = (now - expLastLoggedTargetAt) >= EXP_TARGET_LOG_COOLDOWN_MS;
+        if (window.logExp && expLastLoggedTargetId !== targetLogKey && shouldLogTarget) {
             const rankLabel = target.ranga ? ` (${target.ranga})` : "";
             window.logExp(`🎯 Podchodzę: ${target.nick || "Potwór"}${rankLabel}`, "#ffd54f");
             expLastLoggedTargetId = targetLogKey;
+            expLastLoggedTargetAt = now;
             expLastLoggedTransitMap = null;
         }
         let exactDist = Math.max(Math.abs(hx - target.x), Math.abs(hy - target.y));
