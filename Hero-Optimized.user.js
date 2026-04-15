@@ -10120,7 +10120,28 @@ if (
                     window.stuckIdleCount++;
                     // Odskakuje dopiero po 6 sekundach fizycznego braku ruchu, jeśli żaden wyjątek z listy wyżej go nie uchronił
                     if (window.stuckIdleCount >= 6) {
-                        if (window.logHero) window.logHero("🔄 [Anti-Stuck] Wykryto zacięcie! Lekko odskakuję...", "#00e5ff");
+                        const antiStuckMsg = "🔄 [Anti-Stuck] Wykryto zacięcie! Lekko odskakuję...";
+                        if (window.isExping && window.logExp) window.logExp(antiStuckMsg, "#00e5ff");
+                        else if (window.logHero) window.logHero(antiStuckMsg, "#00e5ff");
+
+                        if (window.isExping) {
+                            const stuckTargetId = window.expFocusTarget?.id ?? window.expCurrentTargetId ?? null;
+                            const currentMapName = Engine?.map?.d?.name;
+                            if (stuckTargetId != null && currentMapName && typeof MonsterMemory !== 'undefined' && MonsterMemory?.onTargetNotFound) {
+                                const mm = MonsterMemory.onTargetNotFound(currentMapName, stuckTargetId);
+                                if (window.logExp) {
+                                    const suffix = mm?.cooldownUntil ? " (oznaczony jako trudny / cooldown)." : ".";
+                                    window.logExp(`🎯 [Anti-Stuck] Zmieniam cel ${stuckTargetId}${suffix}`, "#ffb74d");
+                                }
+                            } else if (window.logExp && (window.expCurrentTargetGroupKey || window.expCurrentTargetId || window.expFocusTarget)) {
+                                window.logExp("🎯 [Anti-Stuck] Resetuję aktualny cel i wybieram nowy.", "#ffb74d");
+                            }
+                            window.expCurrentTargetGroupKey = null;
+                            expCurrentTargetId = null;
+                            window.expFocusTarget = null;
+                            window.expLastTargetNotFoundAt = Date.now();
+                        }
+
                         let stepX = Math.max(0, currentX + (Math.random() > 0.5 ? 1 : -1));
                         let stepY = Math.max(0, currentY + (Math.random() > 0.5 ? 1 : -1));
                         Engine.hero.autoGoTo({x: stepX, y: stepY});
