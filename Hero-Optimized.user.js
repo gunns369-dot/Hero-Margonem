@@ -981,7 +981,13 @@ let opacityValue = 0.95;
             to: ["Archipelag Bremus An", "Wyspa Ingotia", "Wyspa Rem", "Wyspa Caneum", "Magradit", "Wyspa Wraków", "Agia Triada"],
             npcNickIncludes: ["kapitan fork la rush"],
             optionPatterns: {
-                boardShip: ["mozna zakupic u ciebie pewien bilet", "zakupic u ciebie pewien bilet", "mam chyba mdlosci od tego chybotliwego pokladu"],
+                boardShip: [
+                    "toc ja nie szukam pracy, tylko ja oferuje",
+                    "toc ja nie szukam pracy tylko ja oferuje",
+                    "mozna zakupic u ciebie pewien bilet",
+                    "zakupic u ciebie pewien bilet",
+                    "mam chyba mdlosci od tego chybotliwego pokladu"
+                ],
                 mapSelect: ["poplynac na", "chcialabym poplynac na", "chcialbym poplynac na"],
                 confirm: ["no to w droge", "troche drogo", "skoro musze", "cale szczescie"]
             }
