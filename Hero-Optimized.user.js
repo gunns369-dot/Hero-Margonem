@@ -604,7 +604,7 @@ setTimeout(() => window.DatabaseModule.initDatabases(), 3000);
 
         {"name": "Morski potwór", "level": 118, "prof": "Tropiciel", "limit": 999, "pvp": "włączone", "path": ["Tuzmer", "Port Tuzmer", "Archipelag Bremus An", "Jama Morskiej Macki p.1 - sala 1", "Jama Morskiej Macki p.1 - sala 2", "Jama Morskiej Macki p.1 - sala 3"], "resp": {"Jama Morskiej Macki p.1 - sala 3": [[9, 12]]}},
 
-        {"name": "Krab pustelnik", "level": 124, "prof": "Tancerz Ostrzy", "limit": 137, "pvp": "włączone", "path": ["Tuzmer", "Port Tuzmer", "Kapitan Fork la Rush", "Wyspa Rem", "Opuszczony statek - pokład pod rufą"], "resp": {"Opuszczony statek - pokład pod rufą": [[7, 7]], "Wyspa Rem": [[63, 33]]}},
+        {"name": "Krab pustelnik", "level": 124, "prof": "Tancerz Ostrzy", "limit": 137, "pvp": "włączone", "path": ["Tuzmer", "Port Tuzmer", "Wyspa Rem", "Opuszczony statek - pokład pod rufą"], "resp": {"Opuszczony statek - pokład pod rufą": [[7, 7]], "Wyspa Rem": [[63, 33]]}},
 
         {"name": "Borgoros Garamir III", "level": 124, "prof": "Wojownik", "limit": 999, "pvp": "włączone", "path": ["Tuzmer", "Port Tuzmer", "Wyspa Ingotia", "Korytarze Wygnańców p.1 - Sala Ech", "Korytarze Wygnańców p.2 - Sala Żądzy - Komnata Przeklętego Daru", "Twierdza Rogogłowych - Sala Byka"], "resp": {"Twierdza Rogogłowych - Sala Byka": [[16, 7]]}},
 
@@ -967,6 +967,43 @@ let opacityValue = 0.95;
         "Eder": {x: 26, y: 40}
 
     };
+
+    const normalizeDialogText = (txt) => String(txt || "")
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const SPECIAL_TRANSPORT_ROUTES = [
+        {
+            from: ["Port Tuzmer"],
+            to: ["Archipelag Bremus An", "Wyspa Ingotia", "Wyspa Rem", "Wyspa Caneum", "Magradit", "Wyspa Wraków", "Agia Triada"],
+            npcNickIncludes: ["kapitan fork la rush"],
+            optionPatterns: {
+                mapSelect: ["poplynac na", "chcialabym poplynac na", "chcialbym poplynac na"],
+                confirm: ["no to w droge", "troche drogo", "skoro musze", "cale szczescie"]
+            }
+        },
+        {
+            from: ["Wyspa Ingotia"],
+            to: ["Port Tuzmer"],
+            npcNickIncludes: ["lodka"],
+            optionPatterns: {
+                boardShip: ["udaje sie na poklad", "na poklad poslańca", "na poklad poslanca"],
+                confirm: ["cale szczescie", "w droge", "powrot"]
+            }
+        },
+        {
+            from: ["Posłaniec Śmierci", "Posłaniec Śmierci - Pokład", "Poslaniec Smierci", "Poslaniec Smierci - Poklad"],
+            to: ["Port Tuzmer"],
+            npcNickIncludes: ["oficer statku"],
+            optionPatterns: {
+                mapSelect: ["wrocic do portu tuzmer", "wrocic do portu"],
+                confirm: ["cale szczescie", "w droge", "wracamy do portu tuzmer"]
+            }
+        }
+    ];
 
 
 
@@ -2576,6 +2613,18 @@ window.executeRushStep = function() {
         }
 
         window.rushNextMap = nextMap;
+        const hasSpecialTransport = typeof getSpecialTransportRoute === 'function' && !!getSpecialTransportRoute(currentSysMap, nextMap);
+        if (hasSpecialTransport) {
+            if (window._lastRushNextMap !== nextMap) {
+                if (window.logExp) window.logExp(`⛴️ Używam transportu NPC: [${currentSysMap}] → [${nextMap}]`, "#26c6da");
+                if (window.logHero) window.logHero(`⛴️ Używam transportu NPC: [${currentSysMap}] → [${nextMap}]`, "#26c6da");
+                window._lastRushNextMap = nextMap;
+            }
+            clearTimeout(rushInterval);
+            rushInterval = setTimeout(() => window.handleSpecialTransport(nextMap), 180);
+            return;
+        }
+
         let tp = typeof ZAKONNICY !== 'undefined' ? ZAKONNICY[currentSysMap] : null;
         let baseDoor = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let isFakeDoor = baseDoor && tp && Math.abs(baseDoor.x - tp.x) <= 2 && Math.abs(baseDoor.y - tp.y) <= 2;
@@ -2868,6 +2917,19 @@ window.executeRushStep = function() {
                     }
                 }
             }
+
+            const specialDestinations = (typeof getSpecialTransportDestinations === 'function')
+                ? getSpecialTransportDestinations(u)
+                : [];
+            for (const spMap of specialDestinations) {
+                if (!spMap || spMap === u) continue;
+                let alt = distances[u] + 3;
+                if (distances[spMap] === undefined || alt < distances[spMap]) {
+                    distances[spMap] = alt;
+                    previous[spMap] = u;
+                    queue.push({ node: spMap, dist: alt });
+                }
+            }
         }
         return null;
     }
@@ -2908,6 +2970,123 @@ window.handleTeleportNPC = function(targetMap) {
         if (isRushing) { clearTimeout(rushInterval); rushInterval = setTimeout(() => window.handleTeleportNPC(targetMap), 600); }
         else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(() => window.handleTeleportNPC(targetMap), 600); }
         else if (window.isExping) { setTimeout(() => window.handleTeleportNPC(targetMap), 600); }
+    }
+
+    function mapMatchesAlias(currentMap, aliases) {
+        const currNorm = normalizeDialogText(currentMap);
+        return (aliases || []).some(alias => {
+            const a = normalizeDialogText(alias);
+            return currNorm === a || currNorm.includes(a) || a.includes(currNorm);
+        });
+    }
+
+    function getSpecialTransportRoute(currentMap, targetMap) {
+        if (!currentMap || !targetMap) return null;
+        const targetNorm = normalizeDialogText(targetMap);
+        return SPECIAL_TRANSPORT_ROUTES.find(route =>
+            mapMatchesAlias(currentMap, route.from) &&
+            (route.to || []).some(dst => normalizeDialogText(dst) === targetNorm)
+        ) || null;
+    }
+
+    function getSpecialTransportDestinations(currentMap) {
+        if (!currentMap) return [];
+        const dest = [];
+        for (const route of SPECIAL_TRANSPORT_ROUTES) {
+            if (!mapMatchesAlias(currentMap, route.from)) continue;
+            for (const to of (route.to || [])) {
+                if (to && !dest.includes(to)) dest.push(to);
+            }
+        }
+        return dest;
+    }
+
+    function findNpcByNickIncludes(patterns) {
+        const npcs = (typeof Engine !== 'undefined' && Engine.npcs)
+            ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d)
+            : {};
+        if (!npcs) return null;
+        const normPatterns = (patterns || []).map(normalizeDialogText).filter(Boolean);
+        for (let id in npcs) {
+            const n = npcs[id]?.d || npcs[id];
+            if (!n || !n.nick) continue;
+            const nickNorm = normalizeDialogText(n.nick.replace(/<[^>]*>?/gm, ''));
+            if (normPatterns.some(p => nickNorm.includes(p))) {
+                return { id: Number(id), x: Number(n.x), y: Number(n.y), nick: n.nick };
+            }
+        }
+        return null;
+    }
+
+    function clickDialogOptionByPatterns(patterns) {
+        const options = Array.from(document.querySelectorAll('.answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'));
+        if (!options.length) return false;
+        const normPatterns = (patterns || []).map(normalizeDialogText).filter(Boolean);
+        if (!normPatterns.length) return false;
+        const targetOpt = options.find(opt => {
+            const txt = normalizeDialogText(opt.innerText || opt.textContent || '');
+            return normPatterns.some(p => txt.includes(p));
+        });
+        if (!targetOpt) return false;
+        targetOpt.click();
+        return true;
+    }
+
+    window.handleSpecialTransport = function(targetMap) {
+        if (!isRushing && !isPatrolling && !window.isExping) return false;
+        const currentMap = getCurrentMapName();
+        const route = getSpecialTransportRoute(currentMap, targetMap);
+        if (!route) return false;
+
+        const routeKey = `${normalizeDialogText(currentMap)}=>${normalizeDialogText(targetMap)}`;
+        if (!window.specialTransportState || window.specialTransportState.key !== routeKey) {
+            window.specialTransportState = { key: routeKey, startedAt: Date.now() };
+        }
+
+        const tryPatterns = [
+            [targetMap],
+            route.optionPatterns?.mapSelect || [],
+            route.optionPatterns?.boardShip || [],
+            route.optionPatterns?.confirm || []
+        ];
+        for (const patterns of tryPatterns) {
+            if (clickDialogOptionByPatterns(patterns)) {
+                if (window.logExp) window.logExp(`⛴️ Transport: wybieram opcję dla [${targetMap}]`, "#26c6da");
+                rescheduleSpecialTransport(targetMap);
+                return true;
+            }
+        }
+
+        const npc = findNpcByNickIncludes(route.npcNickIncludes);
+        if (npc) {
+            const hx = Number(Engine?.hero?.d?.x);
+            const hy = Number(Engine?.hero?.d?.y);
+            const dist = Math.max(Math.abs(hx - npc.x), Math.abs(hy - npc.y));
+            if (dist > 1) {
+                safeGoTo(npc.x, npc.y, false);
+            } else if (typeof Engine?.npcs?.interact === 'function') {
+                Engine.npcs.interact(npc.id);
+            } else if (typeof window._g === 'function') {
+                window._g(`talk&id=${npc.id}`);
+            }
+            rescheduleSpecialTransport(targetMap);
+            return true;
+        }
+
+        rescheduleSpecialTransport(targetMap);
+        return true;
+    };
+
+    function rescheduleSpecialTransport(targetMap) {
+        if (isRushing) {
+            clearTimeout(rushInterval);
+            rushInterval = setTimeout(() => window.handleSpecialTransport(targetMap), 700);
+        } else if (isPatrolling) {
+            clearTimeout(smoothPatrolInterval);
+            smoothPatrolInterval = setTimeout(() => window.handleSpecialTransport(targetMap), 700);
+        } else if (window.isExping) {
+            setTimeout(() => window.handleSpecialTransport(targetMap), 700);
+        }
     }
 
     // --- FUNKCJE WSPOMAGAJĄCE ---
