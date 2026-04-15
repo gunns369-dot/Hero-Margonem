@@ -6559,7 +6559,6 @@ function runExpLogic() {
         if (!n || n.type === 4 || n.type < 2 || n.dead || n.del || n.delete) continue;
         if (parseInt(n.lvl) < botSettings.exp.minLvl || parseInt(n.lvl) > botSettings.exp.maxLvl) continue;
         if (isOutsideCurrentMap(n.x, n.y)) continue;
-        if (isCollisionSafe(n.x, n.y)) continue;
 
         let ranga = getMobRank(n);
         if (ranga === "normal" && !botSettings.exp.normal) continue;
@@ -6684,7 +6683,7 @@ function runExpLogic() {
         const liveNpcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
         const liveTargetRaw = liveNpcs && (liveNpcs[target.id]?.d || liveNpcs[target.id]);
         const liveTargetMissing = !liveTargetRaw || liveTargetRaw.dead || liveTargetRaw.del || liveTargetRaw.delete;
-        const liveTargetInCollision = !!liveTargetRaw && (isOutsideCurrentMap(liveTargetRaw.x, liveTargetRaw.y) || isCollisionSafe(liveTargetRaw.x, liveTargetRaw.y));
+        const liveTargetInCollision = !!liveTargetRaw && isOutsideCurrentMap(liveTargetRaw.x, liveTargetRaw.y);
         const targetPathData = getPathToAdjacentTile(target.x, target.y, distMap);
 
         // Twardy bezpiecznik: jeżeli celu nie ma albo nie ma legalnego pola podejścia (np. mob w ścianie), pomijamy.
