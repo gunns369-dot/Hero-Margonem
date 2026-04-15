@@ -3028,18 +3028,112 @@ window.handleTeleportNPC = function(targetMap) {
         return null;
     }
 
-    function clickDialogOptionByPatterns(patterns) {
+    function normalizeTransportMapName(name) {
+        const stopWords = new Set(["wyspa", "archipelag", "na", "do", "od", "z", "ze"]);
+        const simplifyWord = (word) => {
+            if (!word) return "";
+            const endings = ["owie", "owiec", "owie", "owej", "owego", "owym", "ami", "ach", "owie", "owi", "ie", "ia", "iu", "a", "e", "u", "y", "ą", "ę"]; 
+            for (const end of endings) {
+                if (word.length > end.length + 2 && word.endsWith(end)) {
+                    return word.slice(0, -end.length);
+                }
+            }
+            return word;
+        };
+
+        return normalizeDialogText(name)
+            .replace(/[^a-z0-9 ]/g, " ")
+            .split(" ")
+            .map(w => w.trim())
+            .filter(Boolean)
+            .filter(w => !stopWords.has(w))
+            .map(simplifyWord)
+            .join(" ")
+            .trim();
+    }
+
+    function levenshteinDistance(a, b) {
+        if (a === b) return 0;
+        if (!a) return b.length;
+        if (!b) return a.length;
+
+        const rows = a.length + 1;
+        const cols = b.length + 1;
+        const matrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+        for (let i = 0; i < rows; i++) matrix[i][0] = i;
+        for (let j = 0; j < cols; j++) matrix[0][j] = j;
+
+        for (let i = 1; i < rows; i++) {
+            for (let j = 1; j < cols; j++) {
+                const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j - 1] + cost
+                );
+            }
+        }
+
+        return matrix[rows - 1][cols - 1];
+    }
+
+    function scoreTransportDestination(optionText, targetMap) {
+        const optionNorm = normalizeTransportMapName(optionText);
+        const targetNorm = normalizeTransportMapName(targetMap);
+        if (!optionNorm || !targetNorm) return 0;
+
+        if (optionNorm === targetNorm) return 1;
+        if (optionNorm.includes(targetNorm) || targetNorm.includes(optionNorm)) return 0.95;
+
+        const dist = levenshteinDistance(optionNorm, targetNorm);
+        const maxLen = Math.max(optionNorm.length, targetNorm.length);
+        const editScore = maxLen > 0 ? (1 - (dist / maxLen)) : 0;
+
+        const optionTokens = new Set(optionNorm.split(" ").filter(Boolean));
+        const targetTokens = new Set(targetNorm.split(" ").filter(Boolean));
+        const common = [...targetTokens].filter(t => optionTokens.has(t)).length;
+        const tokenScore = targetTokens.size ? (common / targetTokens.size) : 0;
+
+        return (editScore * 0.65) + (tokenScore * 0.35);
+    }
+
+    function clickDialogOptionByPatterns(patterns, preferredDestination = null) {
         const options = Array.from(document.querySelectorAll(
             '.dialogue-window-answer, .dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]'
         ));
         if (!options.length) return false;
+
         const normPatterns = (patterns || []).map(normalizeDialogText).filter(Boolean);
-        if (!normPatterns.length) return false;
-        const targetOpt = options.find(opt => {
-            const txt = normalizeDialogText(opt.innerText || opt.textContent || '');
-            return normPatterns.some(p => txt.includes(p));
-        });
-        if (!targetOpt) return false;
+        const matched = normPatterns.length
+            ? options.filter(opt => {
+                const txt = normalizeDialogText(opt.innerText || opt.textContent || '');
+                return normPatterns.some(p => txt.includes(p));
+            })
+            : [];
+
+        const candidates = matched.length ? matched : options;
+        if (!candidates.length) return false;
+
+        let targetOpt = candidates[0];
+
+        if (preferredDestination) {
+            let best = null;
+            for (const opt of candidates) {
+                const txtRaw = (opt.innerText || opt.textContent || '');
+                const score = scoreTransportDestination(txtRaw, preferredDestination);
+                if (!best || score > best.score) best = { opt, score };
+            }
+
+            if (best && best.score >= 0.5) {
+                targetOpt = best.opt;
+            } else if (!matched.length) {
+                return false;
+            }
+        } else if (!matched.length) {
+            return false;
+        }
+
         targetOpt.click();
         return true;
     }
@@ -3062,7 +3156,7 @@ window.handleTeleportNPC = function(targetMap) {
             route.optionPatterns?.confirm || []
         ];
         for (const patterns of tryPatterns) {
-            if (clickDialogOptionByPatterns(patterns)) {
+            if (clickDialogOptionByPatterns(patterns, targetMap)) {
                 if (window.logExp) window.logExp(`⛴️ Transport: wybieram opcję dla [${targetMap}]`, "#26c6da");
                 rescheduleSpecialTransport(targetMap);
                 return true;
