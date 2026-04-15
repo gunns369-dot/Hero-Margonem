@@ -6544,6 +6544,9 @@ function runExpLogic() {
 
     let hx = Engine.hero.d.x;
     let hy = Engine.hero.d.y;
+    const mapW = Number(Engine?.map?.d?.x) || 0;
+    const mapH = Number(Engine?.map?.d?.y) || 0;
+    const isOutsideCurrentMap = (x, y) => x < 0 || y < 0 || x >= mapW || y >= mapH;
 
     // --- PAMIĘĆ POTWORÓW I FILTR RADARU ---
     if (!window.expMonsterCache) window.expMonsterCache = new Map();
@@ -6555,6 +6558,8 @@ function runExpLogic() {
         let n = npcsData[key]?.d || npcsData[key];
         if (!n || n.type === 4 || n.type < 2 || n.dead || n.del || n.delete) continue;
         if (parseInt(n.lvl) < botSettings.exp.minLvl || parseInt(n.lvl) > botSettings.exp.maxLvl) continue;
+        if (isOutsideCurrentMap(n.x, n.y)) continue;
+        if (isCollisionSafe(n.x, n.y)) continue;
 
         let ranga = getMobRank(n);
         if (ranga === "normal" && !botSettings.exp.normal) continue;
@@ -6679,15 +6684,19 @@ function runExpLogic() {
         const liveNpcs = typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d;
         const liveTargetRaw = liveNpcs && (liveNpcs[target.id]?.d || liveNpcs[target.id]);
         const liveTargetMissing = !liveTargetRaw || liveTargetRaw.dead || liveTargetRaw.del || liveTargetRaw.delete;
+        const liveTargetInCollision = !!liveTargetRaw && (isOutsideCurrentMap(liveTargetRaw.x, liveTargetRaw.y) || isCollisionSafe(liveTargetRaw.x, liveTargetRaw.y));
         const targetPathData = getPathToAdjacentTile(target.x, target.y, distMap);
 
         // Twardy bezpiecznik: jeżeli celu nie ma albo nie ma legalnego pola podejścia (np. mob w ścianie), pomijamy.
-        if (liveTargetMissing || !targetPathData?.stand) {
+        if (liveTargetMissing || liveTargetInCollision || !targetPathData?.stand) {
             const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
             if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
             if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
             window.expLastTargetNotFoundAt = Date.now();
-            HeroLogger.emit('DEBUG', 'TARGET_UNREACHABLE_SKIP', `Pomijam cel ${target.nick || target.id} (powód: ${liveTargetMissing ? 'nie istnieje' : 'nieosiągalny/ściana'}, cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2200 });
+            const skipReason = liveTargetMissing
+                ? 'nie istnieje'
+                : (liveTargetInCollision ? 'poza mapą/kolizja' : 'nieosiągalny/ściana');
+            HeroLogger.emit('DEBUG', 'TARGET_UNREACHABLE_SKIP', `Pomijam cel ${target.nick || target.id} (powód: ${skipReason}, cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2200 });
             return;
         }
 
