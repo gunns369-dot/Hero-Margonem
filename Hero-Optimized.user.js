@@ -6128,6 +6128,36 @@ window.expModeDebugLogKey = null;
 window.expMoveLockUntil = 0;
 
 window.expUnreachableMobs = window.expUnreachableMobs || new Set();
+window.expIgnoredTargetsByMap = window.expIgnoredTargetsByMap || {};
+
+function getExpTargetIgnoreKey(mob) {
+    if (!mob) return null;
+    const nick = String(mob.nick || mob.name || '').replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+    const lvl = Number.parseInt(mob.lvl, 10) || 0;
+    const rank = String(mob.ranga || mob.priorityClass || '').trim().toLowerCase();
+    if (!nick && lvl <= 0) return null;
+    return `${nick}|${lvl}|${rank}`;
+}
+
+function isTargetIgnoredOnMap(mapName, mob) {
+    if (!mapName || !mob) return false;
+    const mapKey = getMapClearKey(mapName);
+    const targetKey = getExpTargetIgnoreKey(mob);
+    if (!mapKey || !targetKey) return false;
+    const ignoredSet = window.expIgnoredTargetsByMap?.[mapKey];
+    return ignoredSet instanceof Set ? ignoredSet.has(targetKey) : false;
+}
+
+function markTargetIgnoredOnMap(mapName, mob, reason = 'too_hard') {
+    if (!mapName || !mob) return false;
+    const mapKey = getMapClearKey(mapName);
+    const targetKey = getExpTargetIgnoreKey(mob);
+    if (!mapKey || !targetKey) return false;
+    if (!window.expIgnoredTargetsByMap[mapKey]) window.expIgnoredTargetsByMap[mapKey] = new Set();
+    window.expIgnoredTargetsByMap[mapKey].add(targetKey);
+    HeroLogger.emit('INFO', 'TARGET_HARD_IGNORED_ON_MAP', `Ignoruję cel ${mob.nick || mob.id || '?'} na mapie [${mapName}] (powód: ${reason}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2500 });
+    return true;
+}
 
 function getMapClearKey(mapName) {
     if (!mapName) return "";
@@ -6312,10 +6342,13 @@ function getPathToAdjacentTile(targetX, targetY, distMap) {
 
 function pickBestExpTarget(validMobs, distMap) {
     if (!validMobs || !validMobs.length) return null;
-    const groups = buildServerMobGroups(validMobs, distMap) || [];
+    const mapName = Engine?.map?.d?.name || '';
+    const filteredMobs = validMobs.filter(m => !isTargetIgnoredOnMap(mapName, m));
+    if (!filteredMobs.length) return null;
+    const groups = buildServerMobGroups(filteredMobs, distMap) || [];
     if (!groups.length) {
-        validMobs.sort((a,b)=>a.dist-b.dist);
-        return { mob: validMobs[0], groupKey: null };
+        filteredMobs.sort((a,b)=>a.dist-b.dist);
+        return { mob: filteredMobs[0], groupKey: null };
     }
 
     const rankBonus = { normal: 0, elite1: 4, elite2: 10, hero: 16 };
@@ -6723,6 +6756,7 @@ function runExpLogic() {
 
                 if (window.expMeleeFailByTarget[targetKey] >= 3) {
                     const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+                    markTargetIgnoredOnMap(currMap, target, 'melee_fail_x3');
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
                     window.expLastTargetNotFoundAt = Date.now();
@@ -6767,6 +6801,7 @@ function runExpLogic() {
 
                 if (approachState.failCount >= 3) {
                     const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+                    markTargetIgnoredOnMap(currMap, target, 'approach_fail_x3');
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
                     window.expLastTargetNotFoundAt = Date.now();
@@ -10143,8 +10178,13 @@ if (
                             const currentMapName = Engine?.map?.d?.name;
                             if (stuckTargetId != null && currentMapName && typeof MonsterMemory !== 'undefined' && MonsterMemory?.onTargetNotFound) {
                                 const mm = MonsterMemory.onTargetNotFound(currentMapName, stuckTargetId);
+                                const stuckMob =
+                                    (window.expMonsterCache && window.expMonsterCache.get(String(stuckTargetId))) ||
+                                    (window.expFocusTarget && String(window.expFocusTarget.id) === String(stuckTargetId) ? window.expFocusTarget : null) ||
+                                    { id: stuckTargetId, nick: String(stuckTargetId), lvl: 0, ranga: '' };
+                                markTargetIgnoredOnMap(currentMapName, stuckMob, 'anti_stuck');
                                 if (window.logExp) {
-                                    const suffix = mm?.cooldownUntil ? " (oznaczony jako trudny / cooldown)." : ".";
+                                    const suffix = mm?.cooldownUntil ? " (oznaczony jako trudny / cooldown i ignorowany na tej mapie)." : " (ignorowany na tej mapie).";
                                     window.logExp(`🎯 [Anti-Stuck] Zmieniam cel ${stuckTargetId}${suffix}`, "#ffb74d");
                                 }
                             } else if (window.logExp && (window.expCurrentTargetGroupKey || window.expCurrentTargetId || window.expFocusTarget)) {
