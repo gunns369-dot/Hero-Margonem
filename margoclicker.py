@@ -9,6 +9,8 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 import logging
+import json
+from pathlib import Path
 
 FALLBACK_OFFSET_Y = 7
 PRETRAP_TEST_RATIO_X = 0.50
@@ -18,12 +20,11 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 config_lock = threading.Lock()
+SETTINGS_PATH = Path(__file__).with_name("margoclicker_settings.json")
 config = {
     "use_client_area": True,
     "manual_offset_enabled": True,
-    "manual_offset_x": 0.0,
     "manual_offset_y": 0.0,
-    "launch_fullscreen": False,
     "window_keyword": "margonem",
     "hide_console_on_start": True,
 }
@@ -67,6 +68,55 @@ def run_console_policy():
         should_hide = bool(config["hide_console_on_start"])
     if should_hide:
         hide_console_window()
+
+
+def _normalize_config(raw):
+    normalized = {
+        "use_client_area": bool(raw.get("use_client_area", config["use_client_area"])),
+        "manual_offset_enabled": bool(raw.get("manual_offset_enabled", config["manual_offset_enabled"])),
+        "manual_offset_y": float(raw.get("manual_offset_y", config["manual_offset_y"])),
+        "window_keyword": str(raw.get("window_keyword", config["window_keyword"])).strip() or "margonem",
+        "hide_console_on_start": bool(raw.get("hide_console_on_start", config["hide_console_on_start"])),
+    }
+    return normalized
+
+
+def load_settings_from_disk():
+    if not SETTINGS_PATH.exists():
+        return
+    try:
+        saved = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"⚠️ Nie udało się odczytać ustawień z pliku: {e}")
+        return
+
+    if not isinstance(saved, dict):
+        print("⚠️ Plik ustawień ma nieprawidłowy format, pomijam.")
+        return
+
+    try:
+        normalized = _normalize_config(saved)
+    except Exception as e:
+        print(f"⚠️ Nie udało się znormalizować ustawień: {e}")
+        return
+
+    with config_lock:
+        config.update(normalized)
+
+
+def save_settings_to_disk():
+    with config_lock:
+        payload = {
+            "use_client_area": config["use_client_area"],
+            "manual_offset_enabled": config["manual_offset_enabled"],
+            "manual_offset_y": config["manual_offset_y"],
+            "window_keyword": config["window_keyword"],
+            "hide_console_on_start": config["hide_console_on_start"],
+        }
+    try:
+        SETTINGS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"⚠️ Nie udało się zapisać ustawień do pliku: {e}")
 
 
 def setup_dpi_awareness():
@@ -201,39 +251,11 @@ def get_client_origin(hwnd):
         return None
 
 
-def maybe_enable_fullscreen_from_config():
-    with config_lock:
-        launch_fullscreen = bool(config["launch_fullscreen"])
-
-    if not launch_fullscreen:
-        return
-
-    try:
-        time.sleep(1.2)
-        if send_f11_to_window():
-            print("🖥️ Wysłano F11 (automatyczny tryb pełnoekranowy).")
-        else:
-            print("⚠️ Nie znaleziono okna gry/przeglądarki do F11.")
-    except Exception as e:
-        print(f"⚠️ Nie udało się wysłać F11: {e}")
-
-
-def trigger_fullscreen_now():
-    try:
-        if send_f11_to_window():
-            print("🖥️ Wysłano F11 (ręczne przełączenie pełnego ekranu).")
-        else:
-            print("⚠️ Nie znaleziono okna gry/przeglądarki do F11.")
-    except Exception as e:
-        print(f"⚠️ Nie udało się wysłać F11: {e}")
-
-
 def get_click_config():
     with config_lock:
         return {
             "use_client_area": bool(config["use_client_area"]),
             "manual_offset_enabled": bool(config["manual_offset_enabled"]),
-            "manual_offset_x": float(config["manual_offset_x"]),
             "manual_offset_y": float(config["manual_offset_y"]),
         }
 
@@ -244,7 +266,6 @@ def kliknij_w_grze(x, y):
     local_x = float(x)
     local_y = float(y)
     if cfg["manual_offset_enabled"]:
-        local_x += cfg["manual_offset_x"]
         local_y += cfg["manual_offset_y"]
 
     hwnd = find_best_margonem_hwnd() if cfg["use_client_area"] else None
@@ -327,7 +348,7 @@ def start_http_server():
 def launch_gui():
     root = tk.Tk()
     root.title("MargoClicker - Ustawienia")
-    root.geometry("540x520")
+    root.geometry("520x470")
     root.resizable(False, False)
     root.configure(bg="#111827")
 
@@ -349,14 +370,12 @@ def launch_gui():
 
     use_client_area_var = tk.BooleanVar(value=config["use_client_area"])
     manual_offset_enabled_var = tk.BooleanVar(value=config["manual_offset_enabled"])
-    launch_fullscreen_var = tk.BooleanVar(value=config["launch_fullscreen"])
     hide_console_var = tk.BooleanVar(value=config["hide_console_on_start"])
-    offset_x_var = tk.StringVar(value=str(config["manual_offset_x"]))
     offset_y_var = tk.StringVar(value=str(config["manual_offset_y"]))
     keyword_var = tk.StringVar(value=str(config["window_keyword"]))
     status_var = tk.StringVar(value="Serwer działa na http://127.0.0.1:5000")
 
-    ttk.Label(frame, text="MargoClicker (Dark GUI)", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
+    ttk.Label(frame, text="MargoClicker", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
 
     ttk.Checkbutton(
         frame,
@@ -374,20 +393,11 @@ def launch_gui():
 
     offsets = ttk.Frame(frame, style="Dark.TFrame")
     offsets.pack(anchor="w", pady=(6, 8), fill=tk.X)
-    ttk.Label(offsets, text="Offset X:", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Entry(offsets, textvariable=offset_x_var, width=10, style="Dark.TEntry").grid(row=0, column=1, padx=(6, 16))
-    ttk.Label(offsets, text="Offset Y:", style="Dark.TLabel").grid(row=0, column=2, sticky="w")
-    ttk.Entry(offsets, textvariable=offset_y_var, width=10, style="Dark.TEntry").grid(row=0, column=3, padx=(6, 0))
+    ttk.Label(offsets, text="Offset Y:", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Entry(offsets, textvariable=offset_y_var, width=10, style="Dark.TEntry").grid(row=0, column=1, padx=(6, 0))
 
     ttk.Label(offsets, text="Fraza okna gry:", style="Dark.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 0))
     ttk.Entry(offsets, textvariable=keyword_var, width=28, style="Dark.TEntry").grid(row=1, column=1, columnspan=3, sticky="w", pady=(8, 0))
-
-    ttk.Checkbutton(
-        frame,
-        text="Automatycznie wyślij F11 po starcie (tryb pełnoekranowy)",
-        variable=launch_fullscreen_var,
-        style="Dark.TCheckbutton",
-    ).pack(anchor="w", pady=3)
 
     ttk.Checkbutton(
         frame,
@@ -398,20 +408,18 @@ def launch_gui():
 
     def save_settings():
         try:
-            parsed_x = float(offset_x_var.get().strip())
             parsed_y = float(offset_y_var.get().strip())
         except ValueError:
-            status_var.set("Błąd: Offset X/Y musi być liczbą.")
+            status_var.set("Błąd: Offset Y musi być liczbą.")
             return
 
         with config_lock:
             config["use_client_area"] = bool(use_client_area_var.get())
             config["manual_offset_enabled"] = bool(manual_offset_enabled_var.get())
-            config["launch_fullscreen"] = bool(launch_fullscreen_var.get())
             config["hide_console_on_start"] = bool(hide_console_var.get())
-            config["manual_offset_x"] = parsed_x
             config["manual_offset_y"] = parsed_y
             config["window_keyword"] = keyword_var.get().strip() or "margonem"
+        save_settings_to_disk()
 
         if config["hide_console_on_start"]:
             hide_console_window()
@@ -424,9 +432,7 @@ def launch_gui():
             {
                 "use_client_area": config["use_client_area"],
                 "manual_offset_enabled": config["manual_offset_enabled"],
-                "manual_offset_x": config["manual_offset_x"],
                 "manual_offset_y": config["manual_offset_y"],
-                "launch_fullscreen": config["launch_fullscreen"],
                 "window_keyword": config["window_keyword"],
                 "hide_console_on_start": config["hide_console_on_start"],
             },
@@ -442,12 +448,7 @@ def launch_gui():
         if not client_w or not client_h:
             status_var.set("Brak rozmiaru client-area do kalibracji.")
             return
-        with config_lock:
-            config["manual_offset_x"] = 0.0
-            config["manual_offset_y"] = 0.0
-        offset_x_var.set("0.0")
-        offset_y_var.set("0.0")
-        status_var.set(f"Kalibracja OK. Obszar gry: {client_w}x{client_h}.")
+        status_var.set(f"Kalibracja OK. Obszar gry: {client_w}x{client_h}. Offset Y bez zmian.")
 
     def test_click_center():
         hwnd = find_best_margonem_hwnd() or get_target_hwnd()
@@ -475,12 +476,6 @@ def launch_gui():
     controls.pack(anchor="w", pady=(10, 4))
 
     ttk.Button(controls, text="Zapisz ustawienia", command=save_settings, style="Dark.TButton").pack(side=tk.LEFT)
-    ttk.Button(
-        controls,
-        text="Przełącz pełny ekran (F11)",
-        command=trigger_fullscreen_now,
-        style="Dark.TButton",
-    ).pack(side=tk.LEFT, padx=8)
 
     extra_controls = ttk.Frame(frame, style="Dark.TFrame")
     extra_controls.pack(anchor="w", pady=(8, 0))
@@ -489,26 +484,20 @@ def launch_gui():
     ttk.Button(extra_controls, text="Test pre-zapadki", command=test_click_pretrap, style="Dark.TButton").pack(side=tk.LEFT, padx=8)
 
     ttk.Label(frame, textvariable=status_var, style="Success.TLabel", wraplength=480).pack(anchor="w", pady=(8, 0))
-    ttk.Label(
-        frame,
-        text="Tip: możesz z userscripta wywołać /fullscreen aby wymusić F11.",
-        style="Muted.TLabel",
-    ).pack(anchor="w", pady=(8, 0))
+    ttk.Label(frame, text="Ustawienia zapisują się do pliku i ładują po restarcie.", style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
 
     root.mainloop()
 
 
 if __name__ == '__main__':
+    load_settings_from_disk()
     configure_flask_logging()
     run_console_policy()
     setup_dpi_awareness()
     pyautogui.FAILSAFE = False
 
-    print("🚀 MargoClicker V7 (dark GUI + fullscreen focus + helpers) działa!")
+    print("🚀 MargoClicker działa!")
     server_thread = threading.Thread(target=start_http_server, daemon=True)
     server_thread.start()
-
-    auto_fullscreen_thread = threading.Thread(target=maybe_enable_fullscreen_from_config, daemon=True)
-    auto_fullscreen_thread.start()
 
     launch_gui()
