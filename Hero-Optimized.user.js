@@ -5914,6 +5914,22 @@ const MonsterMemory = {
         m.cooldownUntil = Date.now() + 2600 + (m.failCount * 700);
         if (m.failCount >= 4) this.items.delete(key);
         return m;
+    },
+    getLikelyAliveForMap(mapId, opt = {}) {
+        const now = Date.now();
+        const maxAgeMs = Number(opt.maxAgeMs) || 90000;
+        const minAliveScore = Number(opt.minAliveScore ?? 0.2);
+        const out = [];
+        for (const [k, m] of this.items.entries()) {
+            if (!k.startsWith(`${mapId}|`)) continue;
+            if (!m) continue;
+            if (m.cooldownUntil && now < m.cooldownUntil) continue;
+            const age = now - (m.lastSeenAt || 0);
+            if (age > maxAgeMs) continue;
+            if ((m.aliveScore || 0) < minAliveScore) continue;
+            out.push({ ...m, ageMs: age });
+        }
+        return out;
     }
 };
 
@@ -6477,8 +6493,12 @@ function getExpTargetIgnoreKey(mob) {
     const nick = String(mob.nick || mob.name || '').replace(/<[^>]*>?/gm, '').trim().toLowerCase();
     const lvl = Number.parseInt(mob.lvl, 10) || 0;
     const rank = String(mob.ranga || mob.priorityClass || '').trim().toLowerCase();
-    if (!nick && lvl <= 0) return null;
-    return `${nick}|${lvl}|${rank}`;
+    const x = Number.parseInt(mob.x, 10);
+    const y = Number.parseInt(mob.y, 10);
+    const hasPos = Number.isFinite(x) && Number.isFinite(y);
+    if (!nick && lvl <= 0 && !hasPos) return null;
+    const posKey = hasPos ? `${x}:${y}` : 'anywhere';
+    return `${nick}|${lvl}|${rank}|${posKey}`;
 }
 
 function isTargetIgnoredOnMap(mapName, mob) {
@@ -6486,8 +6506,16 @@ function isTargetIgnoredOnMap(mapName, mob) {
     const mapKey = getMapClearKey(mapName);
     const targetKey = getExpTargetIgnoreKey(mob);
     if (!mapKey || !targetKey) return false;
-    const ignoredSet = window.expIgnoredTargetsByMap?.[mapKey];
-    return ignoredSet instanceof Set ? ignoredSet.has(targetKey) : false;
+    const ignoredMap = window.expIgnoredTargetsByMap?.[mapKey];
+    if (!(ignoredMap instanceof Map)) return false;
+    const expiresAt = ignoredMap.get(targetKey) || 0;
+    if (!expiresAt) return false;
+    if (Date.now() > expiresAt) {
+        ignoredMap.delete(targetKey);
+        if (ignoredMap.size === 0) delete window.expIgnoredTargetsByMap[mapKey];
+        return false;
+    }
+    return true;
 }
 
 function markTargetIgnoredOnMap(mapName, mob, reason = 'too_hard') {
@@ -6495,8 +6523,9 @@ function markTargetIgnoredOnMap(mapName, mob, reason = 'too_hard') {
     const mapKey = getMapClearKey(mapName);
     const targetKey = getExpTargetIgnoreKey(mob);
     if (!mapKey || !targetKey) return false;
-    if (!window.expIgnoredTargetsByMap[mapKey]) window.expIgnoredTargetsByMap[mapKey] = new Set();
-    window.expIgnoredTargetsByMap[mapKey].add(targetKey);
+    if (!(window.expIgnoredTargetsByMap[mapKey] instanceof Map)) window.expIgnoredTargetsByMap[mapKey] = new Map();
+    const ttlMs = reason === 'anti_stuck' ? 35000 : 90000;
+    window.expIgnoredTargetsByMap[mapKey].set(targetKey, Date.now() + ttlMs);
     HeroLogger.emit('INFO', 'TARGET_HARD_IGNORED_ON_MAP', `Ignoruję cel ${mob.nick || mob.id || '?'} na mapie [${mapName}] (powód: ${reason}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2500 });
     return true;
 }
@@ -6514,6 +6543,12 @@ function isMapTemporarilyCleared(mapName) {
     const mapKey = getMapClearKey(mapName);
     const ts = window.mapClearTimes[mapKey] || window.mapClearTimes[mapName];
     if (!ts) return false;
+    const clearTtlMs = 70 * 1000;
+    if (Date.now() - ts > clearTtlMs) {
+        delete window.mapClearTimes[mapKey];
+        delete window.mapClearTimes[mapName];
+        return false;
+    }
     return true;
 }
 
@@ -6919,6 +6954,7 @@ function runExpLogic() {
 
     let hx = Engine.hero.d.x;
     let hy = Engine.hero.d.y;
+    const isRedMapNow = Engine?.map?.d?.pvp === 2;
     const mapW = Number(Engine?.map?.d?.x) || 0;
     const mapH = Number(Engine?.map?.d?.y) || 0;
     const isOutsideCurrentMap = (x, y) => x < 0 || y < 0 || x >= mapW || y >= mapH;
@@ -6944,14 +6980,39 @@ function runExpLogic() {
         const mobCacheKey = String(n.id ?? key);
         currentlyVisibleIds.add(mobCacheKey);
         const memoryEntry = MonsterMemory.upsertVisible(currMap, n, ranga);
-        window.expMonsterCache.set(mobCacheKey, { id: n.id ?? key, cacheKey: mobCacheKey, x: n.x, y: n.y, nick: n.nick || n.name, ranga, mmKey: memoryEntry?.key });
+        window.expMonsterCache.set(mobCacheKey, { id: n.id ?? key, cacheKey: mobCacheKey, x: n.x, y: n.y, nick: n.nick || n.name, ranga, lvl: parseInt(n.lvl, 10) || 0, lastSeenAt: Date.now(), mmKey: memoryEntry?.key });
     }
 
     MonsterMemory.decay(currMap, Engine?.map?.d?.pvp === 2);
     // Usuwanie z pamięci mobów, które powinny być blisko, a ich nie ma (ktoś ubił)
+    const staleDeleteRadius = isRedMapNow ? 5 : 10;
+    const staleDeleteGraceMs = isRedMapNow ? 7000 : 2200;
     for (let [id, mob] of window.expMonsterCache.entries()) {
-        if (Math.max(Math.abs(hx - mob.x), Math.abs(hy - mob.y)) <= 10 && !currentlyVisibleIds.has(id)) {
+        const mobAgeMs = now - (mob.lastSeenAt || 0);
+        if (Math.max(Math.abs(hx - mob.x), Math.abs(hy - mob.y)) <= staleDeleteRadius && !currentlyVisibleIds.has(id) && mobAgeMs > staleDeleteGraceMs) {
             window.expMonsterCache.delete(id);
+        }
+    }
+
+    // Gdy chwilowo nic nie widać, dosiewamy pamięć widzianych mobów (szczególnie ważne na czerwonych mapach).
+    if (window.expMonsterCache.size === 0) {
+        const rememberedMobs = MonsterMemory.getLikelyAliveForMap(currMap, {
+            maxAgeMs: isRedMapNow ? 120000 : 65000,
+            minAliveScore: isRedMapNow ? 0.1 : 0.25
+        });
+        for (const remembered of rememberedMobs) {
+            const cacheKey = String(remembered.id ?? remembered.nick ?? `${remembered.x}_${remembered.y}`);
+            window.expMonsterCache.set(cacheKey, {
+                id: remembered.id ?? cacheKey,
+                cacheKey,
+                x: remembered.x,
+                y: remembered.y,
+                nick: remembered.nick || 'Potwór',
+                ranga: remembered.priorityClass || 'normal',
+                lvl: remembered.lvl || 0,
+                lastSeenAt: remembered.lastSeenAt || now,
+                mmKey: remembered.key
+            });
         }
     }
 
@@ -9964,6 +10025,7 @@ window.openShopAsync = async (namePart) => {
         window.__wasExpingBeforeCaptcha = false;
         window.__wasPatrollingBeforeCaptcha = false;
         window.__wasBerserkBeforeCaptcha = false;
+        window.__wasHeroModeBeforeCaptcha = false;
         window.__fullscreenByBotForTrap = false;
         window.__trapSolveStarted = false;
 
@@ -10116,11 +10178,11 @@ window.openShopAsync = async (namePart) => {
                         if (window.__wasBerserkBeforeCaptcha && window.BerserkController?.setBotBerserkState) {
                             window.BerserkController.setBotBerserkState(true, 'captcha_resume');
                         }
-                        if (window.__wasPatrollingBeforeCaptcha && !window.isPatrolling && !window.isRushing) {
-                            let btn = document.getElementById('btnStartStop');
-                            if (btn) btn.click();
+                        if (window.__wasPatrollingBeforeCaptcha && window.__wasHeroModeBeforeCaptcha && !window.isPatrolling && !window.isRushing) {
+                            if (typeof startPatrol === 'function') startPatrol();
                         }
                         window.__wasBerserkBeforeCaptcha = false;
+                        window.__wasHeroModeBeforeCaptcha = false;
                         window.__captchaPhase = "none";
                     }, delay);
                 }
@@ -10133,6 +10195,7 @@ window.openShopAsync = async (namePart) => {
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
                 window.__wasBerserkBeforeCaptcha = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
+                window.__wasHeroModeBeforeCaptcha = !!document.getElementById('heroModeToggle')?.classList?.contains('active-tab');
 
                 if (window.isExping) {
                     let btn = document.getElementById('btnStartExp');
