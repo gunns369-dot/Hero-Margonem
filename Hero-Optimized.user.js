@@ -1,7 +1,7 @@
 
 // ==UserScript==
 // @name         MargoNeuro - Optimized Edition
-// @version      64.5
+// @version      64.6
 // @description  Automatyczne wykrywanie, inteligentny zasięg, natywny auto-atak, poprawne limity poziomowe, naprawiony scroll.
 // @author       Ty & Gemini
 // @match        https://*.margonem.pl/
@@ -10066,6 +10066,11 @@ window.openShopAsync = async (namePart) => {
         window.__trapSeenAt = 0;
         window.__trapSessionActive = false;
         window.__trapResumeQueued = false;
+        window.__trapForceFullscreen = localStorage.getItem('hero_trap_force_fullscreen') === '1';
+
+        function shouldToggleFullscreenForTrap() {
+            return !!window.__trapForceFullscreen;
+        }
 
         async function checkMargoclickerAlive(force = false) {
             const now = Date.now();
@@ -10095,6 +10100,7 @@ window.openShopAsync = async (namePart) => {
             document.dispatchEvent(new KeyboardEvent('keyup', { key: 'F11', code: 'F11', keyCode: 122, which: 122, bubbles: true }));
         }
         async function ensureFullscreenOnForTrap() {
+            if (!shouldToggleFullscreenForTrap()) return;
             const isBrowserFullscreen = !!document.fullscreenElement;
             if (isBrowserFullscreen || window.__fullscreenByBotForTrap) return;
             let switched = false;
@@ -10112,6 +10118,10 @@ window.openShopAsync = async (namePart) => {
             HeroLogger.emit('INFO', 'FULLSCREEN_ON', 'Włączono pełny ekran przed pierwszą akcją zapadki.', "#4fc3f7");
         }
         async function ensureFullscreenOffAfterTrap() {
+            if (!shouldToggleFullscreenForTrap()) {
+                window.__fullscreenByBotForTrap = false;
+                return;
+            }
             if (!window.__fullscreenByBotForTrap) return;
             let switched = false;
             try {
@@ -10285,7 +10295,7 @@ window.openShopAsync = async (namePart) => {
             }
 
             // 3. OBSŁUGA MAŁEGO OKNA
-            if ((preWin || fullWin) && !window.__fullscreenByBotForTrap) {
+            if (shouldToggleFullscreenForTrap() && (preWin || fullWin) && !window.__fullscreenByBotForTrap) {
                 await ensureFullscreenOnForTrap();
             }
             if (preWin && !fullWin && window.__captchaPhase !== "pre") {
@@ -10318,11 +10328,11 @@ window.openShopAsync = async (namePart) => {
             }
 
             // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
-            if (fullWin && window.__captchaPhase !== "solving" && window.__captchaPhase !== "manual_waiting") {
+            if (fullWin && window.__captchaPhase !== "solving") {
                 window.__captchaPhase = "solving";
                 window.__captchaLock = true;
                 if (!window.__trapSolveStarted) {
-                    await ensureFullscreenOnForTrap();
+                    if (shouldToggleFullscreenForTrap()) await ensureFullscreenOnForTrap();
                     window.__trapSolveStarted = true;
                 }
 
