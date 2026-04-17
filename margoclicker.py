@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 import logging
 import json
+import subprocess
 from pathlib import Path
 
 FALLBACK_OFFSET_Y = 7
@@ -26,6 +27,8 @@ config = {
     "manual_offset_enabled": True,
     "manual_offset_y": 0.0,
     "window_keyword": "margonem",
+    "app_path": "",
+    "restore_window_before_click": True,
     "hide_console_on_start": True,
 }
 
@@ -76,6 +79,8 @@ def _normalize_config(raw):
         "manual_offset_enabled": bool(raw.get("manual_offset_enabled", config["manual_offset_enabled"])),
         "manual_offset_y": float(raw.get("manual_offset_y", config["manual_offset_y"])),
         "window_keyword": str(raw.get("window_keyword", config["window_keyword"])).strip() or "margonem",
+        "app_path": str(raw.get("app_path", config.get("app_path", ""))).strip(),
+        "restore_window_before_click": bool(raw.get("restore_window_before_click", config.get("restore_window_before_click", True))),
         "hide_console_on_start": bool(raw.get("hide_console_on_start", config["hide_console_on_start"])),
     }
     return normalized
@@ -111,6 +116,8 @@ def save_settings_to_disk():
             "manual_offset_enabled": config["manual_offset_enabled"],
             "manual_offset_y": config["manual_offset_y"],
             "window_keyword": config["window_keyword"],
+            "app_path": config.get("app_path", ""),
+            "restore_window_before_click": config.get("restore_window_before_click", True),
             "hide_console_on_start": config["hide_console_on_start"],
         }
     try:
@@ -191,6 +198,26 @@ def find_best_margonem_hwnd():
     return found[0][1]
 
 
+def ensure_window_ready(hwnd):
+    if sys.platform != "win32" or not hwnd:
+        return False
+
+    user32 = ctypes.windll.user32
+    SW_RESTORE = 9
+    SW_SHOW = 5
+
+    try:
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        else:
+            user32.ShowWindow(hwnd, SW_SHOW)
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.07)
+        return True
+    except Exception:
+        return False
+
+
 def send_f11_to_window(hwnd=None):
     if sys.platform != "win32":
         pyautogui.press("f11")
@@ -257,6 +284,7 @@ def get_click_config():
             "use_client_area": bool(config["use_client_area"]),
             "manual_offset_enabled": bool(config["manual_offset_enabled"]),
             "manual_offset_y": float(config["manual_offset_y"]),
+            "restore_window_before_click": bool(config.get("restore_window_before_click", True)),
         }
 
 
@@ -269,6 +297,8 @@ def kliknij_w_grze(x, y):
         local_y += cfg["manual_offset_y"]
 
     hwnd = find_best_margonem_hwnd() if cfg["use_client_area"] else None
+    if hwnd and cfg["restore_window_before_click"]:
+        ensure_window_ready(hwnd)
     client = get_client_origin(hwnd) if hwnd else None
 
     if client:
@@ -313,6 +343,26 @@ def fullscreen():
     return ("OK", 200) if ok else ("NO_WINDOW", 404)
 
 
+@app.route('/launch', methods=['POST', 'OPTIONS'])
+def launch_target_app():
+    if request.method == 'OPTIONS':
+        return make_response("", 200)
+
+    with config_lock:
+        app_path = str(config.get("app_path", "")).strip()
+
+    if not app_path:
+        return "NO_APP_PATH", 400
+
+    try:
+        subprocess.Popen(app_path, shell=True)
+        print(f"🚀 Uruchomiono aplikację: {app_path}")
+        return "OK", 200
+    except Exception as e:
+        print(f"❌ Nie udało się uruchomić aplikacji: {e}")
+        return "ERROR", 500
+
+
 @app.route('/click', methods=['GET', 'OPTIONS'])
 def click():
     if request.method == 'OPTIONS':
@@ -348,7 +398,7 @@ def start_http_server():
 def launch_gui():
     root = tk.Tk()
     root.title("MargoClicker - Ustawienia")
-    root.geometry("520x470")
+    root.geometry("650x560")
     root.resizable(False, False)
     root.configure(bg="#111827")
 
@@ -371,15 +421,17 @@ def launch_gui():
     use_client_area_var = tk.BooleanVar(value=config["use_client_area"])
     manual_offset_enabled_var = tk.BooleanVar(value=config["manual_offset_enabled"])
     hide_console_var = tk.BooleanVar(value=config["hide_console_on_start"])
+    restore_before_click_var = tk.BooleanVar(value=config.get("restore_window_before_click", True))
     offset_y_var = tk.StringVar(value=str(config["manual_offset_y"]))
     keyword_var = tk.StringVar(value=str(config["window_keyword"]))
+    app_path_var = tk.StringVar(value=str(config.get("app_path", "")))
     status_var = tk.StringVar(value="Serwer działa na http://127.0.0.1:5000")
 
     ttk.Label(frame, text="MargoClicker", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
 
     ttk.Checkbutton(
         frame,
-        text="Używaj mapowania do client-area aktywnego okna (WinAPI)",
+        text="Używaj mapowania do client-area wybranego okna (WinAPI)",
         variable=use_client_area_var,
         style="Dark.TCheckbutton",
     ).pack(anchor="w", pady=3)
@@ -398,6 +450,16 @@ def launch_gui():
 
     ttk.Label(offsets, text="Fraza okna gry:", style="Dark.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 0))
     ttk.Entry(offsets, textvariable=keyword_var, width=28, style="Dark.TEntry").grid(row=1, column=1, columnspan=3, sticky="w", pady=(8, 0))
+
+    ttk.Label(offsets, text="Ścieżka aplikacji (opcjonalnie):", style="Dark.TLabel").grid(row=2, column=0, sticky="w", pady=(8, 0))
+    ttk.Entry(offsets, textvariable=app_path_var, width=48, style="Dark.TEntry").grid(row=2, column=1, columnspan=3, sticky="w", pady=(8, 0))
+
+    ttk.Checkbutton(
+        frame,
+        text="Przed kliknięciem przywracaj i aktywuj wybrane okno (gdy inna karta/minimalizacja)",
+        variable=restore_before_click_var,
+        style="Dark.TCheckbutton",
+    ).pack(anchor="w", pady=3)
 
     ttk.Checkbutton(
         frame,
@@ -419,6 +481,8 @@ def launch_gui():
             config["hide_console_on_start"] = bool(hide_console_var.get())
             config["manual_offset_y"] = parsed_y
             config["window_keyword"] = keyword_var.get().strip() or "margonem"
+            config["app_path"] = app_path_var.get().strip()
+            config["restore_window_before_click"] = bool(restore_before_click_var.get())
         save_settings_to_disk()
 
         if config["hide_console_on_start"]:
@@ -434,9 +498,31 @@ def launch_gui():
                 "manual_offset_enabled": config["manual_offset_enabled"],
                 "manual_offset_y": config["manual_offset_y"],
                 "window_keyword": config["window_keyword"],
+                "app_path": config.get("app_path", ""),
+                "restore_window_before_click": config.get("restore_window_before_click", True),
                 "hide_console_on_start": config["hide_console_on_start"],
             },
         )
+
+    def choose_active_window():
+        hwnd = get_target_hwnd()
+        title = get_window_text(hwnd).strip() if hwnd else ""
+        if not title:
+            status_var.set("Nie udało się pobrać tytułu aktywnego okna.")
+            return
+        keyword_var.set(title)
+        status_var.set(f"Ustawiono cel kliknięć na aktywne okno: {title}")
+
+    def launch_app_now():
+        app_path = app_path_var.get().strip()
+        if not app_path:
+            status_var.set("Podaj ścieżkę aplikacji, aby ją uruchomić.")
+            return
+        try:
+            subprocess.Popen(app_path, shell=True)
+            status_var.set("Uruchomiono aplikację.")
+        except Exception as e:
+            status_var.set(f"Błąd uruchamiania aplikacji: {e}")
 
     def calibrate_from_active_window():
         hwnd = get_target_hwnd()
@@ -482,6 +568,11 @@ def launch_gui():
     ttk.Button(extra_controls, text="Kalibracja aktywnego okna", command=calibrate_from_active_window, style="Dark.TButton").pack(side=tk.LEFT)
     ttk.Button(extra_controls, text="Test kliknięcia środka", command=test_click_center, style="Dark.TButton").pack(side=tk.LEFT, padx=8)
     ttk.Button(extra_controls, text="Test pre-zapadki", command=test_click_pretrap, style="Dark.TButton").pack(side=tk.LEFT, padx=8)
+
+    target_controls = ttk.Frame(frame, style="Dark.TFrame")
+    target_controls.pack(anchor="w", pady=(8, 0))
+    ttk.Button(target_controls, text="Wybierz aktywne okno jako cel", command=choose_active_window, style="Dark.TButton").pack(side=tk.LEFT)
+    ttk.Button(target_controls, text="Uruchom aplikację", command=launch_app_now, style="Dark.TButton").pack(side=tk.LEFT, padx=8)
 
     ttk.Label(frame, textvariable=status_var, style="Success.TLabel", wraplength=480).pack(anchor="w", pady=(8, 0))
     ttk.Label(frame, text="Ustawienia zapisują się do pliku i ładują po restarcie.", style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
