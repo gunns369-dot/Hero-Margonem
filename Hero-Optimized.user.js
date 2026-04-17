@@ -5719,6 +5719,8 @@ let expLastMapName = "";
 let expEmptyScans = 0;
 let expLastLoggedTargetId = null;
 let expLastLoggedTransitMap = null;
+let expLastMissingTargetId = null;
+let expRetargetEarliestAt = 0;
 
 let expCurrentMapOrderIndex = -1;
 
@@ -6950,6 +6952,8 @@ function runExpLogic() {
         window.expLastMoveHeroY = null;
         window.expMeleeFailByTarget = {};
         window.expFocusTarget = null;
+        expLastMissingTargetId = null;
+        expRetargetEarliestAt = 0;
         window.isRushing = false;
         expEmptyScans = 0;
         expCurrentTargetId = null;
@@ -7079,14 +7083,17 @@ function runExpLogic() {
         };
     }
 
-    if (target && window.expLastTargetNotFoundAt && now - window.expLastTargetNotFoundAt < 2200) {
-        const upd = MonsterMemory.onTargetNotFound(currMap, target.id);
-        if (upd?.cooldownUntil && now < upd.cooldownUntil) {
-            HeroLogger.emit('DEBUG', 'TARGET_NOT_FOUND', `Cel ${target.nick || target.id} oznaczony cooldown (${upd.failCount})`, "#ffb74d", { dedupeMs: 2200 });
-            if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
-            target = null;
-            selectedGroupKey = null;
-        }
+    if (
+        target &&
+        expLastMissingTargetId != null &&
+        String(target.id) === String(expLastMissingTargetId) &&
+        window.expLastTargetNotFoundAt &&
+        now - window.expLastTargetNotFoundAt < 450
+    ) {
+        HeroLogger.emit('DEBUG', 'TARGET_NOT_FOUND_RECENT', `Pomijam świeżo zniknięty cel ${target.nick || target.id}.`, "#ffb74d", { dedupeMs: 700 });
+        if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
+        target = null;
+        selectedGroupKey = null;
     }
     const targetGroupSize = Math.max(1, Number(bestChoice?.group?.mobs?.length) || 1);
     window.expCurrentTargetGroupKey = selectedGroupKey;
@@ -7149,6 +7156,8 @@ function runExpLogic() {
             if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
             if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
             window.expLastTargetNotFoundAt = Date.now();
+            expLastMissingTargetId = target.id ?? target.cacheKey ?? null;
+            expRetargetEarliestAt = window.expLastTargetNotFoundAt + Math.floor(Math.random() * 301);
             const skipReason = liveTargetMissing
                 ? 'nie istnieje'
                 : (liveTargetInCollision ? 'poza mapą/kolizja' : 'nieosiągalny/ściana');
@@ -7184,6 +7193,8 @@ function runExpLogic() {
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
                     window.expLastTargetNotFoundAt = Date.now();
+                    expLastMissingTargetId = target.id ?? target.cacheKey ?? null;
+                    expRetargetEarliestAt = window.expLastTargetNotFoundAt + Math.floor(Math.random() * 301);
                     HeroLogger.emit('DEBUG', 'ATTACK_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} po ${window.expMeleeFailByTarget[targetKey]} nieudanych próbach (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
                     window.expStandStillStart = null;
                     window.expStandStillTargetKey = null;
@@ -7229,6 +7240,8 @@ function runExpLogic() {
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
                     window.expLastTargetNotFoundAt = Date.now();
+                    expLastMissingTargetId = target.id ?? target.cacheKey ?? null;
+                    expRetargetEarliestAt = window.expLastTargetNotFoundAt + Math.floor(Math.random() * 301);
                     HeroLogger.emit('DEBUG', 'APPROACH_STUCK_TARGET_SKIP', `Pomijam cel ${target.nick || target.id} — stoję w miejscu przy tym samym celu (cooldown=${mm?.cooldownUntil ? 'ON' : 'OFF'}).`, "#ff8a65", { category: 'COMBAT', dedupeMs: 2400 });
                     approachState.targetKey = null;
                     return;
@@ -7258,6 +7271,8 @@ function runExpLogic() {
         }
         return;
     }
+
+    if (expRetargetEarliestAt && now < expRetargetEarliestAt) return;
 
     // --- TRANZYT / ZMIANA MAPY ---
     if (!isExpMap || validMobs.length === 0) {
