@@ -10065,6 +10065,7 @@ window.openShopAsync = async (namePart) => {
         window.__lastMargoclickerProbeAt = 0;
         window.__trapSeenAt = 0;
         window.__trapSessionActive = false;
+        window.__trapResumeQueued = false;
 
         async function checkMargoclickerAlive(force = false) {
             const now = Date.now();
@@ -10082,7 +10083,14 @@ window.openShopAsync = async (namePart) => {
             return !!window.__margoclickerOnline;
         }
 
-        function emitF11() {
+        async function emitF11() {
+            try {
+                const online = await checkMargoclickerAlive(false);
+                if (online) {
+                    await fetch('http://127.0.0.1:5000/fullscreen', { method: 'GET', cache: 'no-store', mode: 'cors' });
+                    return;
+                }
+            } catch (e) {}
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F11', code: 'F11', keyCode: 122, which: 122, bubbles: true }));
             document.dispatchEvent(new KeyboardEvent('keyup', { key: 'F11', code: 'F11', keyCode: 122, which: 122, bubbles: true }));
         }
@@ -10098,7 +10106,7 @@ window.openShopAsync = async (namePart) => {
                 }
             } catch (e) {}
             if (!switched) {
-                emitF11();
+                await emitF11();
             }
             window.__fullscreenByBotForTrap = true;
             HeroLogger.emit('INFO', 'FULLSCREEN_ON', 'Włączono pełny ekran przed pierwszą akcją zapadki.', "#4fc3f7");
@@ -10113,7 +10121,7 @@ window.openShopAsync = async (namePart) => {
                 }
             } catch (e) {}
             if (!switched) {
-                emitF11();
+                await emitF11();
             }
             window.__fullscreenByBotForTrap = false;
             HeroLogger.emit('INFO', 'FULLSCREEN_OFF', 'Wyłączono pełny ekran po zapadce i wznowieniu ruchu.', "#4fc3f7");
@@ -10221,7 +10229,12 @@ window.openShopAsync = async (namePart) => {
                 if (window.__fullscreenByBotForTrap && window.__captchaPhase === "none") {
                     await ensureFullscreenOffAfterTrap();
                 }
-                if (hadTrapSession && (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre" || window.__captchaPhase === "none")) {
+                if (
+                    hadTrapSession &&
+                    !window.__trapResumeQueued &&
+                    (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre" || window.__captchaPhase === "none")
+                ) {
+                    window.__trapResumeQueued = true;
                     window.__captchaPhase = "resuming";
                     window.__trapSolveStarted = false;
                     await ensureFullscreenOffAfterTrap();
@@ -10245,6 +10258,8 @@ window.openShopAsync = async (namePart) => {
                         window.__wasBerserkBeforeCaptcha = false;
                         window.__wasHeroModeBeforeCaptcha = false;
                         window.__captchaPhase = "none";
+                        window.__trapResumeQueued = false;
+                        window.__trapSeenAt = 0;
                     }, delay);
                 }
                 return;
@@ -10253,6 +10268,7 @@ window.openShopAsync = async (namePart) => {
             // 2. ZAPISANIE STANU BOTA
             if (window.__captchaPhase === "none") {
                 HeroLogger.emit('INFO', 'TRAP_DETECTED', 'Wykryto zapadkę/captcha.', "#ffeb3b");
+                window.__trapResumeQueued = false;
                 window.__wasExpingBeforeCaptcha = window.isExping;
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
                 window.__wasBerserkBeforeCaptcha = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
