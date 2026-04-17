@@ -106,6 +106,13 @@ def kliknij_w_grze(x, y):
     pyautogui.mouseUp()
 
 
+
+
+@app.route('/health', methods=['GET'])
+def health():
+    return "OK", 200
+
+
 @app.route('/click', methods=['GET', 'OPTIONS'])
 def click():
     if request.method == 'OPTIONS':
