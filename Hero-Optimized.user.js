@@ -11136,55 +11136,64 @@ window.radarGroupsCache = [];
 window.radarGroupsCacheTime = 0;
 window.radarGroupsCacheMap = "";
 window.radarTargetInfo = null;
+window.__radarLastToggleTs = 0;
 
-function toggleRadar() {
-    const win = document.getElementById('margoRadarWindow');
+function toggleFloatingRadarWindow() {
+    let win = document.getElementById('margoRadarWindow');
+    if (!win) {
+        if (typeof initFloatingRadarUI === 'function') initFloatingRadarUI();
+        win = document.getElementById('margoRadarWindow');
+    }
     if (!win) return;
 
-    if (win.style.display === 'none' || !win.style.display) {
-        win.style.display = 'flex';
-    } else {
-        win.style.display = 'none';
+    win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
+}
+
+function handleRadarToggleEvent(e) {
+    const btn = e.target?.closest?.('#btnToggleRadar');
+    if (!btn) return;
+
+    const now = Date.now();
+    if (now - (window.__radarLastToggleTs || 0) < 140) return;
+    window.__radarLastToggleTs = now;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    toggleFloatingRadarWindow();
+}
+
+function ensureRadarButtonHandlers() {
+    if (!window.__radarDelegatedHandlerInstalled) {
+        window.__radarDelegatedHandlerInstalled = true;
+        document.addEventListener('click', handleRadarToggleEvent, true);
+        document.addEventListener('pointerup', handleRadarToggleEvent, true);
     }
+
+    const toggleButtons = document.querySelectorAll('#btnToggleRadar');
+    toggleButtons.forEach((btn) => {
+        if (btn.dataset.radarBound === '1') return;
+        btn.dataset.radarBound = '1';
+        btn.addEventListener('click', handleRadarToggleEvent, true);
+        btn.addEventListener('pointerup', handleRadarToggleEvent, true);
+    });
+}
+
+function toggleRadar() {
+    toggleFloatingRadarWindow();
 }
 
 function initFloatingRadarUI() {
+    ensureRadarButtonHandlers();
+
     let toggleBtn = document.getElementById('btnToggleRadar');
     if (!toggleBtn) return;
 
     let win = document.getElementById('margoRadarWindow');
 
     if (win) {
-        toggleBtn.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
-        };
+        toggleBtn.onclick = handleRadarToggleEvent;
         return;
-    }
-
-    if (!window.__radarButtonFixInstalled) {
-        window.__radarButtonFixInstalled = true;
-
-        document.addEventListener('click', (e) => {
-            const btn = e.target?.closest?.('#btnToggleRadar');
-            if (!btn) return;
-
-            e.preventDefault();
-            e.stopPropagation();
-
-            let win = document.getElementById('margoRadarWindow');
-            if (!win) {
-                if (typeof initFloatingRadarUI === 'function') {
-                    initFloatingRadarUI();
-                    win = document.getElementById('margoRadarWindow');
-                }
-            }
-
-            if (win) {
-                win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
-            }
-        }, true);
     }
 
     win = document.createElement('div');
@@ -11227,11 +11236,7 @@ function initFloatingRadarUI() {
 
     document.body.appendChild(win);
 
-    toggleBtn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        win.style.display = (win.style.display === 'none' || !win.style.display) ? 'flex' : 'none';
-    };
+    toggleBtn.onclick = handleRadarToggleEvent;
 
     document.getElementById('closeRadarBtn').onclick = (e) => {
         e.preventDefault();
