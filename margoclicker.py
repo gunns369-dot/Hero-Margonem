@@ -11,6 +11,8 @@ from tkinter import ttk
 import logging
 
 FALLBACK_OFFSET_Y = 7
+PRETRAP_TEST_RATIO_X = 0.50
+PRETRAP_TEST_RATIO_Y = 0.34
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -42,6 +44,20 @@ def hide_console_window():
         if hwnd:
             SW_HIDE = 0
             user32.ShowWindow(hwnd, SW_HIDE)
+    except Exception:
+        pass
+
+
+def show_console_window():
+    if sys.platform != "win32":
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            SW_SHOW = 5
+            user32.ShowWindow(hwnd, SW_SHOW)
     except Exception:
         pass
 
@@ -311,7 +327,7 @@ def start_http_server():
 def launch_gui():
     root = tk.Tk()
     root.title("MargoClicker - Ustawienia")
-    root.geometry("520x480")
+    root.geometry("540x520")
     root.resizable(False, False)
     root.configure(bg="#111827")
 
@@ -397,6 +413,11 @@ def launch_gui():
             config["manual_offset_y"] = parsed_y
             config["window_keyword"] = keyword_var.get().strip() or "margonem"
 
+        if config["hide_console_on_start"]:
+            hide_console_window()
+        else:
+            show_console_window()
+
         status_var.set("Zapisano ustawienia.")
         print(
             "⚙️ Zapisano ustawienia:",
@@ -438,6 +459,18 @@ def launch_gui():
         kliknij_w_grze(cw / 2, ch / 2)
         status_var.set("Wysłano testowe kliknięcie w środek client-area.")
 
+    def test_click_pretrap():
+        hwnd = find_best_margonem_hwnd() or get_target_hwnd()
+        client = get_client_origin(hwnd) if hwnd else None
+        if not client or not client[2] or not client[3]:
+            status_var.set("Nie znaleziono okna gry do testu pre-zapadki.")
+            return
+        _, _, cw, ch = client
+        target_x = cw * PRETRAP_TEST_RATIO_X
+        target_y = ch * PRETRAP_TEST_RATIO_Y
+        kliknij_w_grze(target_x, target_y)
+        status_var.set("Wysłano testowe kliknięcie w obszar pre-zapadki (górna część).")
+
     controls = ttk.Frame(frame, style="Dark.TFrame")
     controls.pack(anchor="w", pady=(10, 4))
 
@@ -453,6 +486,7 @@ def launch_gui():
     extra_controls.pack(anchor="w", pady=(8, 0))
     ttk.Button(extra_controls, text="Kalibracja aktywnego okna", command=calibrate_from_active_window, style="Dark.TButton").pack(side=tk.LEFT)
     ttk.Button(extra_controls, text="Test kliknięcia środka", command=test_click_center, style="Dark.TButton").pack(side=tk.LEFT, padx=8)
+    ttk.Button(extra_controls, text="Test pre-zapadki", command=test_click_pretrap, style="Dark.TButton").pack(side=tk.LEFT, padx=8)
 
     ttk.Label(frame, textvariable=status_var, style="Success.TLabel", wraplength=480).pack(anchor="w", pady=(8, 0))
     ttk.Label(
@@ -466,6 +500,7 @@ def launch_gui():
 
 if __name__ == '__main__':
     configure_flask_logging()
+    run_console_policy()
     setup_dpi_awareness()
     pyautogui.FAILSAFE = False
 
@@ -476,5 +511,4 @@ if __name__ == '__main__':
     auto_fullscreen_thread = threading.Thread(target=maybe_enable_fullscreen_from_config, daemon=True)
     auto_fullscreen_thread.start()
 
-    run_console_policy()
     launch_gui()
