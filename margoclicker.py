@@ -8,6 +8,7 @@ import sys
 import threading
 import tkinter as tk
 from tkinter import ttk
+import logging
 
 FALLBACK_OFFSET_Y = 7
 
@@ -21,8 +22,35 @@ config = {
     "manual_offset_x": 0.0,
     "manual_offset_y": 0.0,
     "launch_fullscreen": False,
+    "window_keyword": "margonem",
+    "hide_console_on_start": True,
 }
 
+
+def configure_flask_logging():
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    app.logger.setLevel(logging.ERROR)
+
+
+def hide_console_window():
+    if sys.platform != "win32":
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            SW_HIDE = 0
+            user32.ShowWindow(hwnd, SW_HIDE)
+    except Exception:
+        pass
+
+
+def run_console_policy():
+    with config_lock:
+        should_hide = bool(config["hide_console_on_start"])
+    if should_hide:
+        hide_console_window()
 
 
 def setup_dpi_awareness():
@@ -39,7 +67,6 @@ def setup_dpi_awareness():
             print(f"⚠️ Nie udało się ustawić DPI awareness: {e}")
 
 
-
 def get_target_hwnd():
     if sys.platform != 'win32':
         return None
@@ -49,6 +76,79 @@ def get_target_hwnd():
     except Exception:
         return None
 
+
+def get_window_text(hwnd):
+    if sys.platform != "win32" or not hwnd:
+        return ""
+    user32 = ctypes.windll.user32
+    length = user32.GetWindowTextLengthW(hwnd)
+    if length <= 0:
+        return ""
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buffer, length + 1)
+    return buffer.value or ""
+
+
+def find_best_margonem_hwnd():
+    if sys.platform != "win32":
+        return None
+
+    with config_lock:
+        keyword = (config.get("window_keyword") or "margonem").strip().lower()
+
+    user32 = ctypes.windll.user32
+    found = []
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def enum_handler(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        title = get_window_text(hwnd).strip()
+        if not title:
+            return True
+        lowered = title.lower()
+        score = 0
+        if keyword and keyword in lowered:
+            score += 100
+        if "margonem" in lowered:
+            score += 80
+        if any(browser in lowered for browser in ("brave", "chrome", "firefox", "edge")):
+            score += 10
+        if score > 0:
+            found.append((score, hwnd))
+        return True
+
+    user32.EnumWindows(WNDENUMPROC(enum_handler), 0)
+    if not found:
+        return None
+    found.sort(key=lambda x: x[0], reverse=True)
+    return found[0][1]
+
+
+def send_f11_to_window(hwnd=None):
+    if sys.platform != "win32":
+        pyautogui.press("f11")
+        return True
+
+    user32 = ctypes.windll.user32
+    target = hwnd or find_best_margonem_hwnd() or get_target_hwnd()
+    if not target:
+        return False
+
+    SW_RESTORE = 9
+    VK_F11 = 0x7A
+    KEYEVENTF_KEYUP = 0x0002
+
+    try:
+        user32.ShowWindow(target, SW_RESTORE)
+        user32.SetForegroundWindow(target)
+        time.sleep(0.08)
+        user32.keybd_event(VK_F11, 0, 0, 0)
+        time.sleep(0.02)
+        user32.keybd_event(VK_F11, 0, KEYEVENTF_KEYUP, 0)
+        return True
+    except Exception:
+        return False
 
 
 def get_client_origin(hwnd):
@@ -85,7 +185,6 @@ def get_client_origin(hwnd):
         return None
 
 
-
 def maybe_enable_fullscreen_from_config():
     with config_lock:
         launch_fullscreen = bool(config["launch_fullscreen"])
@@ -95,20 +194,22 @@ def maybe_enable_fullscreen_from_config():
 
     try:
         time.sleep(1.2)
-        pyautogui.press("f11")
-        print("🖥️ Wysłano F11 (automatyczny tryb pełnoekranowy).")
+        if send_f11_to_window():
+            print("🖥️ Wysłano F11 (automatyczny tryb pełnoekranowy).")
+        else:
+            print("⚠️ Nie znaleziono okna gry/przeglądarki do F11.")
     except Exception as e:
         print(f"⚠️ Nie udało się wysłać F11: {e}")
-
 
 
 def trigger_fullscreen_now():
     try:
-        pyautogui.press("f11")
-        print("🖥️ Wysłano F11 (ręczne przełączenie pełnego ekranu).")
+        if send_f11_to_window():
+            print("🖥️ Wysłano F11 (ręczne przełączenie pełnego ekranu).")
+        else:
+            print("⚠️ Nie znaleziono okna gry/przeglądarki do F11.")
     except Exception as e:
         print(f"⚠️ Nie udało się wysłać F11: {e}")
-
 
 
 def get_click_config():
@@ -121,7 +222,6 @@ def get_click_config():
         }
 
 
-
 def kliknij_w_grze(x, y):
     cfg = get_click_config()
 
@@ -131,7 +231,7 @@ def kliknij_w_grze(x, y):
         local_x += cfg["manual_offset_x"]
         local_y += cfg["manual_offset_y"]
 
-    hwnd = get_target_hwnd() if cfg["use_client_area"] else None
+    hwnd = find_best_margonem_hwnd() if cfg["use_client_area"] else None
     client = get_client_origin(hwnd) if hwnd else None
 
     if client:
@@ -168,6 +268,14 @@ def health():
     return "OK", 200
 
 
+@app.route('/fullscreen', methods=['GET', 'POST', 'OPTIONS'])
+def fullscreen():
+    if request.method == 'OPTIONS':
+        return make_response("", 200)
+    ok = send_f11_to_window()
+    return ("OK", 200) if ok else ("NO_WINDOW", 404)
+
+
 @app.route('/click', methods=['GET', 'OPTIONS'])
 def click():
     if request.method == 'OPTIONS':
@@ -196,53 +304,80 @@ def click():
         return "ERROR", 500
 
 
-
 def start_http_server():
     app.run(port=5000, host='127.0.0.1', debug=False, use_reloader=False)
-
 
 
 def launch_gui():
     root = tk.Tk()
     root.title("MargoClicker - Ustawienia")
-    root.geometry("420x300")
+    root.geometry("520x480")
     root.resizable(False, False)
+    root.configure(bg="#111827")
 
-    frame = ttk.Frame(root, padding=12)
+    style = ttk.Style(root)
+    style.theme_use("clam")
+    style.configure("Dark.TFrame", background="#111827")
+    style.configure("Dark.TLabel", background="#111827", foreground="#e5e7eb")
+    style.configure("Title.TLabel", background="#111827", foreground="#f9fafb", font=("Segoe UI", 16, "bold"))
+    style.configure("Dark.TCheckbutton", background="#111827", foreground="#e5e7eb")
+    style.map("Dark.TCheckbutton", background=[("active", "#111827")], foreground=[("active", "#f9fafb")])
+    style.configure("Dark.TEntry", fieldbackground="#1f2937", foreground="#f9fafb", insertcolor="#f9fafb")
+    style.configure("Dark.TButton", background="#2563eb", foreground="#ffffff", padding=(8, 5))
+    style.map("Dark.TButton", background=[("active", "#1d4ed8")])
+    style.configure("Success.TLabel", background="#111827", foreground="#86efac")
+    style.configure("Muted.TLabel", background="#111827", foreground="#93c5fd")
+
+    frame = ttk.Frame(root, padding=14, style="Dark.TFrame")
     frame.pack(fill=tk.BOTH, expand=True)
 
     use_client_area_var = tk.BooleanVar(value=config["use_client_area"])
     manual_offset_enabled_var = tk.BooleanVar(value=config["manual_offset_enabled"])
     launch_fullscreen_var = tk.BooleanVar(value=config["launch_fullscreen"])
+    hide_console_var = tk.BooleanVar(value=config["hide_console_on_start"])
     offset_x_var = tk.StringVar(value=str(config["manual_offset_x"]))
     offset_y_var = tk.StringVar(value=str(config["manual_offset_y"]))
+    keyword_var = tk.StringVar(value=str(config["window_keyword"]))
     status_var = tk.StringVar(value="Serwer działa na http://127.0.0.1:5000")
 
-    ttk.Label(frame, text="MargoClicker (GUI)", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 10))
+    ttk.Label(frame, text="MargoClicker (Dark GUI)", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
 
     ttk.Checkbutton(
         frame,
         text="Używaj mapowania do client-area aktywnego okna (WinAPI)",
         variable=use_client_area_var,
+        style="Dark.TCheckbutton",
     ).pack(anchor="w", pady=3)
 
     ttk.Checkbutton(
         frame,
         text="Włącz ręczny offset (dla paska przeglądarki / UI)",
         variable=manual_offset_enabled_var,
+        style="Dark.TCheckbutton",
     ).pack(anchor="w", pady=3)
 
-    offsets = ttk.Frame(frame)
+    offsets = ttk.Frame(frame, style="Dark.TFrame")
     offsets.pack(anchor="w", pady=(6, 8), fill=tk.X)
-    ttk.Label(offsets, text="Offset X:").grid(row=0, column=0, sticky="w")
-    ttk.Entry(offsets, textvariable=offset_x_var, width=10).grid(row=0, column=1, padx=(6, 16))
-    ttk.Label(offsets, text="Offset Y:").grid(row=0, column=2, sticky="w")
-    ttk.Entry(offsets, textvariable=offset_y_var, width=10).grid(row=0, column=3, padx=(6, 0))
+    ttk.Label(offsets, text="Offset X:", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Entry(offsets, textvariable=offset_x_var, width=10, style="Dark.TEntry").grid(row=0, column=1, padx=(6, 16))
+    ttk.Label(offsets, text="Offset Y:", style="Dark.TLabel").grid(row=0, column=2, sticky="w")
+    ttk.Entry(offsets, textvariable=offset_y_var, width=10, style="Dark.TEntry").grid(row=0, column=3, padx=(6, 0))
+
+    ttk.Label(offsets, text="Fraza okna gry:", style="Dark.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 0))
+    ttk.Entry(offsets, textvariable=keyword_var, width=28, style="Dark.TEntry").grid(row=1, column=1, columnspan=3, sticky="w", pady=(8, 0))
 
     ttk.Checkbutton(
         frame,
         text="Automatycznie wyślij F11 po starcie (tryb pełnoekranowy)",
         variable=launch_fullscreen_var,
+        style="Dark.TCheckbutton",
+    ).pack(anchor="w", pady=3)
+
+    ttk.Checkbutton(
+        frame,
+        text="Ukryj konsolę CMD przy starcie (Windows)",
+        variable=hide_console_var,
+        style="Dark.TCheckbutton",
     ).pack(anchor="w", pady=3)
 
     def save_settings():
@@ -257,8 +392,10 @@ def launch_gui():
             config["use_client_area"] = bool(use_client_area_var.get())
             config["manual_offset_enabled"] = bool(manual_offset_enabled_var.get())
             config["launch_fullscreen"] = bool(launch_fullscreen_var.get())
+            config["hide_console_on_start"] = bool(hide_console_var.get())
             config["manual_offset_x"] = parsed_x
             config["manual_offset_y"] = parsed_y
+            config["window_keyword"] = keyword_var.get().strip() or "margonem"
 
         status_var.set("Zapisano ustawienia.")
         print(
@@ -269,33 +406,75 @@ def launch_gui():
                 "manual_offset_x": config["manual_offset_x"],
                 "manual_offset_y": config["manual_offset_y"],
                 "launch_fullscreen": config["launch_fullscreen"],
+                "window_keyword": config["window_keyword"],
+                "hide_console_on_start": config["hide_console_on_start"],
             },
         )
 
-    controls = ttk.Frame(frame)
+    def calibrate_from_active_window():
+        hwnd = get_target_hwnd()
+        client = get_client_origin(hwnd) if hwnd else None
+        if not client:
+            status_var.set("Nie udało się pobrać aktywnego okna do kalibracji.")
+            return
+        _ox, _oy, client_w, client_h = client
+        if not client_w or not client_h:
+            status_var.set("Brak rozmiaru client-area do kalibracji.")
+            return
+        with config_lock:
+            config["manual_offset_x"] = 0.0
+            config["manual_offset_y"] = 0.0
+        offset_x_var.set("0.0")
+        offset_y_var.set("0.0")
+        status_var.set(f"Kalibracja OK. Obszar gry: {client_w}x{client_h}.")
+
+    def test_click_center():
+        hwnd = find_best_margonem_hwnd() or get_target_hwnd()
+        client = get_client_origin(hwnd) if hwnd else None
+        if not client or not client[2] or not client[3]:
+            status_var.set("Nie znaleziono okna gry do testowego kliknięcia.")
+            return
+        _, _, cw, ch = client
+        kliknij_w_grze(cw / 2, ch / 2)
+        status_var.set("Wysłano testowe kliknięcie w środek client-area.")
+
+    controls = ttk.Frame(frame, style="Dark.TFrame")
     controls.pack(anchor="w", pady=(10, 4))
 
-    ttk.Button(controls, text="Zapisz ustawienia", command=save_settings).pack(side=tk.LEFT)
+    ttk.Button(controls, text="Zapisz ustawienia", command=save_settings, style="Dark.TButton").pack(side=tk.LEFT)
     ttk.Button(
         controls,
         text="Przełącz pełny ekran (F11)",
         command=trigger_fullscreen_now,
+        style="Dark.TButton",
     ).pack(side=tk.LEFT, padx=8)
 
-    ttk.Label(frame, textvariable=status_var, foreground="#1e5f2e").pack(anchor="w", pady=(8, 0))
+    extra_controls = ttk.Frame(frame, style="Dark.TFrame")
+    extra_controls.pack(anchor="w", pady=(8, 0))
+    ttk.Button(extra_controls, text="Kalibracja aktywnego okna", command=calibrate_from_active_window, style="Dark.TButton").pack(side=tk.LEFT)
+    ttk.Button(extra_controls, text="Test kliknięcia środka", command=test_click_center, style="Dark.TButton").pack(side=tk.LEFT, padx=8)
+
+    ttk.Label(frame, textvariable=status_var, style="Success.TLabel", wraplength=480).pack(anchor="w", pady=(8, 0))
+    ttk.Label(
+        frame,
+        text="Tip: możesz z userscripta wywołać /fullscreen aby wymusić F11.",
+        style="Muted.TLabel",
+    ).pack(anchor="w", pady=(8, 0))
 
     root.mainloop()
 
 
 if __name__ == '__main__':
+    configure_flask_logging()
     setup_dpi_awareness()
     pyautogui.FAILSAFE = False
 
-    print("🚀 MargoClicker V6 (GUI + fullscreen + offset) działa!")
+    print("🚀 MargoClicker V7 (dark GUI + fullscreen focus + helpers) działa!")
     server_thread = threading.Thread(target=start_http_server, daemon=True)
     server_thread.start()
 
     auto_fullscreen_thread = threading.Thread(target=maybe_enable_fullscreen_from_config, daemon=True)
     auto_fullscreen_thread.start()
 
+    run_console_policy()
     launch_gui()
