@@ -124,7 +124,7 @@ kernel32 = ctypes.windll.kernel32 if IS_WINDOWS else None
 BROWSER_PROCESS_NAMES = {"brave.exe", "chrome.exe", "firefox.exe", "msedge.exe", "opera.exe", "opera_gx.exe"}
 TEST_POINT_PRESETS = {
     "center": (0.50, 0.50),
-    "pre_zapadki": (0.50, 0.50),
+    "pre_zapadki": (0.50, 0.42),
     "top_center": (0.50, 0.12),
     "left_top_margin": (0.10, 0.10),
     "right_top_margin": (0.90, 0.10),
@@ -156,6 +156,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "file_logging": False,
     "launch_command": "",
     "browser_url_hint": "",
+    "appearance_mode": "dark",
     "disable_randomness": False,
 }
 
@@ -307,6 +308,9 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     normalized["target_window_title"] = str(normalized.get("target_window_title", "")).strip()
     normalized["target_class_name"] = str(normalized.get("target_class_name", "")).strip()
     normalized["hotkey"] = str(normalized.get("hotkey", "f9")).strip().lower() or "f9"
+    normalized["appearance_mode"] = str(normalized.get("appearance_mode", "dark")).strip().lower() or "dark"
+    if normalized["appearance_mode"] not in {"dark", "light", "system"}:
+        normalized["appearance_mode"] = "dark"
 
     for key in ["target_hwnd", "target_pid", "target_monitor_index", "click_hold_ms_min", "click_hold_ms_max", "click_jitter_px"]:
         normalized[key] = int(float(normalized.get(key, DEFAULT_CONFIG[key])))
@@ -540,6 +544,16 @@ def score_window_candidate(candidate: WindowCandidate, cfg: Dict[str, Any]) -> T
     if candidate.process_name in BROWSER_PROCESS_NAMES:
         score += 60
         reasons.append("browser_process")
+    process_hint = str(cfg.get("target_process_name", "")).lower().strip()
+    if process_hint and process_hint in candidate.process_name:
+        score += 90
+        reasons.append("process_hint")
+    if candidate.process_name == "brave.exe":
+        score += 25
+        reasons.append("brave_bonus")
+    if candidate.title.lower().startswith("margoclicker"):
+        score -= 180
+        reasons.append("self_window_penalty")
 
     cw = candidate.client_rect["right"] - candidate.client_rect["left"]
     ch = candidate.client_rect["bottom"] - candidate.client_rect["top"]
@@ -821,8 +835,13 @@ def click_in_game_client(client_x: float, client_y: float, label: str = "client"
     if cw <= 0 or ch <= 0:
         return False, "NO_CLIENT_AREA", {}
 
+    with config_lock:
+        manual_offset_enabled = bool(config.get("manual_offset_enabled", False))
+        offset_y = float(config.get("manual_offset_y", 0.0))
+
     cx = max(0, min(int(round(client_x)), cw - 1))
-    cy = max(0, min(int(round(client_y)), ch - 1))
+    cy_raw = float(client_y) + (offset_y if manual_offset_enabled else 0.0)
+    cy = max(0, min(int(round(cy_raw)), ch - 1))
     screen_pt = client_to_screen(hwnd, cx, cy)
 
     with config_lock:
@@ -839,6 +858,7 @@ def click_in_game_client(client_x: float, client_y: float, label: str = "client"
         "hwnd": hwnd,
         "client_x": cx,
         "client_y": cy,
+        "offset_applied_y": offset_y if manual_offset_enabled else 0.0,
         "screen_x": screen_pt[0] if screen_pt else None,
         "screen_y": screen_pt[1] if screen_pt else None,
     }
@@ -1042,19 +1062,42 @@ def fullscreen_route():
         return jsonify({"ok": False, "status": "ERROR", "error": str(exc)}), 500
 
 
+def launch_configured_target() -> Tuple[bool, str]:
+    with config_lock:
+        cmd = str(config.get("launch_command", "")).strip()
+        url_hint = str(config.get("browser_url_hint", "")).strip() or "https://www.margonem.pl/"
+    if cmd:
+        try:
+            subprocess.Popen(cmd, shell=True)
+            return True, "OK"
+        except Exception as exc:
+            return False, f"ERROR: {exc}"
+
+    if not IS_WINDOWS:
+        return False, "NO_LAUNCH_COMMAND"
+
+    fallback_commands = [
+        f'start "" brave "{url_hint}"',
+        f'start "" chrome "{url_hint}"',
+        f'start "" msedge "{url_hint}"',
+    ]
+    for fallback_cmd in fallback_commands:
+        try:
+            subprocess.Popen(fallback_cmd, shell=True)
+            return True, f"OK_FALLBACK ({fallback_cmd})"
+        except Exception:
+            continue
+    return False, "NO_LAUNCH_COMMAND"
+
+
 @app.route("/launch", methods=["POST", "OPTIONS"])
 def launch_route():
     if request.method == "OPTIONS":
         return make_response("", 200)
-    with config_lock:
-        cmd = str(config.get("launch_command", "")).strip()
-    if not cmd:
-        return jsonify({"ok": False, "status": "NO_LAUNCH_COMMAND"}), 400
-    try:
-        subprocess.Popen(cmd, shell=True)
-        return jsonify({"ok": True, "status": "OK"}), 200
-    except Exception as exc:
-        return jsonify({"ok": False, "status": "ERROR", "error": str(exc)}), 500
+    ok, status = launch_configured_target()
+    if ok:
+        return jsonify({"ok": True, "status": status}), 200
+    return jsonify({"ok": False, "status": status}), 400
 
 
 @app.route("/click", methods=["GET", "OPTIONS"])
@@ -1207,12 +1250,15 @@ def export_route():
 
 
 def launch_gui() -> None:
-    ctk.set_appearance_mode("dark")
+    with config_lock:
+        appearance_mode = str(config.get("appearance_mode", "dark")).strip().lower() or "dark"
+    ctk.set_appearance_mode(appearance_mode)
     ctk.set_default_color_theme("dark-blue")
 
     root = ctk.CTk()
     root.title("MargoClicker v2")
     root.geometry("1420x920")
+    root.minsize(980, 680)
 
     if not USING_CUSTOMTKINTER:
         log_event("CustomTkinter nie znaleziony -> GUI w trybie zgodności tkinter.", "warn")
@@ -1236,12 +1282,16 @@ def launch_gui() -> None:
     restore_var = ctk.BooleanVar(value=bool(cfg.get("restore_window_before_click", True)))
     disable_random_var = ctk.BooleanVar(value=bool(cfg.get("disable_randomness", False)))
     launch_cmd_var = ctk.StringVar(value=str(cfg.get("launch_command", "")))
+    browser_url_var = ctk.StringVar(value=str(cfg.get("browser_url_hint", "")))
+    appearance_var = ctk.StringVar(value=str(cfg.get("appearance_mode", "dark")))
 
     main = ctk.CTkFrame(root)
     main.pack(fill="both", expand=True, padx=16, pady=14)
 
-    top_status = ctk.CTkLabel(main, text="STATUS: AKTYWNY", font=("Segoe UI", 20, "bold"), anchor="w")
-    top_status.pack(fill="x", padx=12, pady=(10, 6))
+    top_row = ctk.CTkFrame(main)
+    top_row.pack(fill="x", padx=10, pady=(8, 6))
+    top_status = ctk.CTkLabel(top_row, text="STATUS: AKTYWNY", font=("Segoe UI", 20, "bold"), anchor="w")
+    top_status.pack(side="left", fill="x", expand=True, padx=(6, 8), pady=(6, 4))
 
     tabview = ctk.CTkTabview(main, width=1380, height=830)
     tabview.pack(fill="both", expand=True, padx=8, pady=8)
@@ -1249,6 +1299,18 @@ def launch_gui() -> None:
     tab_dashboard = tabview.add("Dashboard")
     tab_tools = tabview.add("Testowanie & Narzędzia")
     tab_settings = tabview.add("Ustawienia")
+
+    def toggle_active_from_gui() -> None:
+        runtime_state["paused"] = not bool(runtime_state.get("paused"))
+        state = "ZATRZYMANY" if runtime_state["paused"] else "AKTYWNY"
+        log_event(f"GUI -> STATUS: {state}", "warn" if runtime_state["paused"] else "info")
+
+    def launch_browser_from_gui() -> None:
+        ok, status = launch_configured_target()
+        log_event(f"LAUNCH -> {status}", "info" if ok else "error")
+
+    ctk.CTkButton(top_row, text="Aktywuj / Pauza", command=toggle_active_from_gui).pack(side="right", padx=6, pady=6)
+    ctk.CTkButton(top_row, text="Uruchom Brave + Margonem", command=launch_browser_from_gui).pack(side="right", padx=6, pady=6)
 
     # ---------- Dashboard ----------
     controls = ctk.CTkFrame(tab_dashboard)
@@ -1434,10 +1496,13 @@ def launch_gui() -> None:
     add_label_entry(4, "Hotkey", hotkey_var)
     add_label_entry(5, "Manual offset Y", offset_y_var)
     add_label_entry(6, "Launch command", launch_cmd_var, width=480)
+    add_label_entry(7, "Browser URL hint", browser_url_var, width=480)
 
     ctk.CTkSwitch(sgrid, text="Manual offset włączony", variable=offset_enabled_var).grid(row=0, column=2, sticky="w", padx=8)
     ctk.CTkSwitch(sgrid, text="Logi do pliku", variable=file_log_var).grid(row=1, column=2, sticky="w", padx=8)
     ctk.CTkSwitch(sgrid, text="Bez losowości (pyautogui)", variable=disable_random_var).grid(row=2, column=2, sticky="w", padx=8)
+    ctk.CTkLabel(sgrid, text="Tryb wyglądu").grid(row=3, column=2, sticky="w", padx=8, pady=(6, 0))
+    ctk.CTkOptionMenu(sgrid, variable=appearance_var, values=["dark", "light", "system"]).grid(row=4, column=2, sticky="w", padx=8)
 
     def save_from_gui() -> None:
         try:
@@ -1467,8 +1532,11 @@ def launch_gui() -> None:
             config["restore_window_before_click"] = bool(restore_var.get())
             config["disable_randomness"] = bool(disable_random_var.get())
             config["launch_command"] = launch_cmd_var.get().strip()
+            config["browser_url_hint"] = browser_url_var.get().strip()
+            config["appearance_mode"] = appearance_var.get().strip().lower() or "dark"
 
         save_settings()
+        ctk.set_appearance_mode(str(config.get("appearance_mode", "dark")))
         register_hotkey()
         log_event("Ustawienia zapisane", "info")
 
@@ -1485,8 +1553,24 @@ def launch_gui() -> None:
         )
         root.after(200, sync_status)
 
+    def on_resize(event) -> None:
+        if event.widget is not root:
+            return
+        scale = max(0.78, min(1.0, event.width / 1420.0))
+        if USING_CUSTOMTKINTER:
+            try:
+                ctk.set_widget_scaling(scale)
+            except Exception:
+                pass
+        elif hasattr(root, "tk"):
+            try:
+                root.tk.call("tk", "scaling", max(1.0, 1.25 * scale))
+            except Exception:
+                pass
+
     refresh_candidates()
     sync_status()
+    root.bind("<Configure>", on_resize)
     root.mainloop()
 
 
