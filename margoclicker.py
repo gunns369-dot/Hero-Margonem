@@ -26,6 +26,7 @@ from tkinter import scrolledtext, ttk
 BROWSER_PROCESS_NAMES = {"brave.exe", "chrome.exe", "firefox.exe", "msedge.exe"}
 TEST_POINT_PRESETS = {
     "center": (0.50, 0.50),
+    "pre_zapadki": (0.50, 0.50),
     "top_center": (0.50, 0.12),
     "left_top_margin": (0.10, 0.10),
     "right_top_margin": (0.90, 0.10),
@@ -85,7 +86,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "target_class_name": "",
     "target_monitor_name": "",
     "target_monitor_index": -1,
-    "click_without_mouse_move": False,
+    "use_virtual_mouse": False,
     "disable_randomness": False,
     "calibration": {},
 }
@@ -323,10 +324,10 @@ def ensure_window_ready(hwnd: int) -> bool:
         return False
     user32 = ctypes.windll.user32
     try:
+        SW_RESTORE = 9
         if user32.IsIconic(hwnd):
-            user32.ShowWindow(hwnd, 9)
-        else:
-            user32.ShowWindow(hwnd, 5)
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            log_event("Okno było zminimalizowane - wykonano SW_RESTORE")
         user32.SetForegroundWindow(hwnd)
         time.sleep(0.08)
         return True
@@ -466,10 +467,19 @@ def resolve_target_window() -> Optional[int]:
     with config_lock:
         cfg = dict(config)
 
-    if cfg.get("window_selection_mode") == "picked" and cfg.get("target_hwnd_last"):
-        hwnd = int(cfg.get("target_hwnd_last") or 0)
-        if _is_valid_hwnd(hwnd):
-            return hwnd
+    hwnd_saved = int(cfg.get("target_hwnd_last") or 0)
+    pid_saved = int(cfg.get("target_pid") or 0)
+
+    if hwnd_saved and _is_valid_hwnd(hwnd_saved):
+        if not pid_saved or get_window_pid(hwnd_saved) == pid_saved:
+            return hwnd_saved
+
+    if pid_saved:
+        for candidate in list_window_candidates():
+            if candidate.pid == pid_saved and _is_valid_hwnd(candidate.hwnd):
+                with config_lock:
+                    config["target_hwnd_last"] = candidate.hwnd
+                return candidate.hwnd
 
     best = find_best_target_window()
     if not best:
@@ -522,7 +532,30 @@ def pick_window_under_cursor() -> Optional[WindowCandidate]:
 # CLICK EXECUTION
 # =========================
 
-def perform_click(screen_x: int, screen_y: int, debug_label: str = "", use_message: bool = False, hwnd: Optional[int] = None) -> bool:
+def _make_lparam(client_x: int, client_y: int) -> int:
+    return ((client_y & 0xFFFF) << 16) | (client_x & 0xFFFF)
+
+
+def send_background_click(hwnd: int, client_x: int, client_y: int) -> bool:
+    if not _is_valid_hwnd(hwnd):
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        WM_MOUSEMOVE = 0x0200
+        WM_LBUTTONDOWN = 0x0201
+        WM_LBUTTONUP = 0x0202
+        MK_LBUTTON = 0x0001
+        lparam = _make_lparam(client_x, client_y)
+        user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
+        user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+        user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+        return True
+    except Exception as e:
+        log_event(f"Błąd wirtualnej myszki (PostMessage): {e}")
+        return False
+
+
+def perform_click(screen_x: int, screen_y: int, debug_label: str = "") -> bool:
     with config_lock:
         disable_randomness = bool(config.get("disable_randomness", False))
 
@@ -531,23 +564,6 @@ def perform_click(screen_x: int, screen_y: int, debug_label: str = "", use_messa
     if not disable_randomness:
         fx += random.uniform(-3, 3)
         fy += random.uniform(-2, 2)
-
-    if use_message and hwnd and _is_valid_hwnd(hwnd):
-        try:
-            user32 = ctypes.windll.user32
-            WM_LBUTTONDOWN = 0x0201
-            WM_LBUTTONUP = 0x0202
-            MK_LBUTTON = 0x0001
-            geom = get_window_geometry(hwnd)
-            if geom:
-                cx = int(fx - geom.client_origin["x"])
-                cy = int(fy - geom.client_origin["y"])
-                lparam = (cy << 16) | (cx & 0xFFFF)
-                user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
-                user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
-                return True
-        except Exception as e:
-            log_event(f"Klik przez PostMessage nieudany ({e}), fallback do pyautogui")
 
     duration = 0.0 if disable_randomness else random.uniform(0.12, 0.26)
     pyautogui.moveTo(fx, fy, duration)
@@ -563,7 +579,9 @@ def click_in_game(client_x: float, client_y: float, label: str = "api") -> Tuple
     if not hwnd:
         return False, "NO_TARGET_WINDOW", None
 
-    if cfg.get("restore_window_before_click", True):
+    if ctypes.windll.user32.IsIconic(hwnd):
+        ensure_window_ready(hwnd)
+    elif cfg.get("restore_window_before_click", True):
         ensure_window_ready(hwnd)
 
     geom = get_window_geometry(hwnd)
@@ -585,13 +603,14 @@ def click_in_game(client_x: float, client_y: float, label: str = "api") -> Tuple
     else:
         sx, sy = scr
 
-    click_ok = perform_click(
-        sx,
-        sy,
-        debug_label=label,
-        use_message=bool(cfg.get("click_without_mouse_move", False)),
-        hwnd=hwnd,
-    )
+    use_virtual_mouse = bool(cfg.get("use_virtual_mouse", False))
+    if use_virtual_mouse:
+        click_ok = send_background_click(hwnd, cx, cy)
+        if not click_ok:
+            log_event("Fallback: wirtualna myszka nieudana, używam pyautogui")
+            click_ok = perform_click(sx, sy, debug_label=label)
+    else:
+        click_ok = perform_click(sx, sy, debug_label=label)
 
     payload = {
         "timestamp": time.time(),
@@ -722,11 +741,23 @@ def click_route():
             ok, msg, payload = click_in_game(float(vx), float(vy), label="api_v")
             return jsonify({"status": msg, "ok": ok, "payload": payload}), (200 if ok else 404)
         if ax is not None and ay is not None:
+            hwnd = resolve_target_window()
+            if hwnd and _is_valid_hwnd(hwnd):
+                if ctypes.windll.user32.IsIconic(hwnd):
+                    ensure_window_ready(hwnd)
+                else:
+                    ensure_window_ready(hwnd)
             perform_click(int(float(ax)), int(float(ay)), debug_label="api_abs")
             return "OK", 200
 
         x_abs = float(request.args.get("x"))
         y_abs = float(request.args.get("y"))
+        hwnd = resolve_target_window()
+        if hwnd and _is_valid_hwnd(hwnd):
+            if ctypes.windll.user32.IsIconic(hwnd):
+                ensure_window_ready(hwnd)
+            else:
+                ensure_window_ready(hwnd)
         perform_click(int(x_abs), int(y_abs), debug_label="api_x")
         return "OK", 200
     except Exception as e:
@@ -787,6 +818,8 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     # migracja kompatybilności
     if not normalized.get("launch_command") and normalized.get("app_path"):
         normalized["launch_command"] = str(normalized.get("app_path", ""))
+    if "click_without_mouse_move" in (raw or {}) and "use_virtual_mouse" not in (raw or {}):
+        normalized["use_virtual_mouse"] = bool((raw or {}).get("click_without_mouse_move"))
 
     normalized["window_selection_mode"] = str(normalized.get("window_selection_mode", "auto")).lower().strip()
     if normalized["window_selection_mode"] not in {"auto", "title", "process", "picked"}:
@@ -861,7 +894,7 @@ def launch_gui() -> None:
     hide_console_var = tk.BooleanVar(value=bool(cfg.get("hide_console_on_start", True)))
     manual_off_var = tk.BooleanVar(value=bool(cfg.get("manual_offset_enabled", True)))
     no_random_var = tk.BooleanVar(value=bool(cfg.get("disable_randomness", False)))
-    click_msg_var = tk.BooleanVar(value=bool(cfg.get("click_without_mouse_move", False)))
+    click_msg_var = tk.BooleanVar(value=bool(cfg.get("use_virtual_mouse", False)))
 
     ttk.Label(frame, text="MargoClicker – Diagnostyka i stabilne targetowanie okna", style="Dark.TLabel").pack(anchor="w", pady=(0, 6))
 
@@ -888,7 +921,7 @@ def launch_gui() -> None:
     ttk.Label(flags, text="Y:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
     ttk.Entry(flags, textvariable=offset_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
     ttk.Checkbutton(flags, text="tryb bez losowości", variable=no_random_var).pack(side=tk.LEFT)
-    ttk.Checkbutton(flags, text="kliknięcie bez ruchu myszy (PostMessage)", variable=click_msg_var).pack(side=tk.LEFT, padx=8)
+    ttk.Checkbutton(flags, text="Użyj wirtualnej myszki (w tle)", variable=click_msg_var).pack(side=tk.LEFT, padx=8)
 
     # Diagnostyka - lista kandydatów
     diag_frame = ttk.LabelFrame(frame, text="Diagnostyka")
@@ -928,7 +961,7 @@ def launch_gui() -> None:
             config["manual_offset_enabled"] = bool(manual_off_var.get())
             config["manual_offset_y"] = parsed_off
             config["disable_randomness"] = bool(no_random_var.get())
-            config["click_without_mouse_move"] = bool(click_msg_var.get())
+            config["use_virtual_mouse"] = bool(click_msg_var.get())
             config["hide_console_on_start"] = bool(hide_console_var.get())
         save_settings_to_disk()
         status_var.set("Zapisano ustawienia")
@@ -1035,6 +1068,21 @@ def launch_gui() -> None:
             time.sleep(0.12)
         status_var.set("Test wszystkich punktów zakończony")
 
+    def test_pre_zapadki() -> None:
+        hwnd = resolve_target_window()
+        geom = get_window_geometry(hwnd) if hwnd else None
+        if not geom:
+            status_var.set("Brak okna")
+            return
+        cw = geom.client_rect["right"] - geom.client_rect["left"]
+        ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+        rx, ry = TEST_POINT_PRESETS.get("pre_zapadki", (0.50, 0.50))
+        ok, msg, payload = click_in_game(cw * rx, ch * ry, label="gui_pre_zapadki")
+        if ok:
+            status_var.set(f"Pre zapadki klik: {payload}")
+        else:
+            status_var.set(f"Pre zapadki błąd: {msg}")
+
     def show_last_click() -> None:
         last = runtime_state.get("last_click")
         status_var.set(f"Ostatni klik: {last}" if last else "Brak historii kliknięć")
@@ -1060,10 +1108,17 @@ def launch_gui() -> None:
     btns3 = ttk.Frame(frame, style="Dark.TFrame")
     btns3.pack(fill=tk.X, pady=(2, 4))
     ttk.Button(btns3, text="Test wszystkie punkty", command=run_test_points).pack(side=tk.LEFT)
+    ttk.Button(btns3, text="Test: Pre zapadki", command=test_pre_zapadki).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Pokaż współrzędne ostatniego kliknięcia", command=show_last_click).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Eksport diagnostyki do JSON", command=export_diag).pack(side=tk.LEFT)
 
     ttk.Label(frame, textvariable=status_var, style="Dark.TLabel").pack(anchor="w", pady=(4, 0))
+    ttk.Label(
+        frame,
+        text="W Chromium zakładki nie mają osobnego HWND - aktywowane jest całe okno przeglądarki. Dla stabilności uruchom grę w osobnym oknie.",
+        style="Dark.TLabel",
+        wraplength=1080,
+    ).pack(anchor="w", pady=(3, 0))
     ttk.Label(
         frame,
         text="launch_command uruchamia program. browser_url_hint to wyłącznie notatka diagnostyczna i NIE jest używany do wykrywania okna.",
