@@ -4,20 +4,93 @@ import ctypes
 import json
 import logging
 import random
+import sys
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import customtkinter as ctk
-import cv2
-import keyboard
-import numpy as np
-import pyautogui
-from flask import Flask, jsonify, make_response, request
-from flask_cors import CORS
-from win10toast import ToastNotifier
+try:
+    import cv2
+except ModuleNotFoundError:
+    cv2 = None
+
+try:
+    import keyboard
+except ModuleNotFoundError:
+    keyboard = None
+
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    np = None
+
+try:
+    import pyautogui
+except ModuleNotFoundError:
+    pyautogui = None
+
+try:
+    from flask import Flask, jsonify, make_response, request
+    from flask_cors import CORS
+    FLASK_AVAILABLE = True
+except ModuleNotFoundError:
+    FLASK_AVAILABLE = False
+try:
+    from win10toast import ToastNotifier
+except ModuleNotFoundError:
+    class ToastNotifier:  # type: ignore[override]
+        def show_toast(self, *_args, **_kwargs) -> None:
+            return None
+
+try:
+    import customtkinter as ctk
+    USING_CUSTOMTKINTER = True
+except ModuleNotFoundError:
+    import tkinter as tk
+    from tkinter import scrolledtext, ttk
+
+    USING_CUSTOMTKINTER = False
+
+    class _TabView(ttk.Notebook):
+        def __init__(self, master=None, width: int = 0, height: int = 0, **kwargs):
+            super().__init__(master, **kwargs)
+            if width > 0:
+                self.configure(width=width)
+            if height > 0:
+                self.configure(height=height)
+
+        def add(self, name: str):
+            frame = tk.Frame(self)
+            super().add(frame, text=name)
+            return frame
+
+    class _CTkCompat:
+        CTk = tk.Tk
+        CTkLabel = tk.Label
+        CTkEntry = tk.Entry
+        CTkFrame = tk.Frame
+        CTkButton = tk.Button
+        CTkTextbox = scrolledtext.ScrolledText
+        CTkTabview = _TabView
+        BooleanVar = tk.BooleanVar
+        StringVar = tk.StringVar
+        END = tk.END
+
+        @staticmethod
+        def CTkSwitch(master=None, text: str = "", variable=None, **kwargs):
+            return ttk.Checkbutton(master, text=text, variable=variable, **kwargs)
+
+        @staticmethod
+        def set_appearance_mode(_mode: str) -> None:
+            return None
+
+        @staticmethod
+        def set_default_color_theme(_theme: str) -> None:
+            return None
+
+    ctk = _CTkCompat()
 
 # =====================================================
 # Konfiguracja
@@ -51,16 +124,45 @@ runtime_state: Dict[str, Any] = {
 # Flask
 # =====================================================
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+if FLASK_AVAILABLE:
+    app = Flask(__name__)
+    CORS(app, resources={r"/*": {"origins": "*"}})
+else:
+    class _DummyRequest:
+        method = "GET"
+        args: Dict[str, Any] = {}
+
+    class _DummyApp:
+        logger = logging.getLogger("margoclicker_v2_dummy")
+
+        @staticmethod
+        def route(*_args, **_kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        @staticmethod
+        def run(*_args, **_kwargs):
+            return None
+
+    def jsonify(payload):
+        return payload
+
+    def make_response(body, _code):
+        return body
+
+    request = _DummyRequest()
+    app = _DummyApp()
 
 
 # =====================================================
 # WinAPI – struktury i helpery
 # =====================================================
 
-user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
+IS_WINDOWS = sys.platform == "win32"
+user32 = ctypes.windll.user32 if IS_WINDOWS else None
+gdi32 = ctypes.windll.gdi32 if IS_WINDOWS else None
 
 
 class RECT(ctypes.Structure):
@@ -104,10 +206,14 @@ def log_event(message: str, level: str = "info") -> None:
 
 
 def _is_valid_hwnd(hwnd: int) -> bool:
+    if not IS_WINDOWS or user32 is None:
+        return False
     return bool(hwnd and user32.IsWindow(hwnd))
 
 
 def get_window_text(hwnd: int) -> str:
+    if not IS_WINDOWS or user32 is None:
+        return ""
     length = user32.GetWindowTextLengthW(hwnd)
     if length <= 0:
         return ""
@@ -117,6 +223,8 @@ def get_window_text(hwnd: int) -> str:
 
 
 def resolve_target_window() -> Optional[int]:
+    if not IS_WINDOWS or user32 is None:
+        return None
     with config_lock:
         saved_hwnd = int(config.get("target_hwnd", 0))
         title_hint = str(config.get("target_title_hint", "margonem")).lower().strip()
@@ -147,6 +255,8 @@ def resolve_target_window() -> Optional[int]:
 
 
 def ensure_window_ready(hwnd: int) -> None:
+    if not IS_WINDOWS or user32 is None:
+        return
     with config_lock:
         should_restore = bool(config.get("restore_window_before_click", False))
     if should_restore and user32.IsIconic(hwnd):
@@ -155,6 +265,8 @@ def ensure_window_ready(hwnd: int) -> None:
 
 
 def get_client_size(hwnd: int) -> Tuple[int, int]:
+    if not IS_WINDOWS or user32 is None:
+        return 0, 0
     rc = RECT()
     if user32.GetClientRect(hwnd, ctypes.byref(rc)) == 0:
         return 0, 0
@@ -163,7 +275,7 @@ def get_client_size(hwnd: int) -> Tuple[int, int]:
 
 def screen_to_client(hwnd: int, screen_x: int, screen_y: int) -> Optional[Tuple[int, int]]:
     """Kluczowa poprawka: konwersja absolutnych współrzędnych ekranu do client-area HWND."""
-    if not _is_valid_hwnd(hwnd):
+    if not IS_WINDOWS or user32 is None or not _is_valid_hwnd(hwnd):
         return None
     pt = POINT(int(screen_x), int(screen_y))
     ok = user32.ScreenToClient(hwnd, ctypes.byref(pt))
@@ -173,7 +285,7 @@ def screen_to_client(hwnd: int, screen_x: int, screen_y: int) -> Optional[Tuple[
 
 
 def client_to_screen(hwnd: int, client_x: int, client_y: int) -> Optional[Tuple[int, int]]:
-    if not _is_valid_hwnd(hwnd):
+    if not IS_WINDOWS or user32 is None or not _is_valid_hwnd(hwnd):
         return None
     pt = POINT(int(client_x), int(client_y))
     ok = user32.ClientToScreen(hwnd, ctypes.byref(pt))
@@ -188,7 +300,7 @@ def make_lparam(x: int, y: int) -> int:
 
 def virtual_click(hwnd: int, client_x: int, client_y: int) -> bool:
     """Klik w tle przez komunikaty okna; z czasem przytrzymania LBUTTONDOWN->UP."""
-    if not _is_valid_hwnd(hwnd):
+    if not IS_WINDOWS or user32 is None or not _is_valid_hwnd(hwnd):
         return False
 
     with config_lock:
@@ -212,6 +324,8 @@ def virtual_click(hwnd: int, client_x: int, client_y: int) -> bool:
 
 
 def physical_click(screen_x: int, screen_y: int) -> bool:
+    if pyautogui is None:
+        return False
     pyautogui.moveTo(screen_x, screen_y, duration=random.uniform(0.05, 0.18))
     pyautogui.click()
     return True
@@ -262,7 +376,7 @@ def do_click_absolute(screen_x: int, screen_y: int, label: str = "api") -> Tuple
 
 def capture_window_client_bgr(hwnd: int) -> Optional[np.ndarray]:
     """Próba przechwycenia client area okna (także gdy w tle) przez PrintWindow + PW_CLIENTONLY."""
-    if not _is_valid_hwnd(hwnd):
+    if not IS_WINDOWS or user32 is None or gdi32 is None or cv2 is None or np is None or not _is_valid_hwnd(hwnd):
         return None
 
     width, height = get_client_size(hwnd)
@@ -304,6 +418,8 @@ def capture_window_client_bgr(hwnd: int) -> Optional[np.ndarray]:
 
 
 def find_template_and_click(template_name: str) -> Tuple[bool, str, Dict[str, Any]]:
+    if cv2 is None:
+        return False, "DEPENDENCY_MISSING_CV2", {}
     hwnd = resolve_target_window()
     if not hwnd:
         return False, "NO_TARGET_WINDOW", {}
@@ -439,6 +555,9 @@ def toggle_pause_from_hotkey() -> None:
 
 
 def start_hotkeys() -> None:
+    if keyboard is None:
+        log_event("Brak modułu 'keyboard' -> globalny hotkey wyłączony.", "warn")
+        return
     with config_lock:
         hotkey = str(config.get("hotkey", "f9"))
     keyboard.add_hotkey(hotkey, toggle_pause_from_hotkey)
@@ -495,6 +614,8 @@ def launch_gui() -> None:
     root = ctk.CTk()
     root.title("MargoClicker v2")
     root.geometry("1200x840")
+    if not USING_CUSTOMTKINTER:
+        log_event("CustomTkinter nie znaleziony -> uruchamiam GUI w trybie zgodności tkinter.", "warn")
 
     with config_lock:
         cfg = dict(config)
@@ -619,11 +740,25 @@ def configure_logging() -> None:
 
 
 def start_server() -> None:
+    if not FLASK_AVAILABLE:
+        log_event("Brak modułu 'flask'/'flask-cors' -> API HTTP wyłączone.", "warn")
+        return
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
-    pyautogui.FAILSAFE = False
+    if pyautogui is not None:
+        pyautogui.FAILSAFE = False
+    else:
+        log_event("Brak modułu 'pyautogui' -> fizyczne klikanie wyłączone.", "warn")
+    if not IS_WINDOWS:
+        log_event("System inny niż Windows: część funkcji WinAPI będzie niedostępna.", "warn")
+    if cv2 is None:
+        log_event("Brak modułu 'cv2' -> funkcje Computer Vision wyłączone.", "warn")
+    if np is None:
+        log_event("Brak modułu 'numpy' -> funkcje Computer Vision wyłączone.", "warn")
+    if not FLASK_AVAILABLE:
+        log_event("Brak modułu 'flask'/'flask-cors' -> API HTTP wyłączone.", "warn")
     load_settings()
     configure_logging()
     start_hotkeys()
@@ -632,4 +767,8 @@ if __name__ == "__main__":
     server_thread.start()
 
     log_event("MargoClicker v2 start")
-    launch_gui()
+    try:
+        launch_gui()
+    except Exception as exc:
+        log_event(f"Nie udało się uruchomić GUI: {exc}", "error")
+        sys.exit(1)
