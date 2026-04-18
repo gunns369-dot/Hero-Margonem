@@ -338,6 +338,15 @@ def save_settings() -> None:
     SETTINGS_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def ensure_templates_dir() -> None:
+    if TEMPLATES_DIR.exists():
+        if not any(TEMPLATES_DIR.iterdir()):
+            log_event("Folder templates jest pusty. Dodaj plik pre_zapadka.png", "warn")
+        return
+    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+    log_event("Utworzono folder templates. Folder templates jest pusty. Dodaj plik pre_zapadka.png", "warn")
+
+
 def append_log_to_file(message: str) -> None:
     with config_lock:
         enabled = bool(config.get("file_logging", False))
@@ -872,9 +881,13 @@ def click_in_game_client(client_x: float, client_y: float, label: str = "client"
 # =====================================================
 
 
-def capture_window_client_bgr(hwnd: int) -> Optional[np.ndarray]:
-    """Przechwycenie client-area przez PrintWindow(PW_CLIENTONLY) także dla okna w tle."""
+def capture_window(hwnd: int) -> Optional[np.ndarray]:
+    """Przechwycenie client-area okna do formatu BGR (OpenCV)."""
     if not (_is_valid_hwnd(hwnd) and cv2 is not None and np is not None and gdi32 is not None):
+        return None
+
+    if user32.IsIconic(hwnd):
+        log_event("Okno gry jest zminimalizowane (Minimized). CV wymaga okna w tle, ale nie zminimalizowanego.", "warn")
         return None
 
     width, height = get_client_size(hwnd)
@@ -888,12 +901,15 @@ def capture_window_client_bgr(hwnd: int) -> Optional[np.ndarray]:
 
     PW_CLIENTONLY = 0x00000001
     ok = user32.PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY)
-
     if ok != 1:
-        gdi32.DeleteObject(hbitmap)
-        gdi32.DeleteDC(hdc_mem)
-        user32.ReleaseDC(hwnd, hdc_window)
-        return None
+        # Fallback: pobranie z pulpitu po współrzędnych client-area.
+        origin = get_client_origin(hwnd)
+        hdc_screen = user32.GetDC(0)
+        if origin and hdc_screen:
+            SRCCOPY = 0x00CC0020
+            gdi32.BitBlt(hdc_mem, 0, 0, width, height, hdc_screen, origin["x"], origin["y"], SRCCOPY)
+        if hdc_screen:
+            user32.ReleaseDC(0, hdc_screen)
 
     bmi = BITMAPINFO()
     bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
@@ -915,13 +931,41 @@ def capture_window_client_bgr(hwnd: int) -> Optional[np.ndarray]:
     return cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
 
 
+def capture_window_client_bgr(hwnd: int) -> Optional[np.ndarray]:
+    """Backward compatibility wrapper."""
+    return capture_window(hwnd)
+
+
 def capture_client_area_to_file(hwnd: int) -> Optional[Path]:
-    frame = capture_window_client_bgr(hwnd)
+    frame = capture_window(hwnd)
     if frame is None or cv2 is None:
         return None
     out_path = SETTINGS_PATH.with_name(f"client_area_{int(time.time())}.png")
     cv2.imwrite(str(out_path), frame)
     return out_path
+
+
+def find_template(screen_image: np.ndarray, template_name: str, threshold: float = 0.8) -> Tuple[Optional[Tuple[int, int]], Dict[str, Any]]:
+    if cv2 is None or np is None or screen_image is None:
+        return None, {"status": "DEPENDENCY_MISSING_CV"}
+    template_path = TEMPLATES_DIR / template_name
+    if not template_path.exists():
+        return None, {"status": "TEMPLATE_NOT_FOUND", "path": str(template_path)}
+
+    template = cv2.imread(str(template_path), cv2.IMREAD_COLOR)
+    if template is None:
+        return None, {"status": "TEMPLATE_LOAD_FAILED", "path": str(template_path)}
+
+    result = cv2.matchTemplate(screen_image, template, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, max_loc = cv2.minMaxLoc(result)
+
+    if max_val < threshold:
+        return None, {"status": "NOT_FOUND", "score": float(max_val), "threshold": float(threshold), "template": template_name}
+
+    h, w = template.shape[:2]
+    cx = int(max_loc[0] + (w / 2))
+    cy = int(max_loc[1] + (h / 2))
+    return (cx, cy), {"status": "OK", "score": float(max_val), "threshold": float(threshold), "template": template_name}
 
 
 def find_template_and_click(template_name: str) -> Tuple[bool, str, Dict[str, Any]]:
@@ -932,41 +976,33 @@ def find_template_and_click(template_name: str) -> Tuple[bool, str, Dict[str, An
     if not hwnd:
         return False, "NO_TARGET_WINDOW", {}
 
-    frame = capture_window_client_bgr(hwnd)
+    frame = capture_window(hwnd)
     if frame is None:
         return False, "CAPTURE_FAILED", {}
-
-    template_path = TEMPLATES_DIR / template_name
-    if not template_path.exists():
-        return False, "TEMPLATE_NOT_FOUND", {"path": str(template_path)}
-
-    template = cv2.imread(str(template_path), cv2.IMREAD_COLOR)
-    if template is None:
-        return False, "TEMPLATE_LOAD_FAILED", {"path": str(template_path)}
 
     with config_lock:
         threshold = float(config.get("cv_threshold", 0.84))
 
-    result = cv2.matchTemplate(frame, template, cv2.TM_CCOEFF_NORMED)
-    _, max_val, _, max_loc = cv2.minMaxLoc(result)
+    point, cv_payload = find_template(frame, template_name, threshold=threshold)
+    if point is None:
+        runtime_state["last_cv"] = cv_payload
+        return False, cv_payload.get("status", "NOT_FOUND"), cv_payload
 
-    if max_val < threshold:
-        payload = {"score": float(max_val), "threshold": threshold, "template": template_name}
-        runtime_state["last_cv"] = payload
-        return False, "NOT_FOUND", payload
-
-    h, w = template.shape[:2]
-    cx = int(max_loc[0] + (w / 2) + random.randint(-5, 5))
-    cy = int(max_loc[1] + (h / 2) + random.randint(-5, 5))
+    cx, cy = point
+    with config_lock:
+        jitter = int(config.get("click_jitter_px", 3))
+    cx += random.randint(-jitter, jitter)
+    cy += random.randint(-jitter, jitter)
+    cw, ch = get_client_size(hwnd)
+    cx = max(0, min(cx, max(0, cw - 1)))
+    cy = max(0, min(cy, max(0, ch - 1)))
 
     ok = virtual_click(hwnd, cx, cy)
     screen_pt = client_to_screen(hwnd, cx, cy)
 
     payload = {
         "ok": ok,
-        "template": template_name,
-        "score": float(max_val),
-        "threshold": threshold,
+        **cv_payload,
         "client_x": cx,
         "client_y": cy,
         "screen_x": screen_pt[0] if screen_pt else None,
@@ -1166,6 +1202,39 @@ def find_and_click_route():
     return jsonify({"ok": ok, "status": status, "payload": payload}), (200 if ok else 404)
 
 
+@app.route("/action", methods=["GET", "POST", "OPTIONS"])
+def action_route():
+    if request.method == "OPTIONS":
+        return make_response("", 200)
+
+    with config_lock:
+        api_enabled = bool(config.get("api_enabled", True))
+    if runtime_state.get("paused") or not api_enabled:
+        return _api_blocked_response()
+
+    action_type = str(request.args.get("type", "")).strip().lower()
+    if not action_type and hasattr(request, "json") and isinstance(request.json, dict):
+        action_type = str(request.json.get("type", "")).strip().lower()
+
+    action_map = {
+        "pre_zapadka": "pre_zapadka.png",
+        "zapadka": "pre_zapadka.png",
+    }
+    template_name = action_map.get(action_type)
+    if not template_name:
+        return jsonify({"ok": False, "status": "UNKNOWN_ACTION", "supported": sorted(action_map.keys())}), 400
+
+    ok, status, payload = find_template_and_click(template_name)
+    if ok:
+        log_event(f"Akcja {action_type}: trafienie CV -> {payload}", "click")
+        return jsonify({"ok": True, "status": "OK", "payload": payload}), 200
+
+    if status == "NOT_FOUND":
+        log_event("Błąd: Nie znaleziono wzorca na ekranie", "error")
+    log_event(f"Akcja {action_type}: {status} | {payload}", "warn")
+    return jsonify({"ok": False, "status": status, "payload": payload}), 404
+
+
 notifier = ToastNotifier()
 
 
@@ -1284,6 +1353,7 @@ def launch_gui() -> None:
     launch_cmd_var = ctk.StringVar(value=str(cfg.get("launch_command", "")))
     browser_url_var = ctk.StringVar(value=str(cfg.get("browser_url_hint", "")))
     appearance_var = ctk.StringVar(value=str(cfg.get("appearance_mode", "dark")))
+    dark_mode_var = ctk.BooleanVar(value=str(cfg.get("appearance_mode", "dark")).strip().lower() != "light")
 
     main = ctk.CTkFrame(root)
     main.pack(fill="both", expand=True, padx=16, pady=14)
@@ -1309,6 +1379,15 @@ def launch_gui() -> None:
         ok, status = launch_configured_target()
         log_event(f"LAUNCH -> {status}", "info" if ok else "error")
 
+    def toggle_appearance_mode() -> None:
+        mode = "dark" if bool(dark_mode_var.get()) else "light"
+        ctk.set_appearance_mode(mode)
+        appearance_var.set(mode)
+        with config_lock:
+            config["appearance_mode"] = mode
+        save_settings()
+        log_event(f"Zmieniono motyw GUI na: {mode}", "info")
+
     ctk.CTkButton(top_row, text="Aktywuj / Pauza", command=toggle_active_from_gui).pack(side="right", padx=6, pady=6)
     ctk.CTkButton(top_row, text="Uruchom Brave + Margonem", command=launch_browser_from_gui).pack(side="right", padx=6, pady=6)
 
@@ -1325,6 +1404,12 @@ def launch_gui() -> None:
     ctk.CTkSwitch(left, text="Nasłuchiwanie API", variable=api_var).pack(anchor="w", padx=12)
     ctk.CTkSwitch(left, text="Wirtualna myszka (SendMessage)", variable=virtual_var).pack(anchor="w", padx=12, pady=(4, 0))
     ctk.CTkSwitch(left, text="Przywracaj / aktywuj okno", variable=restore_var).pack(anchor="w", padx=12, pady=(4, 0))
+    ctk.CTkSwitch(
+        left,
+        text="Tryb Ciemny / Jasny",
+        variable=dark_mode_var,
+        command=toggle_appearance_mode,
+    ).pack(anchor="w", padx=12, pady=(8, 0))
 
     ctk.CTkLabel(left, text="Tryb wyboru okna").pack(anchor="w", padx=12, pady=(10, 0))
     ctk.CTkOptionMenu(left, variable=mode_var, values=["auto", "title", "process", "picked"]).pack(anchor="w", padx=12, pady=(0, 6))
@@ -1461,6 +1546,17 @@ def launch_gui() -> None:
         log_event(f"CV TEST -> {status} | {payload}", "click" if ok else "warn")
 
     ctk.CTkButton(trow4, text="Find & Click", command=cv_test).pack(side="left", padx=8)
+
+    def run_test_zapadka() -> None:
+        ok, status, payload = find_template_and_click("pre_zapadka.png")
+        if ok:
+            log_event(f"TEST PRE-ZAPADKI -> OK | {payload}", "click")
+            return
+        if status == "NOT_FOUND":
+            log_event("Błąd: Nie znaleziono wzorca na ekranie", "error")
+        log_event(f"TEST PRE-ZAPADKI -> {status} | {payload}", "warn")
+
+    ctk.CTkButton(trow4, text="Test Pre-Zapadki", command=run_test_zapadka).pack(side="left", padx=8)
 
     def save_screenshot_debug() -> None:
         hwnd = resolve_target_window()
@@ -1621,6 +1717,7 @@ if __name__ == "__main__":
 
     setup_dpi_awareness()
     load_settings()
+    ensure_templates_dir()
     configure_logging()
     register_hotkey()
 
