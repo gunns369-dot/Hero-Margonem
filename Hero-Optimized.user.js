@@ -10081,6 +10081,8 @@ window.openShopAsync = async (namePart) => {
         window.__trapSessionActive = false;
         window.__trapResumeQueued = false;
         window.__trapForceFullscreen = localStorage.getItem('hero_trap_force_fullscreen') === '1';
+        window.__preCaptchaLastAttemptAt = 0;
+        window.__preCaptchaAttempts = 0;
 
         function shouldToggleFullscreenForTrap() {
             return !!window.__trapForceFullscreen;
@@ -10284,6 +10286,8 @@ window.openShopAsync = async (namePart) => {
                         window.__captchaPhase = "none";
                         window.__trapResumeQueued = false;
                         window.__trapSeenAt = 0;
+                        window.__preCaptchaLastAttemptAt = 0;
+                        window.__preCaptchaAttempts = 0;
                     }, delay);
                 }
                 return;
@@ -10312,8 +10316,16 @@ window.openShopAsync = async (namePart) => {
             if (shouldToggleFullscreenForTrap() && (preWin || fullWin) && !window.__fullscreenByBotForTrap) {
                 await ensureFullscreenOnForTrap();
             }
-            if (preWin && !fullWin && window.__captchaPhase !== "pre") {
-                window.__captchaPhase = "pre";
+            if (preWin && !fullWin) {
+                if (window.__captchaPhase !== "pre") {
+                    window.__captchaPhase = "pre";
+                }
+                const now = Date.now();
+                if (now - (window.__preCaptchaLastAttemptAt || 0) < 900) {
+                    return;
+                }
+                window.__preCaptchaLastAttemptAt = now;
+                window.__preCaptchaAttempts = (window.__preCaptchaAttempts || 0) + 1;
                 window.__captchaLock = true;
                 if (!window.__trapSolveStarted) {
                     window.__trapSolveStarted = true;
@@ -10328,13 +10340,16 @@ window.openShopAsync = async (namePart) => {
                     return;
                 }
 
-                await sleep(randomDelay(800, 1500));
+                await sleep(randomDelay(500, 900));
 
                 let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
                 if (btn) {
                     await humanClickAsync(btn);
                 } else {
                     await humanClickAsync(preWin);
+                }
+                if (window.logExp) {
+                    window.logExp(`🧩 Klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
                 }
 
                 window.__captchaLock = false;
@@ -10344,6 +10359,8 @@ window.openShopAsync = async (namePart) => {
             // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
             if (fullWin && window.__captchaPhase !== "solving") {
                 window.__captchaPhase = "solving";
+                window.__preCaptchaLastAttemptAt = 0;
+                window.__preCaptchaAttempts = 0;
                 window.__captchaLock = true;
                 if (!window.__trapSolveStarted) {
                     if (shouldToggleFullscreenForTrap()) await ensureFullscreenOnForTrap();
