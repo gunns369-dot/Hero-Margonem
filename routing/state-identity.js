@@ -1,45 +1,23 @@
-function createStateIdentity({
-  areaName,
-  stateId,
-  entryId,
-  exitId,
-  startZone,
-  areaType,
-  traversalContext = {}
-}) {
-  return {
-    areaName,
-    stateId: stateId || `${areaName}@${entryId || 'unknown'}`,
-    entryId: entryId || null,
-    exitId: exitId || null,
-    startZone: startZone || null,
-    areaType: areaType || 'outer_area',
-    traversalContext: { ...traversalContext }
-  };
+const { navigationState, stateIdentityKey, deriveTopologyHash } = require('./state-model');
+
+function createStateIdentity(input) {
+  return navigationState(input);
 }
 
 function stateKey(state) {
-  const ctx = JSON.stringify(state.traversalContext || {});
-  return [
-    state.areaName,
-    state.stateId,
-    state.entryId || '-',
-    state.exitId || '-',
-    state.startZone || '-',
-    state.areaType || '-',
-    ctx
-  ].join('|');
+  return stateIdentityKey(state);
 }
 
 function topologicalSignature(state) {
-  const ctx = state.traversalContext || {};
+  const normalized = navigationState(state);
   return [
-    state.areaName,
-    state.entryId || '-',
-    state.exitId || '-',
-    state.startZone || '-',
-    state.areaType || '-',
-    Object.keys(ctx).sort().map(k => `${k}:${ctx[k]}`).join(',')
+    normalized.area_name,
+    normalized.entry_id || '-',
+    normalized.exit_id || '-',
+    normalized.zone_id || normalized.anchor_position || '-',
+    normalized.area_instance_type,
+    normalized.reachable_exit_set_signature,
+    deriveTopologyHash(normalized)
   ].join('|');
 }
 

@@ -1,14 +1,23 @@
-const { createStateIdentity, stateKey } = require('./state-identity');
+const { navigationState, stateIdentityKey } = require('./state-model');
+
+class AreaCluster {
+  constructor({ id, type = 'ConnectorSubgraph', stateKeys = [] } = {}) {
+    this.id = id;
+    this.type = type;
+    this.stateKeys = new Set(stateKeys);
+  }
+}
 
 class RouteGraph {
   constructor() {
     this.nodes = new Map();
     this.edges = new Map();
+    this.clusters = new Map();
   }
 
   addNode(nodeInput) {
-    const node = createStateIdentity(nodeInput);
-    const key = stateKey(node);
+    const node = navigationState(nodeInput);
+    const key = stateIdentityKey(node);
     const existing = this.nodes.get(key);
     this.nodes.set(key, existing ? { ...existing, ...node } : node);
     if (!this.edges.has(key)) this.edges.set(key, []);
@@ -16,57 +25,64 @@ class RouteGraph {
   }
 
   addEdge(fromNodeInput, toNodeInput, metadata = {}) {
-    const from = this.addNode(fromNodeInput);
-    const to = this.addNode(toNodeInput);
+    const source = this.addNode(fromNodeInput);
+    const target = this.addNode(toNodeInput);
+    const sourceNode = this.nodes.get(source);
+    const targetNode = this.nodes.get(target);
+
     const edge = {
-      source: from,
-      target: to,
-      source_area: this.nodes.get(from).areaName,
-      source_exit_id: metadata.source_exit_id || this.nodes.get(from).exitId || null,
-      target_area: this.nodes.get(to).areaName,
-      target_entry_id: metadata.target_entry_id || this.nodes.get(to).entryId || null,
-      position: metadata.position || null,
-      standPosition: metadata.standPosition || null,
+      source,
+      target,
+      source_state_pattern: metadata.source_state_pattern || sourceNode.state_id,
+      target_state_pattern: metadata.target_state_pattern || targetNode.state_id,
+      transition_type: metadata.transition_type || 'walk',
+      entry_anchor: metadata.entry_anchor || sourceNode.entry_id || null,
+      exit_anchor: metadata.exit_anchor || targetNode.exit_id || null,
+      bidirectional: metadata.bidirectional ?? !metadata.oneWay,
+      cost: metadata.cost ?? metadata.weight ?? 1,
+      is_connector: metadata.is_connector ?? ['connector', 'transition', 'corridor'].includes(targetNode.area_instance_type),
+      chain_group_id: metadata.chain_group_id || null,
+      topology_effect: metadata.topology_effect || 'same_cluster_move',
       tags: metadata.tags || [],
-      constraints: metadata.constraints || null,
-      oneWay: metadata.oneWay ?? (metadata.tags || []).includes('one_way'),
-      weight: metadata.weight ?? 1,
-      debugLabel: metadata.debugLabel || `${from} -> ${to}`
+      debugLabel: metadata.debugLabel || `${source} -> ${target}`
     };
 
-    this.edges.get(from).push(edge);
+    this.edges.get(source).push(edge);
 
-    if (!edge.oneWay) {
-      this.edges.get(to).push({
+    if (edge.bidirectional) {
+      this.edges.get(target).push({
         ...edge,
-        source: to,
-        target: from,
-        source_area: edge.target_area,
-        source_exit_id: edge.target_entry_id,
-        target_area: edge.source_area,
-        target_entry_id: edge.source_exit_id,
-        debugLabel: `${to} -> ${from}`
+        source: target,
+        target: source,
+        entry_anchor: edge.exit_anchor,
+        exit_anchor: edge.entry_anchor,
+        debugLabel: `${target} -> ${source}`
       });
+    }
+
+    if (edge.chain_group_id) {
+      this.#registerCluster(edge.chain_group_id, source, target);
     }
 
     return edge;
   }
 
-  getNode(key) {
-    return this.nodes.get(key);
+  #registerCluster(clusterId, source, target) {
+    if (!this.clusters.has(clusterId)) {
+      this.clusters.set(clusterId, new AreaCluster({ id: clusterId, type: 'InteriorChain' }));
+    }
+    const cluster = this.clusters.get(clusterId);
+    cluster.stateKeys.add(source);
+    cluster.stateKeys.add(target);
   }
 
-  getOutgoingEdges(key) {
-    return this.edges.get(key) || [];
-  }
+  getNode(key) { return this.nodes.get(key); }
+  getOutgoingEdges(key) { return this.edges.get(key) || []; }
+  getCluster(id) { return this.clusters.get(id) || null; }
 
   findStateKeysByArea(areaName) {
-    return [...this.nodes.entries()]
-      .filter(([, n]) => n.areaName === areaName)
-      .map(([k]) => k);
+    return [...this.nodes.entries()].filter(([, n]) => n.area_name === areaName).map(([k]) => k);
   }
 }
 
-module.exports = {
-  RouteGraph
-};
+module.exports = { RouteGraph, AreaCluster };
