@@ -2535,6 +2535,15 @@ window.executeRushStep = function() {
         if (window._lastRushTick && nowRush - window._lastRushTick < 400) return;
         window._lastRushTick = nowRush;
         if (!isRushing && !window.isRushing) return;
+        // Samonaprawa synchronizacji flag rusha (część modułów ustawia tylko window.isRushing).
+        if (!isRushing && window.isRushing && rushTarget) {
+            isRushing = true;
+        }
+        if (!rushTarget) {
+            isRushing = false;
+            window.isRushing = false;
+            return;
+        }
         let currentSysMap = getCurrentMapName();
 
         if (currentSysMap === rushTarget) {
@@ -7381,10 +7390,14 @@ function runExpLogic() {
             while (window.expMapHistory && window.expMapHistory.length) {
                 const candidate = window.expMapHistory.pop();
                 if (!candidate) continue;
+                if (normMapName(candidate) === normMapName(currMap)) continue;
                 if (isMapTemporarilyCleared(candidate)) continue;
                 if (window.__bannedMaps && window.__bannedMaps[candidate] && Date.now() < window.__bannedMaps[candidate]) continue;
-                const backPath = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate) : null;
-                if (backPath && backPath.length > 0) {
+                let backPath = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate) : null;
+                if ((!backPath || backPath.length < 2) && typeof getShortestPath === 'function') {
+                    backPath = getShortestPath(currMap, candidate, { ignoreEdgeBans: true });
+                }
+                if (backPath && backPath.length > 1) {
                     back = candidate;
                     break;
                 }
@@ -7406,7 +7419,8 @@ function runExpLogic() {
                 window.rushToMap(back);
             } else {
                 if (window.logExp) window.logExp("🛑 Brak osiągalnej mapy do backtracku. Zatrzymuję EXP.", "#e53935");
-                window.isExping = false;
+                if (typeof stopPatrol === 'function') stopPatrol(true);
+                else window.isExping = false;
             }
         }
     }
