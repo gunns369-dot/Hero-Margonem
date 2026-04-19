@@ -10371,10 +10371,17 @@ window.openShopAsync = async (namePart) => {
 
                 await sleep(randomDelay(1000, 2000));
 
-                let questionEl = fullWin.querySelector(".captcha__question");
-                if (!questionEl) { window.__captchaLock = false; return; }
-
-                let qText = questionEl.textContent.toLowerCase();
+                let questionEl = fullWin.querySelector(".captcha__question, .question, .zapadka__question, .margo-window__text");
+                let qText = "";
+                if (questionEl && questionEl.textContent) {
+                    qText = questionEl.textContent.toLowerCase();
+                } else {
+                    qText = (fullWin.innerText || fullWin.textContent || "").toLowerCase();
+                }
+                if (!qText || (!qText.includes("zaznacz") && !qText.includes("powodzenia"))) {
+                    window.__captchaLock = false;
+                    return;
+                }
                 let targetSymbol = null;
 
                 for (let key in symbolMap) {
@@ -10385,8 +10392,14 @@ window.openShopAsync = async (namePart) => {
                 }
 
                 if (targetSymbol) {
-                    let buttons = Array.from(fullWin.querySelectorAll(".captcha__buttons button, .captcha__buttons .button"));
-                    let toClick = buttons.filter(b => b.textContent.includes(targetSymbol));
+                    let buttons = Array.from(fullWin.querySelectorAll(".captcha__buttons button, .captcha__buttons .button, button, .button, .btn"));
+                    let confirmCandidates = buttons.filter(b => /potwierdz|confirm|ok/i.test((b.textContent || "").trim()));
+                    let toClick = buttons.filter(b => {
+                        const txt = (b.textContent || "").trim();
+                        if (!txt) return false;
+                        if (confirmCandidates.includes(b)) return false;
+                        return txt.includes(targetSymbol);
+                    });
 
                     if (toClick.length > 0) {
                         for (let i = 0; i < toClick.length; i++) {
@@ -10396,8 +10409,14 @@ window.openShopAsync = async (namePart) => {
 
                         await sleep(randomDelay(600, 1000));
                         let confirmBtn = fullWin.querySelector(".captcha__confirm button, .captcha__confirm .button");
+                        if (!confirmBtn && confirmCandidates.length > 0) {
+                            confirmBtn = confirmCandidates[0];
+                        }
                         if (confirmBtn) {
                              await humanClickAsync(confirmBtn);
+                        } else {
+                            if (window.logExp) window.logExp("⚠️ Nie znalazłem przycisku potwierdzenia zapadki.", "#ff9800");
+                            window.__captchaPhase = "manual_waiting";
                         }
                     } else {
                         if (window.logExp) window.logExp("⚠️ Błąd: Nie znalazłem w opcjach symbolu: " + targetSymbol, "#ff9800");
