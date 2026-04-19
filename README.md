@@ -22,3 +22,17 @@ pip install -r requirements-margoclicker-v2.txt
 ```bash
 python margoclicker_v2.py
 ```
+
+## MargoClicker (legacy) - gdy nie startuje
+
+Jeśli `margoclicker.py` kończy się błędem `ModuleNotFoundError`, doinstaluj brakujące pakiety:
+
+```bash
+pip install pyautogui flask flask-cors
+```
+
+Następnie uruchom ponownie:
+
+```bash
+python margoclicker.py
+```
