@@ -968,7 +968,7 @@ def find_template(screen_image: np.ndarray, template_name: str, threshold: float
     return (cx, cy), {"status": "OK", "score": float(max_val), "threshold": float(threshold), "template": template_name}
 
 
-def find_template_and_click(template_name: str) -> Tuple[bool, str, Dict[str, Any]]:
+def find_template_and_click(template_name: str, force_physical: bool = False) -> Tuple[bool, str, Dict[str, Any]]:
     if cv2 is None or np is None:
         return False, "DEPENDENCY_MISSING_CV", {}
 
@@ -991,20 +991,32 @@ def find_template_and_click(template_name: str) -> Tuple[bool, str, Dict[str, An
     cx, cy = point
     with config_lock:
         jitter = int(config.get("click_jitter_px", 3))
+        manual_offset_enabled = bool(config.get("manual_offset_enabled", False))
+        offset_y = float(config.get("manual_offset_y", 0.0))
+        use_virtual = bool(config.get("use_virtual_mouse", True))
     cx += random.randint(-jitter, jitter)
     cy += random.randint(-jitter, jitter)
+    if manual_offset_enabled:
+        cy += int(round(offset_y))
     cw, ch = get_client_size(hwnd)
     cx = max(0, min(cx, max(0, cw - 1)))
     cy = max(0, min(cy, max(0, ch - 1)))
 
-    ok = virtual_click(hwnd, cx, cy)
     screen_pt = client_to_screen(hwnd, cx, cy)
+    click_with_virtual = use_virtual and not force_physical
+    if click_with_virtual:
+        ok = virtual_click(hwnd, cx, cy)
+    else:
+        ok = physical_click(screen_pt[0], screen_pt[1]) if screen_pt else False
 
     payload = {
         "ok": ok,
         **cv_payload,
         "client_x": cx,
         "client_y": cy,
+        "offset_applied_y": offset_y if manual_offset_enabled else 0.0,
+        "mode": "virtual" if click_with_virtual else "pyautogui",
+        "force_physical": force_physical,
         "screen_x": screen_pt[0] if screen_pt else None,
         "screen_y": screen_pt[1] if screen_pt else None,
     }
@@ -1379,14 +1391,33 @@ def launch_gui() -> None:
         ok, status = launch_configured_target()
         log_event(f"LAUNCH -> {status}", "info" if ok else "error")
 
+    def set_gui_appearance(mode: str) -> None:
+        normalized_mode = mode.strip().lower()
+        if normalized_mode not in {"dark", "light", "system"}:
+            normalized_mode = "dark"
+        ctk.set_appearance_mode(normalized_mode)
+        appearance_var.set(normalized_mode)
+        dark_mode_var.set(normalized_mode != "light")
+        with config_lock:
+            config["appearance_mode"] = normalized_mode
+        save_settings()
+        log_event(f"Zmieniono motyw GUI na: {normalized_mode}", "info")
+
     def toggle_appearance_mode() -> None:
         mode = "dark" if bool(dark_mode_var.get()) else "light"
-        ctk.set_appearance_mode(mode)
-        appearance_var.set(mode)
-        with config_lock:
-            config["appearance_mode"] = mode
-        save_settings()
-        log_event(f"Zmieniono motyw GUI na: {mode}", "info")
+        set_gui_appearance(mode)
+
+    def apply_appearance_from_menu(choice: str) -> None:
+        set_gui_appearance(choice)
+
+    def apply_appearance_from_button() -> None:
+        set_gui_appearance(appearance_var.get())
+
+    if not USING_CUSTOMTKINTER:
+        log_event(
+            "Tryb jasny/ciemny wymaga CustomTkinter. W trybie zgodności tkinter motyw może się nie zmieniać.",
+            "warn",
+        )
 
     ctk.CTkButton(top_row, text="Aktywuj / Pauza", command=toggle_active_from_gui).pack(side="right", padx=6, pady=6)
     ctk.CTkButton(top_row, text="Uruchom Brave + Margonem", command=launch_browser_from_gui).pack(side="right", padx=6, pady=6)
@@ -1548,7 +1579,7 @@ def launch_gui() -> None:
     ctk.CTkButton(trow4, text="Find & Click", command=cv_test).pack(side="left", padx=8)
 
     def run_test_zapadka() -> None:
-        ok, status, payload = find_template_and_click("pre_zapadka.png")
+        ok, status, payload = find_template_and_click("pre_zapadka.png", force_physical=True)
         if ok:
             log_event(f"TEST PRE-ZAPADKI -> OK | {payload}", "click")
             return
@@ -1598,7 +1629,15 @@ def launch_gui() -> None:
     ctk.CTkSwitch(sgrid, text="Logi do pliku", variable=file_log_var).grid(row=1, column=2, sticky="w", padx=8)
     ctk.CTkSwitch(sgrid, text="Bez losowości (pyautogui)", variable=disable_random_var).grid(row=2, column=2, sticky="w", padx=8)
     ctk.CTkLabel(sgrid, text="Tryb wyglądu").grid(row=3, column=2, sticky="w", padx=8, pady=(6, 0))
-    ctk.CTkOptionMenu(sgrid, variable=appearance_var, values=["dark", "light", "system"]).grid(row=4, column=2, sticky="w", padx=8)
+    ctk.CTkOptionMenu(
+        sgrid,
+        variable=appearance_var,
+        values=["dark", "light", "system"],
+        command=apply_appearance_from_menu,
+    ).grid(row=4, column=2, sticky="w", padx=8)
+    ctk.CTkButton(sgrid, text="Zastosuj motyw", command=apply_appearance_from_button).grid(
+        row=5, column=2, sticky="w", padx=8, pady=(4, 0)
+    )
 
     def save_from_gui() -> None:
         try:
