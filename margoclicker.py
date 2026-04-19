@@ -17,6 +17,11 @@ import tkinter as tk
 from tkinter import scrolledtext, ttk
 
 try:
+    import keyboard
+except ModuleNotFoundError:
+    keyboard = None
+
+try:
     import pyautogui
 except ModuleNotFoundError:
     pyautogui = None
@@ -97,6 +102,7 @@ class WindowGeometry:
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
+    "api_enabled": True,
     "use_client_area": True,
     "manual_offset_enabled": True,
     "manual_offset_y": 0.0,
@@ -114,6 +120,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "target_monitor_name": "",
     "target_monitor_index": -1,
     "use_virtual_mouse": False,
+    "click_hold_ms_min": 60,
+    "click_hold_ms_max": 130,
+    "click_jitter_px": 3,
+    "hotkey": "f9",
     "disable_randomness": False,
     "calibration": {},
 }
@@ -124,11 +134,14 @@ config: Dict[str, Any] = dict(DEFAULT_CONFIG)
 # =========================
 
 runtime_state = {
+    "paused": False,
     "last_candidates": [],
     "last_selected_candidate": None,
     "last_click": None,
     "click_history": deque(maxlen=20),
     "log_hook": None,
+    "hotkey_registered": False,
+    "hotkey_registered_key": "",
 }
 
 
@@ -563,22 +576,37 @@ def _make_lparam(client_x: int, client_y: int) -> int:
     return ((client_y & 0xFFFF) << 16) | (client_x & 0xFFFF)
 
 
-def send_background_click(hwnd: int, client_x: int, client_y: int) -> bool:
+def send_background_click(hwnd: int, client_x: int, client_y: int, hold_ms: Optional[int] = None) -> bool:
     if not _is_valid_hwnd(hwnd):
         return False
     try:
         user32 = ctypes.windll.user32
+        with config_lock:
+            hold_min = int(config.get("click_hold_ms_min", 60))
+            hold_max = int(config.get("click_hold_ms_max", 130))
+            disable_randomness = bool(config.get("disable_randomness", False))
+
+        if hold_max < hold_min:
+            hold_min, hold_max = hold_max, hold_min
+        if hold_ms is not None:
+            real_hold = max(1, int(hold_ms))
+        elif disable_randomness:
+            real_hold = max(1, hold_min)
+        else:
+            real_hold = random.randint(max(1, hold_min), max(1, hold_max))
+
         WM_MOUSEMOVE = 0x0200
         WM_LBUTTONDOWN = 0x0201
         WM_LBUTTONUP = 0x0202
         MK_LBUTTON = 0x0001
         lparam = _make_lparam(client_x, client_y)
-        user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
-        user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
-        user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+        user32.SendMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
+        user32.SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+        time.sleep(real_hold / 1000.0)
+        user32.SendMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
         return True
     except Exception as e:
-        log_event(f"Błąd wirtualnej myszki (PostMessage): {e}")
+        log_event(f"Błąd wirtualnej myszki (SendMessage): {e}")
         return False
 
 
@@ -631,6 +659,12 @@ def click_in_game(client_x: float, client_y: float, label: str = "api") -> Tuple
         sx, sy = scr
 
     use_virtual_mouse = bool(cfg.get("use_virtual_mouse", False))
+    disable_randomness = bool(cfg.get("disable_randomness", False))
+    jitter_px = max(0, int(cfg.get("click_jitter_px", 3)))
+    if use_virtual_mouse and jitter_px > 0 and not disable_randomness:
+        cx = max(0, min(cx + random.randint(-jitter_px, jitter_px), max(0, cw - 1)))
+        cy = max(0, min(cy + random.randint(-jitter_px, jitter_px), max(0, ch - 1)))
+
     if use_virtual_mouse:
         click_ok = send_background_click(hwnd, cx, cy)
         if not click_ok:
@@ -712,6 +746,37 @@ def export_diagnostics_json() -> Path:
 # FLASK ROUTES
 # =========================
 
+def toggle_pause_from_hotkey() -> None:
+    runtime_state["paused"] = not bool(runtime_state.get("paused"))
+    log_event(f"Pause: {'ON' if runtime_state['paused'] else 'OFF'}")
+
+
+def register_hotkey() -> None:
+    if keyboard is None:
+        log_event("Brak modułu 'keyboard' -> globalny hotkey wyłączony.")
+        return
+
+    with config_lock:
+        hotkey = str(config.get("hotkey", "f9")).strip().lower() or "f9"
+
+    old_key = str(runtime_state.get("hotkey_registered_key", "")).strip().lower()
+    if runtime_state.get("hotkey_registered") and old_key == hotkey:
+        return
+
+    try:
+        if runtime_state.get("hotkey_registered"):
+            keyboard.clear_all_hotkeys()
+        keyboard.add_hotkey(hotkey, toggle_pause_from_hotkey)
+        runtime_state["hotkey_registered"] = True
+        runtime_state["hotkey_registered_key"] = hotkey
+        log_event(f"Globalny hotkey aktywny: {hotkey.upper()}")
+    except Exception as exc:
+        log_event(f"Nie udało się aktywować hotkey '{hotkey}': {exc}")
+
+
+def _api_blocked_response():
+    return jsonify({"ok": False, "status": "PAUSED_OR_DISABLED", "paused": bool(runtime_state.get("paused"))}), 423
+
 def configure_flask_logging() -> None:
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     app.logger.setLevel(logging.ERROR)
@@ -719,13 +784,20 @@ def configure_flask_logging() -> None:
 
 @app.route("/health", methods=["GET"])
 def health():
-    return "OK", 200
+    with config_lock:
+        api_enabled = bool(config.get("api_enabled", True))
+        hotkey = str(config.get("hotkey", "f9")).strip().lower() or "f9"
+    return jsonify({"status": "OK", "paused": bool(runtime_state.get("paused")), "api_enabled": api_enabled, "hotkey": hotkey}), 200
 
 
 @app.route("/fullscreen", methods=["GET", "POST", "OPTIONS"])
 def fullscreen():
     if request.method == "OPTIONS":
         return make_response("", 200)
+    with config_lock:
+        api_enabled = bool(config.get("api_enabled", True))
+    if runtime_state.get("paused") or not api_enabled:
+        return _api_blocked_response()
     hwnd = resolve_target_window()
     if not hwnd:
         return "NO_WINDOW", 404
@@ -744,6 +816,10 @@ def launch_target_app():
     if request.method == "OPTIONS":
         return make_response("", 200)
     with config_lock:
+        api_enabled = bool(config.get("api_enabled", True))
+    if runtime_state.get("paused") or not api_enabled:
+        return _api_blocked_response()
+    with config_lock:
         cmd = str(config.get("launch_command", "")).strip()
     if not cmd:
         return "NO_LAUNCH_COMMAND", 400
@@ -758,6 +834,10 @@ def launch_target_app():
 def click_route():
     if request.method == "OPTIONS":
         return make_response("", 200)
+    with config_lock:
+        api_enabled = bool(config.get("api_enabled", True))
+    if runtime_state.get("paused") or not api_enabled:
+        return _api_blocked_response()
     try:
         vx = request.args.get("vx")
         vy = request.args.get("vy")
@@ -819,6 +899,10 @@ def debug_screenshot():
 
 @app.route("/test_points", methods=["POST"])
 def test_points():
+    with config_lock:
+        api_enabled = bool(config.get("api_enabled", True))
+    if runtime_state.get("paused") or not api_enabled:
+        return _api_blocked_response()
     hwnd = resolve_target_window()
     geom = get_window_geometry(hwnd) if hwnd else None
     if not geom:
@@ -832,6 +916,14 @@ def test_points():
         results.append({"name": name, "ok": ok, "msg": msg, "payload": payload})
         time.sleep(0.12)
     return jsonify({"status": "OK", "results": results})
+
+
+@app.route("/pause", methods=["POST", "OPTIONS"])
+def pause_route():
+    if request.method == "OPTIONS":
+        return make_response("", 200)
+    runtime_state["paused"] = not bool(runtime_state.get("paused"))
+    return jsonify({"ok": True, "paused": bool(runtime_state.get("paused"))}), 200
 
 
 # =========================
@@ -859,10 +951,11 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     normalized["target_window_title"] = str(normalized.get("target_window_title", "")).strip()
     normalized["target_class_name"] = str(normalized.get("target_class_name", "")).strip()
     normalized["target_monitor_name"] = str(normalized.get("target_monitor_name", "")).strip()
+    normalized["hotkey"] = str(normalized.get("hotkey", "f9")).strip().lower() or "f9"
 
     for key in ["manual_offset_y"]:
         normalized[key] = float(normalized.get(key, 0.0))
-    for key in ["target_hwnd_last", "target_pid", "target_monitor_index"]:
+    for key in ["target_hwnd_last", "target_pid", "target_monitor_index", "click_hold_ms_min", "click_hold_ms_max", "click_jitter_px"]:
         normalized[key] = int(normalized.get(key, 0))
 
     return normalized
@@ -915,8 +1008,13 @@ def launch_gui() -> None:
     offset_var = tk.StringVar(value=str(cfg.get("manual_offset_y", 0.0)))
     mode_var = tk.StringVar(value=cfg.get("window_selection_mode", "auto"))
     process_var = tk.StringVar(value=cfg.get("target_process_name", ""))
+    hotkey_var = tk.StringVar(value=cfg.get("hotkey", "f9"))
+    hold_min_var = tk.StringVar(value=str(cfg.get("click_hold_ms_min", 60)))
+    hold_max_var = tk.StringVar(value=str(cfg.get("click_hold_ms_max", 130)))
+    jitter_var = tk.StringVar(value=str(cfg.get("click_jitter_px", 3)))
 
     use_client_var = tk.BooleanVar(value=bool(cfg.get("use_client_area", True)))
+    api_enabled_var = tk.BooleanVar(value=bool(cfg.get("api_enabled", True)))
     restore_var = tk.BooleanVar(value=bool(cfg.get("restore_window_before_click", True)))
     hide_console_var = tk.BooleanVar(value=bool(cfg.get("hide_console_on_start", True)))
     manual_off_var = tk.BooleanVar(value=bool(cfg.get("manual_offset_enabled", True)))
@@ -939,10 +1037,18 @@ def launch_gui() -> None:
     ttk.Entry(controls, textvariable=launch_cmd_var, width=62, style="Dark.TEntry").grid(row=1, column=1, columnspan=3, sticky="w", padx=6, pady=(6, 0))
     ttk.Label(controls, text="browser_url_hint:", style="Dark.TLabel").grid(row=1, column=4, sticky="w", pady=(6, 0))
     ttk.Entry(controls, textvariable=url_hint_var, width=26, style="Dark.TEntry").grid(row=1, column=5, sticky="w", padx=6, pady=(6, 0))
+    ttk.Label(controls, text="Hotkey pause:", style="Dark.TLabel").grid(row=2, column=0, sticky="w", pady=(6, 0))
+    ttk.Entry(controls, textvariable=hotkey_var, width=12, style="Dark.TEntry").grid(row=2, column=1, sticky="w", padx=6, pady=(6, 0))
+    ttk.Label(controls, text="Hold min/max ms:", style="Dark.TLabel").grid(row=2, column=2, sticky="w", pady=(6, 0))
+    ttk.Entry(controls, textvariable=hold_min_var, width=8, style="Dark.TEntry").grid(row=2, column=3, sticky="w", padx=(6, 2), pady=(6, 0))
+    ttk.Entry(controls, textvariable=hold_max_var, width=8, style="Dark.TEntry").grid(row=2, column=3, sticky="w", padx=(74, 6), pady=(6, 0))
+    ttk.Label(controls, text="Jitter px:", style="Dark.TLabel").grid(row=2, column=4, sticky="w", pady=(6, 0))
+    ttk.Entry(controls, textvariable=jitter_var, width=8, style="Dark.TEntry").grid(row=2, column=5, sticky="w", padx=6, pady=(6, 0))
 
     flags = ttk.Frame(frame, style="Dark.TFrame")
     flags.pack(fill=tk.X, pady=(4, 6))
     ttk.Checkbutton(flags, text="mapowanie do client-area", variable=use_client_var).pack(side=tk.LEFT)
+    ttk.Checkbutton(flags, text="API włączone", variable=api_enabled_var).pack(side=tk.LEFT, padx=8)
     ttk.Checkbutton(flags, text="restore/activate window", variable=restore_var).pack(side=tk.LEFT, padx=8)
     ttk.Checkbutton(flags, text="manual offset", variable=manual_off_var).pack(side=tk.LEFT)
     ttk.Label(flags, text="Y:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
@@ -973,24 +1079,33 @@ def launch_gui() -> None:
     def save_from_gui() -> None:
         try:
             parsed_off = float(offset_var.get().strip())
+            hold_min = int(float(hold_min_var.get().strip()))
+            hold_max = int(float(hold_max_var.get().strip()))
+            jitter_px = int(float(jitter_var.get().strip()))
         except ValueError:
-            status_var.set("Offset Y musi być liczbą")
+            status_var.set("Offset/Hold/Jitter muszą być liczbami")
             return
 
         with config_lock:
             config["window_keyword"] = keyword_var.get().strip() or "margonem"
             config["launch_command"] = launch_cmd_var.get().strip()
             config["browser_url_hint"] = url_hint_var.get().strip()
+            config["hotkey"] = hotkey_var.get().strip().lower() or "f9"
             config["window_selection_mode"] = mode_var.get().strip() or "auto"
             config["target_process_name"] = process_var.get().strip().lower()
+            config["api_enabled"] = bool(api_enabled_var.get())
             config["use_client_area"] = bool(use_client_var.get())
             config["restore_window_before_click"] = bool(restore_var.get())
             config["manual_offset_enabled"] = bool(manual_off_var.get())
             config["manual_offset_y"] = parsed_off
+            config["click_hold_ms_min"] = max(1, hold_min)
+            config["click_hold_ms_max"] = max(1, hold_max)
+            config["click_jitter_px"] = max(0, jitter_px)
             config["disable_randomness"] = bool(no_random_var.get())
             config["use_virtual_mouse"] = bool(click_msg_var.get())
             config["hide_console_on_start"] = bool(hide_console_var.get())
         save_settings_to_disk()
+        register_hotkey()
         status_var.set("Zapisano ustawienia")
 
     def refresh_candidates() -> None:
@@ -1114,6 +1229,10 @@ def launch_gui() -> None:
         last = runtime_state.get("last_click")
         status_var.set(f"Ostatni klik: {last}" if last else "Brak historii kliknięć")
 
+    def toggle_pause_gui() -> None:
+        runtime_state["paused"] = not bool(runtime_state.get("paused"))
+        status_var.set(f"PAUSE {'ON' if runtime_state['paused'] else 'OFF'}")
+
     def export_diag() -> None:
         p = export_diagnostics_json()
         status_var.set(f"Wyeksportowano diagnostykę: {p.name}")
@@ -1134,6 +1253,7 @@ def launch_gui() -> None:
 
     btns3 = ttk.Frame(frame, style="Dark.TFrame")
     btns3.pack(fill=tk.X, pady=(2, 4))
+    ttk.Button(btns3, text="PAUSE ON/OFF", command=toggle_pause_gui).pack(side=tk.LEFT)
     ttk.Button(btns3, text="Test wszystkie punkty", command=run_test_points).pack(side=tk.LEFT)
     ttk.Button(btns3, text="Test: Pre zapadki", command=test_pre_zapadki).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Pokaż współrzędne ostatniego kliknięcia", command=show_last_click).pack(side=tk.LEFT, padx=6)
@@ -1194,6 +1314,7 @@ if __name__ == "__main__":
     configure_flask_logging()
     setup_dpi_awareness()
     run_console_policy()
+    register_hotkey()
     pyautogui.FAILSAFE = False
 
     log_event("MargoClicker start")
