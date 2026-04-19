@@ -13,11 +13,37 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import pyautogui
 import tkinter as tk
-from flask import Flask, jsonify, make_response, request, send_file
-from flask_cors import CORS
 from tkinter import scrolledtext, ttk
+
+try:
+    import pyautogui
+except ModuleNotFoundError:
+    pyautogui = None
+
+try:
+    from flask import Flask, jsonify, make_response, request, send_file
+    from flask_cors import CORS
+
+    FLASK_AVAILABLE = True
+except ModuleNotFoundError:
+    FLASK_AVAILABLE = False
+
+    class _DummyFlask:
+        def route(self, *_args, **_kwargs):
+            def _decorator(func):
+                return func
+
+            return _decorator
+
+        def run(self, *_args, **_kwargs):
+            raise RuntimeError("Flask nie jest zainstalowany.")
+
+    def Flask(_name):  # type: ignore[misc]
+        return _DummyFlask()
+
+    def CORS(*_args, **_kwargs):  # type: ignore[misc]
+        return None
 
 # =========================
 # MODELE / CONFIG
@@ -34,7 +60,8 @@ TEST_POINT_PRESETS = {
 }
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+if FLASK_AVAILABLE:
+    CORS(app, resources={r"/*": {"origins": "*"}})
 config_lock = threading.Lock()
 SETTINGS_PATH = Path(__file__).with_name("margoclicker_settings.json")
 
@@ -1145,7 +1172,24 @@ def start_http_server() -> None:
     app.run(port=5000, host="127.0.0.1", debug=False, use_reloader=False)
 
 
+def check_required_dependencies() -> bool:
+    missing: List[str] = []
+    if pyautogui is None:
+        missing.append("pyautogui")
+    if not FLASK_AVAILABLE:
+        missing.extend(["flask", "flask-cors"])
+    if missing:
+        uniq = ", ".join(sorted(set(missing)))
+        print("Brak wymaganych bibliotek Pythona:", uniq)
+        print("Zainstaluj je poleceniem:")
+        print("  pip install pyautogui flask flask-cors")
+        return False
+    return True
+
+
 if __name__ == "__main__":
+    if not check_required_dependencies():
+        raise SystemExit(1)
     load_settings_from_disk()
     configure_flask_logging()
     setup_dpi_awareness()
