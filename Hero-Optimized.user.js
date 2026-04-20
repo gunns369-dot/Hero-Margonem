@@ -10104,6 +10104,24 @@ window.openShopAsync = async (namePart) => {
             return !!window.__margoclickerOnline;
         }
 
+        async function runMargoclickerAction(actionType) {
+            if (!actionType) return false;
+            const online = await checkMargoclickerAlive(false);
+            if (!online) return false;
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/action?type=${encodeURIComponent(actionType)}`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    mode: 'cors'
+                });
+                if (!res || !res.ok) return false;
+                const data = await res.json().catch(() => ({}));
+                return !!data?.ok;
+            } catch (e) {
+                return false;
+            }
+        }
+
         async function emitF11() {
             try {
                 const online = await checkMargoclickerAlive(false);
@@ -10203,13 +10221,18 @@ window.openShopAsync = async (namePart) => {
         }
 
         // --- PRECYZYJNA DETEKCJA MAŁEGO OKNA ---
+        function isVisibleCaptchaElement(el) {
+            if (!el) return false;
+            const style = window.getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetWidth > 0 && el.offsetHeight > 0;
+        }
+
         function getPreCaptcha() {
-            const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window');
+            const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window, .margo-window, .c-window, [role="dialog"]');
             for (let el of elements) {
-                const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetWidth > 0) {
+                if (isVisibleCaptchaElement(el)) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
-                    if (text.includes("rozwiąż") || text.includes("pojawi się za")) {
+                    if ((text.includes("zapadka") || text.includes("captcha")) && (text.includes("rozwią") || text.includes("pojawi"))) {
                         return el;
                     }
                 }
@@ -10219,10 +10242,9 @@ window.openShopAsync = async (namePart) => {
 
         // --- PRECYZYJNA DETEKCJA GŁÓWNEGO OKNA ---
         function getCaptchaWindow() {
-            const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"]');
+            const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"], .margo-window, .c-window, [role="dialog"]');
             for (let el of elements) {
-                const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetWidth > 0) {
+                if (isVisibleCaptchaElement(el)) {
                     const text = (el.innerText || el.textContent || "").toLowerCase();
                     if (!text.includes("pojawi się za") && (text.includes("zaznacz") || text.includes("potwierdzam") || text.includes("powodzenia") || text.includes("pozostałych prób"))) {
                         return el;
@@ -10342,14 +10364,21 @@ window.openShopAsync = async (namePart) => {
 
                 await sleep(randomDelay(500, 900));
 
-                let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                if (btn) {
-                    await humanClickAsync(btn);
-                } else {
-                    await humanClickAsync(preWin);
+                const usedTemplateClick = await runMargoclickerAction('pre_zapadka');
+                if (usedTemplateClick && window.logExp) {
+                    window.logExp(`🧩 Pre-zapadka kliknięta przez MargoClicker (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
                 }
-                if (window.logExp) {
-                    window.logExp(`🧩 Klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
+
+                if (!usedTemplateClick) {
+                    let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
+                    if (btn) {
+                        await humanClickAsync(btn);
+                    } else {
+                        await humanClickAsync(preWin);
+                    }
+                    if (window.logExp) {
+                        window.logExp(`🧩 Klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
+                    }
                 }
 
                 window.__captchaLock = false;
