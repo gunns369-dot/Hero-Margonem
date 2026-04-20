@@ -10080,6 +10080,7 @@ window.openShopAsync = async (namePart) => {
         window.__trapSeenAt = 0;
         window.__trapSessionActive = false;
         window.__trapResumeQueued = false;
+        window.__trapBotPausedByCaptcha = false;
         window.__trapForceFullscreen = localStorage.getItem('hero_trap_force_fullscreen') === '1';
         window.__preCaptchaLastAttemptAt = 0;
         window.__preCaptchaAttempts = 0;
@@ -10098,7 +10099,22 @@ window.openShopAsync = async (namePart) => {
                 const timer = setTimeout(() => ctrl.abort(), 900);
                 const res = await fetch('http://127.0.0.1:5000/health', { method: 'GET', cache: 'no-store', signal: ctrl.signal });
                 clearTimeout(timer);
-                window.__margoclickerOnline = !!(res && res.ok);
+                if (!res || !res.ok) {
+                    window.__margoclickerOnline = false;
+                    return false;
+                }
+                let data = null;
+                try {
+                    data = await res.clone().json();
+                } catch (e) {}
+
+                if (data && typeof data === 'object') {
+                    const paused = !!data.paused;
+                    const apiEnabled = data.api_enabled !== false;
+                    window.__margoclickerOnline = !paused && apiEnabled;
+                } else {
+                    window.__margoclickerOnline = true;
+                }
             } catch (e) {
                 window.__margoclickerOnline = false;
             }
@@ -10291,6 +10307,7 @@ window.openShopAsync = async (namePart) => {
                 if (
                     hadTrapSession &&
                     !window.__trapResumeQueued &&
+                    window.__trapBotPausedByCaptcha &&
                     (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre" || window.__captchaPhase === "none")
                 ) {
                     window.__trapResumeQueued = true;
@@ -10316,6 +10333,7 @@ window.openShopAsync = async (namePart) => {
                         window.__wasPatrollingBeforeCaptcha = false;
                         window.__wasBerserkBeforeCaptcha = false;
                         window.__wasHeroModeBeforeCaptcha = false;
+                        window.__trapBotPausedByCaptcha = false;
                         window.__captchaPhase = "none";
                         window.__trapResumeQueued = false;
                         window.__trapSeenAt = 0;
@@ -10323,6 +10341,12 @@ window.openShopAsync = async (namePart) => {
                         window.__preCaptchaAttempts = 0;
                         window.__captchaSolveLastAttemptAt = 0;
                     }, delay);
+                } else if (hadTrapSession && !window.__trapBotPausedByCaptcha) {
+                    window.__captchaPhase = "none";
+                    window.__trapSeenAt = 0;
+                    window.__preCaptchaLastAttemptAt = 0;
+                    window.__preCaptchaAttempts = 0;
+                    window.__captchaSolveLastAttemptAt = 0;
                 }
                 return;
             }
@@ -10335,15 +10359,6 @@ window.openShopAsync = async (namePart) => {
                 window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
                 window.__wasBerserkBeforeCaptcha = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
                 window.__wasHeroModeBeforeCaptcha = !!document.getElementById('heroModeToggle')?.classList?.contains('active-tab');
-
-                if (window.isExping) {
-                    let btn = document.getElementById('btnStartExp');
-                    if (btn) btn.click();
-                }
-                if (typeof stopPatrol === 'function') stopPatrol(true);
-
-                if (window.logExp) window.logExp("🚨 Wstrzymano bota na czas zapadki!", "#ffeb3b");
-                if (window.logHero) window.logHero("🚨 Wstrzymano bota na czas zapadki!", "#ffeb3b");
             }
 
             // 3. OBSŁUGA MAŁEGO OKNA
@@ -10399,6 +10414,16 @@ window.openShopAsync = async (namePart) => {
 
             // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
             if (fullWin) {
+                if (!window.__trapBotPausedByCaptcha) {
+                    if (window.isExping) {
+                        let btn = document.getElementById('btnStartExp');
+                        if (btn) btn.click();
+                    }
+                    if (typeof stopPatrol === 'function') stopPatrol(true);
+                    window.__trapBotPausedByCaptcha = true;
+                    if (window.logExp) window.logExp("🚨 Wstrzymano bota na czas właściwej zapadki (pre-zapadka nie zatrzymuje bota).", "#ffeb3b");
+                    if (window.logHero) window.logHero("🚨 Wstrzymano bota na czas właściwej zapadki (pre-zapadka nie zatrzymuje bota).", "#ffeb3b");
+                }
                 const now = Date.now();
                 if (now - (window.__captchaSolveLastAttemptAt || 0) < 900) {
                     return;
