@@ -10247,11 +10247,18 @@ window.openShopAsync = async (namePart) => {
         function getPreCaptcha() {
             const elements = document.querySelectorAll('.pre-captcha, .zapadka-window, #captcha-alert, .zapadka-icon, .alert-window, .margo-window, .c-window, [role="dialog"]');
             for (let el of elements) {
-                if (isVisibleCaptchaElement(el)) {
-                    const text = (el.innerText || el.textContent || "").toLowerCase();
-                    if ((text.includes("zapadka") || text.includes("captcha")) && (text.includes("rozwią") || text.includes("pojawi"))) {
-                        return el;
-                    }
+                if (!isVisibleCaptchaElement(el)) continue;
+                const text = (el.innerText || el.textContent || "").toLowerCase();
+                const hasTrapKeyword = /(zapadka|zagadka|captcha)/i.test(text);
+                const hasPreKeyword = /(pojawi|za\\s*\\d+\\s*s|rozwiąż\\s*teraz|rozwiaz\\s*teraz|solve\\s*now)/i.test(text);
+                const hasSolveUi = /(zaznacz|potwierdzam|pozostałych\\s*prób|pozostalych\\s*prob)/i.test(text);
+                if (hasSolveUi) continue;
+                if (hasTrapKeyword && hasPreKeyword) {
+                    return el;
+                }
+                const resolveBtn = findResolveNowButton(el);
+                if (hasTrapKeyword && resolveBtn) {
+                    return el;
                 }
             }
             return null;
@@ -10271,11 +10278,12 @@ window.openShopAsync = async (namePart) => {
         function getCaptchaWindow() {
             const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"], .margo-window, .c-window, [role="dialog"]');
             for (let el of elements) {
-                if (isVisibleCaptchaElement(el)) {
-                    const text = (el.innerText || el.textContent || "").toLowerCase();
-                    if (!text.includes("pojawi się za") && (text.includes("zaznacz") || text.includes("potwierdzam") || text.includes("powodzenia") || text.includes("pozostałych prób"))) {
-                        return el;
-                    }
+                if (!isVisibleCaptchaElement(el)) continue;
+                const text = (el.innerText || el.textContent || "").toLowerCase();
+                const hasSolveUi = /(zaznacz|potwierdzam|powodzenia|pozostałych\\s*prób|pozostalych\\s*prob)/i.test(text);
+                const isPreOnly = /(pojawi\\s*się\\s*za|pojawi\\s*sie\\s*za|rozwiąż\\s*teraz|rozwiaz\\s*teraz|solve\\s*now)/i.test(text) && !hasSolveUi;
+                if (!isPreOnly && hasSolveUi) {
+                    return el;
                 }
             }
             return null;
