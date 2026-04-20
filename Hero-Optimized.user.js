@@ -10191,6 +10191,30 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+        // Kliknięcie pre-zapadki dokładnie w tym samym poziomie co preset "Test: Pre zapadki" w margoclicker.py.
+        // Używamy środka viewportu gry (0.5 / 0.5), bez losowego przesunięcia.
+        function clickPreTrapPresetAsync() {
+            return new Promise((resolve) => {
+                const vx = Math.round(window.innerWidth * 0.5);
+                const vy = Math.round(window.innerHeight * 0.5);
+                const url = `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`;
+
+                if (typeof GM_xmlhttpRequest !== 'undefined') {
+                    GM_xmlhttpRequest({
+                        method: "GET",
+                        url,
+                        onload: function() { resolve(true); },
+                        onerror: function() { resolve(false); }
+                    });
+                    return;
+                }
+
+                fetch(url)
+                    .then(() => resolve(true))
+                    .catch(() => resolve(false));
+            });
+        }
+
         // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie VM + Rozrzut
         function humanClickAsync(el) {
             return new Promise((resolve) => {
@@ -10405,14 +10429,21 @@ window.openShopAsync = async (namePart) => {
                 }
 
                 if (!usedTemplateClick) {
-                    let btn = findResolveNowButton(preWin) || preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                    if (btn) {
-                        await humanClickAsync(btn);
+                    const usedPresetLevelClick = await clickPreTrapPresetAsync();
+                    if (usedPresetLevelClick) {
+                        if (window.logExp) {
+                            window.logExp(`🧩 Pre-zapadka kliknięta presetem 0.5/0.5 (jak "Test: Pre zapadki"), próba ${window.__preCaptchaAttempts}.`, "#ab47bc");
+                        }
                     } else {
-                        await humanClickAsync(preWin);
-                    }
-                    if (window.logExp) {
-                        window.logExp(`🧩 Klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
+                        let btn = findResolveNowButton(preWin) || preWin.querySelector('button, .button, .btn, .pre-captcha__button');
+                        if (btn) {
+                            await humanClickAsync(btn);
+                        } else {
+                            await humanClickAsync(preWin);
+                        }
+                        if (window.logExp) {
+                            window.logExp(`🧩 Fallback DOM klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
+                        }
                     }
                 }
 
