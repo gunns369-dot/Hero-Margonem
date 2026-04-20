@@ -10083,6 +10083,7 @@ window.openShopAsync = async (namePart) => {
         window.__trapForceFullscreen = localStorage.getItem('hero_trap_force_fullscreen') === '1';
         window.__preCaptchaLastAttemptAt = 0;
         window.__preCaptchaAttempts = 0;
+        window.__captchaSolveLastAttemptAt = 0;
 
         function shouldToggleFullscreenForTrap() {
             return !!window.__trapForceFullscreen;
@@ -10240,6 +10241,16 @@ window.openShopAsync = async (namePart) => {
             return null;
         }
 
+        function findResolveNowButton(root) {
+            if (!root) return null;
+            const candidates = Array.from(root.querySelectorAll('button, .button, .btn, a, span, div'));
+            return candidates.find(el => {
+                if (!isVisibleCaptchaElement(el)) return false;
+                const txt = (el.textContent || "").trim().toLowerCase();
+                return /rozwiąż|rozwiaz|solve|start/i.test(txt);
+            }) || null;
+        }
+
         // --- PRECYZYJNA DETEKCJA GŁÓWNEGO OKNA ---
         function getCaptchaWindow() {
             const elements = document.querySelectorAll('.captcha, .margo-window[data-wnd="zapadka"], .captcha-window, .zapadka-window, .c-window[id="zapadka"], .margo-window, .c-window, [role="dialog"]');
@@ -10310,6 +10321,7 @@ window.openShopAsync = async (namePart) => {
                         window.__trapSeenAt = 0;
                         window.__preCaptchaLastAttemptAt = 0;
                         window.__preCaptchaAttempts = 0;
+                        window.__captchaSolveLastAttemptAt = 0;
                     }, delay);
                 }
                 return;
@@ -10370,7 +10382,7 @@ window.openShopAsync = async (namePart) => {
                 }
 
                 if (!usedTemplateClick) {
-                    let btn = preWin.querySelector('button, .button, .btn, .pre-captcha__button');
+                    let btn = findResolveNowButton(preWin) || preWin.querySelector('button, .button, .btn, .pre-captcha__button');
                     if (btn) {
                         await humanClickAsync(btn);
                     } else {
@@ -10386,7 +10398,13 @@ window.openShopAsync = async (namePart) => {
             }
 
             // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
-            if (fullWin && window.__captchaPhase !== "solving") {
+            if (fullWin) {
+                const now = Date.now();
+                if (now - (window.__captchaSolveLastAttemptAt || 0) < 900) {
+                    return;
+                }
+                window.__captchaSolveLastAttemptAt = now;
+
                 window.__captchaPhase = "solving";
                 window.__preCaptchaLastAttemptAt = 0;
                 window.__preCaptchaAttempts = 0;
@@ -10416,6 +10434,14 @@ window.openShopAsync = async (namePart) => {
                 }
 
                 await sleep(randomDelay(1000, 2000));
+
+                const resolveNowBtn = findResolveNowButton(fullWin);
+                if (resolveNowBtn) {
+                    await humanClickAsync(resolveNowBtn);
+                    if (window.logExp) window.logExp("🧩 Klikam „Rozwiąż teraz” w oknie zapadki.", "#ab47bc");
+                    window.__captchaLock = false;
+                    return;
+                }
 
                 let questionEl = fullWin.querySelector(".captcha__question, .question, .zapadka__question, .margo-window__text");
                 let qText = "";
