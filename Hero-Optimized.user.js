@@ -2534,6 +2534,11 @@ window.executeRushStep = function() {
         let nowRush = Date.now();
         if (window._lastRushTick && nowRush - window._lastRushTick < 400) return;
         window._lastRushTick = nowRush;
+        if (Engine?.map?.isLoading) {
+            clearTimeout(rushInterval);
+            rushInterval = setTimeout(window.checkRushArrival, 250);
+            return;
+        }
         if (!isRushing && !window.isRushing) return;
         // Samonaprawa synchronizacji flag rusha (część modułów ustawia tylko window.isRushing).
         if (!isRushing && window.isRushing && rushTarget) {
@@ -2854,7 +2859,8 @@ window.executeRushStep = function() {
                     window._lastGateForceLog = `${currentSysMap}:${nextMap}`;
                 }
                 if (typeof window.safeGoTo === 'function') {
-                    window.safeGoTo(exactX, exactY, false, { forceExact: true, bypassThrottle: true, forcePacket: true });
+                    // Nie wymuszamy obchodzenia throttle w bramie — bywa to odrzucane przez serwer.
+                    window.safeGoTo(exactX, exactY, false, { forceExact: true });
                 } else if (Engine?.hero?.autoGoTo) {
                     Engine.hero.autoGoTo({ x: exactX, y: exactY });
                 } else if (window.originalAutoWalk) {
