@@ -10191,14 +10191,30 @@ window.openShopAsync = async (namePart) => {
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-        // Kliknięcie pre-zapadki dokładnie w tym samym poziomie co preset "Test: Pre zapadki" w margoclicker.py.
-        // Używamy środka viewportu gry (0.5 / 0.5), bez losowego przesunięcia.
-        function clickPreTrapPresetAsync() {
-            return new Promise((resolve) => {
-                const vx = Math.round(window.innerWidth * 0.5);
-                const vy = Math.round(window.innerHeight * 0.5);
-                const url = `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`;
+        function getCaptchaGameContainer() {
+            return document.querySelector('#box, .interface-layer, .game-window, #engine, #game, #game-window') || document.body;
+        }
 
+        function buildRelativeClickFromElement(el, options = {}) {
+            if (!el) return null;
+            const targetRect = el.getBoundingClientRect();
+            const gameContainer = getCaptchaGameContainer();
+            const gameRect = gameContainer.getBoundingClientRect();
+            if (!targetRect.width || !targetRect.height || !gameRect.width || !gameRect.height) return null;
+
+            const jitterX = options.jitter ? (Math.random() - 0.5) * (targetRect.width * 0.6) : 0;
+            const jitterY = options.jitter ? (Math.random() - 0.5) * (targetRect.height * 0.6) : 0;
+            const centerX = targetRect.left - gameRect.left + (targetRect.width / 2) + jitterX;
+            const centerY = targetRect.top - gameRect.top + (targetRect.height / 2) + jitterY;
+
+            const vx = Math.min(1, Math.max(0, centerX / gameRect.width));
+            const vy = Math.min(1, Math.max(0, centerY / gameRect.height));
+            return { vx, vy };
+        }
+
+        function sendCaptchaClick(vx, vy) {
+            return new Promise((resolve) => {
+                const url = `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`;
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
                         method: "GET",
@@ -10208,56 +10224,34 @@ window.openShopAsync = async (namePart) => {
                     });
                     return;
                 }
-
                 fetch(url)
                     .then(() => resolve(true))
                     .catch(() => resolve(false));
             });
         }
 
+        // Kliknięcie pre-zapadki dokładnie w tym samym poziomie co preset "Test: Pre zapadki" w margoclicker.py.
+        // Używamy środka okna gry (0.5 / 0.5), bez losowego przesunięcia.
+        function clickPreTrapPresetAsync() {
+            return sendCaptchaClick(0.5, 0.5);
+        }
+
         // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie VM + Rozrzut
         function humanClickAsync(el) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
-
-                let rect = el.getBoundingClientRect();
-
-                // Humanizacja: losowy rozrzut wewnątrz guzika
-                let randomOffsetX = (Math.random() - 0.5) * (rect.width * 0.6);
-                let randomOffsetY = (Math.random() - 0.5) * (rect.height * 0.6);
-
-                // Punkt względem samego viewportu gry (bez ramek i paska przeglądarki).
-                // Python przelicza to na absolutny ekran na podstawie aktywnego okna.
-                let viewportX = rect.left + (rect.width / 2) + randomOffsetX;
-                let viewportY = rect.top + (rect.height / 2) + randomOffsetY;
-                let vx = viewportX;
-                let vy = viewportY;
-
-                // Fallback "nie-fullscreen": policz absolut z uwzględnieniem pasków przeglądarki.
-                let browserLeftBar = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
-                let browserTopBar = Math.max(0, window.outerHeight - window.innerHeight);
-                let absX = window.screenX + browserLeftBar + viewportX;
-                let absY = window.screenY + browserTopBar + viewportY;
-
-                if (typeof GM_xmlhttpRequest !== 'undefined') {
-                    GM_xmlhttpRequest({
-                        method: "GET",
-                        url: `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}&ax=${absX}&ay=${absY}&topbar=${browserTopBar}`,
-                        onload: function(response) {
-                            if(window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu!", "#e040fb");
-                            resolve();
-                        },
-                        onerror: function(error) {
-                            if(window.logExp) window.logExp("⚠️ Błąd GM_xml.", "#ff9800");
-                            el.classList.add('pressed', 'active');
-                            resolve();
-                        }
+                const clickPoint = buildRelativeClickFromElement(el, { jitter: true });
+                if (!clickPoint) return resolve();
+                sendCaptchaClick(clickPoint.vx, clickPoint.vy)
+                    .then((ok) => {
+                        if (ok && window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu (vx/vy).", "#e040fb");
+                        if (!ok) el.classList.add('pressed', 'active');
+                        resolve();
+                    })
+                    .catch(() => {
+                        el.classList.add('pressed', 'active');
+                        resolve();
                     });
-                } else {
-                    fetch(`http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}&ax=${absX}&ay=${absY}&topbar=${browserTopBar}`)
-                        .then(res => resolve())
-                        .catch(err => { el.classList.add('pressed', 'active'); resolve(); });
-                }
             });
         }
 
@@ -10429,20 +10423,23 @@ window.openShopAsync = async (namePart) => {
                 }
 
                 if (!usedTemplateClick) {
-                    const usedPresetLevelClick = await clickPreTrapPresetAsync();
-                    if (usedPresetLevelClick) {
+                    const resolveBtn = findResolveNowButton(preWin) || preWin.querySelector('button, .button, .btn, .pre-captcha__button');
+                    if (resolveBtn && isVisibleCaptchaElement(resolveBtn)) {
+                        await humanClickAsync(resolveBtn);
                         if (window.logExp) {
-                            window.logExp(`🧩 Pre-zapadka kliknięta presetem 0.5/0.5 (jak "Test: Pre zapadki"), próba ${window.__preCaptchaAttempts}.`, "#ab47bc");
+                            window.logExp(`🧩 Kliknięto przycisk „Rozwiąż test/teraz” przez vx/vy (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
                         }
                     } else {
-                        let btn = findResolveNowButton(preWin) || preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                        if (btn) {
-                            await humanClickAsync(btn);
+                        const usedPresetLevelClick = await clickPreTrapPresetAsync();
+                        if (usedPresetLevelClick) {
+                            if (window.logExp) {
+                                window.logExp(`🧩 Pre-zapadka kliknięta presetem 0.5/0.5 (jak "Test: Pre zapadki"), próba ${window.__preCaptchaAttempts}.`, "#ab47bc");
+                            }
                         } else {
                             await humanClickAsync(preWin);
-                        }
-                        if (window.logExp) {
-                            window.logExp(`🧩 Fallback DOM klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
+                            if (window.logExp) {
+                                window.logExp(`🧩 Fallback DOM klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
+                            }
                         }
                     }
                 }
