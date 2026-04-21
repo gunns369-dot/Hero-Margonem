@@ -643,11 +643,18 @@ def click_in_game(client_x: float, client_y: float, label: str = "api") -> Tuple
     if not geom:
         return False, "NO_GEOMETRY", None
 
+    cw = geom.client_rect["right"] - geom.client_rect["left"]
+    ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+
+    # Konwersja ułamków na piksele okna
+    if 0.0 <= client_x <= 1.0 and 0.0 <= client_y <= 1.0:
+        client_x = cw * client_x
+        client_y = ch * client_y
+
+    # Aplikowanie offsetu po konwersji
     if cfg.get("manual_offset_enabled", True):
         client_y += float(cfg.get("manual_offset_y", 0.0))
 
-    cw = geom.client_rect["right"] - geom.client_rect["left"]
-    ch = geom.client_rect["bottom"] - geom.client_rect["top"]
     cx = max(0, min(int(round(client_x)), max(0, cw - 1)))
     cy = max(0, min(int(round(client_y)), max(0, ch - 1)))
 
@@ -661,6 +668,7 @@ def click_in_game(client_x: float, client_y: float, label: str = "api") -> Tuple
     use_virtual_mouse = bool(cfg.get("use_virtual_mouse", False))
     disable_randomness = bool(cfg.get("disable_randomness", False))
     jitter_px = max(0, int(cfg.get("click_jitter_px", 3)))
+
     if use_virtual_mouse and jitter_px > 0 and not disable_randomness:
         cx = max(0, min(cx + random.randint(-jitter_px, jitter_px), max(0, cw - 1)))
         cy = max(0, min(cy + random.randint(-jitter_px, jitter_px), max(0, ch - 1)))
@@ -843,30 +851,33 @@ def click_route():
         vy = request.args.get("vy")
         ax = request.args.get("ax")
         ay = request.args.get("ay")
+        x_abs = request.args.get("x")
+        y_abs = request.args.get("y")
 
         if vx is not None and vy is not None:
             ok, msg, payload = click_in_game(float(vx), float(vy), label="api_v")
             return jsonify({"status": msg, "ok": ok, "payload": payload}), (200 if ok else 404)
-        if ax is not None and ay is not None:
-            hwnd = resolve_target_window()
-            if hwnd and _is_valid_hwnd(hwnd):
-                if ctypes.windll.user32.IsIconic(hwnd):
-                    ensure_window_ready(hwnd)
-                else:
-                    ensure_window_ready(hwnd)
-            perform_click(int(float(ax)), int(float(ay)), debug_label="api_abs")
-            return "OK", 200
 
-        x_abs = float(request.args.get("x"))
-        y_abs = float(request.args.get("y"))
         hwnd = resolve_target_window()
-        if hwnd and _is_valid_hwnd(hwnd):
-            if ctypes.windll.user32.IsIconic(hwnd):
-                ensure_window_ready(hwnd)
-            else:
-                ensure_window_ready(hwnd)
-        perform_click(int(x_abs), int(y_abs), debug_label="api_x")
-        return "OK", 200
+        geom = get_window_geometry(hwnd) if hwnd else None
+
+        if not geom:
+            return jsonify({"status": "NO_WINDOW_GEOMETRY", "ok": False}), 404
+
+        if ax is not None and ay is not None:
+            rel_x = float(ax) - geom.client_origin["x"]
+            rel_y = float(ay) - geom.client_origin["y"]
+            ok, msg, payload = click_in_game(rel_x, rel_y, label="api_ax")
+            return jsonify({"status": msg, "ok": ok, "payload": payload}), (200 if ok else 404)
+
+        if x_abs is not None and y_abs is not None:
+            rel_x = float(x_abs) - geom.client_origin["x"]
+            rel_y = float(y_abs) - geom.client_origin["y"]
+            ok, msg, payload = click_in_game(rel_x, rel_y, label="api_x")
+            return jsonify({"status": msg, "ok": ok, "payload": payload}), (200 if ok else 404)
+
+        return jsonify({"status": "MISSING_COORDINATES", "ok": False}), 400
+
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
