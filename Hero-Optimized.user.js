@@ -2855,8 +2855,12 @@ window.executeRushStep = function() {
                 }
                 if (typeof window.safeGoTo === 'function') {
                     window.safeGoTo(exactX, exactY, false, { forceExact: true, bypassThrottle: true, forcePacket: true });
-                } else if (typeof window._g === 'function') {
-                    window._g(`walk=${exactX},${exactY}`);
+                } else if (Engine?.hero?.autoGoTo) {
+                    Engine.hero.autoGoTo({ x: exactX, y: exactY });
+                } else if (window.originalAutoWalk) {
+                    window.originalAutoWalk.call(Engine.hero, exactX, exactY);
+                } else if (Engine?.hero?.autoWalk) {
+                    Engine.hero.autoWalk(exactX, exactY);
                 }
                 window.rushGateLastClickAt = Date.now();
                 window.rushGatewayStallSince = Date.now() + 900;
@@ -5479,17 +5483,12 @@ function optimizeRoute() {
         }
 
         if (typeof Engine !== 'undefined' && Engine.hero) {
-            if (options?.forcePacket && typeof window._g === 'function') {
-                // POPRAWKA (RUSH/GATE): awaryjne wymuszenie wejścia na kratkę (np. brama w wąskim gardle).
-                window._g(`walk=${x},${y}`);
-            } else if (typeof Engine.hero.autoGoTo === 'function') {
+            if (typeof Engine.hero.autoGoTo === 'function') {
                 Engine.hero.autoGoTo({x: x, y: y});
             } else if (typeof window.originalAutoWalk === 'function') {
                 window.originalAutoWalk.call(Engine.hero, x, y);
             } else if (typeof Engine.hero.autoWalk === 'function') {
                 Engine.hero.autoWalk(x, y);
-            } else if (typeof window._g === 'function') {
-                window._g(`walk=${x},${y}`);
             }
 
             let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
@@ -6053,9 +6052,9 @@ const GateRecovery = {
             const nx = cx + dx, ny = cy + dy;
             if (typeof Engine.map.checkCollision === 'function' && Engine.map.checkCollision(nx, ny)) continue;
             ActionExecutor.run('MOVE', { x: nx, y: ny }, () => {
-                if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
+                if (Engine?.hero?.autoGoTo) Engine.hero.autoGoTo({ x: nx, y: ny });
+                else if (window.originalAutoWalk) window.originalAutoWalk.call(Engine.hero, nx, ny);
                 else if (Engine?.hero?.autoWalk) Engine.hero.autoWalk(nx, ny);
-                else if (window._g) window._g(`walk=${nx},${ny}`);
             }, { throttleMs: 320 });
             return true;
         }
