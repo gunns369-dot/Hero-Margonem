@@ -2835,10 +2835,34 @@ window.executeRushStep = function() {
         }
 
         if (!window.rushGateLastClickAt) window.rushGateLastClickAt = 0;
+        if (!window.rushGatewayStallSince) window.rushGatewayStallSince = 0;
         const gateRetryMs = 2800;
         if ((dist === 1 || dist === 0) && (Date.now() - window.rushGateLastClickAt > gateRetryMs)) {
             ActionExecutor.runWithRetry('PASS_GATE', { x: exactX, y: exactY, targetMap: nextMap }, () => safeGoTo(exactX, exactY, false), { retries: 2, baseDelay: 220 });
             window.rushGateLastClickAt = Date.now();
+        }
+
+        // POPRAWKA (RUSH): Gdy stoimy 1 kratkę od bramy i nie ruszamy się przez dłużej niż N sekund,
+        // wymuszamy wejście bezpośrednio na kratkę przejścia (wąskie gardła / 3 strony kolizji).
+        const isMovingNow = !!(Engine?.hero?.d?.path && Engine.hero.d.path.length > 0);
+        if (dist <= 1 && !isMovingNow) {
+            if (!window.rushGatewayStallSince) window.rushGatewayStallSince = Date.now();
+            const stallMs = Date.now() - window.rushGatewayStallSince;
+            if (stallMs > 2200) {
+                if (window.logExp && window._lastGateForceLog !== `${currentSysMap}:${nextMap}`) {
+                    window.logExp(`🧷 Wymuszam krok na kratkę przejścia [${exactX},${exactY}] → [${nextMap}] (odblokowanie).`, "#ffb74d");
+                    window._lastGateForceLog = `${currentSysMap}:${nextMap}`;
+                }
+                if (typeof window.safeGoTo === 'function') {
+                    window.safeGoTo(exactX, exactY, false, { forceExact: true, bypassThrottle: true, forcePacket: true });
+                } else if (typeof window._g === 'function') {
+                    window._g(`walk=${exactX},${exactY}`);
+                }
+                window.rushGateLastClickAt = Date.now();
+                window.rushGatewayStallSince = Date.now() + 900;
+            }
+        } else {
+            window.rushGatewayStallSince = 0;
         }
 
         if (Date.now() - window.rushGatewayArrivalTime > 3500) {
@@ -5436,9 +5460,10 @@ function optimizeRoute() {
     }
 
 
-   window.safeGoTo = function(targetX, targetY, useRandom) {
+   window.safeGoTo = function(targetX, targetY, useRandom, options = {}) {
         let now = Date.now();
-        if (now < nextAllowedClickTime) return;
+        const bypassThrottle = !!options?.bypassThrottle;
+        if (!bypassThrottle && now < nextAllowedClickTime) return;
 
         let x = Number(targetX); 
         let y = Number(targetY);
@@ -5454,7 +5479,10 @@ function optimizeRoute() {
         }
 
         if (typeof Engine !== 'undefined' && Engine.hero) {
-            if (typeof Engine.hero.autoGoTo === 'function') {
+            if (options?.forcePacket && typeof window._g === 'function') {
+                // POPRAWKA (RUSH/GATE): awaryjne wymuszenie wejścia na kratkę (np. brama w wąskim gardle).
+                window._g(`walk=${x},${y}`);
+            } else if (typeof Engine.hero.autoGoTo === 'function') {
                 Engine.hero.autoGoTo({x: x, y: y});
             } else if (typeof window.originalAutoWalk === 'function') {
                 window.originalAutoWalk.call(Engine.hero, x, y);
@@ -5465,13 +5493,13 @@ function optimizeRoute() {
             }
 
             let throttleDelay = Math.floor(Math.random() * (botSettings.throttleMax - botSettings.throttleMin + 1)) + botSettings.throttleMin;
-            nextAllowedClickTime = Date.now() + throttleDelay;
+            nextAllowedClickTime = bypassThrottle ? Date.now() + 120 : Date.now() + throttleDelay;
         }
     };
 
     // Kompatybilność wsteczna w razie wywołania bez "window."
-    function safeGoTo(targetX, targetY, useRandom) {
-        window.safeGoTo(targetX, targetY, useRandom);
+    function safeGoTo(targetX, targetY, useRandom, options = {}) {
+        window.safeGoTo(targetX, targetY, useRandom, options);
     }
 
 
@@ -5930,13 +5958,29 @@ setInterval(() => {
 const MonsterMemory = {
     items: new Map(),
     keyFor(mapId, n) {
-        const fallback = `${(n.nick || n.name || 'mob').toLowerCase()}:${n.x}:${n.y}`;
-        return `${mapId}|${n.id || fallback}`;
+        // POPRAWKA (EXP): Moby w Margonem NI są statyczne, więc klucz opieramy o mapę + nick + XY.
+        // Dzięki temu ten sam spawn jest śledzony stabilnie także po respawnie (ID potwora może się zmieniać).
+        const stableNick = String(n.nick || n.name || 'mob').toLowerCase().trim();
+        return `${mapId}|${stableNick}:${n.x}:${n.y}`;
     },
     upsertVisible(mapId, n, priorityClass = 'normal') {
         const k = this.keyFor(mapId, n);
         const prev = this.items.get(k) || { seenCount: 0, failCount: 0, aliveScore: 0 };
-        this.items.set(k, { ...prev, id: n.id, nick: n.nick || n.name, x: n.x, y: n.y, mapId, lastSeenAt: Date.now(), seenCount: prev.seenCount + 1, failCount: 0, aliveScore: 1, priorityClass, cooldownUntil: 0 });
+        this.items.set(k, {
+            ...prev,
+            key: k,
+            id: n.id,
+            nick: n.nick || n.name,
+            x: n.x,
+            y: n.y,
+            mapId,
+            lastSeenAt: Date.now(),
+            seenCount: prev.seenCount + 1,
+            failCount: 0,
+            aliveScore: 1,
+            priorityClass,
+            cooldownUntil: 0
+        });
         return this.items.get(k);
     },
     decay(mapId, isRedMap) {
@@ -5949,14 +5993,28 @@ const MonsterMemory = {
             m.aliveScore = Math.max(0, m.aliveScore - (isRedMap ? 0.03 : 0.08));
         }
     },
-    onTargetNotFound(mapId, targetId) {
-        const key = [...this.items.keys()].find(k => k.startsWith(`${mapId}|`) && this.items.get(k)?.id == targetId);
+    onTargetNotFound(mapId, targetRef) {
+        const key = [...this.items.keys()].find(k => {
+            if (!k.startsWith(`${mapId}|`)) return false;
+            const mob = this.items.get(k);
+            if (!mob) return false;
+            if (targetRef == null) return false;
+            if (typeof targetRef === 'object') {
+                const byId = targetRef.id != null && mob.id == targetRef.id;
+                const byPos = mob.x === targetRef.x && mob.y === targetRef.y;
+                return byId || byPos;
+            }
+            return mob.id == targetRef;
+        });
         if (!key) return null;
         const m = this.items.get(key);
         m.failCount = (m.failCount || 0) + 1;
         m.aliveScore = Math.max(0, (m.aliveScore || 1) - 0.35);
-        m.cooldownUntil = Date.now() + 2600 + (m.failCount * 700);
-        if (m.failCount >= 4) this.items.delete(key);
+        // POPRAWKA (EXP): Traktujemy "zniknięcie celu" jako potencjalny kill i ustawiamy cooldown respawnu.
+        // Respawn można ręcznie zmienić przez botSettings.exp.staticMobRespawnMs (domyślnie 20s).
+        const respawnMs = Math.max(3000, parseInt(botSettings?.exp?.staticMobRespawnMs ?? 20000, 10) || 20000);
+        m.cooldownUntil = Date.now() + respawnMs + (m.failCount * 500);
+        if (m.failCount >= 6) this.items.delete(key);
         return m;
     },
     getLikelyAliveForMap(mapId, opt = {}) {
@@ -5974,6 +6032,17 @@ const MonsterMemory = {
             out.push({ ...m, ageMs: age });
         }
         return out;
+    },
+    hasAliveCandidateOnMap(mapId) {
+        const now = Date.now();
+        for (const [k, m] of this.items.entries()) {
+            if (!k.startsWith(`${mapId}|`)) continue;
+            if (!m) continue;
+            if (m.cooldownUntil && now < m.cooldownUntil) continue;
+            if ((m.aliveScore || 0) <= 0.05) continue;
+            return true;
+        }
+        return false;
     }
 };
 
@@ -7161,7 +7230,7 @@ function runExpLogic() {
 
         // Twardy bezpiecznik: jeżeli celu nie ma albo nie ma legalnego pola podejścia (np. mob w ścianie), pomijamy.
         if (liveTargetMissing || liveTargetInCollision || !targetPathData?.stand) {
-            const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+            const mm = MonsterMemory.onTargetNotFound(currMap, target);
             if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
             if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
             window.expLastTargetNotFoundAt = Date.now();
@@ -7197,7 +7266,7 @@ function runExpLogic() {
                 HeroLogger.emit('DEBUG', 'ATTACK_WAIT_FOR_BERSERK', `Jestem przy celu ${target.nick || target.id} — czekam na autoatak berserka (próba=${window.expMeleeFailByTarget[targetKey]}).`, "#ffcc80", { category: 'COMBAT', dedupeMs: 1500 });
 
                 if (window.expMeleeFailByTarget[targetKey] >= 3) {
-                    const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+                    const mm = MonsterMemory.onTargetNotFound(currMap, target);
                     markTargetIgnoredOnMap(currMap, target, 'melee_fail_x3');
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
@@ -7244,7 +7313,7 @@ function runExpLogic() {
                 HeroLogger.emit('DEBUG', 'APPROACH_STUCK_RETRY', `Nie mogę dojść do celu ${target.nick || target.id} (próba=${approachState.failCount}).`, "#ffcc80", { category: 'COMBAT', dedupeMs: 1500 });
 
                 if (approachState.failCount >= 3) {
-                    const mm = MonsterMemory.onTargetNotFound(currMap, target.id);
+                    const mm = MonsterMemory.onTargetNotFound(currMap, target);
                     markTargetIgnoredOnMap(currMap, target, 'approach_fail_x3');
                     if (window.expMonsterCache) window.expMonsterCache.delete(String(target.cacheKey ?? target.id));
                     if (window.expFocusTarget && String(window.expFocusTarget.id) === String(target.id)) window.expFocusTarget = null;
@@ -7285,6 +7354,12 @@ function runExpLogic() {
 
     // --- TRANZYT / ZMIANA MAPY ---
     if (!isExpMap || validMobs.length === 0) {
+        // POPRAWKA (EXP): jeśli na mapie nie ma żadnego żywego celu (wszystkie spawny są na cooldownie respawnu),
+        // nie czekamy sztucznie kilku skanów — od razu zmieniamy mapę.
+        const hasVisibleLiveMobs = validMobs.length > 0;
+        const hasRememberedAlive = MonsterMemory.hasAliveCandidateOnMap(currMap);
+        const shouldInstantRotateMap = isExpMap && !hasVisibleLiveMobs && !hasRememberedAlive;
+
         // Bezpiecznik: po zmianie mapy tranzytowej czasem silnik "staje" bez decyzji.
         // Po krótkim timeoutcie wymuszamy ponowne obrane celu mapowego.
         if (!isExpMap && !window.isRushing && window.expMapEnteredAt && (now - window.expMapEnteredAt > 4200)) {
@@ -7302,7 +7377,7 @@ function runExpLogic() {
         }
 
         expEmptyScans++;
-        if (expEmptyScans < 8 && isExpMap) {
+        if (!shouldInstantRotateMap && expEmptyScans < 8 && isExpMap) {
             window.expDecisionInfo = `Mapa exp pusta chwilowo: ${currMap} (resp)`;
             return; // Czekaj na resp (berserk zostaje ON na exp mapie)
         }
@@ -7919,8 +7994,17 @@ window.renderMapOrderList = () => {
         let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
         let allGateways = typeof getCurrentMapGatewaysForRadar === 'function' ? getCurrentMapGatewaysForRadar(distMap) : [];
 
-        c.innerHTML = heroMapOrder[hero].map((mapName, index) => {
-            let safeMapName = mapName.replace(/'/g, "\\'");
+        c.innerHTML = heroMapOrder[hero].map((mapStep, index) => {
+            // POPRAWKA (KREATOR TRASY / HEROSI):
+            // Zawsze renderujemy każdy krok sekwencji, nawet jeśli parser nie zna mapy.
+            const rawLabel = (typeof mapStep === 'string')
+                ? mapStep
+                : (mapStep?.name || mapStep?.map || mapStep?.id || String(mapStep ?? ''));
+            const mapName = String(rawLabel || '').trim();
+            const hasReadableName = mapName.length > 0 && mapName !== 'undefined' && mapName !== 'null';
+            const safeMapName = mapName.replace(/'/g, "\\'");
+            const inBase = hasReadableName && isMapKnownInGatewayBase(mapName);
+            const isUnknown = !hasReadableName || !inBase;
 
             if (editingGatewayFor === mapName) {
                 let defaultX = "";
@@ -7953,23 +8037,25 @@ window.renderMapOrderList = () => {
                     </div>
                 </div>`;
             } else {
-                const inBase = isMapKnownInGatewayBase(mapName);
-                
                 // Sprawdzamy czy to wejście jest aktualnie osiągalne z miejsca gdzie stoisz
-                const liveDoor = allGateways.find(g => g.targetMap.toLowerCase() === mapName.toLowerCase() && g.reachable);
+                const liveDoor = hasReadableName
+                    ? allGateways.find(g => g.targetMap.toLowerCase() === mapName.toLowerCase() && g.reachable)
+                    : null;
                 const doorDistance = liveDoor ? liveDoor.pathDistance : "?";
                 
-                const baseBadge = inBase
+                const unknownLabel = hasReadableName ? mapName : `[krok-${index + 1}]`;
+                const mapDisplayText = isUnknown ? `Nieznana mapa: ${unknownLabel}` : mapName;
+                const baseBadge = !isUnknown
                     ? `<span style="color:#81c784; font-size:9px; margin-left:4px; white-space:nowrap;" title="${liveDoor ? `Odległość do bramy: ${doorDistance}` : `Nie widzę bramy z obecnego punktu`} ">[BAZA${liveDoor ? ' ✔' : ''}]</span>`
-                    : `<span style="color:#ef9a9a; font-size:9px; margin-left:4px; white-space:nowrap;">[BRAK]</span>`;
+                    : `<span style="color:#ef9a9a; font-size:9px; margin-left:4px; white-space:nowrap;">[NIEZNANA]</span>`;
 
-                const mapColor = inBase ? (liveDoor ? "#4caf50" : "#aed581") : "#ef9a9a";
+                const mapColor = isUnknown ? "#ef5350" : (liveDoor ? "#4caf50" : "#aed581");
 
                 return `<div class="list-item">
-                    <div class="map-name-wrap" title="${mapName}">
+                    <div class="map-name-wrap" title="${mapDisplayText}">
                         <span class="btn-del-map" onclick="window.removeHeroMapFromOrder(${index})">✖</span>
                         <span class="map-name" style="color:${mapColor}; font-weight:bold;">
-                            ${index + 1}. ${mapName}
+                            ${index + 1}. ${mapDisplayText}
                         </span>
                         ${baseBadge}
                     </div>
