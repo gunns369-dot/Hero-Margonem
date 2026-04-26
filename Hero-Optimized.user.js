@@ -1477,6 +1477,68 @@ function pickNextReachableMapFromRoute(currentSysMap, allowedMaps) {
     return null;
 }
 
+function pickSmartTransitGateway(currentSysMap, preferredTargets) {
+    if (!currentSysMap) return null;
+    const targets = Array.isArray(preferredTargets) ? preferredTargets.filter(Boolean) : [];
+    if (!targets.length) return null;
+
+    const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
+    const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable && g?.targetMap);
+    if (!reachableDoors.length) return null;
+
+    const currNorm = normMapName(currentSysMap);
+    const normalizedTargets = targets.map(t => normMapName(t));
+    let best = null;
+
+    for (const door of reachableDoors) {
+        const viaMap = (door.targetMap || '').trim();
+        if (!viaMap || normMapName(viaMap) === currNorm) continue;
+        if (isEdgeBanned(currentSysMap, viaMap)) continue;
+
+        const viaNorm = normMapName(viaMap);
+        let bestDoorScore = Infinity;
+        let bestDoorTarget = null;
+        let bestDoorPath = null;
+
+        for (let i = 0; i < targets.length; i++) {
+            const finalTarget = targets[i];
+            if (!finalTarget) continue;
+            const targetNorm = normalizedTargets[i];
+            if (!targetNorm || targetNorm === viaNorm) {
+                if (0 < bestDoorScore) {
+                    bestDoorScore = 0;
+                    bestDoorTarget = finalTarget;
+                    bestDoorPath = [viaMap, finalTarget];
+                }
+                continue;
+            }
+            const p = typeof getShortestPath === 'function'
+                ? getShortestPath(viaMap, finalTarget, { allowIndoorTransit: true })
+                : null;
+            if (!p || p.length < 2) continue;
+            const score = p.length - 1;
+            if (score < bestDoorScore) {
+                bestDoorScore = score;
+                bestDoorTarget = finalTarget;
+                bestDoorPath = p;
+            }
+        }
+
+        if (!Number.isFinite(bestDoorScore)) continue;
+        if (!best || bestDoorScore < best.score || (bestDoorScore === best.score && door.pathDistance < best.door.pathDistance)) {
+            best = {
+                nextMap: viaMap,
+                finalTarget: bestDoorTarget,
+                path: bestDoorPath,
+                door,
+                score: bestDoorScore
+            };
+        }
+    }
+
+    return best;
+}
+
 function getExpGroupNameForMap(mapName) {
     if (!mapName) return null;
     let source = (typeof botSettings !== 'undefined' && Array.isArray(botSettings.expProfiles) && botSettings.expProfiles.length > 0)
@@ -2724,13 +2786,24 @@ window.executeRushStep = function() {
                 if (window.isExping && botSettings.exp && botSettings.exp.mapOrder) {
                     fallback = typeof pickNextReachableMapFromRoute === 'function' ? pickNextReachableMapFromRoute(currentSysMap, window.isExping ? getCurrentExpHuntMaps() : null) : null;
                 }
+                if (!fallback) {
+                    const smartTargets = [];
+                    if (rushTarget) smartTargets.push(rushTarget);
+                    if (window.isExping) {
+                        const expTargets = typeof getCurrentExpHuntMaps === 'function' ? getCurrentExpHuntMaps() : [];
+                        if (Array.isArray(expTargets)) smartTargets.push(...expTargets);
+                    }
+                    fallback = typeof pickSmartTransitGateway === 'function'
+                        ? pickSmartTransitGateway(currentSysMap, smartTargets)
+                        : null;
+                }
 
                 if (fallback && fallback.nextMap && fallback.door) {
                     window.rushNextMap = fallback.nextMap;
                     if (window._lastRushNextMap !== fallback.nextMap) {
                         let suffix = fallback.finalTarget ? ` → cel trasy: ${fallback.finalTarget}` : "";
-                        if (window.logExp) window.logExp(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (pominięto martwe przejście)`, "#ba68c8");
-                        if (window.logHero) window.logHero(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (pominięto martwe przejście)`, "#ba68c8");
+                        if (window.logExp) window.logExp(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (awaryjny tranzyt przez widoczne przejście)`, "#ba68c8");
+                        if (window.logHero) window.logHero(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (awaryjny tranzyt przez widoczne przejście)`, "#ba68c8");
                         window._lastRushNextMap = fallback.nextMap;
                     }
                     safeGoTo(fallback.door.x, fallback.door.y, false);
