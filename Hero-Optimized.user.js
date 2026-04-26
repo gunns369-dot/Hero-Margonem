@@ -9281,6 +9281,20 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             window.__unconscious = true;
             if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zamykam walkę i zatrzymuję bota...", "#e53935");
 
+            // Twarde wyłączenie auto-walki po śmierci (UI + pamięć), żeby nie wisiała aktywna walka na ekranie.
+            if (window.BerserkController && typeof window.BerserkController.setBotBerserkState === 'function') {
+                window.BerserkController.setBotBerserkState(false, 'death_guard');
+            }
+            if (botSettings?.berserk) {
+                botSettings.berserk.enabled = false;
+                saveSettings();
+            }
+            if (typeof window.toggleNativeAggroVisuals === 'function') {
+                window.toggleNativeAggroVisuals(false);
+            } else if (typeof Engine !== 'undefined' && Engine.settings && Engine.settings.d) {
+                Engine.settings.d.fight_auto_solo = 0;
+            }
+
             // --- WYMUSZONE ZAMKNIĘCIE OKNA WALKI ---
             if (typeof Engine !== 'undefined' && Engine.battle) {
                 if (typeof Engine.battle.close === 'function') Engine.battle.close();
@@ -9477,14 +9491,10 @@ if (isDead) {
                         window._g(`moveitem&st=1&id=${bestPot.id}`);
                     }
 
-                    // KLUCZOWA ŁATKA: Symulujemy zjedzenie potki lokalnie.
-                    // Dzięki temu bot od razu widzi, że ma 100% HP i nie spamuje potkami w oczekiwaniu na serwer!
-                    if (Engine.hero.d.hp !== undefined) Engine.hero.d.hp = Math.min(maxhp, hp + bestPot.heal);
-                    if (Engine.hero.d.warrior_stats) Engine.hero.d.warrior_stats.hp = Math.min(maxhp, hp + bestPot.heal);
-
-                    // Szybkie leczenie z odpowiednim marginesem błędu
-                    window.lastHealTime = Date.now() + 350;
-                    setTimeout(() => { window.isHealLocked = false; }, 300);
+                    // Czekamy na realne HP z serwera i dopiero wtedy decydujemy o kolejnej potce.
+                    // Dzięki temu zawsze domykamy leczenie do 100%, zamiast kończyć na pierwszej miksturze.
+                    window.lastHealTime = Date.now() + 550;
+                    setTimeout(() => { window.isHealLocked = false; }, 500);
                 } else {
                     window.isRegeneratingToFull = false;
                     if (window.logHero) window.logHero(`⚠️ Skończyło Ci się jedzenie w plecaku! (Zbyt wysoki lvl / Lista ignorowanych)`, "#ffb300");
