@@ -10386,9 +10386,10 @@ window.openShopAsync = async (namePart) => {
             return { vx, vy };
         }
 
-        function sendCaptchaClick(vx, vy) {
+        function sendCaptchaClick(vx, vy, options = {}) {
             return new Promise((resolve) => {
-                const url = `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}`;
+                const noOffset = options.noOffset === true ? '&no_offset=1' : '';
+                const url = `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}${noOffset}`;
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
                         method: "GET",
@@ -10416,7 +10417,7 @@ window.openShopAsync = async (namePart) => {
                 if (!el) return resolve();
                 const clickPoint = buildRelativeClickFromElement(el, { jitter: true });
                 if (!clickPoint) return resolve();
-                sendCaptchaClick(clickPoint.vx, clickPoint.vy)
+                sendCaptchaClick(clickPoint.vx, clickPoint.vy, { noOffset: true })
                     .then((ok) => {
                         if (ok && window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu (vx/vy).", "#e040fb");
                         if (!ok) el.classList.add('pressed', 'active');
