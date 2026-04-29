@@ -773,7 +773,9 @@ def physical_click(screen_x: int, screen_y: int) -> bool:
     return True
 
 
-def do_click_absolute(screen_x: int, screen_y: int, label: str = "api") -> Tuple[bool, str, Dict[str, Any]]:
+def do_click_absolute(
+    screen_x: int, screen_y: int, label: str = "api", apply_manual_offset: bool = True
+) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Wejście: absolutne współrzędne ekranu z JS / API.
     Gdy aktywna myszka wirtualna -> ScreenToClient i dopiero SendMessage.
@@ -790,7 +792,8 @@ def do_click_absolute(screen_x: int, screen_y: int, label: str = "api") -> Tuple
         offset_y = float(config.get("manual_offset_y", 0.0))
 
     x = int(screen_x)
-    y = int(screen_y + (offset_y if manual_offset_enabled else 0.0))
+    use_offset = apply_manual_offset and manual_offset_enabled
+    y = int(screen_y + (offset_y if use_offset else 0.0))
 
     if use_virtual:
         client_pt = screen_to_client(hwnd, x, y)
@@ -834,7 +837,9 @@ def do_click_absolute(screen_x: int, screen_y: int, label: str = "api") -> Tuple
     return ok, ("OK" if ok else "CLICK_FAILED"), payload
 
 
-def click_in_game_client(client_x: float, client_y: float, label: str = "client") -> Tuple[bool, str, Dict[str, Any]]:
+def click_in_game_client(
+    client_x: float, client_y: float, label: str = "client", apply_manual_offset: bool = True
+) -> Tuple[bool, str, Dict[str, Any]]:
     hwnd = resolve_target_window()
     if not hwnd:
         return False, "NO_TARGET_WINDOW", {}
@@ -849,7 +854,8 @@ def click_in_game_client(client_x: float, client_y: float, label: str = "client"
         offset_y = float(config.get("manual_offset_y", 0.0))
 
     cx = max(0, min(int(round(client_x)), cw - 1))
-    cy_raw = float(client_y) + (offset_y if manual_offset_enabled else 0.0)
+    use_offset = apply_manual_offset and manual_offset_enabled
+    cy_raw = float(client_y) + (offset_y if use_offset else 0.0)
     cy = max(0, min(int(round(cy_raw)), ch - 1))
     screen_pt = client_to_screen(hwnd, cx, cy)
 
@@ -867,7 +873,7 @@ def click_in_game_client(client_x: float, client_y: float, label: str = "client"
         "hwnd": hwnd,
         "client_x": cx,
         "client_y": cy,
-        "offset_applied_y": offset_y if manual_offset_enabled else 0.0,
+        "offset_applied_y": offset_y if use_offset else 0.0,
         "screen_x": screen_pt[0] if screen_pt else None,
         "screen_y": screen_pt[1] if screen_pt else None,
     }
@@ -1159,6 +1165,8 @@ def click_route():
         return _api_blocked_response()
 
     try:
+        no_offset = request.args.get("no_offset", "0").strip().lower() in {"1", "true", "yes", "on"}
+        apply_manual_offset = not no_offset
         vx = request.args.get("vx")
         vy = request.args.get("vy")
         ax = request.args.get("ax")
@@ -1166,7 +1174,9 @@ def click_route():
 
         # kompatybilność ze "starą" wersją: klik client-area (vx,vy)
         if vx is not None and vy is not None:
-            ok, status, payload = click_in_game_client(float(vx), float(vy), label="api_v")
+            ok, status, payload = click_in_game_client(
+                float(vx), float(vy), label="api_v", apply_manual_offset=apply_manual_offset
+            )
             if ok:
                 log_event(f"Klik API(vx/vy): {payload}", "click")
             else:
@@ -1175,7 +1185,9 @@ def click_route():
 
         # kompatybilność: ax/ay traktowane jak absolutne
         if ax is not None and ay is not None:
-            ok, status, payload = do_click_absolute(int(float(ax)), int(float(ay)), label="api_abs")
+            ok, status, payload = do_click_absolute(
+                int(float(ax)), int(float(ay)), label="api_abs", apply_manual_offset=apply_manual_offset
+            )
             return jsonify({"ok": ok, "status": status, "payload": payload}), (200 if ok else 404)
 
         # standard: x/y absolutne
@@ -1184,7 +1196,7 @@ def click_route():
     except Exception:
         return jsonify({"ok": False, "status": "BAD_ARGS", "example": "/click?x=1200&y=800"}), 400
 
-    ok, status, payload = do_click_absolute(x, y, label="api_click")
+    ok, status, payload = do_click_absolute(x, y, label="api_click", apply_manual_offset=apply_manual_offset)
     if ok:
         log_event(f"Klik API: screen=({x},{y}) -> {payload}", "click")
     else:
