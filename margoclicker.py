@@ -106,6 +106,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "use_client_area": True,
     "manual_offset_enabled": True,
     "manual_offset_y": 0.0,
+    "answer_offset_enabled": False,
+    "answer_offset_y": 0.0,
     "window_keyword": "margonem",
     "restore_window_before_click": True,
     "hide_console_on_start": True,
@@ -626,7 +628,7 @@ def perform_click(screen_x: int, screen_y: int, debug_label: str = "") -> bool:
     return True
 
 
-def click_in_game(client_x: float, client_y: float, label: str = "api") -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def click_in_game(client_x: float, client_y: float, label: str = "api", use_manual_offset: bool = True, is_answer_click: bool = False) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     with config_lock:
         cfg = dict(config)
 
@@ -651,9 +653,11 @@ def click_in_game(client_x: float, client_y: float, label: str = "api") -> Tuple
         client_x = cw * client_x
         client_y = ch * client_y
 
-    # Aplikowanie offsetu po konwersji
-    if cfg.get("manual_offset_enabled", True):
+    # Aplikowanie offsetów po konwersji
+    if use_manual_offset and cfg.get("manual_offset_enabled", True):
         client_y += float(cfg.get("manual_offset_y", 0.0))
+    if is_answer_click and cfg.get("answer_offset_enabled", False):
+        client_y += float(cfg.get("answer_offset_y", 0.0))
 
     cx = max(0, min(int(round(client_x)), max(0, cw - 1)))
     cy = max(0, min(int(round(client_y)), max(0, ch - 1)))
@@ -849,13 +853,15 @@ def click_route():
     try:
         vx = request.args.get("vx")
         vy = request.args.get("vy")
+        no_offset = request.args.get("no_offset") in {"1", "true", "yes"}
+        answer_click = request.args.get("answer_click") in {"1", "true", "yes"}
         ax = request.args.get("ax")
         ay = request.args.get("ay")
         x_abs = request.args.get("x")
         y_abs = request.args.get("y")
 
         if vx is not None and vy is not None:
-            ok, msg, payload = click_in_game(float(vx), float(vy), label="api_v")
+            ok, msg, payload = click_in_game(float(vx), float(vy), label="api_v", use_manual_offset=not no_offset, is_answer_click=answer_click)
             return jsonify({"status": msg, "ok": ok, "payload": payload}), (200 if ok else 404)
 
         hwnd = resolve_target_window()
@@ -867,13 +873,13 @@ def click_route():
         if ax is not None and ay is not None:
             rel_x = float(ax) - geom.client_origin["x"]
             rel_y = float(ay) - geom.client_origin["y"]
-            ok, msg, payload = click_in_game(rel_x, rel_y, label="api_ax")
+            ok, msg, payload = click_in_game(rel_x, rel_y, label="api_ax", use_manual_offset=not no_offset, is_answer_click=answer_click)
             return jsonify({"status": msg, "ok": ok, "payload": payload}), (200 if ok else 404)
 
         if x_abs is not None and y_abs is not None:
             rel_x = float(x_abs) - geom.client_origin["x"]
             rel_y = float(y_abs) - geom.client_origin["y"]
-            ok, msg, payload = click_in_game(rel_x, rel_y, label="api_x")
+            ok, msg, payload = click_in_game(rel_x, rel_y, label="api_x", use_manual_offset=not no_offset, is_answer_click=answer_click)
             return jsonify({"status": msg, "ok": ok, "payload": payload}), (200 if ok else 404)
 
         return jsonify({"status": "MISSING_COORDINATES", "ok": False}), 400
@@ -964,7 +970,7 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     normalized["target_monitor_name"] = str(normalized.get("target_monitor_name", "")).strip()
     normalized["hotkey"] = str(normalized.get("hotkey", "f9")).strip().lower() or "f9"
 
-    for key in ["manual_offset_y"]:
+    for key in ["manual_offset_y", "answer_offset_y"]:
         normalized[key] = float(normalized.get(key, 0.0))
     for key in ["target_hwnd_last", "target_pid", "target_monitor_index", "click_hold_ms_min", "click_hold_ms_max", "click_jitter_px"]:
         normalized[key] = int(normalized.get(key, 0))
@@ -1017,6 +1023,7 @@ def launch_gui() -> None:
     launch_cmd_var = tk.StringVar(value=cfg.get("launch_command", ""))
     url_hint_var = tk.StringVar(value=cfg.get("browser_url_hint", ""))
     offset_var = tk.StringVar(value=str(cfg.get("manual_offset_y", 0.0)))
+    answer_offset_var = tk.StringVar(value=str(cfg.get("answer_offset_y", 0.0)))
     mode_var = tk.StringVar(value=cfg.get("window_selection_mode", "auto"))
     process_var = tk.StringVar(value=cfg.get("target_process_name", ""))
     hotkey_var = tk.StringVar(value=cfg.get("hotkey", "f9"))
@@ -1029,6 +1036,7 @@ def launch_gui() -> None:
     restore_var = tk.BooleanVar(value=bool(cfg.get("restore_window_before_click", True)))
     hide_console_var = tk.BooleanVar(value=bool(cfg.get("hide_console_on_start", True)))
     manual_off_var = tk.BooleanVar(value=bool(cfg.get("manual_offset_enabled", True)))
+    answer_off_var = tk.BooleanVar(value=bool(cfg.get("answer_offset_enabled", False)))
     no_random_var = tk.BooleanVar(value=bool(cfg.get("disable_randomness", False)))
     click_msg_var = tk.BooleanVar(value=bool(cfg.get("use_virtual_mouse", False)))
 
@@ -1064,6 +1072,9 @@ def launch_gui() -> None:
     ttk.Checkbutton(flags, text="manual offset", variable=manual_off_var).pack(side=tk.LEFT)
     ttk.Label(flags, text="Y:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
     ttk.Entry(flags, textvariable=offset_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
+    ttk.Checkbutton(flags, text="offset odpowiedzi", variable=answer_off_var).pack(side=tk.LEFT)
+    ttk.Label(flags, text="Y:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
+    ttk.Entry(flags, textvariable=answer_offset_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
     ttk.Checkbutton(flags, text="tryb bez losowości", variable=no_random_var).pack(side=tk.LEFT)
     ttk.Checkbutton(flags, text="Użyj wirtualnej myszki (w tle)", variable=click_msg_var).pack(side=tk.LEFT, padx=8)
 
@@ -1090,6 +1101,7 @@ def launch_gui() -> None:
     def save_from_gui() -> None:
         try:
             parsed_off = float(offset_var.get().strip())
+            parsed_answer_off = float(answer_offset_var.get().strip())
             hold_min = int(float(hold_min_var.get().strip()))
             hold_max = int(float(hold_max_var.get().strip()))
             jitter_px = int(float(jitter_var.get().strip()))
@@ -1109,6 +1121,8 @@ def launch_gui() -> None:
             config["restore_window_before_click"] = bool(restore_var.get())
             config["manual_offset_enabled"] = bool(manual_off_var.get())
             config["manual_offset_y"] = parsed_off
+            config["answer_offset_enabled"] = bool(answer_off_var.get())
+            config["answer_offset_y"] = parsed_answer_off
             config["click_hold_ms_min"] = max(1, hold_min)
             config["click_hold_ms_max"] = max(1, hold_max)
             config["click_jitter_px"] = max(0, jitter_px)
