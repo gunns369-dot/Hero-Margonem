@@ -128,8 +128,44 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "hotkey": "f9",
     "disable_randomness": False,
     "calibration": {},
+    "manual_click_points": {},
 }
 config: Dict[str, Any] = dict(DEFAULT_CONFIG)
+
+def get_manual_click_point(name: str) -> Optional[Dict[str, int]]:
+    with config_lock:
+        points = config.get("manual_click_points", {})
+        point = points.get(name) if isinstance(points, dict) else None
+    if not isinstance(point, dict):
+        return None
+    try:
+        return {"x": int(point.get("x", 0)), "y": int(point.get("y", 0))}
+    except Exception:
+        return None
+
+
+def resolve_click_point(name: str, fallback_ratio: Tuple[float, float], client_w: int, client_h: int) -> Tuple[float, float]:
+    point = get_manual_click_point(name)
+    if point:
+        return float(point["x"]), float(point["y"])
+    return client_w * fallback_ratio[0], client_h * fallback_ratio[1]
+
+
+def wait_for_left_click(timeout_sec: float = 10.0) -> Optional[Tuple[int, int]]:
+    if sys.platform != "win32":
+        return None
+    user32 = ctypes.windll.user32
+    pt = POINT()
+    start = time.time()
+    while time.time() - start < timeout_sec:
+        if user32.GetAsyncKeyState(0x01) & 0x8000:
+            while user32.GetAsyncKeyState(0x01) & 0x8000:
+                time.sleep(0.01)
+            if user32.GetCursorPos(ctypes.byref(pt)):
+                return int(pt.x), int(pt.y)
+        time.sleep(0.01)
+    return None
+
 
 # =========================
 # DIAGNOSTYKA (stan runtime)
@@ -1244,7 +1280,8 @@ def launch_gui() -> None:
         cw = geom.client_rect["right"] - geom.client_rect["left"]
         ch = geom.client_rect["bottom"] - geom.client_rect["top"]
         rx, ry = TEST_POINT_PRESETS.get("pre_zapadki", (0.50, 0.50))
-        ok, msg, payload = click_in_game(cw * rx, ch * ry, label="gui_pre_zapadki")
+        px, py = resolve_click_point("pre_zapadki", (rx, ry), cw, ch)
+        ok, msg, payload = click_in_game(px, py, label="gui_pre_zapadki")
         if ok:
             status_var.set(f"Pre zapadki klik: {payload}")
         else:
@@ -1261,6 +1298,58 @@ def launch_gui() -> None:
     def export_diag() -> None:
         p = export_diagnostics_json()
         status_var.set(f"Wyeksportowano diagnostykę: {p.name}")
+
+    def save_manual_point(point_key: str, point_label: str) -> None:
+        hwnd = resolve_target_window()
+        geom = get_window_geometry(hwnd) if hwnd else None
+        if not geom:
+            status_var.set("Brak okna do zapisu punktu")
+            return
+
+        status_var.set(f"Kliknij teraz punkt: {point_label} (max 10s)")
+
+        def _worker() -> None:
+            clicked = wait_for_left_click(10.0)
+            if not clicked:
+                root.after(0, lambda: status_var.set(f"Timeout: nie kliknięto punktu {point_label}"))
+                return
+            sx, sy = clicked
+            cpt = screen_to_client_point(hwnd, sx, sy)
+            if not cpt:
+                root.after(0, lambda: status_var.set("Nie udało się przeliczyć punktu"))
+                return
+            cx, cy = int(cpt[0]), int(cpt[1])
+            with config_lock:
+                points = config.setdefault("manual_click_points", {})
+                points[point_key] = {"x": cx, "y": cy}
+            save_settings_to_disk()
+            root.after(0, lambda: status_var.set(f"Zapisano {point_label}: client=({cx}, {cy})"))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def test_answer_click() -> None:
+        hwnd = resolve_target_window()
+        geom = get_window_geometry(hwnd) if hwnd else None
+        if not geom:
+            status_var.set("Brak okna")
+            return
+        cw = geom.client_rect["right"] - geom.client_rect["left"]
+        ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+        px, py = resolve_click_point("answer", (0.50, 0.56), cw, ch)
+        ok, msg, payload = click_in_game(px, py, label="gui_answer", use_manual_offset=False, is_answer_click=True)
+        status_var.set(f"Odpowiedź klik: {payload}" if ok else f"Odpowiedź błąd: {msg}")
+
+    def test_confirm_click() -> None:
+        hwnd = resolve_target_window()
+        geom = get_window_geometry(hwnd) if hwnd else None
+        if not geom:
+            status_var.set("Brak okna")
+            return
+        cw = geom.client_rect["right"] - geom.client_rect["left"]
+        ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+        px, py = resolve_click_point("confirm", (0.50, 0.63), cw, ch)
+        ok, msg, payload = click_in_game(px, py, label="gui_confirm", use_manual_offset=False)
+        status_var.set(f"Potwierdź klik: {payload}" if ok else f"Potwierdź błąd: {msg}")
 
     btns1 = ttk.Frame(frame, style="Dark.TFrame")
     btns1.pack(fill=tk.X, pady=(4, 2))
@@ -1281,8 +1370,17 @@ def launch_gui() -> None:
     ttk.Button(btns3, text="PAUSE ON/OFF", command=toggle_pause_gui).pack(side=tk.LEFT)
     ttk.Button(btns3, text="Test wszystkie punkty", command=run_test_points).pack(side=tk.LEFT)
     ttk.Button(btns3, text="Test: Pre zapadki", command=test_pre_zapadki).pack(side=tk.LEFT, padx=6)
+    ttk.Button(btns3, text="Test: Odpowiedź", command=test_answer_click).pack(side=tk.LEFT, padx=6)
+    ttk.Button(btns3, text="Test: Potwierdź", command=test_confirm_click).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Pokaż współrzędne ostatniego kliknięcia", command=show_last_click).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Eksport diagnostyki do JSON", command=export_diag).pack(side=tk.LEFT)
+
+
+    btns4 = ttk.Frame(frame, style="Dark.TFrame")
+    btns4.pack(fill=tk.X, pady=(2, 4))
+    ttk.Button(btns4, text="Ustaw punkt: Pre zapadka", command=lambda: save_manual_point("pre_zapadki", "Pre zapadka")).pack(side=tk.LEFT)
+    ttk.Button(btns4, text="Ustaw punkt: Odpowiedź", command=lambda: save_manual_point("answer", "Odpowiedź")).pack(side=tk.LEFT, padx=6)
+    ttk.Button(btns4, text="Ustaw punkt: Potwierdź", command=lambda: save_manual_point("confirm", "Potwierdź")).pack(side=tk.LEFT)
 
     ttk.Label(frame, textvariable=status_var, style="Dark.TLabel").pack(anchor="w", pady=(4, 0))
     ttk.Label(
