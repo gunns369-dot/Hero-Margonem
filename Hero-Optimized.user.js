@@ -10413,12 +10413,14 @@ window.openShopAsync = async (namePart) => {
         }
 
         // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie VM + Rozrzut
-        function humanClickAsync(el) {
+        function humanClickAsync(el, options = {}) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
-                const clickPoint = buildRelativeClickFromElement(el, { jitter: true });
+                const useJitter = options.jitter !== false;
+                const clickPoint = buildRelativeClickFromElement(el, { jitter: useJitter });
                 if (!clickPoint) return resolve();
-                sendCaptchaClick(clickPoint.vx, clickPoint.vy, { noOffset: true, answerClick: true })
+                const answerClick = options.answerClick === true;
+                sendCaptchaClick(clickPoint.vx, clickPoint.vy, { noOffset: true, answerClick })
                     .then((ok) => {
                         if (ok && window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu (vx/vy).", "#e040fb");
                         if (!ok) el.classList.add('pressed', 'active');
@@ -10460,12 +10462,22 @@ window.openShopAsync = async (namePart) => {
 
         function findResolveNowButton(root) {
             if (!root) return null;
-            const candidates = Array.from(root.querySelectorAll('button, .button, .btn, a, span, div'));
-            return candidates.find(el => {
-                if (!isVisibleCaptchaElement(el)) return false;
-                const txt = (el.textContent || "").trim().toLowerCase();
-                return /rozwiąż|rozwiaz|solve|start/i.test(txt);
-            }) || null;
+            const candidates = Array.from(root.querySelectorAll('button, .button, .btn, a, span, div'))
+                .filter(el => isVisibleCaptchaElement(el))
+                .map(el => ({
+                    el,
+                    txt: (el.textContent || "").trim().toLowerCase(),
+                    area: Math.max(1, el.offsetWidth * el.offsetHeight)
+                }))
+                .filter(item => /rozwiąż\s*teraz|rozwiaz\s*teraz|solve\s*now|rozwiąż|rozwiaz|solve|start/i.test(item.txt));
+
+            const preferred = candidates
+                .filter(item => /rozwiąż\s*teraz|rozwiaz\s*teraz|solve\s*now/.test(item.txt))
+                .sort((a, b) => a.area - b.area);
+            if (preferred.length) return preferred[0].el;
+
+            candidates.sort((a, b) => a.area - b.area);
+            return candidates.length ? candidates[0].el : null;
         }
 
         // --- PRECYZYJNA DETEKCJA GŁÓWNEGO OKNA ---
@@ -10601,7 +10613,7 @@ window.openShopAsync = async (namePart) => {
                 if (!usedTemplateClick) {
                     const resolveBtn = findResolveNowButton(preWin) || preWin.querySelector('button, .button, .btn, .pre-captcha__button');
                     if (resolveBtn && isVisibleCaptchaElement(resolveBtn)) {
-                        await humanClickAsync(resolveBtn);
+                        await humanClickAsync(resolveBtn, { jitter: false, answerClick: false });
                         if (window.logExp) {
                             window.logExp(`🧩 Kliknięto przycisk „Rozwiąż test/teraz” przez vx/vy (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
                         }
