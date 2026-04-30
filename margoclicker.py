@@ -25,6 +25,14 @@ try:
     import pyautogui
 except ModuleNotFoundError:
     pyautogui = None
+try:
+    import cv2
+except ModuleNotFoundError:
+    cv2 = None
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    np = None
 
 try:
     from flask import Flask, jsonify, make_response, request, send_file
@@ -129,6 +137,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "disable_randomness": False,
     "calibration": {},
     "manual_click_points": {},
+    "vision_enabled": False,
+    "vision_threshold": 0.85,
+    "vision_templates_dir": "templates",
+    "vision_debug": False,
+    "vision_fallback_manual": True,
 }
 config: Dict[str, Any] = dict(DEFAULT_CONFIG)
 
@@ -374,6 +387,18 @@ def client_to_screen_point(hwnd: int, x: float, y: float) -> Optional[Tuple[int,
     if ctypes.windll.user32.ClientToScreen(hwnd, ctypes.byref(pt)) == 0:
         return None
     return int(pt.x), int(pt.y)
+
+
+def screen_to_client_point(hwnd: int, x: int, y: int) -> Optional[Tuple[int, int]]:
+    try:
+        if not _is_valid_hwnd(hwnd):
+            return None
+        pt = POINT(int(x), int(y))
+        if ctypes.windll.user32.ScreenToClient(hwnd, ctypes.byref(pt)) == 0:
+            return None
+        return int(pt.x), int(pt.y)
+    except Exception:
+        return None
 
 
 def get_window_geometry(hwnd: int) -> Optional[WindowGeometry]:
@@ -756,6 +781,87 @@ def capture_client_area(hwnd: int) -> Optional[Path]:
     return out_path
 
 
+def find_template_in_client(hwnd: int, template_name: str) -> Optional[Tuple[int, int]]:
+    try:
+        with config_lock:
+            threshold = float(config.get("vision_threshold", 0.85))
+            templates_dir = str(config.get("vision_templates_dir", "templates")).strip() or "templates"
+            debug_enabled = bool(config.get("vision_debug", False))
+
+        if cv2 is None or np is None or pyautogui is None:
+            return None
+
+        screenshot_path = capture_client_area(hwnd)
+        if not screenshot_path or not screenshot_path.exists():
+            return None
+
+        template_path = Path(templates_dir) / template_name
+        if template_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp"}:
+            template_path = template_path.with_suffix(".png")
+        if not template_path.is_absolute():
+            template_path = SETTINGS_PATH.parent / template_path
+        if not template_path.exists():
+            return None
+
+        screenshot = cv2.imread(str(screenshot_path), cv2.IMREAD_COLOR)
+        template = cv2.imread(str(template_path), cv2.IMREAD_COLOR)
+        if screenshot is None or template is None:
+            return None
+
+        result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+        _min_val, max_val, _min_loc, max_loc = cv2.minMaxLoc(result)
+        if float(max_val) < threshold:
+            return None
+
+        h, w = template.shape[:2]
+        center_x = int(max_loc[0] + w / 2)
+        center_y = int(max_loc[1] + h / 2)
+
+        if debug_enabled:
+            try:
+                vis = screenshot.copy()
+                cv2.rectangle(vis, max_loc, (max_loc[0] + w, max_loc[1] + h), (0, 0, 255), 2)
+                cv2.circle(vis, (center_x, center_y), 5, (0, 255, 0), -1)
+                out_dbg = SETTINGS_PATH.with_name(f"vision_debug_{template_name}_{int(time.time())}.png")
+                cv2.imwrite(str(out_dbg), vis)
+            except Exception:
+                pass
+        return center_x, center_y
+    except Exception:
+        return None
+
+
+def click_template(template_name: str, fallback_point: Optional[str] = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    try:
+        with config_lock:
+            vision_enabled = bool(config.get("vision_enabled", False))
+            fallback_manual = bool(config.get("vision_fallback_manual", True))
+
+        hwnd = resolve_target_window()
+        if not hwnd:
+            return False, "NO_TARGET_WINDOW", None
+
+        if vision_enabled:
+            point = find_template_in_client(hwnd, template_name)
+            if point:
+                ok, msg, payload = click_in_game(point[0], point[1], label=f"vision_{template_name}", use_manual_offset=False)
+                return ok, msg, payload
+
+        if fallback_manual and fallback_point:
+            geom = get_window_geometry(hwnd)
+            if not geom:
+                return False, "NO_GEOMETRY", None
+            cw = geom.client_rect["right"] - geom.client_rect["left"]
+            ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+            ratio = TEST_POINT_PRESETS.get(fallback_point, (0.50, 0.50))
+            px, py = resolve_click_point(fallback_point, ratio, cw, ch)
+            return click_in_game(px, py, label=f"fallback_{fallback_point}", use_manual_offset=False)
+
+        return False, "TEMPLATE_NOT_FOUND", None
+    except Exception as e:
+        return False, f"ERROR: {e}", None
+
+
 def draw_overlay_rect(root: tk.Tk, x: int, y: int, w: int, h: int, color: str = "#ff3333", duration_ms: int = 1300) -> None:
     overlay = tk.Toplevel(root)
     overlay.overrideredirect(True)
@@ -980,6 +1086,25 @@ def pause_route():
     return jsonify({"ok": True, "paused": bool(runtime_state.get("paused"))}), 200
 
 
+@app.route("/vision/click", methods=["GET", "OPTIONS"])
+def vision_click_route():
+    if request.method == "OPTIONS":
+        return make_response("", 200)
+    with config_lock:
+        api_enabled = bool(config.get("api_enabled", True))
+    if runtime_state.get("paused") or not api_enabled:
+        return _api_blocked_response()
+    try:
+        name = (request.args.get("name") or "").strip().lower()
+        mapping = {"answer": "answer", "confirm": "confirm"}
+        if name not in mapping:
+            return jsonify({"ok": False, "status": "UNSUPPORTED_TEMPLATE"}), 400
+        ok, msg, payload = click_template(name, fallback_point=mapping[name])
+        return jsonify({"ok": ok, "status": msg, "payload": payload}), (200 if ok else 404)
+    except Exception as e:
+        return jsonify({"ok": False, "status": "ERROR", "error": str(e)}), 500
+
+
 # =========================
 # GUI
 # =========================
@@ -1006,6 +1131,11 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     normalized["target_class_name"] = str(normalized.get("target_class_name", "")).strip()
     normalized["target_monitor_name"] = str(normalized.get("target_monitor_name", "")).strip()
     normalized["hotkey"] = str(normalized.get("hotkey", "f9")).strip().lower() or "f9"
+    normalized["vision_templates_dir"] = str(normalized.get("vision_templates_dir", "templates")).strip() or "templates"
+    normalized["vision_enabled"] = bool(normalized.get("vision_enabled", False))
+    normalized["vision_debug"] = bool(normalized.get("vision_debug", False))
+    normalized["vision_fallback_manual"] = bool(normalized.get("vision_fallback_manual", True))
+    normalized["vision_threshold"] = float(normalized.get("vision_threshold", 0.85))
 
     for key in ["manual_offset_y", "answer_offset_y"]:
         normalized[key] = float(normalized.get(key, 0.0))
@@ -1067,6 +1197,7 @@ def launch_gui() -> None:
     hold_min_var = tk.StringVar(value=str(cfg.get("click_hold_ms_min", 60)))
     hold_max_var = tk.StringVar(value=str(cfg.get("click_hold_ms_max", 130)))
     jitter_var = tk.StringVar(value=str(cfg.get("click_jitter_px", 3)))
+    vision_threshold_var = tk.StringVar(value=str(cfg.get("vision_threshold", 0.85)))
 
     use_client_var = tk.BooleanVar(value=bool(cfg.get("use_client_area", True)))
     api_enabled_var = tk.BooleanVar(value=bool(cfg.get("api_enabled", True)))
@@ -1076,6 +1207,7 @@ def launch_gui() -> None:
     answer_off_var = tk.BooleanVar(value=bool(cfg.get("answer_offset_enabled", False)))
     no_random_var = tk.BooleanVar(value=bool(cfg.get("disable_randomness", False)))
     click_msg_var = tk.BooleanVar(value=bool(cfg.get("use_virtual_mouse", False)))
+    vision_enabled_var = tk.BooleanVar(value=bool(cfg.get("vision_enabled", False)))
 
     ttk.Label(frame, text="MargoClicker – Diagnostyka i stabilne targetowanie okna", style="Dark.TLabel").pack(anchor="w", pady=(0, 6))
 
@@ -1114,6 +1246,9 @@ def launch_gui() -> None:
     ttk.Entry(flags, textvariable=answer_offset_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
     ttk.Checkbutton(flags, text="tryb bez losowości", variable=no_random_var).pack(side=tk.LEFT)
     ttk.Checkbutton(flags, text="Użyj wirtualnej myszki (w tle)", variable=click_msg_var).pack(side=tk.LEFT, padx=8)
+    ttk.Checkbutton(flags, text="Vision enabled", variable=vision_enabled_var).pack(side=tk.LEFT, padx=8)
+    ttk.Label(flags, text="Vision threshold:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
+    ttk.Entry(flags, textvariable=vision_threshold_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
 
     # Diagnostyka - lista kandydatów
     diag_frame = ttk.LabelFrame(frame, text="Diagnostyka")
@@ -1142,6 +1277,7 @@ def launch_gui() -> None:
             hold_min = int(float(hold_min_var.get().strip()))
             hold_max = int(float(hold_max_var.get().strip()))
             jitter_px = int(float(jitter_var.get().strip()))
+            vision_threshold = float(vision_threshold_var.get().strip())
         except ValueError:
             status_var.set("Offset/Hold/Jitter muszą być liczbami")
             return
@@ -1165,6 +1301,8 @@ def launch_gui() -> None:
             config["click_jitter_px"] = max(0, jitter_px)
             config["disable_randomness"] = bool(no_random_var.get())
             config["use_virtual_mouse"] = bool(click_msg_var.get())
+            config["vision_enabled"] = bool(vision_enabled_var.get())
+            config["vision_threshold"] = max(0.0, min(1.0, vision_threshold))
             config["hide_console_on_start"] = bool(hide_console_var.get())
         save_settings_to_disk()
         register_hotkey()
