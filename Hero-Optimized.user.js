@@ -10391,24 +10391,18 @@ window.openShopAsync = async (namePart) => {
             }
         }
 
-        async function clickCaptchaAnswerViaVision(index = 0) {
-            const ok = await fetchVisionEndpoint(`http://127.0.0.1:5000/vision/click_answer?index=${encodeURIComponent(index)}`);
-            HERO_LOG.info("Captcha answer Vision click", { index, ok });
-            return ok;
-        }
-
-        async function clickConfirmViaVision() {
-            const ok = await fetchVisionEndpoint("http://127.0.0.1:5000/vision/click_confirm");
-            HERO_LOG.info("Captcha confirm Vision click", { ok });
+        async function triggerVisionAnswersScan() {
+            const ok = await fetchVisionEndpoint("http://127.0.0.1:5000/vision/answers");
+            HERO_LOG.info("Captcha Vision answers scan", { ok });
             return ok;
         }
 
         function humanClickAsync(el, options = {}) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
-                clickCaptchaAnswerViaVision(0)
+                triggerVisionAnswersScan()
                     .then((ok) => {
-                        if (ok && window.logExp) window.logExp("🤖 Klik odpowiedzi przez /vision/click_answer?index=0.", "#e040fb");
+                        if (ok && window.logExp) window.logExp("🤖 Wymuszono skan odpowiedzi przez /vision/answers.", "#e040fb");
                         if (!ok) el.classList.add('pressed', 'active');
                         resolve();
                     })
