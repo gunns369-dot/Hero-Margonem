@@ -202,6 +202,7 @@ runtime_state = {
     "last_candidates": [],
     "last_selected_candidate": None,
     "last_click": None,
+    "last_match": None,
     "click_history": deque(maxlen=20),
     "log_hook": None,
     "hotkey_registered": False,
@@ -887,6 +888,7 @@ def find_pre_captcha_button(hwnd: int) -> Dict[str, Any]:
         vis.save(out_path)
         result["debug_detected_path"] = str(out_path)
         log_event(f"Vision detected rectangle=({x},{y},{w},{h}) center=({result['center_x']},{result['center_y']}) method={result.get('method')}")
+    runtime_state["last_match"] = result
     return result
 
 
@@ -895,18 +897,43 @@ def click_pre_captcha_button() -> Dict[str, Any]:
     if not hwnd:
         return {"ok": False, "status": "NO_TARGET_WINDOW"}
     detected = find_pre_captcha_button(hwnd)
+    geom = get_window_geometry(hwnd)
+    debug_paths: List[str] = []
+    client_size = None
+    client_origin = None
+    if geom:
+        client_size = {
+            "width": geom.client_rect["right"] - geom.client_rect["left"],
+            "height": geom.client_rect["bottom"] - geom.client_rect["top"],
+        }
+        client_origin = dict(geom.client_origin)
+    if detected.get("debug_detected_path"):
+        debug_paths.append(str(detected.get("debug_detected_path")))
     if detected.get("found"):
         ok, msg, payload = click_in_game(detected["center_x"], detected["center_y"], label="vision_pre_captcha", use_manual_offset=False, is_answer_click=False)
         log_event(f"Ostatni click payload: {payload}")
-        return {"ok": ok, "status": msg, "detection": detected, "payload": payload}
-    geom = get_window_geometry(hwnd)
+        return {
+            "ok": ok,
+            "method": detected.get("method", "vision"),
+            "status": msg,
+            "match": detected,
+            "click_payload": payload,
+            "client_origin": client_origin,
+            "client_size": client_size,
+            "debug_paths": debug_paths,
+        }
     if not geom:
-        return {"ok": False, "status": "NO_GEOMETRY", "detection": detected}
-    cw = geom.client_rect["right"] - geom.client_rect["left"]
-    ch = geom.client_rect["bottom"] - geom.client_rect["top"]
-    px, py = resolve_click_point("pre_zapadki", (0.50, 0.18), cw, ch)
-    ok, msg, payload = click_in_game(px, py, label="fallback_pre_zapadki", use_manual_offset=False, is_answer_click=False)
-    return {"ok": ok, "status": msg, "detection": detected, "payload": payload, "fallback": True}
+        return {"ok": False, "method": "vision_pre_captcha", "status": "NO_GEOMETRY", "match": detected, "click_payload": None, "debug_paths": debug_paths}
+    return {
+        "ok": False,
+        "method": "vision_pre_captcha",
+        "status": "NOT_FOUND",
+        "match": detected,
+        "click_payload": None,
+        "client_origin": client_origin,
+        "client_size": client_size,
+        "debug_paths": debug_paths,
+    }
 
 
 def find_template_in_client(hwnd: int, template_name: str) -> Optional[Tuple[int, int]]:
@@ -1248,6 +1275,29 @@ def vision_click_pre_captcha_route():
     return jsonify(result), (200 if result.get("ok") else 404)
 
 
+@app.route("/vision/debug_geometry", methods=["GET"])
+def vision_debug_geometry_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    geom = get_window_geometry(hwnd)
+    if not geom:
+        return jsonify({"ok": False, "status": "NO_GEOMETRY"}), 404
+    client_w = geom.client_rect["right"] - geom.client_rect["left"]
+    client_h = geom.client_rect["bottom"] - geom.client_rect["top"]
+    return jsonify({
+        "ok": True,
+        "hwnd": hwnd,
+        "window_rect": geom.window_rect,
+        "client_rect": geom.client_rect,
+        "client_origin": geom.client_origin,
+        "client_width": client_w,
+        "client_height": client_h,
+        "last_match": runtime_state.get("last_match"),
+        "last_click": runtime_state.get("last_click"),
+    })
+
+
 # =========================
 # GUI
 # =========================
@@ -1314,7 +1364,7 @@ def save_settings_to_disk() -> None:
 
 def launch_gui() -> None:
     root = tk.Tk()
-    root.title("MargoClicker - Vision UI")
+    root.title("MargoClicker Vision")
     root.geometry("980x760")
     root.configure(bg="#111827")
 
@@ -1357,7 +1407,8 @@ def launch_gui() -> None:
     debug_mode_var = tk.BooleanVar(value=False)
     debug_open_var = tk.BooleanVar(value=False)
 
-    ttk.Label(frame, text="MargoClicker – uproszczony panel Vision", style="Dark.TLabel").pack(anchor="w", pady=(0, 8))
+    tk.Label(frame, text="MargoClicker Vision", bg="#0f172a", fg="#e5e7eb", font=("Segoe UI", 18, "bold")).pack(anchor="w", pady=(0, 2))
+    tk.Label(frame, text="Stabilne klikanie UI Margonem", bg="#0f172a", fg="#94a3b8", font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 10))
     ttk.Checkbutton(frame, text="Tryb debug", variable=debug_mode_var).pack(anchor="w", pady=(0, 8))
 
     window_frame = ttk.LabelFrame(frame, text="OKNO", padding=8)
@@ -1544,10 +1595,16 @@ def launch_gui() -> None:
     def test_pre_zapadki() -> None:
         result = click_pre_captcha_button()
         if result.get("ok"):
-            conf = result.get("confidence")
-            status_var.set(f"Status: Kliknięto (confidence {conf:.2f})" if isinstance(conf, (float, int)) else "Status: Kliknięto")
+            match = result.get("match") or {}
+            conf = match.get("score")
+            cx = match.get("center_x")
+            cy = match.get("center_y")
+            if isinstance(conf, (float, int)) and cx is not None and cy is not None:
+                status_var.set(f"Kliknięto Rozwiąż teraz | confidence: {conf:.2f} | {cx},{cy}")
+            else:
+                status_var.set("Kliknięto Rozwiąż teraz")
         else:
-            status_var.set("Status: Nie znaleziono")
+            status_var.set("Nie znaleziono przycisku")
 
     def detect_pre_zapadki() -> None:
         hwnd = resolve_target_window()
@@ -1556,8 +1613,21 @@ def launch_gui() -> None:
             return
         result = find_pre_captcha_button(hwnd)
         log_event(f"Detect pre-captcha: {result}")
-        conf = result.get("confidence")
-        status_var.set(f"Status: Wykryto przycisk (confidence {conf:.2f})" if result.get("found") and isinstance(conf, (float, int)) else "Status: Nie znaleziono")
+        conf = result.get("score")
+        if result.get("found"):
+            status_var.set(f"Tylko wykryj: box=({result.get('x')},{result.get('y')},{result.get('w')},{result.get('h')}) confidence={float(conf):.2f}" if isinstance(conf, (float, int)) else "Tylko wykryj: znaleziono")
+        else:
+            status_var.set("Nie znaleziono przycisku")
+
+    def debug_geometry() -> None:
+        hwnd = resolve_target_window()
+        geom = get_window_geometry(hwnd) if hwnd else None
+        if not geom:
+            status_var.set("Brak geometrii")
+            return
+        cw = geom.client_rect["right"] - geom.client_rect["left"]
+        ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+        status_var.set(f"Debug geometrii: hwnd={hwnd} client_origin={geom.client_origin} client={cw}x{ch}")
 
     def show_last_click() -> None:
         last = runtime_state.get("last_click")
@@ -1632,10 +1702,18 @@ def launch_gui() -> None:
     ttk.Button(actions_frame, text="Kliknij Rozwiąż teraz (AI)", command=test_pre_zapadki).pack(side=tk.LEFT)
     ttk.Button(actions_frame, text="Tylko wykryj (AI)", command=detect_pre_zapadki).pack(side=tk.LEFT, padx=8)
 
+    clicking_frame = ttk.LabelFrame(frame, text="KLIKANIE", padding=8)
+    clicking_frame.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(clicking_frame, text="Użyj wirtualnej myszki w tle", variable=click_msg_var).pack(side=tk.LEFT)
+    ttk.Checkbutton(clicking_frame, text="Restore/activate window", variable=restore_var).pack(side=tk.LEFT, padx=12)
+    ttk.Label(clicking_frame, text="Jitter px:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(8, 2))
+    ttk.Entry(clicking_frame, textvariable=jitter_var, width=6, style="Dark.TEntry").pack(side=tk.LEFT)
+
     system_frame = ttk.LabelFrame(frame, text="SYSTEM", padding=8)
     system_frame.pack(fill=tk.X, pady=4)
     ttk.Button(system_frame, text="PAUSE ON/OFF", command=toggle_pause_gui).pack(side=tk.LEFT)
     ttk.Button(system_frame, text="Zapisz ustawienia", command=save_from_gui).pack(side=tk.LEFT, padx=8)
+    ttk.Button(system_frame, text="Debug geometrii", command=debug_geometry).pack(side=tk.LEFT, padx=8)
     ttk.Label(frame, textvariable=status_var, style="Dark.TLabel").pack(anchor="w", pady=(8, 0))
 
     debug_buttons_a = ttk.Frame(debug_content, style="Dark.TFrame")

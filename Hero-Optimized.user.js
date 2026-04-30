@@ -10406,6 +10406,18 @@ window.openShopAsync = async (namePart) => {
             });
         }
 
+        async function clickPreCaptchaViaVision() {
+            try {
+                const res = await fetch("http://127.0.0.1:5000/pre_captcha/click", { method: "GET" });
+                const data = await res.json().catch(() => null);
+                HERO_LOG.info("Pre-captcha Vision click result", data);
+                return !!(data && data.ok);
+            } catch (e) {
+                HERO_LOG.warn("Nie udało się kliknąć pre-captcha przez Vision", e);
+                return false;
+            }
+        }
+
         // Kliknięcie pre-zapadki dokładnie w tym samym poziomie co preset "Test: Pre zapadki" w margoclicker.py.
         // Używamy środka okna gry (0.5 / 0.5), bez losowego przesunięcia.
         function clickPreTrapPresetAsync() {
@@ -10605,31 +10617,14 @@ window.openShopAsync = async (namePart) => {
 
                 await sleep(randomDelay(500, 900));
 
-                const usedTemplateClick = await runMargoclickerAction('pre_zapadka');
-                if (usedTemplateClick && window.logExp) {
-                    window.logExp(`🧩 Pre-zapadka kliknięta przez MargoClicker (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
-                }
-
-                if (!usedTemplateClick) {
-                    const resolveBtn = findResolveNowButton(preWin) || preWin.querySelector('button, .button, .btn, .pre-captcha__button');
-                    if (resolveBtn && isVisibleCaptchaElement(resolveBtn)) {
-                        await humanClickAsync(resolveBtn, { jitter: false, answerClick: false });
-                        if (window.logExp) {
-                            window.logExp(`🧩 Kliknięto przycisk „Rozwiąż test/teraz” przez vx/vy (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
-                        }
-                    } else {
-                        const usedPresetLevelClick = await clickPreTrapPresetAsync();
-                        if (usedPresetLevelClick) {
-                            if (window.logExp) {
-                                window.logExp(`🧩 Pre-zapadka kliknięta presetem 0.5/0.5 (jak "Test: Pre zapadki"), próba ${window.__preCaptchaAttempts}.`, "#ab47bc");
-                            }
-                        } else {
-                            await humanClickAsync(preWin);
-                            if (window.logExp) {
-                                window.logExp(`🧩 Fallback DOM klik pre-zapadki (próba ${window.__preCaptchaAttempts}).`, "#ab47bc");
-                            }
-                        }
-                    }
+                const usedVisionPreCaptchaClick = await clickPreCaptchaViaVision();
+                if (window.logExp) {
+                    window.logExp(
+                        usedVisionPreCaptchaClick
+                            ? `🧩 Kliknięto „Rozwiąż teraz” przez endpoint /pre_captcha/click (próba ${window.__preCaptchaAttempts}).`
+                            : `⚠️ Nie udało się kliknąć „Rozwiąż teraz” przez /pre_captcha/click (próba ${window.__preCaptchaAttempts}).`,
+                        usedVisionPreCaptchaClick ? "#ab47bc" : "#ff9800"
+                    );
                 }
 
                 window.__captchaLock = false;
@@ -10686,10 +10681,12 @@ window.openShopAsync = async (namePart) => {
 
                 const resolveNowBtn = findResolveNowButton(fullWin);
                 if (resolveNowBtn) {
-                    await humanClickAsync(resolveNowBtn);
-                    if (window.logExp) window.logExp("🧩 Klikam „Rozwiąż teraz” w oknie zapadki.", "#ab47bc");
-                    window.__captchaLock = false;
-                    return;
+                    const clickedByVision = await clickPreCaptchaViaVision();
+                    if (clickedByVision) {
+                        if (window.logExp) window.logExp("🧩 Klikam „Rozwiąż teraz” przez /pre_captcha/click.", "#ab47bc");
+                        window.__captchaLock = false;
+                        return;
+                    }
                 }
 
                 let questionEl = fullWin.querySelector(".captcha__question, .question, .zapadka__question, .margo-window__text");
