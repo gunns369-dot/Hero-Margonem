@@ -965,7 +965,8 @@ def test_points():
 
     results = []
     for name, (rx, ry) in TEST_POINT_PRESETS.items():
-        ok, msg, payload = click_in_game(cw * rx, ch * ry, label=f"test_{name}")
+        px, py = resolve_click_point(name, (rx, ry), cw, ch)
+        ok, msg, payload = click_in_game(px, py, label=f"test_{name}")
         results.append({"name": name, "ok": ok, "msg": msg, "payload": payload})
         time.sleep(0.12)
     return jsonify({"status": "OK", "results": results})
@@ -1263,7 +1264,8 @@ def launch_gui() -> None:
         cw = geom.client_rect["right"] - geom.client_rect["left"]
         ch = geom.client_rect["bottom"] - geom.client_rect["top"]
         for name, (rx, ry) in TEST_POINT_PRESETS.items():
-            ok, msg, payload = click_in_game(cw * rx, ch * ry, label=f"gui_{name}")
+            px, py = resolve_click_point(name, (rx, ry), cw, ch)
+            ok, msg, payload = click_in_game(px, py, label=f"gui_{name}")
             log_event(f"TEST {name}: {msg} -> {payload}")
             if not ok:
                 status_var.set(f"Test punktu {name} nieudany")
@@ -1281,7 +1283,7 @@ def launch_gui() -> None:
         ch = geom.client_rect["bottom"] - geom.client_rect["top"]
         rx, ry = TEST_POINT_PRESETS.get("pre_zapadki", (0.50, 0.50))
         px, py = resolve_click_point("pre_zapadki", (rx, ry), cw, ch)
-        ok, msg, payload = click_in_game(px, py, label="gui_pre_zapadki")
+        ok, msg, payload = click_in_game(px, py, label="gui_pre_zapadki", use_manual_offset=False)
         if ok:
             status_var.set(f"Pre zapadki klik: {payload}")
         else:
@@ -1323,7 +1325,11 @@ def launch_gui() -> None:
                 points = config.setdefault("manual_click_points", {})
                 points[point_key] = {"x": cx, "y": cy}
             save_settings_to_disk()
-            root.after(0, lambda: status_var.set(f"Zapisano {point_label}: client=({cx}, {cy})"))
+            persisted = get_manual_click_point(point_key)
+            if persisted and persisted.get("x") == cx and persisted.get("y") == cy:
+                root.after(0, lambda: status_var.set(f"Zapisano {point_label}: client=({cx}, {cy})"))
+            else:
+                root.after(0, lambda: status_var.set(f"Błąd weryfikacji zapisu {point_label}"))
 
         threading.Thread(target=_worker, daemon=True).start()
 
