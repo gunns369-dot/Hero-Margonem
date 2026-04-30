@@ -1314,8 +1314,8 @@ def save_settings_to_disk() -> None:
 
 def launch_gui() -> None:
     root = tk.Tk()
-    root.title("MargoClicker - Windows target diagnostics")
-    root.geometry("1180x860")
+    root.title("MargoClicker - Vision UI")
+    root.geometry("980x760")
     root.configure(bg="#111827")
 
     style = ttk.Style(root)
@@ -1325,13 +1325,13 @@ def launch_gui() -> None:
     style.configure("Dark.TButton", background="#2563eb", foreground="white", padding=(8, 5))
     style.configure("Dark.TEntry", fieldbackground="#1f2937", foreground="#f9fafb", insertcolor="#f9fafb")
 
-    frame = ttk.Frame(root, style="Dark.TFrame", padding=10)
+    frame = ttk.Frame(root, style="Dark.TFrame", padding=12)
     frame.pack(fill=tk.BOTH, expand=True)
 
     with config_lock:
         cfg = dict(config)
 
-    status_var = tk.StringVar(value="Serwer: http://127.0.0.1:5000")
+    status_var = tk.StringVar(value="Status: gotowy")
     keyword_var = tk.StringVar(value=cfg["window_keyword"])
     launch_cmd_var = tk.StringVar(value=cfg.get("launch_command", ""))
     url_hint_var = tk.StringVar(value=cfg.get("browser_url_hint", ""))
@@ -1353,52 +1353,33 @@ def launch_gui() -> None:
     answer_off_var = tk.BooleanVar(value=bool(cfg.get("answer_offset_enabled", False)))
     no_random_var = tk.BooleanVar(value=bool(cfg.get("disable_randomness", False)))
     click_msg_var = tk.BooleanVar(value=bool(cfg.get("use_virtual_mouse", False)))
-    vision_enabled_var = tk.BooleanVar(value=bool(cfg.get("vision_enabled", False)))
+    vision_enabled_var = tk.BooleanVar(value=bool(cfg.get("vision_enabled", True)))
+    debug_mode_var = tk.BooleanVar(value=False)
+    debug_open_var = tk.BooleanVar(value=False)
 
-    ttk.Label(frame, text="MargoClicker – Diagnostyka i stabilne targetowanie okna", style="Dark.TLabel").pack(anchor="w", pady=(0, 6))
+    ttk.Label(frame, text="MargoClicker – uproszczony panel Vision", style="Dark.TLabel").pack(anchor="w", pady=(0, 8))
+    ttk.Checkbutton(frame, text="Tryb debug", variable=debug_mode_var).pack(anchor="w", pady=(0, 8))
 
-    controls = ttk.Frame(frame, style="Dark.TFrame")
-    controls.pack(fill=tk.X, pady=6)
+    window_frame = ttk.LabelFrame(frame, text="OKNO", padding=8)
+    window_frame.pack(fill=tk.X, pady=4)
+    ttk.Label(window_frame, text="Fraza tytułu:", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Entry(window_frame, textvariable=keyword_var, width=34, style="Dark.TEntry").grid(row=0, column=1, sticky="w", padx=6)
+    ttk.Label(window_frame, text="Tryb wyboru:", style="Dark.TLabel").grid(row=0, column=2, sticky="w")
+    ttk.Combobox(window_frame, textvariable=mode_var, values=["auto", "title", "process", "picked"], width=12).grid(row=0, column=3, sticky="w", padx=6)
 
-    ttk.Label(controls, text="Fraza tytułu:", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Entry(controls, textvariable=keyword_var, width=34, style="Dark.TEntry").grid(row=0, column=1, sticky="w", padx=6)
-    ttk.Label(controls, text="Tryb wyboru:", style="Dark.TLabel").grid(row=0, column=2, sticky="w")
-    ttk.Combobox(controls, textvariable=mode_var, values=["auto", "title", "process", "picked"], width=12).grid(row=0, column=3, sticky="w", padx=6)
-    ttk.Label(controls, text="Process hint:", style="Dark.TLabel").grid(row=0, column=4, sticky="w")
-    ttk.Entry(controls, textvariable=process_var, width=16, style="Dark.TEntry").grid(row=0, column=5, sticky="w", padx=6)
+    vision_frame = ttk.LabelFrame(frame, text="VISION", padding=8)
+    vision_frame.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(vision_frame, text="Vision enabled", variable=vision_enabled_var).grid(row=0, column=0, sticky="w")
+    ttk.Label(vision_frame, text="Threshold:", style="Dark.TLabel").grid(row=0, column=1, sticky="w", padx=(12, 0))
+    ttk.Entry(vision_frame, textvariable=vision_threshold_var, width=8, style="Dark.TEntry").grid(row=0, column=2, sticky="w", padx=6)
 
-    ttk.Label(controls, text="launch_command:", style="Dark.TLabel").grid(row=1, column=0, sticky="w", pady=(6, 0))
-    ttk.Entry(controls, textvariable=launch_cmd_var, width=62, style="Dark.TEntry").grid(row=1, column=1, columnspan=3, sticky="w", padx=6, pady=(6, 0))
-    ttk.Label(controls, text="browser_url_hint:", style="Dark.TLabel").grid(row=1, column=4, sticky="w", pady=(6, 0))
-    ttk.Entry(controls, textvariable=url_hint_var, width=26, style="Dark.TEntry").grid(row=1, column=5, sticky="w", padx=6, pady=(6, 0))
-    ttk.Label(controls, text="Hotkey pause:", style="Dark.TLabel").grid(row=2, column=0, sticky="w", pady=(6, 0))
-    ttk.Entry(controls, textvariable=hotkey_var, width=12, style="Dark.TEntry").grid(row=2, column=1, sticky="w", padx=6, pady=(6, 0))
-    ttk.Label(controls, text="Hold min/max ms:", style="Dark.TLabel").grid(row=2, column=2, sticky="w", pady=(6, 0))
-    ttk.Entry(controls, textvariable=hold_min_var, width=8, style="Dark.TEntry").grid(row=2, column=3, sticky="w", padx=(6, 2), pady=(6, 0))
-    ttk.Entry(controls, textvariable=hold_max_var, width=8, style="Dark.TEntry").grid(row=2, column=3, sticky="w", padx=(74, 6), pady=(6, 0))
-    ttk.Label(controls, text="Jitter px:", style="Dark.TLabel").grid(row=2, column=4, sticky="w", pady=(6, 0))
-    ttk.Entry(controls, textvariable=jitter_var, width=8, style="Dark.TEntry").grid(row=2, column=5, sticky="w", padx=6, pady=(6, 0))
-
-    flags = ttk.Frame(frame, style="Dark.TFrame")
-    flags.pack(fill=tk.X, pady=(4, 6))
-    ttk.Checkbutton(flags, text="mapowanie do client-area", variable=use_client_var).pack(side=tk.LEFT)
-    ttk.Checkbutton(flags, text="API włączone", variable=api_enabled_var).pack(side=tk.LEFT, padx=8)
-    ttk.Checkbutton(flags, text="restore/activate window", variable=restore_var).pack(side=tk.LEFT, padx=8)
-    ttk.Checkbutton(flags, text="manual offset", variable=manual_off_var).pack(side=tk.LEFT)
-    ttk.Label(flags, text="Y:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
-    ttk.Entry(flags, textvariable=offset_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
-    ttk.Checkbutton(flags, text="offset odpowiedzi", variable=answer_off_var).pack(side=tk.LEFT)
-    ttk.Label(flags, text="Y:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
-    ttk.Entry(flags, textvariable=answer_offset_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
-    ttk.Checkbutton(flags, text="tryb bez losowości", variable=no_random_var).pack(side=tk.LEFT)
-    ttk.Checkbutton(flags, text="Użyj wirtualnej myszki (w tle)", variable=click_msg_var).pack(side=tk.LEFT, padx=8)
-    ttk.Checkbutton(flags, text="Vision enabled", variable=vision_enabled_var).pack(side=tk.LEFT, padx=8)
-    ttk.Label(flags, text="Vision threshold:", style="Dark.TLabel").pack(side=tk.LEFT, padx=(4, 0))
-    ttk.Entry(flags, textvariable=vision_threshold_var, width=8, style="Dark.TEntry").pack(side=tk.LEFT, padx=(2, 8))
-
-    # Diagnostyka - lista kandydatów
-    diag_frame = ttk.LabelFrame(frame, text="Diagnostyka")
-    diag_frame.pack(fill=tk.BOTH, expand=True, pady=(6, 4))
+    debug_frame = ttk.LabelFrame(frame, text="DEBUG", padding=8)
+    debug_frame.pack(fill=tk.BOTH, expand=True, pady=(6, 4))
+    ttk.Checkbutton(debug_frame, text="▼ Debug", variable=debug_open_var).pack(anchor="w", pady=(0, 6))
+    debug_content = ttk.Frame(debug_frame, style="Dark.TFrame")
+    debug_content.pack(fill=tk.BOTH, expand=True)
+    diag_frame = ttk.LabelFrame(debug_content, text="Diagnostyka")
+    diag_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
 
     columns = ("hwnd", "title", "proc", "class", "monitor", "score", "client")
     tree = ttk.Treeview(diag_frame, columns=columns, show="headings", height=12)
@@ -1407,12 +1388,15 @@ def launch_gui() -> None:
         tree.column(col, width=w, anchor="w")
     tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
-    log_box = scrolledtext.ScrolledText(frame, height=12, bg="#0b1220", fg="#e5e7eb")
+    log_box = scrolledtext.ScrolledText(debug_content, height=12, bg="#0b1220", fg="#e5e7eb")
     log_box.pack(fill=tk.BOTH, expand=False, pady=(6, 2))
 
     def gui_log(msg: str) -> None:
-        log_box.insert(tk.END, msg + "\n")
-        log_box.see(tk.END)
+        if debug_mode_var.get():
+            log_box.insert(tk.END, msg + "\n")
+            log_box.see(tk.END)
+        else:
+            status_var.set(f"Status: {msg}")
 
     runtime_state["log_hook"] = gui_log
 
@@ -1452,7 +1436,7 @@ def launch_gui() -> None:
             config["hide_console_on_start"] = bool(hide_console_var.get())
         save_settings_to_disk()
         register_hotkey()
-        status_var.set("Zapisano ustawienia")
+        status_var.set("Status: zapisano ustawienia")
 
     def refresh_candidates() -> None:
         tree.delete(*tree.get_children())
@@ -1461,7 +1445,7 @@ def launch_gui() -> None:
             cw = c.client_rect["right"] - c.client_rect["left"]
             ch = c.client_rect["bottom"] - c.client_rect["top"]
             tree.insert("", tk.END, values=(c.hwnd, c.title[:70], c.process_name, c.class_name, f"{c.monitor_index}:{c.monitor_name}", f"{c.score:.1f}", f"{cw}x{ch}"))
-        status_var.set(f"Wykryto okna: {len(candidates)}")
+        status_var.set(f"Status: wykryto okna: {len(candidates)}")
 
     def pick_under_cursor_gui() -> None:
         status_var.set("Masz 3 sekundy aby najechać kursorem na docelowe okno...")
@@ -1559,7 +1543,11 @@ def launch_gui() -> None:
 
     def test_pre_zapadki() -> None:
         result = click_pre_captcha_button()
-        status_var.set(f"Vision pre-zapadki: {result}")
+        if result.get("ok"):
+            conf = result.get("confidence")
+            status_var.set(f"Status: Kliknięto (confidence {conf:.2f})" if isinstance(conf, (float, int)) else "Status: Kliknięto")
+        else:
+            status_var.set("Status: Nie znaleziono")
 
     def detect_pre_zapadki() -> None:
         hwnd = resolve_target_window()
@@ -1568,7 +1556,8 @@ def launch_gui() -> None:
             return
         result = find_pre_captcha_button(hwnd)
         log_event(f"Detect pre-captcha: {result}")
-        status_var.set(f"Detect pre-captcha: {result}")
+        conf = result.get("confidence")
+        status_var.set(f"Status: Wykryto przycisk (confidence {conf:.2f})" if result.get("found") and isinstance(conf, (float, int)) else "Status: Nie znaleziono")
 
     def show_last_click() -> None:
         last = runtime_state.get("last_click")
@@ -1638,52 +1627,57 @@ def launch_gui() -> None:
         ok, msg, payload = click_in_game(px, py, label="gui_confirm", use_manual_offset=False)
         status_var.set(f"Potwierdź klik: {payload}" if ok else f"Potwierdź błąd: {msg}")
 
-    btns1 = ttk.Frame(frame, style="Dark.TFrame")
-    btns1.pack(fill=tk.X, pady=(4, 2))
-    ttk.Button(btns1, text="Zapisz ustawienia", command=save_from_gui).pack(side=tk.LEFT)
-    ttk.Button(btns1, text="Pokaż wykryte okna", command=refresh_candidates).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns1, text="Odśwież kandydatów", command=refresh_candidates).pack(side=tk.LEFT)
-    ttk.Button(btns1, text="Wskaż okno myszą", command=pick_under_cursor_gui).pack(side=tk.LEFT, padx=6)
+    actions_frame = ttk.LabelFrame(frame, text="AKCJE", padding=8)
+    actions_frame.pack(fill=tk.X, pady=4)
+    ttk.Button(actions_frame, text="Kliknij Rozwiąż teraz (AI)", command=test_pre_zapadki).pack(side=tk.LEFT)
+    ttk.Button(actions_frame, text="Tylko wykryj (AI)", command=detect_pre_zapadki).pack(side=tk.LEFT, padx=8)
 
-    btns2 = ttk.Frame(frame, style="Dark.TFrame")
-    btns2.pack(fill=tk.X, pady=(2, 2))
-    ttk.Button(btns2, text="Test: zaznacz client-area", command=test_highlight_client).pack(side=tk.LEFT)
-    ttk.Button(btns2, text="Test: pokaż punkt kliknięcia", command=test_show_click_point).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns2, text="Zrzut client-area", command=snapshot_client).pack(side=tk.LEFT)
-    ttk.Button(btns2, text="Kalibracja aktywnego okna", command=calibrate_active).pack(side=tk.LEFT, padx=6)
+    system_frame = ttk.LabelFrame(frame, text="SYSTEM", padding=8)
+    system_frame.pack(fill=tk.X, pady=4)
+    ttk.Button(system_frame, text="PAUSE ON/OFF", command=toggle_pause_gui).pack(side=tk.LEFT)
+    ttk.Button(system_frame, text="Zapisz ustawienia", command=save_from_gui).pack(side=tk.LEFT, padx=8)
+    ttk.Label(frame, textvariable=status_var, style="Dark.TLabel").pack(anchor="w", pady=(8, 0))
 
-    btns3 = ttk.Frame(frame, style="Dark.TFrame")
-    btns3.pack(fill=tk.X, pady=(2, 4))
-    ttk.Button(btns3, text="PAUSE ON/OFF", command=toggle_pause_gui).pack(side=tk.LEFT)
-    ttk.Button(btns3, text="Test wszystkie punkty", command=run_test_points).pack(side=tk.LEFT)
-    ttk.Button(btns3, text="Vision: kliknij Rozwiąż teraz", command=test_pre_zapadki).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns3, text="Vision: tylko wykryj Rozwiąż teraz", command=detect_pre_zapadki).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns3, text="Test: Odpowiedź", command=test_answer_click).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns3, text="Test: Potwierdź", command=test_confirm_click).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns3, text="Pokaż współrzędne ostatniego kliknięcia", command=show_last_click).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns3, text="Eksport diagnostyki do JSON", command=export_diag).pack(side=tk.LEFT)
+    debug_buttons_a = ttk.Frame(debug_content, style="Dark.TFrame")
+    debug_buttons_a.pack(fill=tk.X, pady=(6, 2))
+    ttk.Button(debug_buttons_a, text="Pokaż wykryte okna", command=refresh_candidates).pack(side=tk.LEFT)
+    ttk.Button(debug_buttons_a, text="Wskaż okno myszą", command=pick_under_cursor_gui).pack(side=tk.LEFT, padx=6)
+    ttk.Button(debug_buttons_a, text="Test: zaznacz client-area", command=test_highlight_client).pack(side=tk.LEFT)
+    ttk.Button(debug_buttons_a, text="Test: pokaż punkt kliknięcia", command=test_show_click_point).pack(side=tk.LEFT, padx=6)
+    ttk.Button(debug_buttons_a, text="Zrzut client-area", command=snapshot_client).pack(side=tk.LEFT)
+    ttk.Button(debug_buttons_a, text="Kalibracja aktywnego okna", command=calibrate_active).pack(side=tk.LEFT, padx=6)
 
+    debug_buttons_b = ttk.Frame(debug_content, style="Dark.TFrame")
+    debug_buttons_b.pack(fill=tk.X, pady=(2, 2))
+    ttk.Button(debug_buttons_b, text="Test wszystkie punkty", command=run_test_points).pack(side=tk.LEFT)
+    ttk.Button(debug_buttons_b, text="Test odpowiedź", command=test_answer_click).pack(side=tk.LEFT, padx=6)
+    ttk.Button(debug_buttons_b, text="Test potwierdź", command=test_confirm_click).pack(side=tk.LEFT, padx=6)
+    ttk.Button(debug_buttons_b, text="pokaż współrzędne", command=show_last_click).pack(side=tk.LEFT, padx=6)
+    ttk.Button(debug_buttons_b, text="Eksport diagnostyki", command=export_diag).pack(side=tk.LEFT)
 
-    btns4 = ttk.Frame(frame, style="Dark.TFrame")
-    btns4.pack(fill=tk.X, pady=(2, 4))
-    ttk.Button(btns4, text="Ustaw punkt: Pre zapadka", command=lambda: save_manual_point("pre_zapadki", "Pre zapadka")).pack(side=tk.LEFT)
-    ttk.Button(btns4, text="Ustaw punkt: Odpowiedź", command=lambda: save_manual_point("answer", "Odpowiedź")).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns4, text="Ustaw punkt: Potwierdź", command=lambda: save_manual_point("confirm", "Potwierdź")).pack(side=tk.LEFT)
+    debug_buttons_c = ttk.Frame(debug_content, style="Dark.TFrame")
+    debug_buttons_c.pack(fill=tk.X, pady=(2, 4))
+    ttk.Button(debug_buttons_c, text="Ustaw punkt: Pre zapadka", command=lambda: save_manual_point("pre_zapadki", "Pre zapadka")).pack(side=tk.LEFT)
+    ttk.Button(debug_buttons_c, text="Ustaw punkt: Odpowiedź", command=lambda: save_manual_point("answer", "Odpowiedź")).pack(side=tk.LEFT, padx=6)
+    ttk.Button(debug_buttons_c, text="Ustaw punkt: Potwierdź", command=lambda: save_manual_point("confirm", "Potwierdź")).pack(side=tk.LEFT)
 
-    ttk.Label(frame, textvariable=status_var, style="Dark.TLabel").pack(anchor="w", pady=(4, 0))
-    ttk.Label(
-        frame,
-        text="W Chromium zakładki nie mają osobnego HWND - aktywowane jest całe okno przeglądarki. Dla stabilności uruchom grę w osobnym oknie.",
-        style="Dark.TLabel",
-        wraplength=1080,
-    ).pack(anchor="w", pady=(3, 0))
-    ttk.Label(
-        frame,
-        text="launch_command uruchamia program. browser_url_hint to wyłącznie notatka diagnostyczna i NIE jest używany do wykrywania okna.",
-        style="Dark.TLabel",
-        wraplength=1080,
-    ).pack(anchor="w", pady=(3, 0))
+    def toggle_debug_ui() -> None:
+        show_debug = debug_mode_var.get()
+        show_debug_content = show_debug and debug_open_var.get()
+        if show_debug:
+            debug_frame.pack(fill=tk.BOTH, expand=True, pady=(6, 4))
+        else:
+            debug_frame.pack_forget()
+        if show_debug_content:
+            debug_content.pack(fill=tk.BOTH, expand=True)
+        else:
+            debug_content.pack_forget()
 
+    debug_mode_var.trace_add("write", lambda *_: toggle_debug_ui())
+    debug_open_var.trace_add("write", lambda *_: toggle_debug_ui())
+    toggle_debug_ui()
+
+    save_from_gui()
     root.after(300, refresh_candidates)
     root.mainloop()
 
