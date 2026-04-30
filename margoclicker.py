@@ -153,6 +153,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "vision_templates_dir": "templates",
     "vision_debug": False,
     "vision_debug_save": True,
+    "vision_click_mode": "absolute",
+    "vision_min_confidence_to_label": 0.72,
     "pre_captcha_button_text": "Rozwiąż teraz",
     "vision_fallback_manual": True,
 }
@@ -814,6 +816,42 @@ def capture_client_pil(hwnd: int) -> Optional[Any]:
     return image
 
 
+def is_bad_capture(image: Any) -> Dict[str, Any]:
+    if image is None or np is None:
+        return {"is_bad": True, "brightness": 0.0, "variance": 0.0}
+    arr = np.array(image.convert("L")) if hasattr(image, "convert") else np.array(image)
+    brightness = float(arr.mean()) if arr.size else 0.0
+    variance = float(arr.var()) if arr.size else 0.0
+    is_bad = brightness < 5.0 or variance < 2.0
+    return {"is_bad": is_bad, "brightness": round(brightness, 3), "variance": round(variance, 3)}
+
+
+def capture_client_area_robust(hwnd: int) -> Dict[str, Any]:
+    image = capture_client_pil(hwnd)
+    if image is None:
+        return {"ok": False, "status": "CAPTURE_FAILED"}
+    quality = is_bad_capture(image)
+    return {"ok": not quality["is_bad"], "image": image, "method": "pyautogui", "quality": quality}
+
+
+def validate_click_coordinate_pipeline(hwnd: int, client_x: float, client_y: float) -> Dict[str, Any]:
+    screen_pt = client_to_screen_point(hwnd, client_x, client_y)
+    if not screen_pt:
+        return {"ok": False, "status": "CLIENT_TO_SCREEN_FAILED"}
+    roundtrip = screen_to_client_point(hwnd, int(screen_pt[0]), int(screen_pt[1]))
+    if not roundtrip:
+        return {"ok": False, "status": "SCREEN_TO_CLIENT_FAILED"}
+    dx = int(roundtrip[0] - int(round(client_x)))
+    dy = int(roundtrip[1] - int(round(client_y)))
+    return {
+        "input_client": {"x": int(round(client_x)), "y": int(round(client_y))},
+        "screen": {"x": int(screen_pt[0]), "y": int(screen_pt[1])},
+        "roundtrip_client": {"x": int(roundtrip[0]), "y": int(roundtrip[1])},
+        "delta": {"x": dx, "y": dy},
+        "ok": abs(dx) <= 2 and abs(dy) <= 2,
+    }
+
+
 def find_green_button_by_cv(image: Any) -> Dict[str, Any]:
     if cv2 is None or np is None or image is None:
         return {"found": False, "method": "green_button_cv", "reason": "MISSING_DEPS"}
@@ -896,6 +934,7 @@ def click_pre_captcha_button() -> Dict[str, Any]:
     hwnd = resolve_target_window()
     if not hwnd:
         return {"ok": False, "status": "NO_TARGET_WINDOW"}
+    ensure_window_ready(hwnd)
     detected = find_pre_captcha_button(hwnd)
     geom = get_window_geometry(hwnd)
     debug_paths: List[str] = []
@@ -910,7 +949,12 @@ def click_pre_captcha_button() -> Dict[str, Any]:
     if detected.get("debug_detected_path"):
         debug_paths.append(str(detected.get("debug_detected_path")))
     if detected.get("found"):
-        ok, msg, payload = click_in_game(detected["center_x"], detected["center_y"], label="vision_pre_captcha", use_manual_offset=False, is_answer_click=False)
+        mode = str(config.get("vision_click_mode", "absolute")).strip().lower()
+        if mode == "absolute":
+            click_result = click_detected_box(hwnd, detected, "vision_pre_captcha")
+            ok, msg, payload = click_result["ok"], click_result.get("status", "OK"), click_result.get("click_payload")
+        else:
+            ok, msg, payload = click_in_game(detected["center_x"], detected["center_y"], label="vision_pre_captcha", use_manual_offset=False, is_answer_click=False)
         log_event(f"Ostatni click payload: {payload}")
         return {
             "ok": ok,
@@ -934,6 +978,42 @@ def click_pre_captcha_button() -> Dict[str, Any]:
         "client_size": client_size,
         "debug_paths": debug_paths,
     }
+
+
+def click_detected_box(hwnd: int, box: Dict[str, Any], label: str) -> Dict[str, Any]:
+    cx = int(round(float(box.get("center_x", 0))))
+    cy = int(round(float(box.get("center_y", 0))))
+    geo = validate_click_coordinate_pipeline(hwnd, cx, cy)
+    if not geo.get("ok"):
+        return {"ok": False, "status": "GEOMETRY_MISMATCH", "geometry": geo}
+    sx, sy = geo["screen"]["x"], geo["screen"]["y"]
+    ok = perform_click(sx, sy, debug_label=label)
+    payload = {"client_x": cx, "client_y": cy, "screen_x": sx, "screen_y": sy, "method": "vision_absolute", "label": label}
+    runtime_state["last_click"] = payload
+    return {"ok": ok, "status": "OK" if ok else "CLICK_FAILED", "click_payload": payload, "geometry": geo}
+
+
+def find_captcha_answers(hwnd: int) -> Dict[str, Any]:
+    cap = capture_client_area_robust(hwnd)
+    if not cap.get("image"):
+        return {"ok": False, "answers": [], "status": "CAPTURE_FAILED"}
+    image = cap["image"]
+    answers: List[Dict[str, Any]] = []
+    if pytesseract is not None:
+        try:
+            data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+            for i, txt in enumerate(data.get("text", [])):
+                token = str(txt or "").strip()
+                if len(token) < 1:
+                    continue
+                x, y = int(data["left"][i]), int(data["top"][i])
+                w, h = int(data["width"][i]), int(data["height"][i])
+                if w < 20 or h < 10:
+                    continue
+                answers.append({"index": len(answers), "text": token, "x": x, "y": y, "w": w, "h": h, "center_x": x + w // 2, "center_y": y + h // 2, "confidence": 0.6})
+        except Exception:
+            pass
+    return {"ok": True, "answers": answers, "status": "OK", "capture_method": cap.get("method"), "quality": cap.get("quality")}
 
 
 def find_template_in_client(hwnd: int, template_name: str) -> Optional[Tuple[int, int]]:
@@ -1298,6 +1378,52 @@ def vision_debug_geometry_route():
     })
 
 
+@app.route("/vision/debug_coordinate", methods=["GET"])
+def vision_debug_coordinate_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    x = float(request.args.get("x", "100"))
+    y = float(request.args.get("y", "100"))
+    return jsonify(validate_click_coordinate_pipeline(hwnd, x, y))
+
+
+@app.route("/vision/answers", methods=["GET"])
+def vision_answers_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "answers": [], "status": "NO_TARGET_WINDOW"}), 404
+    return jsonify(find_captcha_answers(hwnd))
+
+
+@app.route("/vision/click_answer", methods=["GET"])
+def vision_click_answer_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    idx = int(request.args.get("index", "0"))
+    result = find_captcha_answers(hwnd)
+    answers = result.get("answers", [])
+    if idx < 0 or idx >= len(answers):
+        return jsonify({"ok": False, "status": "ANSWER_INDEX_OUT_OF_RANGE", "answers": answers}), 404
+    click = click_detected_box(hwnd, answers[idx], f"vision_answer_{idx}")
+    return jsonify({**click, "answer": answers[idx]})
+
+
+@app.route("/vision/click_answer_by_text", methods=["GET"])
+def vision_click_answer_by_text_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    query = (request.args.get("text") or "").strip().lower()
+    result = find_captcha_answers(hwnd)
+    for answer in result.get("answers", []):
+        if query and query in str(answer.get("text", "")).lower():
+            click = click_detected_box(hwnd, answer, "vision_answer_text")
+            return jsonify({**click, "answer": answer})
+    return jsonify({"ok": False, "status": "ANSWER_TEXT_NOT_FOUND", "answers": result.get("answers", [])}), 404
+
+
 # =========================
 # GUI
 # =========================
@@ -1331,6 +1457,9 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     normalized["vision_debug_save"] = bool(normalized.get("vision_debug_save", True))
     normalized["vision_fallback_manual"] = bool(normalized.get("vision_fallback_manual", True))
     normalized["vision_threshold"] = float(normalized.get("vision_threshold", 0.72))
+    normalized["vision_click_mode"] = str(normalized.get("vision_click_mode", "absolute")).strip().lower()
+    if normalized["vision_click_mode"] not in {"absolute", "client", "virtual"}:
+        normalized["vision_click_mode"] = "absolute"
     normalized["pre_captcha_button_text"] = str(normalized.get("pre_captcha_button_text", "Rozwiąż teraz")).strip() or "Rozwiąż teraz"
 
     for key in ["manual_offset_y", "answer_offset_y"]:

@@ -10369,41 +10369,14 @@ window.openShopAsync = async (namePart) => {
             return document.querySelector('#box, .interface-layer, .game-window, #engine, #game, #game-window') || document.body;
         }
 
-        function buildRelativeClickFromElement(el, options = {}) {
-            if (!el) return null;
-            const targetRect = el.getBoundingClientRect();
-            const gameContainer = getCaptchaGameContainer();
-            const gameRect = gameContainer.getBoundingClientRect();
-            if (!targetRect.width || !targetRect.height || !gameRect.width || !gameRect.height) return null;
-
-            const jitterX = options.jitter ? (Math.random() - 0.5) * (targetRect.width * 0.6) : 0;
-            const jitterY = options.jitter ? (Math.random() - 0.5) * (targetRect.height * 0.6) : 0;
-            const centerX = targetRect.left - gameRect.left + (targetRect.width / 2) + jitterX;
-            const centerY = targetRect.top - gameRect.top + (targetRect.height / 2) + jitterY;
-
-            const vx = Math.min(1, Math.max(0, centerX / gameRect.width));
-            const vy = Math.min(1, Math.max(0, centerY / gameRect.height));
-            return { vx, vy };
-        }
-
-        function sendCaptchaClick(vx, vy, options = {}) {
-            return new Promise((resolve) => {
-                const noOffset = options.noOffset === true ? '&no_offset=1' : '';
-                const answerClick = options.answerClick === true ? '&answer_click=1' : '';
-                const url = `http://127.0.0.1:5000/click?vx=${vx}&vy=${vy}${noOffset}${answerClick}`;
-                if (typeof GM_xmlhttpRequest !== 'undefined') {
-                    GM_xmlhttpRequest({
-                        method: "GET",
-                        url,
-                        onload: function() { resolve(true); },
-                        onerror: function() { resolve(false); }
-                    });
-                    return;
-                }
-                fetch(url)
-                    .then(() => resolve(true))
-                    .catch(() => resolve(false));
-            });
+        async function fetchVisionEndpoint(url) {
+            try {
+                const res = await fetch(url, { method: "GET", cache: "no-store", mode: "cors" });
+                const data = await res.json().catch(() => null);
+                return !!(res && res.ok && data && data.ok);
+            } catch (e) {
+                return false;
+            }
         }
 
         async function clickPreCaptchaViaVision() {
@@ -10418,23 +10391,17 @@ window.openShopAsync = async (namePart) => {
             }
         }
 
-        // Kliknięcie pre-zapadki dokładnie w tym samym poziomie co preset "Test: Pre zapadki" w margoclicker.py.
-        // Używamy środka okna gry (0.5 / 0.5), bez losowego przesunięcia.
-        function clickPreTrapPresetAsync() {
-            return sendCaptchaClick(0.5, 0.5);
+        // Wszystkie kliknięcia captcha/odpowiedzi idą przez Vision endpoints.
+        async function clickAnswerByVision(index = 0) {
+            return fetchVisionEndpoint(`http://127.0.0.1:5000/vision/click_answer?index=${encodeURIComponent(index)}`);
         }
 
-        // HYBRYDOWY SYMULATOR KLIKNIĘCIA (JS + PYTHON) - Skalowanie VM + Rozrzut
         function humanClickAsync(el, options = {}) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
-                const useJitter = options.jitter !== false;
-                const clickPoint = buildRelativeClickFromElement(el, { jitter: useJitter });
-                if (!clickPoint) return resolve();
-                const answerClick = options.answerClick === true;
-                sendCaptchaClick(clickPoint.vx, clickPoint.vy, { noOffset: true, answerClick })
+                clickAnswerByVision(0)
                     .then((ok) => {
-                        if (ok && window.logExp) window.logExp("🤖 Python strzela w losowy punkt celu (vx/vy).", "#e040fb");
+                        if (ok && window.logExp) window.logExp("🤖 Klik odpowiedzi przez /vision/click_answer?index=0.", "#e040fb");
                         if (!ok) el.classList.add('pressed', 'active');
                         resolve();
                     })
