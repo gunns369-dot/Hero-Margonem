@@ -245,6 +245,10 @@ runtime_state = {
     "watcher_state": "IDLE",
     "last_ocr_texts": [],
     "last_dataset_event": None,
+    "last_saved_by_kind": {"precaptcha": None, "answers": None, "confirm": None, "unknown": None, "failed": None},
+    "watcher_running": False,
+    "watcher_thread": None,
+    "force_answers_scan": False,
 }
 
 
@@ -1011,22 +1015,55 @@ def _image_hash(image: Any) -> str:
     return hashlib.md5(small.tobytes()).hexdigest()
 
 
-def should_save_sample(image: Any, kind: str, boxes: List[Dict[str, Any]], window_geometry: Dict[str, Any]) -> Tuple[bool, str, str]:
+def _hash_distance(a: str, b: str) -> int:
+    if not a or not b:
+        return 999
+    if len(a) == len(b) and all(c in "0123456789abcdef" for c in a.lower()+b.lower()):
+        return sum(ch1 != ch2 for ch1, ch2 in zip(a.lower(), b.lower()))
+    return 0 if a == b else 999
+
+
+def _boxes_changed(prev_boxes: List[Dict[str, Any]], boxes: List[Dict[str, Any]], delta: int) -> bool:
+    if len(prev_boxes) != len(boxes):
+        return True
+    for pb, cb in zip(prev_boxes, boxes):
+        for k in ("x", "y", "w", "h"):
+            if abs(int(pb.get(k, 0)) - int(cb.get(k, 0))) > delta:
+                return True
+    return False
+
+
+def should_save_sample(image: Any, kind: str, boxes: List[Dict[str, Any]], metadata: Dict[str, Any]) -> Tuple[bool, str, str]:
     image_hash = _image_hash(image)
     now = time.time()
     threshold = int(config.get("dataset_min_seconds_between_duplicates", 600))
+    box_delta = int(config.get("dataset_box_delta_px", 8))
+    hash_delta = int(config.get("dataset_hash_distance_threshold", 6))
     for row in reversed(runtime_state.get("dataset_index", [])):
         if row.get("kind") != kind:
             continue
-        if row.get("image_hash") == image_hash:
-            if now - float(row.get("_ts", now)) < threshold:
-                return False, "duplicate_interval", image_hash
-    return True, "new_hash", image_hash
+        elapsed = now - float(row.get("_ts", now))
+        if elapsed >= threshold:
+            return True, "min_interval_elapsed", image_hash
+        if row.get("ocr_texts") != metadata.get("ocr_texts"):
+            return True, "ocr_changed", image_hash
+        if _boxes_changed(row.get("boxes", []), boxes, box_delta):
+            return True, "boxes_changed", image_hash
+        if row.get("client_size") != metadata.get("client_size"):
+            return True, "client_size_changed", image_hash
+        if row.get("monitor_index") != metadata.get("monitor_index") or row.get("monitor_rect") != metadata.get("monitor_rect"):
+            return True, "monitor_changed", image_hash
+        if row.get("detection_method") != metadata.get("detection_method"):
+            return True, "detection_method_changed", image_hash
+        if _hash_distance(str(row.get("image_hash", "")), image_hash) > hash_delta:
+            return True, "hash_changed", image_hash
+        return False, "duplicate_interval", image_hash
+    return True, "first_of_kind", image_hash
 
 
 def save_dataset_sample_deduped(image: Any, kind: str, boxes: List[Dict[str, Any]], metadata: Dict[str, Any]) -> Dict[str, Any]:
     ensure_data_dirs()
-    ok, reason, image_hash = should_save_sample(image, kind, boxes, metadata.get("client_size", {}))
+    ok, reason, image_hash = should_save_sample(image, kind, boxes, metadata)
     if not ok:
         return {"ok": False, "status": "DEDUPED"}
     ts = datetime.utcnow()
@@ -1044,13 +1081,15 @@ def save_dataset_sample_deduped(image: Any, kind: str, boxes: List[Dict[str, Any
         bh = float(b["h"]) / ih
         lines.append(f"{class_map.get(kind,1)} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
     lbl_path.write_text("\n".join(lines), encoding="utf-8")
-    index_row = {"timestamp": ts.isoformat(), "kind": kind, "image_path": str(img_path), "label_path": str(lbl_path), "image_hash": image_hash, "client_size": metadata.get("client_size", {}), "boxes": boxes, "capture_method": metadata.get("capture_method"), "detection_method": metadata.get("detection_method"), "saved_reason": reason, "_ts": time.time()}
+    index_row = {"timestamp": ts.isoformat(), "kind": kind, "image_path": str(img_path), "label_path": str(lbl_path), "image_hash": image_hash, "client_size": metadata.get("client_size", {}), "boxes": boxes, "capture_method": metadata.get("capture_method"), "detection_method": metadata.get("detection_method"), "saved_reason": reason, "ocr_texts": metadata.get("ocr_texts", []), "monitor_index": metadata.get("monitor_index"), "monitor_rect": metadata.get("monitor_rect"), "_ts": time.time()}
     with (DATA_DIR / "dataset" / "index.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(index_row, ensure_ascii=False) + "\n")
     with (DATA_DIR / "dataset" / "metadata.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps({**index_row, **metadata}, ensure_ascii=False) + "\n")
     runtime_state["dataset_index"].append(index_row)
-    return {"ok": True, "status": "SAVED", "image_path": str(img_path), "label_path": str(lbl_path)}
+    runtime_state["last_dataset_event"] = {"kind": kind, "status": "SAVED", "image_path": str(img_path), "reason": reason}
+    runtime_state["last_saved_by_kind"][kind] = str(img_path)
+    return {"ok": True, "status": "SAVED", "image_path": str(img_path), "label_path": str(lbl_path), "reason": reason}
 
 
 def find_green_button_by_cv(image: Any) -> Dict[str, Any]:
@@ -1192,6 +1231,13 @@ def click_pre_captcha_button() -> Dict[str, Any]:
     if detected.get("debug_detected_path"):
         debug_paths.append(str(detected.get("debug_detected_path")))
     if detected.get("found"):
+        cap = capture_client_area_robust(hwnd)
+        if cap.get("image"):
+            box=[{k: detected[k] for k in ("x","y","w","h") if k in detected}]
+            meta = build_capture_metadata(hwnd, cap, "precaptcha", box, [str(config.get("pre_captcha_button_text","Rozwiąż teraz"))], str(detected.get("method","unknown")))
+            dbg = maybe_save_debug_detected(cap.get("image"), "precaptcha", box)
+            if dbg: meta["debug_detected_path"] = dbg
+            save_dataset_sample_deduped(cap["image"], "precaptcha", box, meta)
         mode = str(config.get("vision_click_mode", "absolute")).strip().lower()
         if mode == "absolute":
             click_result = click_detected_box(hwnd, detected, "vision_pre_captcha")
@@ -1242,6 +1288,53 @@ def click_detected_box(hwnd: int, box: Dict[str, Any], label: str) -> Dict[str, 
     return {"ok": ok, "status": "OK" if ok else "CLICK_FAILED", "click_payload": payload, "geometry": geo}
 
 
+
+
+def build_capture_metadata(hwnd: int, cap: Dict[str, Any], kind: str, boxes: List[Dict[str, Any]], ocr_texts: List[str], detection_method: str, click_payload: Optional[Dict[str, Any]] = None, saved_reason: str = "") -> Dict[str, Any]:
+    geom = get_window_geometry(hwnd)
+    image = cap.get("image")
+    brightness = variance = None
+    if image is not None and Image is not None:
+        try:
+            gray = image.convert("L")
+            data = list(gray.getdata())
+            if data:
+                brightness = float(sum(data) / len(data))
+                mean = brightness
+                variance = float(sum((x - mean) ** 2 for x in data) / len(data))
+        except Exception:
+            pass
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "kind": kind,
+        "client_size": {"width": image.size[0], "height": image.size[1]} if image is not None else {},
+        "monitor_index": geom.monitor_index if geom else None,
+        "monitor_rect": geom.monitor_rect if geom else {},
+        "client_origin": geom.client_origin if geom else {},
+        "boxes": boxes,
+        "ocr_texts": ocr_texts,
+        "capture_method": cap.get("method"),
+        "detection_method": detection_method,
+        "brightness": brightness,
+        "variance": variance,
+        "click_payload": click_payload,
+        "watcher_state": runtime_state.get("watcher_state"),
+        "saved_reason": saved_reason,
+    }
+
+
+def maybe_save_debug_detected(image: Any, kind: str, boxes: List[Dict[str, Any]]) -> Optional[str]:
+    if ImageDraw is None or image is None:
+        return None
+    out = DATA_DIR / "captures" / "detected" / f"{int(time.time()*1000)}_{kind}_detected.png"
+    vis = image.copy()
+    d = ImageDraw.Draw(vis)
+    for b in boxes:
+        x,y,w,h = int(b.get("x",0)),int(b.get("y",0)),int(b.get("w",0)),int(b.get("h",0))
+        d.rectangle([x,y,x+w,y+h], outline="red", width=3)
+    vis.save(out)
+    return str(out)
+
 def find_captcha_answers(hwnd: int) -> Dict[str, Any]:
     cap = capture_client_area_robust(hwnd)
     if not cap.get("image"):
@@ -1253,7 +1346,12 @@ def find_captcha_answers(hwnd: int) -> Dict[str, Any]:
         if r["w"] < 25 or r["h"] < 12:
             continue
         answers.append({**r, "index": i, "kind": "answer", "confidence": 0.6})
-    ds = save_dataset_sample_deduped(image, "answers", answers, {"capture_method": cap.get("method"), "detection_method": "ocr_regions", "ocr_texts": [a.get("text") for a in answers]}) if answers else {"ok": False, "status": "NO_ANSWERS"}
+    meta = build_capture_metadata(hwnd, cap, "answers", answers, [a.get("text","") for a in answers], "ocr_regions")
+    dbg = maybe_save_debug_detected(image, "answers", answers)
+    if dbg:
+        meta["debug_detected_path"] = dbg
+    ds = save_dataset_sample_deduped(image, "answers", answers, meta) if answers else {"ok": False, "status": "NO_ANSWERS"}
+    runtime_state["last_ocr_texts"] = [a.get("text","") for a in answers]
     log_event(f"Answers found: {len(answers)}")
     log_event(f"Dataset saved/skipped duplicate: answers ({ds.get('status')})")
     for i, a in enumerate(answers):
@@ -1273,7 +1371,12 @@ def find_confirm_button(hwnd: int) -> Dict[str, Any]:
         r = regs[0]
         ocr = {"found": True, "method": "ocr", "x": r["x"], "y": r["y"], "w": r["w"], "h": r["h"], "center_x": r["center_x"], "center_y": r["center_y"]}
     if ocr.get("found"):
-        save_dataset_sample_deduped(image, "confirm", [{k: ocr[k] for k in ("x", "y", "w", "h")}], {"capture_method": cap.get("method"), "detection_method": "ocr_confirm"})
+        runtime_state["last_ocr_texts"] = [r.get("text","") for r in regs]
+        box=[{k: ocr[k] for k in ("x", "y", "w", "h")}]
+        meta = build_capture_metadata(hwnd, cap, "confirm", box, [r.get("text","") for r in regs], "ocr_confirm")
+        dbg = maybe_save_debug_detected(image, "confirm", box)
+        if dbg: meta["debug_detected_path"] = dbg
+        save_dataset_sample_deduped(image, "confirm", box, meta)
         return {**ocr, "kind": "confirm", "confidence": 0.7}
     green = find_green_button_by_cv(image)
     if green.get("found"):
@@ -1760,6 +1863,55 @@ def vision_dataset_stats_route():
     return jsonify({"ok": True, "precaptcha": count(DATA_DIR/"dataset/images/precaptcha"), "answers": count(DATA_DIR/"dataset/images/answers"), "confirm": count(DATA_DIR/"dataset/images/confirm"), "unknown": count(DATA_DIR/"dataset/images/unknown"), "failed": count(DATA_DIR/"captures/failed")})
 
 
+
+
+def vision_watcher_tick() -> None:
+    hwnd = resolve_target_window()
+    if not hwnd:
+        runtime_state["watcher_state"] = "IDLE"
+        return
+    pre = find_pre_captcha_button(hwnd)
+    if pre.get("found"):
+        runtime_state["watcher_state"] = "PRECAPTCHA_VISIBLE"
+        if bool(config.get("vision_auto_click_precaptcha", True)):
+            res = click_pre_captcha_button()
+            if res.get("ok"):
+                runtime_state["watcher_state"] = "PRECAPTCHA_CLICKED"
+                time.sleep(random.uniform(0.3,0.8))
+                runtime_state["watcher_state"] = "ANSWERS_VISIBLE"
+                find_captcha_answers(hwnd)
+    if runtime_state.get("force_answers_scan"):
+        runtime_state["force_answers_scan"] = False
+        runtime_state["watcher_state"] = "ANSWERS_VISIBLE"
+        find_captcha_answers(hwnd)
+    conf = find_confirm_button(hwnd)
+    if conf.get("found"):
+        runtime_state["watcher_state"] = "CONFIRM_VISIBLE"
+        if bool(config.get("vision_auto_click_confirm", False)):
+            click_detected_box(hwnd, conf, "watcher_confirm")
+            runtime_state["watcher_state"] = "DONE"
+            time.sleep(max(0.1,float(config.get("vision_click_cooldown_ms",2000))/1000.0))
+            runtime_state["watcher_state"] = "COOLDOWN"
+    if runtime_state.get("watcher_state") not in {"COOLDOWN","DONE"}:
+        runtime_state["watcher_state"] = "IDLE"
+
+
+def start_watcher() -> None:
+    if runtime_state.get("watcher_running"):
+        return
+    runtime_state["watcher_running"] = True
+    def _loop():
+        while runtime_state.get("watcher_running"):
+            try:
+                vision_watcher_tick()
+            except Exception as exc:
+                log_event(f"Watcher error: {exc}")
+            time.sleep(max(0.05, float(config.get("vision_watch_interval_ms",300))/1000.0))
+    t=threading.Thread(target=_loop, daemon=True)
+    runtime_state["watcher_thread"] = t
+    t.start()
+
+
 # =========================
 # GUI
 # =========================
@@ -1847,6 +1999,9 @@ def launch_gui() -> None:
         cfg = dict(config)
 
     status_var = tk.StringVar(value="Status: gotowy")
+    watcher_var = tk.StringVar(value="watcher_state: IDLE")
+    ocr_var = tk.StringVar(value="OCR: []")
+    ds_var = tk.StringVar(value="Dataset: -")
     keyword_var = tk.StringVar(value=cfg["window_keyword"])
     launch_cmd_var = tk.StringVar(value=cfg.get("launch_command", ""))
     url_hint_var = tk.StringVar(value=cfg.get("browser_url_hint", ""))
@@ -2179,7 +2334,14 @@ def launch_gui() -> None:
     ttk.Button(system_frame, text="PAUSE ON/OFF", command=toggle_pause_gui).pack(side=tk.LEFT)
     ttk.Button(system_frame, text="Zapisz ustawienia", command=save_from_gui).pack(side=tk.LEFT, padx=8)
     ttk.Button(system_frame, text="Debug geometrii", command=debug_geometry).pack(side=tk.LEFT, padx=8)
+    ttk.Button(system_frame, text="Debug monitory", command=lambda: log_event(f"Monitors: {vision_debug_monitors_route().get_json()}" )).pack(side=tk.LEFT, padx=6)
+    ttk.Button(system_frame, text="Scan state", command=lambda: vision_watcher_tick()).pack(side=tk.LEFT, padx=6)
+    ttk.Button(system_frame, text="Wymuś skan odpowiedzi", command=lambda: runtime_state.__setitem__("force_answers_scan", True)).pack(side=tk.LEFT, padx=6)
+    ttk.Button(system_frame, text="Otwórz folder data", command=lambda: subprocess.Popen(["explorer", str(DATA_DIR)]) if sys.platform=="win32" else log_event(str(DATA_DIR))).pack(side=tk.LEFT, padx=6)
     ttk.Label(frame, textvariable=status_var, style="Dark.TLabel").pack(anchor="w", pady=(8, 0))
+    ttk.Label(frame, textvariable=watcher_var, style="Dark.TLabel").pack(anchor="w")
+    ttk.Label(frame, textvariable=ocr_var, style="Dark.TLabel").pack(anchor="w")
+    ttk.Label(frame, textvariable=ds_var, style="Dark.TLabel").pack(anchor="w")
 
     debug_buttons_a = ttk.Frame(debug_content, style="Dark.TFrame")
     debug_buttons_a.pack(fill=tk.X, pady=(6, 2))
@@ -2220,8 +2382,17 @@ def launch_gui() -> None:
     debug_open_var.trace_add("write", lambda *_: toggle_debug_ui())
     toggle_debug_ui()
 
+    def refresh_runtime_ui():
+        sel = runtime_state.get("last_selected_candidate") or {}
+        watcher_var.set(f"window={sel.get('title','-')[:30]} mon={sel.get('monitor_index','-')} origin={sel.get('client_origin',{})} capture={runtime_state.get('capture_method')} watcher_state={runtime_state.get('watcher_state')}")
+        ocr_var.set(f"last OCR: {runtime_state.get('last_ocr_texts', [])}")
+        stats = vision_dataset_stats_route().get_json()
+        ds_var.set(f"dataset last={runtime_state.get('last_dataset_event')} counts p/a/c/u/f={stats.get('precaptcha')}/{stats.get('answers')}/{stats.get('confirm')}/{stats.get('unknown')}/{stats.get('failed')}")
+        root.after(1000, refresh_runtime_ui)
+
     save_from_gui()
     root.after(300, refresh_candidates)
+    root.after(500, refresh_runtime_ui)
     root.mainloop()
 
 
