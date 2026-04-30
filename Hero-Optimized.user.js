@@ -10391,15 +10391,22 @@ window.openShopAsync = async (namePart) => {
             }
         }
 
-        // Wszystkie kliknięcia captcha/odpowiedzi idą przez Vision endpoints.
-        async function clickAnswerByVision(index = 0) {
-            return fetchVisionEndpoint(`http://127.0.0.1:5000/vision/click_answer?index=${encodeURIComponent(index)}`);
+        async function clickCaptchaAnswerViaVision(index = 0) {
+            const ok = await fetchVisionEndpoint(`http://127.0.0.1:5000/vision/click_answer?index=${encodeURIComponent(index)}`);
+            HERO_LOG.info("Captcha answer Vision click", { index, ok });
+            return ok;
+        }
+
+        async function clickConfirmViaVision() {
+            const ok = await fetchVisionEndpoint("http://127.0.0.1:5000/vision/click_confirm");
+            HERO_LOG.info("Captcha confirm Vision click", { ok });
+            return ok;
         }
 
         function humanClickAsync(el, options = {}) {
             return new Promise((resolve) => {
                 if (!el) return resolve();
-                clickAnswerByVision(0)
+                clickCaptchaAnswerViaVision(0)
                     .then((ok) => {
                         if (ok && window.logExp) window.logExp("🤖 Klik odpowiedzi przez /vision/click_answer?index=0.", "#e040fb");
                         if (!ok) el.classList.add('pressed', 'active');
@@ -10698,7 +10705,8 @@ window.openShopAsync = async (namePart) => {
                             confirmBtn = confirmCandidates[0];
                         }
                         if (confirmBtn) {
-                             await humanClickAsync(confirmBtn);
+                             const confirmed = await clickConfirmViaVision();
+                             if (!confirmed) await humanClickAsync(confirmBtn);
                         } else {
                             if (window.logExp) window.logExp("⚠️ Nie znalazłem przycisku potwierdzenia zapadki.", "#ff9800");
                             window.__captchaPhase = "manual_waiting";

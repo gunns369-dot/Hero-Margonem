@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 import json
 import logging
+import hashlib
 import random
 import subprocess
 import sys
@@ -12,6 +13,7 @@ import importlib
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import tkinter as tk
@@ -43,6 +45,14 @@ try:
     import pytesseract
 except ModuleNotFoundError:
     pytesseract = None
+try:
+    import mss
+except ModuleNotFoundError:
+    mss = None
+try:
+    import imagehash
+except ModuleNotFoundError:
+    imagehash = None
 
 try:
     from flask import Flask, jsonify, make_response, request, send_file
@@ -87,6 +97,7 @@ if FLASK_AVAILABLE:
     CORS(app, resources={r"/*": {"origins": "*"}})
 config_lock = threading.Lock()
 SETTINGS_PATH = Path(__file__).with_name("margoclicker_settings.json")
+DATA_DIR = Path(__file__).with_name("data")
 
 
 @dataclass
@@ -155,6 +166,20 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "vision_debug_save": True,
     "vision_click_mode": "absolute",
     "vision_min_confidence_to_label": 0.72,
+    "vision_dataset_enabled": True,
+    "vision_save_failed_samples": True,
+    "dataset_dedupe_enabled": True,
+    "dataset_hash_distance_threshold": 6,
+    "dataset_box_delta_px": 8,
+    "dataset_min_seconds_between_duplicates": 600,
+    "dataset_save_on_window_size_change": True,
+    "dataset_save_unknown": False,
+    "vision_auto_watch": True,
+    "vision_watch_interval_ms": 300,
+    "vision_click_cooldown_ms": 2000,
+    "vision_auto_click_precaptcha": True,
+    "vision_auto_click_answers": False,
+    "vision_auto_click_confirm": False,
     "pre_captcha_button_text": "Rozwiąż teraz",
     "vision_fallback_manual": True,
 }
@@ -209,7 +234,34 @@ runtime_state = {
     "log_hook": None,
     "hotkey_registered": False,
     "hotkey_registered_key": "",
+    "capture_method": None,
+    "capture_quality": None,
+    "dataset_index": [],
+    "watcher_started": False,
 }
+
+
+def ensure_data_dirs() -> Dict[str, Path]:
+    paths = {
+        "captures_raw": DATA_DIR / "captures" / "raw",
+        "captures_detected": DATA_DIR / "captures" / "detected",
+        "captures_failed": DATA_DIR / "captures" / "failed",
+        "dataset_images_precaptcha": DATA_DIR / "dataset" / "images" / "precaptcha",
+        "dataset_images_answers": DATA_DIR / "dataset" / "images" / "answers",
+        "dataset_images_confirm": DATA_DIR / "dataset" / "images" / "confirm",
+        "dataset_images_unknown": DATA_DIR / "dataset" / "images" / "unknown",
+        "dataset_labels_precaptcha": DATA_DIR / "dataset" / "labels" / "precaptcha",
+        "dataset_labels_answers": DATA_DIR / "dataset" / "labels" / "answers",
+        "dataset_labels_confirm": DATA_DIR / "dataset" / "labels" / "confirm",
+        "dataset_labels_unknown": DATA_DIR / "dataset" / "labels" / "unknown",
+        "logs": DATA_DIR / "logs",
+        "models": DATA_DIR / "models",
+    }
+    for p in paths.values():
+        p.mkdir(parents=True, exist_ok=True)
+    (DATA_DIR / "dataset" / "index.jsonl").touch(exist_ok=True)
+    (DATA_DIR / "dataset" / "metadata.jsonl").touch(exist_ok=True)
+    return paths
 
 
 class RECT(ctypes.Structure):
@@ -819,6 +871,8 @@ def capture_client_pil(hwnd: int) -> Optional[Any]:
 def is_bad_capture(image: Any) -> Dict[str, Any]:
     if image is None or np is None:
         return {"is_bad": True, "brightness": 0.0, "variance": 0.0}
+    if not hasattr(image, "size") or image.size[0] <= 0 or image.size[1] <= 0:
+        return {"is_bad": True, "brightness": 0.0, "variance": 0.0}
     arr = np.array(image.convert("L")) if hasattr(image, "convert") else np.array(image)
     brightness = float(arr.mean()) if arr.size else 0.0
     variance = float(arr.var()) if arr.size else 0.0
@@ -827,11 +881,43 @@ def is_bad_capture(image: Any) -> Dict[str, Any]:
 
 
 def capture_client_area_robust(hwnd: int) -> Dict[str, Any]:
-    image = capture_client_pil(hwnd)
-    if image is None:
-        return {"ok": False, "status": "CAPTURE_FAILED"}
-    quality = is_bad_capture(image)
-    return {"ok": not quality["is_bad"], "image": image, "method": "pyautogui", "quality": quality}
+    ensure_data_dirs()
+    hwnd = resolve_target_window() or hwnd
+    ensure_window_ready(hwnd)
+    time.sleep(0.15)
+    geom = get_window_geometry(hwnd)
+    if not geom:
+        return {"ok": False, "status": "NO_GEOMETRY"}
+    ox, oy = geom.client_origin["x"], geom.client_origin["y"]
+    cw = geom.client_rect["right"] - geom.client_rect["left"]
+    ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+    methods = []
+    if mss is not None:
+        methods.append("mss")
+    methods.extend(["imagegrab", "pyautogui", "printwindow"])
+    for method in methods:
+        image = None
+        try:
+            if method == "mss" and mss is not None and Image is not None:
+                with mss.mss() as sct:
+                    shot = sct.grab({"left": ox, "top": oy, "width": cw, "height": ch})
+                    image = Image.frombytes("RGB", shot.size, shot.rgb)
+            elif method == "imagegrab":
+                from PIL import ImageGrab
+                image = ImageGrab.grab(bbox=(ox, oy, ox + cw, oy + ch))
+            elif method == "pyautogui" and pyautogui is not None:
+                image = pyautogui.screenshot(region=(ox, oy, cw, ch))
+            elif method == "printwindow":
+                image = capture_client_pil(hwnd)
+        except Exception as exc:
+            log_event(f"Capture method {method} failed: {exc}")
+        quality = is_bad_capture(image) if image is not None else {"is_bad": True, "brightness": 0.0, "variance": 0.0}
+        if not quality["is_bad"]:
+            runtime_state["capture_method"] = method
+            runtime_state["capture_quality"] = quality
+            return {"ok": True, "image": image, "method": method, "quality": quality}
+        log_event(f"Capture method {method} produced bad frame: {quality}")
+    return {"ok": False, "status": "CAPTURE_BLACK", "message": "Screenshot czarny. Wyłącz akcelerację sprzętową w Brave/Chrome: Ustawienia → System → Użyj akceleracji sprzętowej → OFF, potem restart przeglądarki."}
 
 
 def validate_click_coordinate_pipeline(hwnd: int, client_x: float, client_y: float) -> Dict[str, Any]:
@@ -850,6 +936,58 @@ def validate_click_coordinate_pipeline(hwnd: int, client_x: float, client_y: flo
         "delta": {"x": dx, "y": dy},
         "ok": abs(dx) <= 2 and abs(dy) <= 2,
     }
+
+
+def _image_hash(image: Any) -> str:
+    if imagehash is not None and Image is not None:
+        try:
+            return str(imagehash.phash(image))
+        except Exception:
+            pass
+    small = image.convert("L").resize((32, 32))
+    return hashlib.md5(small.tobytes()).hexdigest()
+
+
+def should_save_sample(image: Any, kind: str, boxes: List[Dict[str, Any]], window_geometry: Dict[str, Any]) -> Tuple[bool, str, str]:
+    image_hash = _image_hash(image)
+    now = time.time()
+    threshold = int(config.get("dataset_min_seconds_between_duplicates", 600))
+    for row in reversed(runtime_state.get("dataset_index", [])):
+        if row.get("kind") != kind:
+            continue
+        if row.get("image_hash") == image_hash:
+            if now - float(row.get("_ts", now)) < threshold:
+                return False, "duplicate_interval", image_hash
+    return True, "new_hash", image_hash
+
+
+def save_dataset_sample_deduped(image: Any, kind: str, boxes: List[Dict[str, Any]], metadata: Dict[str, Any]) -> Dict[str, Any]:
+    ensure_data_dirs()
+    ok, reason, image_hash = should_save_sample(image, kind, boxes, metadata.get("client_size", {}))
+    if not ok:
+        return {"ok": False, "status": "DEDUPED"}
+    ts = datetime.utcnow()
+    stamp = ts.strftime("%Y%m%d_%H%M%S_") + f"{int(ts.microsecond/1000):03d}"
+    img_path = DATA_DIR / "dataset" / "images" / kind / f"{stamp}_{kind}_ok_{metadata.get('capture_method','unknown')}.png"
+    lbl_path = DATA_DIR / "dataset" / "labels" / kind / f"{img_path.stem}.txt"
+    image.save(img_path)
+    iw, ih = image.size
+    class_map = {"precaptcha": 0, "answers": 1, "confirm": 2, "unknown": 1}
+    lines = []
+    for b in boxes:
+        cx = (float(b["x"]) + float(b["w"]) / 2.0) / iw
+        cy = (float(b["y"]) + float(b["h"]) / 2.0) / ih
+        bw = float(b["w"]) / iw
+        bh = float(b["h"]) / ih
+        lines.append(f"{class_map.get(kind,1)} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+    lbl_path.write_text("\n".join(lines), encoding="utf-8")
+    index_row = {"timestamp": ts.isoformat(), "kind": kind, "image_path": str(img_path), "label_path": str(lbl_path), "image_hash": image_hash, "client_size": metadata.get("client_size", {}), "boxes": boxes, "capture_method": metadata.get("capture_method"), "detection_method": metadata.get("detection_method"), "saved_reason": reason, "_ts": time.time()}
+    with (DATA_DIR / "dataset" / "index.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(index_row, ensure_ascii=False) + "\n")
+    with (DATA_DIR / "dataset" / "metadata.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps({**index_row, **metadata}, ensure_ascii=False) + "\n")
+    runtime_state["dataset_index"].append(index_row)
+    return {"ok": True, "status": "SAVED", "image_path": str(img_path), "label_path": str(lbl_path)}
 
 
 def find_green_button_by_cv(image: Any) -> Dict[str, Any]:
@@ -1013,7 +1151,27 @@ def find_captcha_answers(hwnd: int) -> Dict[str, Any]:
                 answers.append({"index": len(answers), "text": token, "x": x, "y": y, "w": w, "h": h, "center_x": x + w // 2, "center_y": y + h // 2, "confidence": 0.6})
         except Exception:
             pass
+    for i, a in enumerate(answers):
+        a["index"] = i
+        a["kind"] = "answer"
     return {"ok": True, "answers": answers, "status": "OK", "capture_method": cap.get("method"), "quality": cap.get("quality")}
+
+
+def find_confirm_button(hwnd: int) -> Dict[str, Any]:
+    cap = capture_client_area_robust(hwnd)
+    if not cap.get("ok"):
+        return {"found": False, "status": cap.get("status", "CAPTURE_FAILED")}
+    image = cap["image"]
+    ocr = find_text_button_by_ocr(image, "Potwierdź")
+    if ocr.get("found"):
+        return {**ocr, "kind": "confirm", "confidence": 0.7}
+    green = find_green_button_by_cv(image)
+    if green.get("found"):
+        return {**green, "kind": "confirm", "confidence": green.get("score", 0.6)}
+    pt = find_template_in_client(hwnd, "confirm.png") or find_template_in_client(hwnd, "potwierdz.png")
+    if pt:
+        return {"found": True, "kind": "confirm", "x": pt[0]-45, "y": pt[1]-15, "w": 90, "h": 30, "center_x": pt[0], "center_y": pt[1], "confidence": 0.6, "method": "template"}
+    return {"found": False, "kind": "confirm", "status": "NOT_FOUND"}
 
 
 def find_template_in_client(hwnd: int, template_name: str) -> Optional[Tuple[int, int]]:
@@ -1396,6 +1554,14 @@ def vision_answers_route():
     return jsonify(find_captcha_answers(hwnd))
 
 
+@app.route("/vision/confirm", methods=["GET"])
+def vision_confirm_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    return jsonify(find_confirm_button(hwnd))
+
+
 @app.route("/vision/click_answer", methods=["GET"])
 def vision_click_answer_route():
     hwnd = resolve_target_window()
@@ -1422,6 +1588,41 @@ def vision_click_answer_by_text_route():
             click = click_detected_box(hwnd, answer, "vision_answer_text")
             return jsonify({**click, "answer": answer})
     return jsonify({"ok": False, "status": "ANSWER_TEXT_NOT_FOUND", "answers": result.get("answers", [])}), 404
+
+
+@app.route("/vision/click_confirm", methods=["GET"])
+def vision_click_confirm_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    found = find_confirm_button(hwnd)
+    if not found.get("found"):
+        return jsonify({"ok": False, "status": "CONFIRM_NOT_FOUND", "confirm": found}), 404
+    return jsonify(click_detected_box(hwnd, found, "vision_confirm"))
+
+
+@app.route("/vision/capture_debug", methods=["GET"])
+def vision_capture_debug_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    cap = capture_client_area_robust(hwnd)
+    if not cap.get("image"):
+        return jsonify(cap), 500
+    ensure_data_dirs()
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    kind = "ok" if cap.get("ok") else "failed"
+    folder = DATA_DIR / "captures" / ("raw" if kind == "ok" else "failed")
+    path = folder / f"{ts}_capture_{kind}_{cap.get('method','unknown')}.png"
+    cap["image"].save(path)
+    return jsonify({"ok": True, "path": str(path), "quality": cap.get("quality"), "method": cap.get("method")})
+
+
+@app.route("/vision/dataset_stats", methods=["GET"])
+def vision_dataset_stats_route():
+    ensure_data_dirs()
+    count = lambda p: len(list(p.glob("*.png")))
+    return jsonify({"ok": True, "precaptcha": count(DATA_DIR/"dataset/images/precaptcha"), "answers": count(DATA_DIR/"dataset/images/answers"), "confirm": count(DATA_DIR/"dataset/images/confirm"), "unknown": count(DATA_DIR/"dataset/images/unknown"), "failed": count(DATA_DIR/"captures/failed")})
 
 
 # =========================
