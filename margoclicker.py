@@ -182,6 +182,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "vision_auto_click_confirm": False,
     "pre_captcha_button_text": "Rozwiąż teraz",
     "vision_fallback_manual": True,
+    "target_prefer_game_title": True,
+    "target_title_required_keywords": ["margonem"],
+    "target_exclude_process_names": ["python.exe"],
+    "target_exclude_title_keywords": ["MargoClicker", "Codex", "GitHub", "DevTools"],
 }
 config: Dict[str, Any] = dict(DEFAULT_CONFIG)
 
@@ -238,6 +242,9 @@ runtime_state = {
     "capture_quality": None,
     "dataset_index": [],
     "watcher_started": False,
+    "watcher_state": "IDLE",
+    "last_ocr_texts": [],
+    "last_dataset_event": None,
 }
 
 
@@ -525,6 +532,16 @@ def score_window_candidate(candidate: WindowCandidate, cfg: Dict[str, Any]) -> T
     if "margonem" in title_low:
         score += 60
         reasons.append("title has margonem")
+    if "margonem mmorpg" in title_low and bool(cfg.get("target_prefer_game_title", True)):
+        score += 180
+        reasons.append("exact game title")
+    if candidate.process_name in {"python.exe"}:
+        score -= 300
+        reasons.append("excluded process penalty")
+    for ex_kw in (cfg.get("target_exclude_title_keywords") or []):
+        if str(ex_kw).strip().lower() and str(ex_kw).strip().lower() in title_low and "margonem" not in title_low:
+            score -= 240
+            reasons.append(f"excluded title keyword:{ex_kw}")
 
     client_w = candidate.client_rect["right"] - candidate.client_rect["left"]
     client_h = candidate.client_rect["bottom"] - candidate.client_rect["top"]
@@ -641,8 +658,20 @@ def resolve_target_window() -> Optional[int]:
     hwnd_saved = int(cfg.get("target_hwnd_last") or 0)
     pid_saved = int(cfg.get("target_pid") or 0)
 
+    required_keywords = [str(x).lower() for x in (cfg.get("target_title_required_keywords") or []) if str(x).strip()]
+    excluded_proc = {str(x).lower() for x in (cfg.get("target_exclude_process_names") or []) if str(x).strip()}
+    excluded_title = [str(x).lower() for x in (cfg.get("target_exclude_title_keywords") or []) if str(x).strip()]
+    def _game_like(hwnd: int) -> bool:
+        title = get_window_text(hwnd).lower()
+        proc = get_process_name(get_window_pid(hwnd)).lower()
+        if proc in excluded_proc:
+            return False
+        if any(k in title for k in excluded_title) and "margonem" not in title:
+            return False
+        return all(k in title for k in required_keywords) if required_keywords else ("margonem" in title)
+
     if hwnd_saved and _is_valid_hwnd(hwnd_saved):
-        if not pid_saved or get_window_pid(hwnd_saved) == pid_saved:
+        if (not pid_saved or get_window_pid(hwnd_saved) == pid_saved) and _game_like(hwnd_saved):
             return hwnd_saved
 
     if pid_saved:
@@ -892,9 +921,20 @@ def capture_client_area_robust(hwnd: int) -> Dict[str, Any]:
     cw = geom.client_rect["right"] - geom.client_rect["left"]
     ch = geom.client_rect["bottom"] - geom.client_rect["top"]
     methods = []
+    mss_monitors = []
+    if mss is not None:
+        try:
+            with mss.mss() as sct:
+                mss_monitors = [dict(m) for m in sct.monitors]
+        except Exception:
+            mss_monitors = []
+    log_event(
+        f"capture_client_area_robust hwnd={hwnd} title='{get_window_text(hwnd)}' monitor={geom.monitor_name} idx={geom.monitor_index} "
+        f"monitor_rect={geom.monitor_rect} client_origin={geom.client_origin} client_size=({cw}x{ch}) mss_monitors={mss_monitors}"
+    )
     if mss is not None:
         methods.append("mss")
-    methods.extend(["imagegrab", "pyautogui", "printwindow"])
+    methods.extend(["imagegrab", "pyautogui", "printwindow", "full_desktop_crop"])
     for method in methods:
         image = None
         try:
@@ -904,11 +944,13 @@ def capture_client_area_robust(hwnd: int) -> Dict[str, Any]:
                     image = Image.frombytes("RGB", shot.size, shot.rgb)
             elif method == "imagegrab":
                 from PIL import ImageGrab
-                image = ImageGrab.grab(bbox=(ox, oy, ox + cw, oy + ch))
+                image = ImageGrab.grab(bbox=(ox, oy, ox + cw, oy + ch), all_screens=True)
             elif method == "pyautogui" and pyautogui is not None:
                 image = pyautogui.screenshot(region=(ox, oy, cw, ch))
             elif method == "printwindow":
                 image = capture_client_pil(hwnd)
+            elif method == "full_desktop_crop":
+                image = capture_by_full_desktop_crop(hwnd)
         except Exception as exc:
             log_event(f"Capture method {method} failed: {exc}")
         quality = is_bad_capture(image) if image is not None else {"is_bad": True, "brightness": 0.0, "variance": 0.0}
@@ -918,6 +960,27 @@ def capture_client_area_robust(hwnd: int) -> Dict[str, Any]:
             return {"ok": True, "image": image, "method": method, "quality": quality}
         log_event(f"Capture method {method} produced bad frame: {quality}")
     return {"ok": False, "status": "CAPTURE_BLACK", "message": "Screenshot czarny. Wyłącz akcelerację sprzętową w Brave/Chrome: Ustawienia → System → Użyj akceleracji sprzętowej → OFF, potem restart przeglądarki."}
+
+
+def capture_by_full_desktop_crop(hwnd: int) -> Optional[Any]:
+    if Image is None:
+        return None
+    geom = get_window_geometry(hwnd)
+    if not geom:
+        return None
+    ox, oy = geom.client_origin["x"], geom.client_origin["y"]
+    cw = geom.client_rect["right"] - geom.client_rect["left"]
+    ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+    if cw <= 0 or ch <= 0:
+        return None
+    try:
+        from PIL import ImageGrab
+        return ImageGrab.grab(bbox=(ox, oy, ox + cw, oy + ch), all_screens=True)
+    except Exception:
+        if pyautogui is None:
+            return None
+        full = pyautogui.screenshot()
+        return full.crop((ox, oy, ox + cw, oy + ch))
 
 
 def validate_click_coordinate_pipeline(hwnd: int, client_x: float, client_y: float) -> Dict[str, Any]:
@@ -1040,21 +1103,63 @@ def find_text_button_by_ocr(image: Any, text: str = "Rozwiąż teraz") -> Dict[s
     return {"found": False, "method": "ocr"}
 
 
+def find_text_regions(image: Any, phrases: List[str]) -> List[Dict[str, Any]]:
+    if pytesseract is None:
+        return []
+    out = []
+    try:
+        data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+        tokens = [str(t or "").strip() for t in data.get("text", [])]
+        norm_phrases = [p.lower().replace("ą", "a").replace("ż", "z").replace("ź", "z") for p in phrases]
+        for i in range(len(tokens)):
+            for span in (2, 3, 4):
+                if i + span > len(tokens):
+                    continue
+                frag = " ".join(tokens[i:i + span]).lower()
+                frag_norm = frag.replace("ą", "a").replace("ż", "z").replace("ź", "z")
+                if any(p in frag_norm for p in norm_phrases):
+                    x = min(int(data["left"][j]) for j in range(i, i + span))
+                    y = min(int(data["top"][j]) for j in range(i, i + span))
+                    r = max(int(data["left"][j]) + int(data["width"][j]) for j in range(i, i + span))
+                    b = max(int(data["top"][j]) + int(data["height"][j]) for j in range(i, i + span))
+                    out.append({"text": frag, "x": x, "y": y, "w": r - x, "h": b - y, "center_x": (x + r) // 2, "center_y": (y + b) // 2})
+    except Exception:
+        return []
+    return out
+
+
+def find_precaptcha_panel_by_text(image: Any) -> Optional[Dict[str, Any]]:
+    regions = find_text_regions(image, ["Zagadka pojawi się za"])
+    if not regions:
+        return None
+    r = max(regions, key=lambda x: x["w"] * x["h"])
+    m = 20
+    return {"x": max(0, r["x"] - m), "y": max(0, r["y"] - m), "w": r["w"] + m * 2, "h": r["h"] + 90, "text_region": r}
+
+
 def find_pre_captcha_button(hwnd: int) -> Dict[str, Any]:
-    image = capture_client_pil(hwnd)
+    cap = capture_client_area_robust(hwnd)
+    image = cap.get("image")
     if image is None:
         return {"found": False, "status": "CAPTURE_FAILED"}
     with config_lock:
         button_text = str(config.get("pre_captcha_button_text", "Rozwiąż teraz"))
         templates_dir = str(config.get("vision_templates_dir", "templates")).strip() or "templates"
         debug_save = bool(config.get("vision_debug_save", True))
-    result = find_green_button_by_cv(image)
-    if not result.get("found"):
-        result = find_text_button_by_ocr(image, button_text)
+    panel = find_precaptcha_panel_by_text(image)
+    result = {"found": False, "method": "none"}
+    if panel:
+        crop = image.crop((panel["x"], panel["y"], panel["x"] + panel["w"], panel["y"] + panel["h"]))
+        regs = find_text_regions(crop, ["Rozwiąż teraz", "Rozwiaz teraz"])
+        if regs:
+            rr = regs[0]
+            result = {"found": True, "method": "ocr_panel", "x": panel["x"] + rr["x"], "y": panel["y"] + rr["y"], "w": rr["w"], "h": rr["h"], "center_x": panel["x"] + rr["center_x"], "center_y": panel["y"] + rr["center_y"], "score": 0.8, "panel": panel}
     if not result.get("found"):
         point = find_template_in_client(hwnd, "rozwiaz_teraz.png")
         if point:
             result = {"found": True, "method": "template", "center_x": point[0], "center_y": point[1], "x": point[0] - 45, "y": point[1] - 15, "w": 90, "h": 30, "score": 0.5}
+    if not result.get("found"):
+        result = find_green_button_by_cv(image)
     if result.get("found") and debug_save and ImageDraw is not None:
         out_path = SETTINGS_PATH.with_name(f"vision_precaptcha_detected_{int(time.time())}.png")
         vis = image.copy()
@@ -1093,6 +1198,11 @@ def click_pre_captcha_button() -> Dict[str, Any]:
             ok, msg, payload = click_result["ok"], click_result.get("status", "OK"), click_result.get("click_payload")
         else:
             ok, msg, payload = click_in_game(detected["center_x"], detected["center_y"], label="vision_pre_captcha", use_manual_offset=False, is_answer_click=False)
+        if ok:
+            runtime_state["watcher_state"] = "PRECAPTCHA_CLICKED"
+            log_event("After precaptcha click: scanning answers...")
+            time.sleep(random.uniform(0.3, 0.8))
+            find_captcha_answers(hwnd)
         log_event(f"Ostatni click payload: {payload}")
         return {
             "ok": ok,
@@ -1104,6 +1214,7 @@ def click_pre_captcha_button() -> Dict[str, Any]:
             "client_size": client_size,
             "debug_paths": debug_paths,
         }
+        
     if not geom:
         return {"ok": False, "method": "vision_pre_captcha", "status": "NO_GEOMETRY", "match": detected, "click_payload": None, "debug_paths": debug_paths}
     return {
@@ -1137,20 +1248,14 @@ def find_captcha_answers(hwnd: int) -> Dict[str, Any]:
         return {"ok": False, "answers": [], "status": "CAPTURE_FAILED"}
     image = cap["image"]
     answers: List[Dict[str, Any]] = []
-    if pytesseract is not None:
-        try:
-            data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
-            for i, txt in enumerate(data.get("text", [])):
-                token = str(txt or "").strip()
-                if len(token) < 1:
-                    continue
-                x, y = int(data["left"][i]), int(data["top"][i])
-                w, h = int(data["width"][i]), int(data["height"][i])
-                if w < 20 or h < 10:
-                    continue
-                answers.append({"index": len(answers), "text": token, "x": x, "y": y, "w": w, "h": h, "center_x": x + w // 2, "center_y": y + h // 2, "confidence": 0.6})
-        except Exception:
-            pass
+    regions = find_text_regions(image, ["A", "B", "C", "D", "E", "F"])
+    for i, r in enumerate(regions):
+        if r["w"] < 25 or r["h"] < 12:
+            continue
+        answers.append({**r, "index": i, "kind": "answer", "confidence": 0.6})
+    ds = save_dataset_sample_deduped(image, "answers", answers, {"capture_method": cap.get("method"), "detection_method": "ocr_regions", "ocr_texts": [a.get("text") for a in answers]}) if answers else {"ok": False, "status": "NO_ANSWERS"}
+    log_event(f"Answers found: {len(answers)}")
+    log_event(f"Dataset saved/skipped duplicate: answers ({ds.get('status')})")
     for i, a in enumerate(answers):
         a["index"] = i
         a["kind"] = "answer"
@@ -1162,8 +1267,13 @@ def find_confirm_button(hwnd: int) -> Dict[str, Any]:
     if not cap.get("ok"):
         return {"found": False, "status": cap.get("status", "CAPTURE_FAILED")}
     image = cap["image"]
-    ocr = find_text_button_by_ocr(image, "Potwierdź")
+    regs = find_text_regions(image, ["Potwierdź", "Zatwierdź", "OK"])
+    ocr = {"found": False}
+    if regs:
+        r = regs[0]
+        ocr = {"found": True, "method": "ocr", "x": r["x"], "y": r["y"], "w": r["w"], "h": r["h"], "center_x": r["center_x"], "center_y": r["center_y"]}
     if ocr.get("found"):
+        save_dataset_sample_deduped(image, "confirm", [{k: ocr[k] for k in ("x", "y", "w", "h")}], {"capture_method": cap.get("method"), "detection_method": "ocr_confirm"})
         return {**ocr, "kind": "confirm", "confidence": 0.7}
     green = find_green_button_by_cv(image)
     if green.get("found"):
@@ -1616,6 +1726,31 @@ def vision_capture_debug_route():
     path = folder / f"{ts}_capture_{kind}_{cap.get('method','unknown')}.png"
     cap["image"].save(path)
     return jsonify({"ok": True, "path": str(path), "quality": cap.get("quality"), "method": cap.get("method")})
+
+
+@app.route("/vision/debug_monitors", methods=["GET"])
+def vision_debug_monitors_route():
+    hwnd = resolve_target_window()
+    geom = get_window_geometry(hwnd) if hwnd else None
+    monitors = []
+    if mss is not None:
+        try:
+            with mss.mss() as sct:
+                monitors = [dict(m) for m in sct.monitors]
+        except Exception:
+            monitors = []
+    return jsonify({"ok": True, "hwnd": hwnd, "selected_geometry": asdict(geom) if geom else None, "mss_monitors": monitors})
+
+
+@app.route("/vision/scan_state", methods=["GET"])
+def vision_scan_state_route():
+    return jsonify({
+        "ok": True,
+        "watcher_state": runtime_state.get("watcher_state", "IDLE"),
+        "capture_method": runtime_state.get("capture_method"),
+        "last_ocr_texts": runtime_state.get("last_ocr_texts", []),
+        "last_dataset_event": runtime_state.get("last_dataset_event"),
+    })
 
 
 @app.route("/vision/dataset_stats", methods=["GET"])
