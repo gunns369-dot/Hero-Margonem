@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import importlib
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -33,6 +34,15 @@ try:
     import numpy as np
 except ModuleNotFoundError:
     np = None
+try:
+    from PIL import Image, ImageDraw
+except ModuleNotFoundError:
+    Image = None
+    ImageDraw = None
+try:
+    import pytesseract
+except ModuleNotFoundError:
+    pytesseract = None
 
 try:
     from flask import Flask, jsonify, make_response, request, send_file
@@ -137,10 +147,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "disable_randomness": False,
     "calibration": {},
     "manual_click_points": {},
-    "vision_enabled": False,
-    "vision_threshold": 0.85,
+    "vision_enabled": True,
+    "vision_auto_install": True,
+    "vision_threshold": 0.72,
     "vision_templates_dir": "templates",
     "vision_debug": False,
+    "vision_debug_save": True,
+    "pre_captcha_button_text": "Rozwiąż teraz",
     "vision_fallback_manual": True,
 }
 config: Dict[str, Any] = dict(DEFAULT_CONFIG)
@@ -781,6 +794,121 @@ def capture_client_area(hwnd: int) -> Optional[Path]:
     return out_path
 
 
+def capture_client_pil(hwnd: int) -> Optional[Any]:
+    geom = get_window_geometry(hwnd)
+    if not geom or pyautogui is None:
+        return None
+    cw = geom.client_rect["right"] - geom.client_rect["left"]
+    ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+    ox, oy = geom.client_origin["x"], geom.client_origin["y"]
+    if cw <= 0 or ch <= 0:
+        return None
+    image = pyautogui.screenshot(region=(ox, oy, cw, ch))
+    if bool(config.get("vision_debug_save", True)):
+        debug_path = SETTINGS_PATH.with_name(f"vision_precaptcha_raw_{int(time.time())}.png")
+        image.save(debug_path)
+        log_event(f"Vision capture client_origin=({ox},{oy}) client_size=({cw}x{ch}) raw={debug_path}")
+    else:
+        log_event(f"Vision capture client_origin=({ox},{oy}) client_size=({cw}x{ch})")
+    return image
+
+
+def find_green_button_by_cv(image: Any) -> Dict[str, Any]:
+    if cv2 is None or np is None or image is None:
+        return {"found": False, "method": "green_button_cv", "reason": "MISSING_DEPS"}
+    arr = np.array(image)
+    bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, np.array([35, 40, 40]), np.array([90, 255, 255]))
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    h_img, w_img = mask.shape[:2]
+    best = None
+    for c in contours:
+        x, y, w, h = cv2.boundingRect(c)
+        if not (70 <= w <= 220 and 20 <= h <= 60):
+            continue
+        ratio = w / max(1.0, float(h))
+        if ratio < 2.0 or ratio > 7.5:
+            continue
+        roi = mask[y:y + h, x:x + w]
+        green_ratio = float(cv2.countNonZero(roi)) / float(max(1, w * h))
+        y_bonus = 0.15 if y < (h_img * 0.55) else 0.0
+        score = green_ratio + y_bonus + min(w / 220.0, 1.0) * 0.1
+        cand = {"found": True, "method": "green_button_cv", "x": x, "y": y, "w": w, "h": h, "center_x": x + w // 2, "center_y": y + h // 2, "score": round(score, 4)}
+        if best is None or cand["score"] > best["score"]:
+            best = cand
+    return best or {"found": False, "method": "green_button_cv"}
+
+
+def find_text_button_by_ocr(image: Any, text: str = "Rozwiąż teraz") -> Dict[str, Any]:
+    if pytesseract is None or np is None:
+        return {"found": False, "method": "ocr", "reason": "OCR_UNAVAILABLE"}
+    try:
+        data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+        target_a = text.lower()
+        target_b = "rozwiaz teraz"
+        for i in range(len(data.get("text", []))):
+            token = str(data["text"][i]).strip().lower()
+            if not token:
+                continue
+            if "rozwiąż" in token or "rozwiaz" in token or "teraz" in token:
+                full = token
+                if i + 1 < len(data["text"]):
+                    full = f"{token} {str(data['text'][i + 1]).strip().lower()}"
+                if target_a in full or target_b in full or ("rozwiaz" in full and "teraz" in full):
+                    x, y, w, h = int(data["left"][i]), int(data["top"][i]), int(data["width"][i]), int(data["height"][i])
+                    return {"found": True, "method": "ocr", "x": x, "y": y, "w": w, "h": h, "center_x": x + w // 2, "center_y": y + h // 2, "score": 0.6}
+    except Exception as exc:
+        return {"found": False, "method": "ocr", "reason": str(exc)}
+    return {"found": False, "method": "ocr"}
+
+
+def find_pre_captcha_button(hwnd: int) -> Dict[str, Any]:
+    image = capture_client_pil(hwnd)
+    if image is None:
+        return {"found": False, "status": "CAPTURE_FAILED"}
+    with config_lock:
+        button_text = str(config.get("pre_captcha_button_text", "Rozwiąż teraz"))
+        templates_dir = str(config.get("vision_templates_dir", "templates")).strip() or "templates"
+        debug_save = bool(config.get("vision_debug_save", True))
+    result = find_green_button_by_cv(image)
+    if not result.get("found"):
+        result = find_text_button_by_ocr(image, button_text)
+    if not result.get("found"):
+        point = find_template_in_client(hwnd, "rozwiaz_teraz.png")
+        if point:
+            result = {"found": True, "method": "template", "center_x": point[0], "center_y": point[1], "x": point[0] - 45, "y": point[1] - 15, "w": 90, "h": 30, "score": 0.5}
+    if result.get("found") and debug_save and ImageDraw is not None:
+        out_path = SETTINGS_PATH.with_name(f"vision_precaptcha_detected_{int(time.time())}.png")
+        vis = image.copy()
+        draw = ImageDraw.Draw(vis)
+        x, y, w, h = int(result["x"]), int(result["y"]), int(result["w"]), int(result["h"])
+        draw.rectangle([x, y, x + w, y + h], outline="red", width=3)
+        vis.save(out_path)
+        result["debug_detected_path"] = str(out_path)
+        log_event(f"Vision detected rectangle=({x},{y},{w},{h}) center=({result['center_x']},{result['center_y']}) method={result.get('method')}")
+    return result
+
+
+def click_pre_captcha_button() -> Dict[str, Any]:
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return {"ok": False, "status": "NO_TARGET_WINDOW"}
+    detected = find_pre_captcha_button(hwnd)
+    if detected.get("found"):
+        ok, msg, payload = click_in_game(detected["center_x"], detected["center_y"], label="vision_pre_captcha", use_manual_offset=False, is_answer_click=False)
+        log_event(f"Ostatni click payload: {payload}")
+        return {"ok": ok, "status": msg, "detection": detected, "payload": payload}
+    geom = get_window_geometry(hwnd)
+    if not geom:
+        return {"ok": False, "status": "NO_GEOMETRY", "detection": detected}
+    cw = geom.client_rect["right"] - geom.client_rect["left"]
+    ch = geom.client_rect["bottom"] - geom.client_rect["top"]
+    px, py = resolve_click_point("pre_zapadki", (0.50, 0.18), cw, ch)
+    ok, msg, payload = click_in_game(px, py, label="fallback_pre_zapadki", use_manual_offset=False, is_answer_click=False)
+    return {"ok": ok, "status": msg, "detection": detected, "payload": payload, "fallback": True}
+
+
 def find_template_in_client(hwnd: int, template_name: str) -> Optional[Tuple[int, int]]:
     try:
         with config_lock:
@@ -1105,6 +1233,21 @@ def vision_click_route():
         return jsonify({"ok": False, "status": "ERROR", "error": str(e)}), 500
 
 
+@app.route("/vision/pre_captcha", methods=["GET"])
+def vision_pre_captcha_route():
+    hwnd = resolve_target_window()
+    if not hwnd:
+        return jsonify({"ok": False, "status": "NO_TARGET_WINDOW"}), 404
+    return jsonify(find_pre_captcha_button(hwnd))
+
+
+@app.route("/vision/click_pre_captcha", methods=["GET"])
+@app.route("/pre_captcha/click", methods=["GET"])
+def vision_click_pre_captcha_route():
+    result = click_pre_captcha_button()
+    return jsonify(result), (200 if result.get("ok") else 404)
+
+
 # =========================
 # GUI
 # =========================
@@ -1133,9 +1276,12 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     normalized["hotkey"] = str(normalized.get("hotkey", "f9")).strip().lower() or "f9"
     normalized["vision_templates_dir"] = str(normalized.get("vision_templates_dir", "templates")).strip() or "templates"
     normalized["vision_enabled"] = bool(normalized.get("vision_enabled", False))
+    normalized["vision_auto_install"] = bool(normalized.get("vision_auto_install", True))
     normalized["vision_debug"] = bool(normalized.get("vision_debug", False))
+    normalized["vision_debug_save"] = bool(normalized.get("vision_debug_save", True))
     normalized["vision_fallback_manual"] = bool(normalized.get("vision_fallback_manual", True))
-    normalized["vision_threshold"] = float(normalized.get("vision_threshold", 0.85))
+    normalized["vision_threshold"] = float(normalized.get("vision_threshold", 0.72))
+    normalized["pre_captcha_button_text"] = str(normalized.get("pre_captcha_button_text", "Rozwiąż teraz")).strip() or "Rozwiąż teraz"
 
     for key in ["manual_offset_y", "answer_offset_y"]:
         normalized[key] = float(normalized.get(key, 0.0))
@@ -1412,20 +1558,17 @@ def launch_gui() -> None:
         status_var.set("Test wszystkich punktów zakończony")
 
     def test_pre_zapadki() -> None:
+        result = click_pre_captcha_button()
+        status_var.set(f"Vision pre-zapadki: {result}")
+
+    def detect_pre_zapadki() -> None:
         hwnd = resolve_target_window()
-        geom = get_window_geometry(hwnd) if hwnd else None
-        if not geom:
+        if not hwnd:
             status_var.set("Brak okna")
             return
-        cw = geom.client_rect["right"] - geom.client_rect["left"]
-        ch = geom.client_rect["bottom"] - geom.client_rect["top"]
-        rx, ry = TEST_POINT_PRESETS.get("pre_zapadki", (0.50, 0.50))
-        px, py = resolve_click_point("pre_zapadki", (rx, ry), cw, ch)
-        ok, msg, payload = click_in_game(px, py, label="gui_pre_zapadki", use_manual_offset=False)
-        if ok:
-            status_var.set(f"Pre zapadki klik: {payload}")
-        else:
-            status_var.set(f"Pre zapadki błąd: {msg}")
+        result = find_pre_captcha_button(hwnd)
+        log_event(f"Detect pre-captcha: {result}")
+        status_var.set(f"Detect pre-captcha: {result}")
 
     def show_last_click() -> None:
         last = runtime_state.get("last_click")
@@ -1513,7 +1656,8 @@ def launch_gui() -> None:
     btns3.pack(fill=tk.X, pady=(2, 4))
     ttk.Button(btns3, text="PAUSE ON/OFF", command=toggle_pause_gui).pack(side=tk.LEFT)
     ttk.Button(btns3, text="Test wszystkie punkty", command=run_test_points).pack(side=tk.LEFT)
-    ttk.Button(btns3, text="Test: Pre zapadki", command=test_pre_zapadki).pack(side=tk.LEFT, padx=6)
+    ttk.Button(btns3, text="Vision: kliknij Rozwiąż teraz", command=test_pre_zapadki).pack(side=tk.LEFT, padx=6)
+    ttk.Button(btns3, text="Vision: tylko wykryj Rozwiąż teraz", command=detect_pre_zapadki).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Test: Odpowiedź", command=test_answer_click).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Test: Potwierdź", command=test_confirm_click).pack(side=tk.LEFT, padx=6)
     ttk.Button(btns3, text="Pokaż współrzędne ostatniego kliknięcia", command=show_last_click).pack(side=tk.LEFT, padx=6)
@@ -1574,10 +1718,29 @@ def check_required_dependencies() -> bool:
     return True
 
 
+def ensure_optional_vision_dependencies() -> None:
+    required = ["opencv-python", "numpy", "pillow", "pytesseract", "pywin32"]
+    import_names = {"opencv-python": "cv2", "numpy": "numpy", "pillow": "PIL", "pytesseract": "pytesseract", "pywin32": "win32api"}
+    with config_lock:
+        auto_install = bool(config.get("vision_auto_install", True))
+    missing = [pkg for pkg in required if importlib.util.find_spec(import_names[pkg]) is None]
+    if not missing:
+        return
+    print("Brakują biblioteki vision. Uruchom:")
+    print("  python -m pip install opencv-python numpy pillow pytesseract pywin32")
+    if not auto_install:
+        return
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
+    except Exception as exc:
+        log_event(f"Auto-instalacja vision nieudana: {exc}")
+
+
 if __name__ == "__main__":
     if not check_required_dependencies():
         raise SystemExit(1)
     load_settings_from_disk()
+    ensure_optional_vision_dependencies()
     configure_flask_logging()
     setup_dpi_awareness()
     run_console_policy()
