@@ -1400,6 +1400,7 @@ function banEdge(from, to, durationMs = 30000) {
     if (!window.__bannedEdges[from]) window.__bannedEdges[from] = {};
     const expiresAt = Date.now() + Math.max(1000, durationMs || 0);
     window.__bannedEdges[from][to] = expiresAt;
+    window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
     if (window.logHero) window.logHero(`⛔ Blokuję przejście: [${from}] → [${to}] na ${Math.round((expiresAt - Date.now()) / 1000)}s`, '#ff9800');
 }
 
@@ -1570,8 +1571,8 @@ function isMapKnownInGatewayBase(mapName) {
             cleanOldGateways();
             initGUI();
             setInterval(autoDetectEngineData, 800);
-            setInterval(heroPositionTracker, 100);
-            setInterval(radarLoop, 150);
+            setInterval(heroPositionTracker, 180);
+            setInterval(radarLoop, 300);
            document.addEventListener('keydown', handleGlobalKeydown);
                 setupMapClickListener();
 
@@ -3034,8 +3035,127 @@ window.executeRushStep = function() {
             allowSameMapReentry: true,
             maxSameMapVisits: 2,
             maxIndoorDepth: 10,
-            maxPathNodes: 48
+            maxPathNodes: 48,
+            maxStateExpansions: 650
         }, extra || {});
+    }
+
+    function getRouteCacheKey(start, end, options = {}) {
+        const unlocked = Object.keys(botSettings?.unlockedTeleports || {})
+            .filter(k => botSettings.unlockedTeleports[k])
+            .sort()
+            .join(",");
+        return [
+            start,
+            end,
+            options.ignoreEdgeBans ? "ib1" : "ib0",
+            options.allowIndoorTransit ? "in1" : "in0",
+            options.allowSameMapReentry || options.allowReentry ? "re1" : "re0",
+            botSettings?.useTeleports ? "tp1" : "tp0",
+            unlocked,
+            window.__routePathCacheVersion || 0
+        ].join("::");
+    }
+
+    function getCachedRoutePath(cacheKey) {
+        window.__routePathCache = window.__routePathCache instanceof Map ? window.__routePathCache : new Map();
+        const entry = window.__routePathCache.get(cacheKey);
+        if (!entry) return undefined;
+        if (Date.now() - entry.ts > entry.ttl) {
+            window.__routePathCache.delete(cacheKey);
+            return undefined;
+        }
+        return Array.isArray(entry.path) ? entry.path.slice() : null;
+    }
+
+    function setCachedRoutePath(cacheKey, path, ttl = 900) {
+        window.__routePathCache = window.__routePathCache instanceof Map ? window.__routePathCache : new Map();
+        if (window.__routePathCache.size > 250) window.__routePathCache.clear();
+        window.__routePathCache.set(cacheKey, {
+            ts: Date.now(),
+            ttl,
+            path: Array.isArray(path) ? path.slice() : null
+        });
+    }
+
+    function getShortestPathBasic(start, end, options = {}) {
+        if (start === end) return [start];
+        const ignoreEdgeBans = !!(options && options.ignoreEdgeBans);
+        const allowIndoorTransit = !!(options && options.allowIndoorTransit);
+        const distances = {};
+        const previous = {};
+        const queue = [{ node: start, dist: 0 }];
+        const visited = new Set();
+
+        distances[start] = 0;
+        cleanupExpiredEdgeBans();
+
+        while (queue.length > 0) {
+            queue.sort((a, b) => a.dist - b.dist);
+            const current = queue.shift();
+            const u = current.node;
+            if (visited.has(u)) continue;
+            visited.add(u);
+
+            if (u === end) {
+                const path = [];
+                let curr = end;
+                while (curr) {
+                    path.unshift(curr);
+                    curr = previous[curr];
+                }
+                return path;
+            }
+
+            if (globalGateways[u]) {
+                const nowBan = Date.now();
+                for (let v in globalGateways[u]) {
+                    if (!ignoreEdgeBans && typeof isEdgeBanned === 'function' && isEdgeBanned(u, v, nowBan)) continue;
+                    if (v !== end && window.__bannedMaps && window.__bannedMaps[v] && nowBan < window.__bannedMaps[v]) continue;
+
+                    let penalty = 1;
+                    if (v !== end && isIndoorTransitMapName(v)) {
+                        penalty = allowIndoorTransit ? 3 : 50;
+                    }
+
+                    const alt = distances[u] + penalty;
+                    if (distances[v] === undefined || alt < distances[v]) {
+                        distances[v] = alt;
+                        previous[v] = u;
+                        queue.push({ node: v, dist: alt });
+                    }
+                }
+            }
+
+            const unlockedFromMap = !!(botSettings.unlockedTeleports && botSettings.unlockedTeleports[u]);
+            if (botSettings.useTeleports && ZAKONNICY[u] && unlockedFromMap) {
+                for (let tpMap in botSettings.unlockedTeleports) {
+                    if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
+                        const alt = distances[u] + 2;
+                        if (distances[tpMap] === undefined || alt < distances[tpMap]) {
+                            distances[tpMap] = alt;
+                            previous[tpMap] = u;
+                            queue.push({ node: tpMap, dist: alt });
+                        }
+                    }
+                }
+            }
+
+            const specialDestinations = (typeof getSpecialTransportDestinations === 'function')
+                ? getSpecialTransportDestinations(u)
+                : [];
+            for (const spMap of specialDestinations) {
+                if (!spMap || spMap === u) continue;
+                const alt = distances[u] + 3;
+                if (distances[spMap] === undefined || alt < distances[spMap]) {
+                    distances[spMap] = alt;
+                    previous[spMap] = u;
+                    queue.push({ node: spMap, dist: alt });
+                }
+            }
+        }
+
+        return null;
     }
 
     function getShortestPath(start, end, options = {}) {
@@ -3046,10 +3166,21 @@ window.executeRushStep = function() {
         const maxSameMapVisits = Math.max(1, parseInt(options?.maxSameMapVisits, 10) || (allowSameMapReentry ? 2 : 1));
         const maxIndoorDepth = Math.max(1, parseInt(options?.maxIndoorDepth, 10) || 10);
         const maxPathNodes = Math.max(4, parseInt(options?.maxPathNodes, 10) || 48);
+        const maxStateExpansions = Math.max(80, parseInt(options?.maxStateExpansions, 10) || 650);
         if (start === end) return [start];
 
         if (!globalGateways || Object.keys(globalGateways).length === 0 || !globalGateways[start]) {
             refreshGatewayBaseFromStorage();
+        }
+
+        const cacheKey = getRouteCacheKey(start, end, options);
+        const cached = getCachedRoutePath(cacheKey);
+        if (cached !== undefined) return cached;
+
+        const basicPath = getShortestPathBasic(start, end, options);
+        if (basicPath || !allowSameMapReentry) {
+            setCachedRoutePath(cacheKey, basicPath, ignoreEdgeBans ? 350 : 900);
+            return Array.isArray(basicPath) ? basicPath.slice() : null;
         }
 
         let distances = {};
@@ -3142,14 +3273,19 @@ window.executeRushStep = function() {
         queue.push(states[startKey]);
 
         let visited = new Set();
+        let expandedStates = 0;
+        cleanupExpiredEdgeBans();
 
         while (queue.length > 0) {
+            if (++expandedStates > maxStateExpansions) break;
             queue.sort((a, b) => a.dist - b.dist);
             let current = queue.shift();
             let u = current.map;
 
             if (u === end) {
-                return reconstructPath(current.key);
+                const advancedPath = reconstructPath(current.key);
+                setCachedRoutePath(cacheKey, advancedPath, ignoreEdgeBans ? 350 : 900);
+                return advancedPath;
             }
 
             if (visited.has(current.key)) continue;
@@ -3157,7 +3293,6 @@ window.executeRushStep = function() {
 
             if (globalGateways[u]) {
                 for (let v in globalGateways[u]) {
-                    cleanupExpiredEdgeBans();
                     const nowBan = Date.now();
                     pushNeighbor(current, v, 1, nowBan);
                 }
@@ -3180,6 +3315,7 @@ window.executeRushStep = function() {
                 pushNeighbor(current, spMap, 3, Date.now());
             }
         }
+        setCachedRoutePath(cacheKey, null, 450);
         return null;
     }
 window.handleTeleportNPC = function(targetMap) {
@@ -7670,7 +7806,7 @@ function runExpLogic() {
         }
     }
 }
-setInterval(runExpLogic, 150);
+setInterval(runExpLogic, 250);
     // --- BAZA DANYCH PROFILI EXPOWISK ---
 
     window.saveCurrentExpProfile = function() {
@@ -10985,6 +11121,7 @@ window.openShopAsync = async (namePart) => {
                     let banTime = Date.now() + 10 * 60 * 1000;
                     window.__bannedMaps = window.__bannedMaps || {};
                     window.__bannedMaps[Engine.map.d.name] = banTime;
+                    window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
 
                     if (!window.mapClearTimes) window.mapClearTimes = {};
                     window.mapClearTimes[Engine.map.d.name] = banTime;
@@ -11028,6 +11165,7 @@ window.openShopAsync = async (namePart) => {
                 let banTime = Date.now() + 10 * 60 * 1000;
                 window.__bannedMaps = window.__bannedMaps || {};
                 window.__bannedMaps[Engine.map.d.name] = banTime;
+                window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
                 if (!window.mapClearTimes) window.mapClearTimes = {};
                 window.mapClearTimes[Engine.map.d.name] = banTime;
                 expCurrentTargetId = null;
@@ -11845,16 +11983,18 @@ function updateWalkableArea() {
 
     if (!(window.margoWalkableMask instanceof Set)) window.margoWalkableMask = new Set();
     window.margoWalkableMask.clear();
+    window.__distanceMapCache = null;
     let w = Engine.map.d.x;
     let h = Engine.map.d.y;
     let queue = [[Engine.hero.d.x, Engine.hero.d.y]];
+    let queueIndex = 0;
     let visited = new Set();
     let getKey = (x, y) => `${x}_${y}`;
 
     visited.add(getKey(Engine.hero.d.x, Engine.hero.d.y));
 
-    while (queue.length > 0) {
-        let [cx, cy] = queue.shift();
+    while (queueIndex < queue.length) {
+        let [cx, cy] = queue[queueIndex++];
         window.margoWalkableMask.add(getKey(cx, cy));
 
         let dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,-1],[-1,1],[1,-1]];
@@ -11874,6 +12014,7 @@ function updateWalkableArea() {
         }
     }
     window._walkMaskMapName = Engine?.map?.d?.name || "";
+    window._walkMaskRev = (window._walkMaskRev || 0) + 1;
 }
 
 function buildDistanceMapFromHero() {
@@ -11899,13 +12040,22 @@ function buildDistanceMapFromHero() {
     const w = Engine.map.d.x;
     const h = Engine.map.d.y;
     const getKey = (x, y) => `${x}_${y}`;
-    const distMap = new Map();
-
     const startX = Engine.hero.d.x;
     const startY = Engine.hero.d.y;
+    const cacheKey = `${currentMapName}|${startX}|${startY}|${window._walkMaskRev || 0}`;
+    if (
+        window.__distanceMapCache &&
+        window.__distanceMapCache.key === cacheKey &&
+        Date.now() - window.__distanceMapCache.ts < 280
+    ) {
+        return window.__distanceMapCache.map;
+    }
+
+    const distMap = new Map();
 
     const startKey = getKey(startX, startY);
     const q = [[startX, startY]];
+    let qIndex = 0;
     distMap.set(startKey, 0);
 
     const dirs = [
@@ -11913,8 +12063,8 @@ function buildDistanceMapFromHero() {
         [1,1],[-1,-1],[-1,1],[1,-1]
     ];
 
-    while (q.length > 0) {
-        const [cx, cy] = q.shift();
+    while (qIndex < q.length) {
+        const [cx, cy] = q[qIndex++];
         const baseDist = distMap.get(getKey(cx, cy));
 
         for (const [dx, dy] of dirs) {
@@ -11938,6 +12088,7 @@ function buildDistanceMapFromHero() {
             q.push([nx, ny]);
         }
     }
+    window.__distanceMapCache = { key: cacheKey, ts: Date.now(), map: distMap };
     return distMap;
 }
 
@@ -12426,5 +12577,5 @@ setInterval(() => {
         
         if (typeof renderTacticalRadar === 'function') renderTacticalRadar();
     }
-}, 250);
+}, 500);
 })(); // Koniec kodu
