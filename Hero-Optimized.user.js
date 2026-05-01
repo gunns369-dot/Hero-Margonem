@@ -1733,9 +1733,9 @@ function isMapKnownInGatewayBase(mapName) {
             loadData();
             cleanOldGateways();
             initGUI();
-            setInterval(autoDetectEngineData, 800);
+            setInterval(autoDetectEngineData, 1500);
             setInterval(heroPositionTracker, 180);
-            setInterval(radarLoop, 300);
+            setInterval(radarLoop, 700);
            document.addEventListener('keydown', handleGlobalKeydown);
                 setupMapClickListener();
 
@@ -2114,6 +2114,12 @@ let attackInterval = null;
     function radarLoop() {
 
         if (!botSettings.radarEnabled || heroFoundAlerted) return;
+        const radarNow = Date.now();
+        const radarMoving = typeof Engine !== 'undefined' && !!(Engine?.hero?.d?.path && Engine.hero.d.path.length > 0);
+        const radarRushing = !!(window.isRushing || (typeof isRushing !== 'undefined' && isRushing));
+        const radarMinGap = (radarMoving || radarRushing) ? 1200 : 650;
+        if (window.__lastRadarLoopAt && radarNow - window.__lastRadarLoopAt < radarMinGap) return;
+        window.__lastRadarLoopAt = radarNow;
 
         if (typeof Engine !== 'undefined' && Engine.map && Engine.map.isLoading) return;
 
@@ -2527,8 +2533,13 @@ function autoDetectEngineData() {
         }
     }
 
-    updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
-    updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
+    const uiRefreshKey = `${currentName}|${Engine.hero?.d?.lvl || 0}`;
+    if (window.__suitableBossUiKey !== uiRefreshKey || Date.now() - (window.__lastSuitableBossUiAt || 0) > 6000) {
+        window.__suitableBossUiKey = uiRefreshKey;
+        window.__lastSuitableBossUiAt = Date.now();
+        updateSuitableBosses('e2SuitableContainer', 'e2Search', elityIIData, '#ba68c8');
+        updateSuitableBosses('kolosySuitableContainer', 'kolosySearch', kolosyData, '#ff7043');
+    }
 
     if (currentName !== lastMapName) {
         positionHistory = [];
@@ -7409,6 +7420,9 @@ function requestGatewayRefresh(reason = 'loop', forceNow = false) {
     if (!currentMap || typeof HeroScannerModule === 'undefined' || typeof HeroScannerModule.scanCurrentMap !== 'function') return state.cache || [];
 
     const now = Date.now();
+    const heroMovingNow = !!(Engine?.hero?.d?.path && Engine.hero.d.path.length > 0);
+    if (!forceNow && heroMovingNow) return state.cache || [];
+
     if (state.mapName !== currentMap) {
         state.mapName = currentMap;
         state.lastScanAt = 0;
@@ -7417,7 +7431,7 @@ function requestGatewayRefresh(reason = 'loop', forceNow = false) {
         state.cache = [];
     }
 
-    const minGap = forceNow ? 0 : 500;
+    const minGap = forceNow ? 0 : 1800;
     if (now - state.lastScanAt < minGap) return state.cache || [];
 
     state.lastScanAt = now;
@@ -7438,6 +7452,7 @@ function requestGatewayRefresh(reason = 'loop', forceNow = false) {
             state.pendingRescan = true;
             setTimeout(() => {
                 if (!window.isExping && !window.isRushing) return;
+                if (Engine?.hero?.d?.path && Engine.hero.d.path.length > 0) return;
                 requestGatewayRefresh('retry', true);
             }, 220);
         } else {
@@ -7456,6 +7471,20 @@ function getExpAllowedMapSet() {
 function runExpLogic() {
     if (!window.isExping) return;
     if (typeof Engine === 'undefined' || !Engine.hero || !Engine.hero.d || !Engine.map || Engine.map.isLoading || !Engine.map.d.name) return;
+    const now = Date.now();
+    const heroMovingEarly = !!(Engine.hero.d.path && Engine.hero.d.path.length > 0);
+    const rushingEarly = !!(window.isRushing || (typeof isRushing !== 'undefined' && isRushing) || window.isRushingToShop);
+    if (heroMovingEarly || rushingEarly) {
+        if (window.RouteCombatFSM && (!window.__lastRushFsmSyncAt || now - window.__lastRushFsmSyncAt > 1500)) {
+            window.__lastRushFsmSyncAt = now;
+            window.RouteCombatFSM.update({
+                running: !!window.isExping,
+                currentTask: (window.autoSellState?.active ? 'AUTOSELL' : (window.autoPotState?.active ? 'AUTOPOT' : 'TRANSIT')),
+                inRouteMap: false
+            }, 'exp_tick_moving');
+        }
+        return;
+    }
     const currMapEarly = Engine.map.d.name;
     const mapsPoolEarly = getCurrentExpHuntMaps();
     const poolSetEarly = new Set((mapsPoolEarly || []).map(normMapName));
@@ -7468,12 +7497,10 @@ function runExpLogic() {
         }, isExpMapEarly ? 'exp_tick_in_route' : 'exp_tick_out_of_route');
     }
 
-    if (Engine.hero.d.path && Engine.hero.d.path.length > 0) return;
     if (Engine.battle && Engine.battle.show) return;
 
     if ((window.autoSellState && window.autoSellState.active) || (window.autoPotState && window.autoPotState.active)) return;
 
-    const now = Date.now();
     window.expCycleId = (window.expCycleId || 0) + 1;
     const currMap = Engine.map.d.name;
     let mapsPool = getCurrentExpHuntMaps();
@@ -7481,7 +7508,11 @@ function runExpLogic() {
     const isExpMap = poolSet.has(normMapName(currMap));
     let temporaryExpMode = false;
     window.expDecisionInfo = `Mapa: ${currMap} | tryb: ${isExpMap ? "EXP" : "TRANZYT"}`;
-    requestGatewayRefresh("run-exp");
+    if (window.expLastGatewayRefreshMap !== currMap || now - (window.expLastGatewayRefreshAt || 0) > 3200) {
+        window.expLastGatewayRefreshMap = currMap;
+        window.expLastGatewayRefreshAt = now;
+        requestGatewayRefresh("run-exp");
+    }
     window.expMapPvpCache = window.expMapPvpCache || {};
     window.expMapPvpCache[currMap] = Engine.map?.d?.pvp;
 
@@ -7977,7 +8008,7 @@ function runExpLogic() {
         }
     }
 }
-setInterval(runExpLogic, 250);
+setInterval(runExpLogic, 400);
     // --- BAZA DANYCH PROFILI EXPOWISK ---
 
     window.saveCurrentExpProfile = function() {
@@ -12213,11 +12244,15 @@ function buildDistanceMapFromHero() {
     const getKey = (x, y) => `${x}_${y}`;
     const startX = Engine.hero.d.x;
     const startY = Engine.hero.d.y;
-    const cacheKey = `${currentMapName}|${startX}|${startY}|${window._walkMaskRev || 0}`;
+    const rushingForDistance = !!(window.isRushing || (typeof isRushing !== 'undefined' && isRushing));
+    const cacheKey = rushingForDistance
+        ? `${currentMapName}|rush|${window._walkMaskRev || 0}`
+        : `${currentMapName}|${startX}|${startY}|${window._walkMaskRev || 0}`;
+    const cacheTtl = rushingForDistance ? 900 : 280;
     if (
         window.__distanceMapCache &&
         window.__distanceMapCache.key === cacheKey &&
-        Date.now() - window.__distanceMapCache.ts < 280
+        Date.now() - window.__distanceMapCache.ts < cacheTtl
     ) {
         return window.__distanceMapCache.map;
     }
@@ -12742,5 +12777,5 @@ setInterval(() => {
         
         if (typeof renderTacticalRadar === 'function') renderTacticalRadar();
     }
-}, 500);
+}, 1000);
 })(); // Koniec kodu
