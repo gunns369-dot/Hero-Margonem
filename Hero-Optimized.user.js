@@ -1465,7 +1465,7 @@ function pickNextReachableMapFromRoute(currentSysMap, allowedMaps) {
         if (!checkMap || normMapName(checkMap) === currNorm) continue;
         if (window.__bannedMaps && window.__bannedMaps[checkMap] && Date.now() < window.__bannedMaps[checkMap]) continue;
 
-        const path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, checkMap, { allowIndoorTransit: true }) : null;
+        const path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, checkMap, routePathOptions()) : null;
         if (!path || path.length < 2) continue;
 
         const nextHop = path[1];
@@ -1513,7 +1513,7 @@ function pickSmartTransitGateway(currentSysMap, preferredTargets) {
                 continue;
             }
             const p = typeof getShortestPath === 'function'
-                ? getShortestPath(viaMap, finalTarget, { allowIndoorTransit: true })
+                ? getShortestPath(viaMap, finalTarget, routePathOptions())
                 : null;
             if (!p || p.length < 2) continue;
             const score = p.length - 1;
@@ -2636,7 +2636,7 @@ window.executeRushStep = function() {
         }
 
         let nextMap = null;
-        let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
+        let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget, routePathOptions()) : null;
         let currentDistance = path ? path.length : 999;
 
         if (!path) {
@@ -2644,12 +2644,12 @@ window.executeRushStep = function() {
             if (typeof refreshGatewayBaseFromStorage === 'function') refreshGatewayBaseFromStorage();
             if (typeof autoLearnGateways === 'function') autoLearnGateways();
             if (typeof requestGatewayRefresh === 'function') requestGatewayRefresh('rush-no-path', true);
-            path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget) : null;
+            path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget, routePathOptions()) : null;
             currentDistance = path ? path.length : 999;
 
             // Awaryjnie: jeśli jedyne znane przejścia są tymczasowo zbanowane, spróbuj zignorować bany krawędzi.
             if (!path && typeof getShortestPath === 'function') {
-                const emergencyPath = getShortestPath(currentSysMap, rushTarget, { ignoreEdgeBans: true });
+                const emergencyPath = getShortestPath(currentSysMap, rushTarget, routePathOptions({ ignoreEdgeBans: true }));
                 if (emergencyPath && emergencyPath.length > 1) {
                     path = emergencyPath;
                     currentDistance = path.length;
@@ -2673,7 +2673,7 @@ window.executeRushStep = function() {
 
         for (let tp of tps) {
             if (tp.map === currentSysMap) continue;
-            let tpPath = typeof getShortestPath === 'function' ? getShortestPath(tp.map, rushTarget) : null;
+            let tpPath = typeof getShortestPath === 'function' ? getShortestPath(tp.map, rushTarget, routePathOptions()) : null;
             if (tpPath && tpPath.length < bestDist) {
                 bestDist = tpPath.length;
                 bestTp = tp;
@@ -2711,7 +2711,7 @@ window.executeRushStep = function() {
                 nextMap = window.rushFullPath[idx + 1];
             } else {
                 let startMap = window.rushFullPath[0];
-                let pathToStart = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, startMap) : null;
+                let pathToStart = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, startMap, routePathOptions()) : null;
                 if (pathToStart && pathToStart.length > 1) nextMap = pathToStart[1];
                 else if (currentSysMap === startMap && window.rushFullPath.length > 1) nextMap = window.rushFullPath[1];
             }
@@ -2799,12 +2799,14 @@ window.executeRushStep = function() {
                 }
 
                 if (fallback && fallback.nextMap && fallback.door) {
-                    window.rushNextMap = fallback.nextMap;
-                    if (window._lastRushNextMap !== fallback.nextMap) {
+                    const immediateHop = fallback.nextHop || fallback.door.targetMap || fallback.nextMap;
+                    window.rushNextMap = immediateHop;
+                    if (window._lastRushNextMap !== immediateHop) {
                         let suffix = fallback.finalTarget ? ` → cel trasy: ${fallback.finalTarget}` : "";
-                        if (window.logExp) window.logExp(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (awaryjny tranzyt przez widoczne przejście)`, "#ba68c8");
-                        if (window.logHero) window.logHero(`🚪 Biegnę do: ${fallback.nextMap}${suffix} (awaryjny tranzyt przez widoczne przejście)`, "#ba68c8");
-                        window._lastRushNextMap = fallback.nextMap;
+                        if (!suffix && fallback.nextMap && fallback.nextMap !== immediateHop) suffix = ` → cel trasy: ${fallback.nextMap}`;
+                        if (window.logExp) window.logExp(`🚪 Biegnę do: ${immediateHop}${suffix} (awaryjny tranzyt przez widoczne przejście)`, "#ba68c8");
+                        if (window.logHero) window.logHero(`🚪 Biegnę do: ${immediateHop}${suffix} (awaryjny tranzyt przez widoczne przejście)`, "#ba68c8");
+                        window._lastRushNextMap = immediateHop;
                     }
                     safeGoTo(fallback.door.x, fallback.door.y, false);
                     clearTimeout(rushInterval);
@@ -3004,10 +3006,47 @@ window.executeRushStep = function() {
         }
     }
 
+    function isIndoorTransitMapName(mapName) {
+        const vLower = String(mapName || "").toLowerCase();
+        return (
+            vLower.includes(" p.") ||
+            vLower.includes(" s.") ||
+            vLower.includes(" - ") ||
+            vLower.includes("dom ") ||
+            vLower.includes("domu") ||
+            vLower.includes("mlyn") ||
+            vLower.includes("młyn") ||
+            vLower.includes("jaskinia") ||
+            vLower.includes("grota") ||
+            vLower.includes("kopalnia") ||
+            vLower.includes("piwnica") ||
+            vLower.includes("pietro") ||
+            vLower.includes("piętro") ||
+            vLower.includes("parter") ||
+            vLower.includes("komnata") ||
+            vLower.includes("korytarz")
+        );
+    }
+
+    function routePathOptions(extra = {}) {
+        return Object.assign({
+            allowIndoorTransit: true,
+            allowSameMapReentry: true,
+            maxSameMapVisits: 2,
+            maxIndoorDepth: 10,
+            maxPathNodes: 48
+        }, extra || {});
+    }
+
     function getShortestPath(start, end, options = {}) {
-        if (start === end) return [start];
+        if (!start || !end) return null;
         const ignoreEdgeBans = !!(options && options.ignoreEdgeBans);
         const allowIndoorTransit = !!(options && options.allowIndoorTransit);
+        const allowSameMapReentry = !!(options && (options.allowSameMapReentry || options.allowReentry || options.allowIndoorTransit));
+        const maxSameMapVisits = Math.max(1, parseInt(options?.maxSameMapVisits, 10) || (allowSameMapReentry ? 2 : 1));
+        const maxIndoorDepth = Math.max(1, parseInt(options?.maxIndoorDepth, 10) || 10);
+        const maxPathNodes = Math.max(4, parseInt(options?.maxPathNodes, 10) || 48);
+        if (start === end) return [start];
 
         if (!globalGateways || Object.keys(globalGateways).length === 0 || !globalGateways[start]) {
             refreshGatewayBaseFromStorage();
@@ -3015,51 +3054,112 @@ window.executeRushStep = function() {
 
         let distances = {};
         let previous = {};
+        let states = {};
         let queue = [];
 
-        distances[start] = 0;
-        queue.push({node: start, dist: 0});
+        function makeStateKey(mapName, visits, indoorDepth) {
+            const repeats = Object.keys(visits || {})
+                .filter(k => visits[k] > 1)
+                .sort()
+                .map(k => `${k}:${visits[k]}`)
+                .join("|");
+            return `${mapName}@@${indoorDepth || 0}@@${repeats}`;
+        }
+
+        function reconstructPath(stateKey) {
+            const path = [];
+            let curr = stateKey;
+            while (curr) {
+                if (states[curr]) path.unshift(states[curr].map);
+                curr = previous[curr];
+            }
+            return path;
+        }
+
+        function canUseNeighbor(current, targetMap, nowBan) {
+            if (!targetMap) return false;
+            if (!ignoreEdgeBans && typeof isEdgeBanned === 'function' && isEdgeBanned(current.map, targetMap, nowBan)) {
+                return false;
+            }
+            if (targetMap !== end && window.__bannedMaps && window.__bannedMaps[targetMap] && nowBan < window.__bannedMaps[targetMap]) {
+                return false;
+            }
+
+            const alreadyVisited = current.visits[targetMap] || 0;
+            if (alreadyVisited <= 0) return true;
+            if (!allowSameMapReentry || alreadyVisited >= maxSameMapVisits) return false;
+
+            const currentIndoor = isIndoorTransitMapName(current.map);
+            const targetIndoor = isIndoorTransitMapName(targetMap);
+            return currentIndoor || targetIndoor || current.indoorDepth > 0;
+        }
+
+        function pushNeighbor(current, targetMap, basePenalty, nowBan) {
+            if (!canUseNeighbor(current, targetMap, nowBan)) return;
+
+            const targetIndoor = isIndoorTransitMapName(targetMap);
+            const nextIndoorDepth = targetIndoor ? current.indoorDepth + 1 : 0;
+            if (targetIndoor && nextIndoorDepth > maxIndoorDepth) return;
+            if (current.depth + 1 > maxPathNodes) return;
+
+            let penalty = basePenalty || 1;
+            if (targetMap !== end && targetIndoor) {
+                penalty = allowIndoorTransit ? Math.max(penalty, 3) : Math.max(penalty, 50);
+            }
+            if ((current.visits[targetMap] || 0) > 0) penalty += 1.5;
+
+            const nextVisits = Object.assign({}, current.visits);
+            nextVisits[targetMap] = (nextVisits[targetMap] || 0) + 1;
+            const nextKey = makeStateKey(targetMap, nextVisits, nextIndoorDepth);
+            const alt = distances[current.key] + penalty;
+            if (distances[nextKey] === undefined || alt < distances[nextKey]) {
+                states[nextKey] = {
+                    key: nextKey,
+                    map: targetMap,
+                    dist: alt,
+                    visits: nextVisits,
+                    indoorDepth: nextIndoorDepth,
+                    depth: current.depth + 1
+                };
+                distances[nextKey] = alt;
+                previous[nextKey] = current.key;
+                queue.push(states[nextKey]);
+            }
+        }
+
+        const startVisits = {};
+        startVisits[start] = 1;
+        const startKey = makeStateKey(start, startVisits, isIndoorTransitMapName(start) ? 1 : 0);
+        states[startKey] = {
+            key: startKey,
+            map: start,
+            dist: 0,
+            visits: startVisits,
+            indoorDepth: isIndoorTransitMapName(start) ? 1 : 0,
+            depth: 1
+        };
+        distances[startKey] = 0;
+        queue.push(states[startKey]);
 
         let visited = new Set();
 
         while (queue.length > 0) {
             queue.sort((a, b) => a.dist - b.dist);
             let current = queue.shift();
-            let u = current.node;
+            let u = current.map;
 
             if (u === end) {
-                let path = [];
-                let curr = end;
-                while (curr) { path.unshift(curr); curr = previous[curr]; }
-                return path;
+                return reconstructPath(current.key);
             }
 
-            if (visited.has(u)) continue;
-            visited.add(u);
+            if (visited.has(current.key)) continue;
+            visited.add(current.key);
 
             if (globalGateways[u]) {
                 for (let v in globalGateways[u]) {
                     cleanupExpiredEdgeBans();
                     const nowBan = Date.now();
-                    if (!ignoreEdgeBans && typeof isEdgeBanned === 'function' && isEdgeBanned(u, v, nowBan)) {
-                        continue;
-                    }
-                    // Map-level bany (np. PvP flee), ale nie blokuj finalnego celu ścieżki.
-                    if (v !== end && window.__bannedMaps && window.__bannedMaps[v] && nowBan < window.__bannedMaps[v]) {
-                        continue;
-                    }
-
-                    let penalty = 1;
-                    const vLower = v.toLowerCase();
-                    const looksIndoor = (vLower.includes(" p.") || vLower.includes(" s.") || vLower.includes(" - ") || vLower.includes("dom ") || vLower.includes("młyn") || vLower.includes("jaskinia") || vLower.includes("grota") || vLower.includes("kopalnia"));
-                    if (v !== end && looksIndoor) {
-                        penalty = allowIndoorTransit ? 3 : 50;
-                    }
-
-                    let alt = distances[u] + penalty;
-                    if (distances[v] === undefined || alt < distances[v]) {
-                        distances[v] = alt; previous[v] = u; queue.push({node: v, dist: alt});
-                    }
+                    pushNeighbor(current, v, 1, nowBan);
                 }
             }
 
@@ -3067,10 +3167,7 @@ window.executeRushStep = function() {
             if (botSettings.useTeleports && ZAKONNICY[u] && unlockedFromMap) {
                 for (let tpMap in botSettings.unlockedTeleports) {
                     if (botSettings.unlockedTeleports[tpMap] && tpMap !== u) {
-                        let alt = distances[u] + 2;
-                        if (distances[tpMap] === undefined || alt < distances[tpMap]) {
-                            distances[tpMap] = alt; previous[tpMap] = u; queue.push({node: tpMap, dist: alt});
-                        }
+                        pushNeighbor(current, tpMap, 2, Date.now());
                     }
                 }
             }
@@ -3080,12 +3177,7 @@ window.executeRushStep = function() {
                 : [];
             for (const spMap of specialDestinations) {
                 if (!spMap || spMap === u) continue;
-                let alt = distances[u] + 3;
-                if (distances[spMap] === undefined || alt < distances[spMap]) {
-                    distances[spMap] = alt;
-                    previous[spMap] = u;
-                    queue.push({ node: spMap, dist: alt });
-                }
+                pushNeighbor(current, spMap, 3, Date.now());
             }
         }
         return null;
@@ -3496,7 +3588,7 @@ window.runRoutingAlgorithm = function(hero, targets, startMap) {
             let minScore = Infinity;
 
             for (let target of unvisited) {
-                let path = getShortestPath(currentMap, target);
+                let path = getShortestPath(currentMap, target, routePathOptions());
                 if (path) {
                     // Waga 1: Ilość przejść między mapami (bardzo duży koszt, unikamy ładowania map)
                     let score = (path.length - 1) * 10000;
@@ -3545,7 +3637,7 @@ window.runRoutingAlgorithm = function(hero, targets, startMap) {
         finalRoute.forEach((mapName, idx) => {
             if (heroData[hero] && heroData[hero][mapName] && heroData[hero][mapName].length > 1) {
                 let nextMap = finalRoute[(idx + 1) % finalRoute.length];
-                let exitPath = getShortestPath(mapName, nextMap);
+                let exitPath = getShortestPath(mapName, nextMap, routePathOptions());
                 let exitGw = null;
 
                 if (exitPath && exitPath.length > 1 && globalGateways[mapName] && globalGateways[mapName][exitPath[1]]) {
@@ -4925,7 +5017,7 @@ selHero.addEventListener('change', (e) => {
 
             // Jeśli kliknąłeś inną mapę - sprawdzamy, czy bot zna drogę
 
-            let path = getShortestPath(currentSysMap, mapName);
+            let path = getShortestPath(currentSysMap, mapName, routePathOptions());
 
 
 
@@ -5500,7 +5592,7 @@ function optimizeRoute() {
             let mapList = heroMapOrder[hero];
             // Ulepszenie: Następna mapa w pętli. Jeśli kończymy listę (np. indeks 3 z 4), weź indeks 0
             let nextMap = mapList[(currentRouteIndex + 1) % mapList.length];
-            let path = getShortestPath(currentSysMap, nextMap);
+            let path = getShortestPath(currentSysMap, nextMap, routePathOptions());
 
             if (path && path.length > 1) {
                 let immediateNextMap = path[1];
@@ -6643,7 +6735,7 @@ function setExpBerserkState(shouldEnable) {
 
     for (const targetMap of maps) {
 
-        const p = getShortestPath(currMap, targetMap, { allowIndoorTransit: true });
+        const p = getShortestPath(currMap, targetMap, routePathOptions());
 
         if (p && p.length > 0 && p.length < bestLen) {
 
@@ -6803,7 +6895,7 @@ function pickNextUnclearedExpMap(currMap, mapsPool) {
         if (isMapTemporarilyCleared(candidate)) continue;
         if (window.__bannedMaps && window.__bannedMaps[candidate] && now < window.__bannedMaps[candidate]) continue;
 
-        const path = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate, { allowIndoorTransit: true }) : null;
+        const path = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate, routePathOptions()) : null;
         if (!path || path.length < 2) continue;
 
         const nextHop = path[1];
@@ -6836,7 +6928,7 @@ function getNearestKnownSafeExpMap(currMap, mapsPool) {
 
     let best = null;
     for (const mapName of safeCandidates) {
-        const p = typeof getShortestPath === 'function' ? getShortestPath(currMap, mapName) : null;
+        const p = typeof getShortestPath === 'function' ? getShortestPath(currMap, mapName, routePathOptions()) : null;
         if (!p || p.length === 0) continue;
         const score = p.length;
         if (!best || score < best.score) best = { map: mapName, score };
@@ -7546,9 +7638,9 @@ function runExpLogic() {
                 if (normMapName(candidate) === normMapName(currMap)) continue;
                 if (isMapTemporarilyCleared(candidate)) continue;
                 if (window.__bannedMaps && window.__bannedMaps[candidate] && Date.now() < window.__bannedMaps[candidate]) continue;
-                let backPath = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate) : null;
+                let backPath = typeof getShortestPath === 'function' ? getShortestPath(currMap, candidate, routePathOptions()) : null;
                 if ((!backPath || backPath.length < 2) && typeof getShortestPath === 'function') {
-                    backPath = getShortestPath(currMap, candidate, { ignoreEdgeBans: true });
+                    backPath = getShortestPath(currMap, candidate, routePathOptions({ ignoreEdgeBans: true }));
                 }
                 if (backPath && backPath.length > 1) {
                     back = candidate;
@@ -8010,7 +8102,7 @@ window.clearExpMaps = clearExpMaps;
             let minLen = Infinity;
 
             for (let target of unvisited) {
-                let path = typeof getShortestPath === 'function' ? getShortestPath(currentMap, target) : null;
+                let path = typeof getShortestPath === 'function' ? getShortestPath(currentMap, target, routePathOptions()) : null;
                 let dist = path ? path.length : 999;
                 if (dist < minLen) {
                     minLen = dist;
@@ -8036,7 +8128,7 @@ window.clearExpMaps = clearExpMaps;
         }
 
         // Zamykamy pętlę powrotną (od ostatniej mapy wprost do pierwszej)
-        let returnPath = typeof getShortestPath === 'function' ? getShortestPath(currentMap, finalRoute[0]) : null;
+        let returnPath = typeof getShortestPath === 'function' ? getShortestPath(currentMap, finalRoute[0], routePathOptions()) : null;
         if (returnPath && returnPath.length > 1) {
             for (let i = 1; i < returnPath.length - 1; i++) {
                 finalRoute.push(returnPath[i]);
@@ -9686,7 +9778,7 @@ if (isDead) {
                         if (k.map_name === currMap) {
                             dist = 0;
                         } else {
-                            let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name) : null;
+                            let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, k.map_name, routePathOptions()) : null;
                             if (path && path.length > 0) dist = path.length;
                         }
 
@@ -10125,7 +10217,7 @@ window.openShopAsync = async (namePart) => {
                         if (!bestNpc) {
                             let bestDist = Infinity;
                             validMerchants.forEach(m => {
-                                let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, m.map_name) : null;
+                                let path = typeof getShortestPath === 'function' ? getShortestPath(currMap, m.map_name, routePathOptions()) : null;
                                 if (path && path.length < bestDist) { bestDist = path.length; bestNpc = m; }
                             });
                         }
@@ -10255,6 +10347,8 @@ window.openShopAsync = async (namePart) => {
         window.__trapSessionActive = false;
         window.__trapResumeQueued = false;
         window.__trapBotPausedByCaptcha = false;
+        window.__trapResumeSnapshot = null;
+        window.__trapLastResumeAt = 0;
         window.__trapForceFullscreen = localStorage.getItem('hero_trap_force_fullscreen') === '1';
         window.__preCaptchaLastAttemptAt = 0;
         window.__preCaptchaAttempts = 0;
@@ -10364,6 +10458,120 @@ window.openShopAsync = async (namePart) => {
 
         function randomDelay(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+        function readTrapResumeSnapshot(reason = "trap") {
+            const localPatrol = (typeof isPatrolling !== 'undefined' && !!isPatrolling);
+            const localRush = (typeof isRushing !== 'undefined' && !!isRushing);
+            const snapshot = {
+                reason,
+                createdAt: Date.now(),
+                map: (typeof getCurrentMapName === 'function' ? getCurrentMapName() : (Engine?.map?.d?.name || null)),
+                exping: !!window.isExping,
+                patrolling: localPatrol || !!window.isPatrolling,
+                rushing: localRush || !!window.isRushing,
+                rushTarget: (typeof rushTarget !== 'undefined' ? rushTarget : null),
+                rushTargetX: (typeof rushTargetX !== 'undefined' ? rushTargetX : null),
+                rushTargetY: (typeof rushTargetY !== 'undefined' ? rushTargetY : null),
+                rushFullPath: Array.isArray(window.rushFullPath) ? [...window.rushFullPath] : [],
+                resumePatrolAfterRush: !!window.resumePatrolAfterRush,
+                berserk: !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo),
+                heroModeActive: !!document.getElementById('heroModeToggle')?.classList?.contains('active-tab')
+            };
+
+            window.__wasExpingBeforeCaptcha = snapshot.exping;
+            window.__wasPatrollingBeforeCaptcha = snapshot.patrolling || snapshot.rushing;
+            window.__wasBerserkBeforeCaptcha = snapshot.berserk;
+            window.__wasHeroModeBeforeCaptcha = snapshot.heroModeActive;
+            return snapshot;
+        }
+
+        function ensureTrapResumeSnapshot(reason = "trap") {
+            const snap = window.__trapResumeSnapshot;
+            if (snap && (snap.exping || snap.patrolling || snap.rushing)) return snap;
+            window.__trapResumeSnapshot = readTrapResumeSnapshot(reason);
+            return window.__trapResumeSnapshot;
+        }
+
+        function hasTrapResumeWork(snapshot = window.__trapResumeSnapshot) {
+            return !!(snapshot && (snapshot.exping || snapshot.patrolling || snapshot.rushing));
+        }
+
+        function resetTrapResumeState() {
+            window.__wasExpingBeforeCaptcha = false;
+            window.__wasPatrollingBeforeCaptcha = false;
+            window.__wasBerserkBeforeCaptcha = false;
+            window.__wasHeroModeBeforeCaptcha = false;
+            window.__trapBotPausedByCaptcha = false;
+            window.__captchaPhase = "none";
+            window.__trapResumeQueued = false;
+            window.__trapResumeSnapshot = null;
+            window.__trapSeenAt = 0;
+            window.__preCaptchaLastAttemptAt = 0;
+            window.__preCaptchaAttempts = 0;
+            window.__captchaSolveLastAttemptAt = 0;
+        }
+
+        function pauseBotsForTrap(snapshot) {
+            const snap = snapshot || ensureTrapResumeSnapshot("full");
+            if (snap.exping && window.isExping) {
+                let btn = document.getElementById('btnStartExp');
+                if (btn) btn.click();
+                else window.isExping = false;
+            }
+            if (typeof stopPatrol === 'function') stopPatrol(true);
+            window.__trapBotPausedByCaptcha = true;
+        }
+
+        function resumeBotsAfterTrap(snapshot) {
+            const snap = snapshot || window.__trapResumeSnapshot || null;
+            if (!snap || !hasTrapResumeWork(snap)) return false;
+
+            const now = Date.now();
+            window.__trapLastResumeAt = now;
+
+            if (snap.exping && !window.isExping) {
+                let btn = document.getElementById('btnStartExp');
+                if (btn) btn.click();
+                else {
+                    window.isExping = true;
+                    window.expRunId = window.expRunId || `captcha-resume-${now}`;
+                }
+            }
+
+            if (snap.exping) {
+                window.expMapEnteredAt = now;
+                window.expMapTransitionCooldown = now + randomDelay(1200, 2200);
+                window.expLastActionTime = now + randomDelay(500, 1200);
+                window.expCurrentTargetGroupKey = null;
+                window.expFocusTarget = null;
+                if (typeof expCurrentTargetId !== 'undefined') expCurrentTargetId = null;
+            } else if (snap.rushing && snap.rushTarget) {
+                if (typeof rushTarget !== 'undefined') rushTarget = snap.rushTarget;
+                if (typeof rushTargetX !== 'undefined') rushTargetX = snap.rushTargetX ?? null;
+                if (typeof rushTargetY !== 'undefined') rushTargetY = snap.rushTargetY ?? null;
+                window.rushFullPath = Array.isArray(snap.rushFullPath) ? [...snap.rushFullPath] : [];
+                window.resumePatrolAfterRush = !!snap.resumePatrolAfterRush;
+                if (typeof isPatrolling !== 'undefined') isPatrolling = false;
+                if (typeof isRushing !== 'undefined') isRushing = true;
+                window.isRushing = true;
+                clearTimeout(rushInterval);
+                rushInterval = setTimeout(() => {
+                    if (typeof window.executeRushStep === 'function') window.executeRushStep();
+                }, randomDelay(700, 1300));
+            } else if (snap.patrolling && !window.isRushing) {
+                if (typeof startPatrol === 'function') {
+                    startPatrol();
+                } else if (typeof isPatrolling !== 'undefined') {
+                    isPatrolling = true;
+                }
+            }
+
+            if (snap.berserk && window.BerserkController?.setBotBerserkState) {
+                window.BerserkController.setBotBerserkState(true, 'captcha_resume');
+            }
+
+            return true;
+        }
 
         function getCaptchaGameContainer() {
             return document.querySelector('#box, .interface-layer, .game-window, #engine, #game, #game-window') || document.body;
@@ -10498,10 +10706,11 @@ window.openShopAsync = async (namePart) => {
                 if (window.__fullscreenByBotForTrap && window.__captchaPhase === "none") {
                     await ensureFullscreenOffAfterTrap();
                 }
+                const resumeSnapshot = window.__trapResumeSnapshot;
                 if (
                     hadTrapSession &&
                     !window.__trapResumeQueued &&
-                    window.__trapBotPausedByCaptcha &&
+                    (window.__trapBotPausedByCaptcha || hasTrapResumeWork(resumeSnapshot)) &&
                     (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre" || window.__captchaPhase === "none")
                 ) {
                     window.__trapResumeQueued = true;
@@ -10513,34 +10722,17 @@ window.openShopAsync = async (namePart) => {
                     if (window.logHero) window.logHero(`✅ Zapadka zniknęła. Wznawiam pracę za ${(delay/1000).toFixed(1)}s...`, "#4caf50");
 
                     setTimeout(() => {
-                        if (window.__wasExpingBeforeCaptcha && !window.isExping) {
-                            let btn = document.getElementById('btnStartExp');
-                            if (btn) btn.click();
+                        if (getCaptchaWindow() || getPreCaptcha()) {
+                            window.__trapResumeQueued = false;
+                            window.__captchaPhase = "solving";
+                            return;
                         }
-                        if (window.__wasBerserkBeforeCaptcha && window.BerserkController?.setBotBerserkState) {
-                            window.BerserkController.setBotBerserkState(true, 'captcha_resume');
-                        }
-                        if (window.__wasPatrollingBeforeCaptcha && window.__wasHeroModeBeforeCaptcha && !window.isPatrolling && !window.isRushing) {
-                            if (typeof startPatrol === 'function') startPatrol();
-                        }
-                        window.__wasExpingBeforeCaptcha = false;
-                        window.__wasPatrollingBeforeCaptcha = false;
-                        window.__wasBerserkBeforeCaptcha = false;
-                        window.__wasHeroModeBeforeCaptcha = false;
-                        window.__trapBotPausedByCaptcha = false;
-                        window.__captchaPhase = "none";
-                        window.__trapResumeQueued = false;
-                        window.__trapSeenAt = 0;
-                        window.__preCaptchaLastAttemptAt = 0;
-                        window.__preCaptchaAttempts = 0;
-                        window.__captchaSolveLastAttemptAt = 0;
+                        const resumed = resumeBotsAfterTrap(resumeSnapshot);
+                        resetTrapResumeState();
+                        if (resumed && window.logExp) window.logExp("▶ Bot wznowiony po zapadce.", "#4caf50");
                     }, delay);
                 } else if (hadTrapSession && !window.__trapBotPausedByCaptcha) {
-                    window.__captchaPhase = "none";
-                    window.__trapSeenAt = 0;
-                    window.__preCaptchaLastAttemptAt = 0;
-                    window.__preCaptchaAttempts = 0;
-                    window.__captchaSolveLastAttemptAt = 0;
+                    resetTrapResumeState();
                 }
                 return;
             }
@@ -10549,10 +10741,7 @@ window.openShopAsync = async (namePart) => {
             if (window.__captchaPhase === "none") {
                 HeroLogger.emit('INFO', 'TRAP_DETECTED', 'Wykryto zapadkę/captcha.', "#ffeb3b");
                 window.__trapResumeQueued = false;
-                window.__wasExpingBeforeCaptcha = window.isExping;
-                window.__wasPatrollingBeforeCaptcha = window.isPatrolling || window.isRushing;
-                window.__wasBerserkBeforeCaptcha = !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo);
-                window.__wasHeroModeBeforeCaptcha = !!document.getElementById('heroModeToggle')?.classList?.contains('active-tab');
+                ensureTrapResumeSnapshot("detected");
             }
 
             // 3. OBSŁUGA MAŁEGO OKNA
@@ -10602,12 +10791,7 @@ window.openShopAsync = async (namePart) => {
             // 4. OBSŁUGA GŁÓWNEGO OKNA ZAPADKI
             if (fullWin) {
                 if (!window.__trapBotPausedByCaptcha) {
-                    if (window.isExping) {
-                        let btn = document.getElementById('btnStartExp');
-                        if (btn) btn.click();
-                    }
-                    if (typeof stopPatrol === 'function') stopPatrol(true);
-                    window.__trapBotPausedByCaptcha = true;
+                    pauseBotsForTrap(ensureTrapResumeSnapshot("full"));
                     if (window.logExp) window.logExp("🚨 Wstrzymano bota na czas właściwej zapadki (pre-zapadka nie zatrzymuje bota).", "#ffeb3b");
                     if (window.logHero) window.logHero("🚨 Wstrzymano bota na czas właściwej zapadki (pre-zapadka nie zatrzymuje bota).", "#ffeb3b");
                 }
