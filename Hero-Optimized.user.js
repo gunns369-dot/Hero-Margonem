@@ -287,6 +287,12 @@
 
     const safeText = el => ((el && (el.innerText || el.textContent)) || "").toLowerCase();
 
+    try {
+        if (typeof learnTeleportDestinationsFromDialog === 'function') {
+            learnTeleportDestinationsFromDialog(options, typeof getCurrentMapName === 'function' ? getCurrentMapName() : null);
+        }
+    } catch (e) {}
+
     let startOpt = options.find(el => safeText(el).includes("teleport"));
     if (startOpt) {
         humanClick(startOpt, retryCallback);
@@ -309,6 +315,15 @@
         }
 
         humanClick(destOpt, continueCallback);
+        return;
+    }
+
+    const bestAltTeleport = (typeof pickBestTeleportDialogOption === 'function')
+        ? pickBestTeleportDialogOption(options, targetMap)
+        : null;
+    if (bestAltTeleport && bestAltTeleport.el) {
+        if (window.logExp) window.logExp(`🚀 Zakonnik: wybieram najlepszy dostępny teleport pośredni [${bestAltTeleport.mapName}] do celu [${targetMap}].`, "#9c27b0");
+        humanClick(bestAltTeleport.el, continueCallback);
         return;
     }
 
@@ -975,6 +990,119 @@ let opacityValue = 0.95;
         .replace(/\s+/g, ' ')
         .trim();
 
+    function getKnownTeleportMaps() {
+        const fromZakonnik = (typeof ZAKONNICY !== 'undefined' && ZAKONNICY) ? Object.keys(ZAKONNICY) : [];
+        const fromSettings = Object.keys(botSettings?.unlockedTeleports || {});
+        const fallback = ["Ithan", "Torneg", "Karka-han", "Werbin", "Tuzmer", "Thuzal", "Eder", "Nithal", "Mythar"];
+        return [...new Set([...fromZakonnik, ...fromSettings, ...fallback].filter(Boolean))];
+    }
+
+    function persistTeleportMemory(changedMaps = []) {
+        if (!changedMaps || changedMaps.length === 0) return;
+        try {
+            localStorage.setItem('hero_teleports_v64', JSON.stringify(botSettings.unlockedTeleports || {}));
+            if (Engine?.hero?.d?.nick) {
+                const nick = Engine.hero.d.nick;
+                const allTps = JSON.parse(localStorage.getItem('hero_teleports_by_nick_v64') || '{}');
+                allTps[nick] = botSettings.unlockedTeleports || {};
+                localStorage.setItem('hero_teleports_by_nick_v64', JSON.stringify(allTps));
+            }
+            if (typeof saveSettings === 'function') saveSettings();
+            window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
+            if (typeof window.renderTeleportList === 'function') window.renderTeleportList();
+        } catch (e) {}
+    }
+
+    function learnCurrentTeleporterSource(currentMap, distMap = null) {
+        if (!currentMap || typeof ZAKONNICY === 'undefined' || !ZAKONNICY[currentMap]) return false;
+        if (!botSettings.unlockedTeleports) botSettings.unlockedTeleports = {};
+        if (botSettings.unlockedTeleports[currentMap]) return false;
+        const tp = ZAKONNICY[currentMap];
+        const map = distMap || (typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : null);
+        let reachable = false;
+        if (map && tp) {
+            for (let dx = -1; dx <= 1 && !reachable; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (map.has(`${tp.x + dx}_${tp.y + dy}`)) {
+                        reachable = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!reachable) return false;
+        botSettings.unlockedTeleports[currentMap] = true;
+        persistTeleportMemory([currentMap]);
+        if (window.logExp) window.logExp(`🚀 Wykryto dostępnego Zakonnika na mapie [${currentMap}] — zapisuję teleporter.`, "#9c27b0");
+        return true;
+    }
+
+    function learnTeleportDestinationsFromDialog(options, currentMap = null) {
+        if (!Array.isArray(options) || options.length === 0) return [];
+        if (!botSettings.unlockedTeleports) botSettings.unlockedTeleports = {};
+
+        const knownMaps = getKnownTeleportMaps();
+        const changed = [];
+        const blockedRe = /(brak zezwolenia|nie mozesz|nie możesz|niedostep|niedostęp|zablokowan|brak uprawnien|brak uprawnień)/i;
+        const optionTexts = options.map(el => ({
+            raw: (el && (el.innerText || el.textContent)) || "",
+            norm: normalizeDialogText((el && (el.innerText || el.textContent)) || "")
+        }));
+
+        if (currentMap && typeof ZAKONNICY !== 'undefined' && ZAKONNICY[currentMap] && !botSettings.unlockedTeleports[currentMap]) {
+            botSettings.unlockedTeleports[currentMap] = true;
+            changed.push(currentMap);
+        }
+
+        for (const mapName of knownMaps) {
+            const mapNorm = normalizeDialogText(mapName);
+            if (!mapNorm) continue;
+            const visibleAllowed = optionTexts.some(item => item.norm.includes(mapNorm) && !blockedRe.test(item.raw));
+            if (!visibleAllowed) continue;
+            if (!botSettings.unlockedTeleports[mapName]) {
+                botSettings.unlockedTeleports[mapName] = true;
+                changed.push(mapName);
+            }
+        }
+
+        if (changed.length > 0) {
+            persistTeleportMemory(changed);
+            if (window.logExp) window.logExp(`🚀 Zakonnik: zapisano dostępne teleporty: ${changed.join(", ")}`, "#9c27b0");
+        }
+        return changed;
+    }
+
+    function pickBestTeleportDialogOption(options, finalTarget) {
+        if (!Array.isArray(options) || !options.length || !finalTarget) return null;
+        const knownMaps = getKnownTeleportMaps();
+        const blockedRe = /(brak zezwolenia|nie mozesz|nie możesz|niedostep|niedostęp|zablokowan|brak uprawnien|brak uprawnień)/i;
+        const finalNorm = normalizeDialogText(finalTarget);
+        let best = null;
+
+        for (const el of options) {
+            const raw = (el && (el.innerText || el.textContent)) || "";
+            if (!raw || blockedRe.test(raw)) continue;
+            const txt = normalizeDialogText(raw);
+            for (const mapName of knownMaps) {
+                const mapNorm = normalizeDialogText(mapName);
+                if (!mapNorm || !txt.includes(mapNorm)) continue;
+
+                let score = Infinity;
+                if (mapNorm === finalNorm) {
+                    score = 0;
+                } else if (typeof getShortestPath === 'function') {
+                    const p = getShortestPath(mapName, finalTarget, routePathOptions());
+                    if (p && p.length > 0) score = p.length;
+                }
+
+                if (!Number.isFinite(score)) continue;
+                if (!best || score < best.score) best = { el, mapName, score };
+            }
+        }
+
+        return best;
+    }
+
     const SPECIAL_TRANSPORT_ROUTES = [
         {
             from: ["Port Tuzmer"],
@@ -1360,17 +1488,13 @@ function pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap) {
         const y = parseInt(coord[1], 10);
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
 
-        let bestLocal = Infinity;
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                const k = `${x + dx}_${y + dy}`;
-                if (distMap.has(k)) bestLocal = Math.min(bestLocal, distMap.get(k));
-            }
-        }
+        const exactKey = `${x}_${y}`;
+        if (!distMap.has(exactKey)) continue;
+        let bestLocal = distMap.get(exactKey);
 
         if (!Number.isFinite(bestLocal)) continue;
         if (!best || bestLocal < best.pathDistance) {
-            best = { x, y, pathDistance: bestLocal };
+            best = { x, y, stand: { x, y }, pathDistance: bestLocal, exactReachable: true };
         }
     }
 
@@ -1378,6 +1502,7 @@ function pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap) {
 }
 
 window.__bannedEdges = window.__bannedEdges || {};
+window.__physicalBlockedEdges = window.__physicalBlockedEdges || {};
 
 function cleanupExpiredEdgeBans(now = Date.now()) {
     window.__bannedEdges = window.__bannedEdges || {};
@@ -1392,6 +1517,18 @@ function cleanupExpiredEdgeBans(now = Date.now()) {
         }
         if (Object.keys(window.__bannedEdges[from]).length === 0) delete window.__bannedEdges[from];
     }
+    window.__physicalBlockedEdges = window.__physicalBlockedEdges || {};
+    for (let from in window.__physicalBlockedEdges) {
+        if (!window.__physicalBlockedEdges[from] || typeof window.__physicalBlockedEdges[from] !== 'object') {
+            delete window.__physicalBlockedEdges[from];
+            continue;
+        }
+        for (let to in window.__physicalBlockedEdges[from]) {
+            const until = window.__physicalBlockedEdges[from][to];
+            if (!until || now >= until) delete window.__physicalBlockedEdges[from][to];
+        }
+        if (Object.keys(window.__physicalBlockedEdges[from]).length === 0) delete window.__physicalBlockedEdges[from];
+    }
 }
 
 function banEdge(from, to, durationMs = 30000) {
@@ -1402,6 +1539,29 @@ function banEdge(from, to, durationMs = 30000) {
     window.__bannedEdges[from][to] = expiresAt;
     window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
     if (window.logHero) window.logHero(`⛔ Blokuję przejście: [${from}] → [${to}] na ${Math.round((expiresAt - Date.now()) / 1000)}s`, '#ff9800');
+}
+
+function banPhysicalEdge(from, to, durationMs = 120000) {
+    if (!from || !to) return;
+    window.__physicalBlockedEdges = window.__physicalBlockedEdges || {};
+    if (!window.__physicalBlockedEdges[from]) window.__physicalBlockedEdges[from] = {};
+    const expiresAt = Date.now() + Math.max(1000, durationMs || 0);
+    window.__physicalBlockedEdges[from][to] = expiresAt;
+    window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
+    if (window.logExp) window.logExp(`🧱 Przejście fizycznie niedostępne: [${from}] → [${to}], szukam objazdu.`, '#ff8a65');
+}
+
+function isPhysicalEdgeBlocked(from, to, now = Date.now()) {
+    if (!from || !to) return false;
+    window.__physicalBlockedEdges = window.__physicalBlockedEdges || {};
+    const until = window.__physicalBlockedEdges[from] ? window.__physicalBlockedEdges[from][to] : 0;
+    if (!until) return false;
+    if (now >= until) {
+        delete window.__physicalBlockedEdges[from][to];
+        if (Object.keys(window.__physicalBlockedEdges[from]).length === 0) delete window.__physicalBlockedEdges[from];
+        return false;
+    }
+    return true;
 }
 
 function isEdgeBanned(from, to, now = Date.now()) {
@@ -1417,9 +1577,12 @@ function isEdgeBanned(from, to, now = Date.now()) {
     return true;
 }
 
-function markGatewayAsBlocked(currentSysMap, nextMap, duration) {
+function markGatewayAsBlocked(currentSysMap, nextMap, duration, reason = 'temporary') {
     cleanupExpiredEdgeBans();
     banEdge(currentSysMap, nextMap, duration || 30000);
+    if (reason === 'physical' || reason === 'unreachable' || reason === 'stuck') {
+        banPhysicalEdge(currentSysMap, nextMap, Math.max(duration || 0, 90000));
+    }
 }
 
 function pickDoorToNextHop(currentSysMap, nextHop, distMap, reachableDoors) {
@@ -2334,6 +2497,9 @@ function autoDetectEngineData() {
             }
         }
     }
+    if (typeof learnCurrentTeleporterSource === 'function') {
+        try { learnCurrentTeleporterSource(currentName); } catch (e) {}
+    }
 
     // --- ŁATKA: SPRAWDZANIE AWANSU I AUTO-EXPOWISKO ---
     if (Engine.hero && Engine.hero.d && Engine.hero.d.lvl) {
@@ -2658,6 +2824,7 @@ window.executeRushStep = function() {
                     if (window.__bannedEdges && window.__bannedEdges[currentSysMap] && firstHop) {
                         delete window.__bannedEdges[currentSysMap][firstHop];
                         if (Object.keys(window.__bannedEdges[currentSysMap]).length === 0) delete window.__bannedEdges[currentSysMap];
+                        window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
                     }
                     if (window.logExp) window.logExp(`🧭 Awaryjny powrót na trasę: [${currentSysMap}] → [${firstHop}] (pomijam chwilowe bany).`, '#66bb6a');
                     if (window.logHero) window.logHero(`🧭 Awaryjny powrót na trasę: [${currentSysMap}] → [${firstHop}] (pomijam chwilowe bany).`, '#66bb6a');
@@ -2780,7 +2947,7 @@ window.executeRushStep = function() {
             }
 
             if (targetX === null || targetY === null) {
-                if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+                if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 120000, 'unreachable');
                 
                 let fallback = null;
                 // Tylko jak biega rutynowo w Expie, szukamy następnej mapy z listy
@@ -2871,7 +3038,7 @@ window.executeRushStep = function() {
         }
 
         if (exactX === null || exactY === null) {
-            if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+            if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 120000, 'unreachable');
             window.executeRushStep();
             return;
         }
@@ -2893,7 +3060,7 @@ window.executeRushStep = function() {
                     if (stuckCount > 15) {
                         if (window.logHero) window.logHero("⚠️ Brama nieosiągalna! Szukam innej drogi...", "#ffb300");
                         if (window.logExp) window.logExp("⚠️ Brama nieosiągalna! Szukam innej drogi...", "#ffb300");
-                        if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+                        if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 90000, 'stuck');
                         window.executeRushStep();
                         return;
                     }
@@ -2974,7 +3141,7 @@ window.executeRushStep = function() {
             } else {
                 moved = GateRecovery.tryStep(cx, cy, [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]);
                 if (typeof markGatewayAsBlocked === 'function' && attempts >= 6) {
-                    markGatewayAsBlocked(currentSysMap, nextMap, 30000);
+                    markGatewayAsBlocked(currentSysMap, nextMap, 90000, 'stuck');
                     HeroLogger.emit('WARN', 'RECOVERY_STEP', `GateRecovery: oznaczam bramę jako czasowo zablokowaną`, "#ff8a65");
                     GateRecovery.state.attempts = 0;
                     window.executeRushStep();
@@ -3110,6 +3277,7 @@ window.executeRushStep = function() {
             if (globalGateways[u]) {
                 const nowBan = Date.now();
                 for (let v in globalGateways[u]) {
+                    if (typeof isPhysicalEdgeBlocked === 'function' && isPhysicalEdgeBlocked(u, v, nowBan) && !options.ignorePhysicalBans) continue;
                     if (!ignoreEdgeBans && typeof isEdgeBanned === 'function' && isEdgeBanned(u, v, nowBan)) continue;
                     if (v !== end && window.__bannedMaps && window.__bannedMaps[v] && nowBan < window.__bannedMaps[v]) continue;
 
@@ -3209,6 +3377,9 @@ window.executeRushStep = function() {
 
         function canUseNeighbor(current, targetMap, nowBan) {
             if (!targetMap) return false;
+            if (typeof isPhysicalEdgeBlocked === 'function' && isPhysicalEdgeBlocked(current.map, targetMap, nowBan) && !options.ignorePhysicalBans) {
+                return false;
+            }
             if (!ignoreEdgeBans && typeof isEdgeBanned === 'function' && isEdgeBanned(current.map, targetMap, nowBan)) {
                 return false;
             }
@@ -8535,12 +8706,12 @@ window.toggleTeleportLock = function(city, isChecked) {
         let container = document.getElementById('heroTeleportsGUI');
         if (!container) return;
 
-        let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : [
+        let tpList = typeof getKnownTeleportMaps === 'function' ? getKnownTeleportMaps().sort() : (typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : [
             "Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer",
             "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal",
             "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy",
             "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"
-        ];
+        ]);
 
         let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
         let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div>`;
@@ -11473,7 +11644,7 @@ if (
             if (btnTp && properTpContainer) {
                 // Nadpisujemy oryginalną funkcję rysującą, by na pewno trafiała do dobrego diva
                 window.renderTeleportList = function() {
-                    let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"];
+                    let tpList = typeof getKnownTeleportMaps === 'function' ? getKnownTeleportMaps().sort() : (typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"]);
                     let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
                     let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div><div id="tpCheckboxes" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height: 250px;">`;
 
@@ -11547,7 +11718,7 @@ if (
                 let container = document.querySelector('#teleportsContainer #heroTeleportsGUI');
                 if (!container) return;
 
-                let tpList = typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"];
+                let tpList = typeof getKnownTeleportMaps === 'function' ? getKnownTeleportMaps().sort() : (typeof ZAKONNICY !== 'undefined' ? Object.keys(ZAKONNICY).sort() : ["Ithan", "Torneg", "Karka-han", "Werbin", "Eder", "Mythar", "Tuzmer", "Port Tuzmer", "Wioska Pszczelarzy", "Nithal", "Podgrodzie Nithal", "Thuzal", "Gildia Kupców - część zachodnia", "Brama Północy", "Zniszczone Opactwo", "Kwieciste Przejście", "Wzgórze Płaczek", "Nizinne Sady"]);
                 let myNick = (typeof Engine !== 'undefined' && Engine.hero && Engine.hero.d && Engine.hero.d.nick) ? Engine.hero.d.nick : "Nieznany";
                 let html = `<div style="color:#a99a75; font-size:10px; margin-bottom:5px; text-align:center;">Zaznacz odblokowane teleporty dla: <b style="color:#00acc1;">${myNick}</b></div><div style="display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height:250px;">`;
 
@@ -12182,17 +12353,11 @@ function getCurrentMapGatewaysForRadar(distMap) {
         if (!cleanTarget) return;
         if (onlyExpMaps && !onlyExpMaps.has(cleanTarget.toLowerCase())) return;
 
-        let isReachable = false; let bestStand = null; let minDist = Infinity;
-        let dirs = [[0,0], [0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [-1,1], [1,-1]];
-        for (let d of dirs) {
-            let nx = x + d[0]; let ny = y + d[1]; let k = `${nx}_${ny}`;
-            if (distMap && distMap.has(k)) {
-                isReachable = true;
-                let dist = distMap.get(k);
-                if (dist < minDist) { minDist = dist; bestStand = {x: nx, y: ny}; }
-            }
-        }
-        found.push({ x, y, targetMap: cleanTarget, reachable: isReachable, stand: bestStand, pathDistance: minDist });
+        const exactKey = `${x}_${y}`;
+        const exactReachable = !!(distMap && distMap.has(exactKey));
+        const minDist = exactReachable ? distMap.get(exactKey) : Infinity;
+        const bestStand = exactReachable ? { x, y } : null;
+        found.push({ x, y, targetMap: cleanTarget, reachable: exactReachable, stand: bestStand, pathDistance: minDist, exactReachable });
     };
 
     let scannedGateways = [];
