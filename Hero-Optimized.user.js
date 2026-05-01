@@ -1823,7 +1823,12 @@ window.heroMapOrder = heroMapOrder;
         }).catch(e => HERO_LOG.error("Błąd wysyłania na Discorda.", e));
     };
 
-    function saveGateways() { localStorage.setItem('hero_global_gateways_v20', JSON.stringify(globalGateways)); }
+    function saveGateways() {
+        localStorage.setItem('hero_global_gateways_v20', JSON.stringify(globalGateways));
+        window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
+        if (window.__routePathCache instanceof Map) window.__routePathCache.clear();
+        window.__internalMapGraphCache = null;
+    }
 
     function saveMapOrder() { localStorage.setItem('hero_map_order_v20', JSON.stringify(heroMapOrder)); }
 
@@ -1929,19 +1934,26 @@ function cleanOldGateways() {
         if (changed) saveGateways();
     }
 
-    window.saveGatewayToDB = function(source, target, x, y) {
+    window.saveGatewayToDB = function(source, target, x, y, options = {}) {
         // Blokada przed ręcznym nagraniem Zakonnika
+        if (!source || !target) return null;
+        x = parseInt(x, 10);
+        y = parseInt(y, 10);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        if (normMapName(source) === normMapName(target)) return null;
         let tp = ZAKONNICY[source];
         if (tp && Math.abs(x - tp.x) <= 2 && Math.abs(y - tp.y) <= 2) return;
 
         if (!globalGateways[source]) globalGateways[source] = {};
-        let baseTarget = target.trim().split(" .")[0];
+        let baseTarget = String(target).trim().split(" .")[0];
+        let changed = false;
 
 
 
         if (!globalGateways[source][baseTarget]) {
 
             globalGateways[source][baseTarget] = { x: x, y: y, allCoords: [[x, y]] };
+            changed = true;
 
         } else {
 
@@ -1951,17 +1963,52 @@ function cleanOldGateways() {
 
             let exists = gw.allCoords.some(c => c[0] === x && c[1] === y);
 
-            if (!exists) { gw.allCoords.push([x, y]); }
+            if (!exists) {
+                gw.allCoords.push([x, y]);
+                changed = true;
+            }
+            if (!Number.isFinite(parseInt(gw.x, 10)) || !Number.isFinite(parseInt(gw.y, 10))) {
+                gw.x = x;
+                gw.y = y;
+                changed = true;
+            }
 
         }
 
-        saveGateways();
+        if (changed) saveGateways();
 
-        updateUI();
+        if (!options.silent) updateUI();
 
         return baseTarget;
 
     }
+
+
+    window.rememberMapTransition = function(fromMap, toMap, fromX, fromY, toX, toY, reason = 'transition') {
+        if (!fromMap || !toMap || normMapName(fromMap) === normMapName(toMap)) return false;
+        let changed = false;
+        if (Number.isFinite(parseInt(fromX, 10)) && Number.isFinite(parseInt(fromY, 10))) {
+            changed = !!window.saveGatewayToDB(fromMap, toMap, fromX, fromY, { silent: true }) || changed;
+        }
+        if (Number.isFinite(parseInt(toX, 10)) && Number.isFinite(parseInt(toY, 10))) {
+            changed = !!window.saveGatewayToDB(toMap, fromMap, toX, toY, { silent: true }) || changed;
+        }
+        window.__lastRememberedTransition = {
+            fromMap,
+            toMap,
+            fromX: Number.isFinite(parseInt(fromX, 10)) ? parseInt(fromX, 10) : null,
+            fromY: Number.isFinite(parseInt(fromY, 10)) ? parseInt(fromY, 10) : null,
+            toX: Number.isFinite(parseInt(toX, 10)) ? parseInt(toX, 10) : null,
+            toY: Number.isFinite(parseInt(toY, 10)) ? parseInt(toY, 10) : null,
+            reason,
+            ts: Date.now()
+        };
+        if (changed) {
+            if (typeof window.renderInternalMapGraph === 'function') window.renderInternalMapGraph();
+            updateUI();
+        }
+        return changed;
+    };
 
 
 
