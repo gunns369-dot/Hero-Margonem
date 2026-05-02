@@ -219,10 +219,80 @@
     };
 
     // WBUDOWANY MODUŁ TELEPORTACJI (Złoty środek: Niezawodny, LUDZKI - Anty-Captcha i Anty-Blokada NI)
+    function getCurrentNpcEntries() {
+        const raw = (typeof Engine !== 'undefined' && Engine.npcs)
+            ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d)
+            : {};
+        return Object.entries(raw || {}).map(([id, entry]) => {
+            const n = entry?.d || entry || {};
+            return {
+                id: Number(n.id || id),
+                x: Number(n.x),
+                y: Number(n.y),
+                nick: String(n.nick || '').replace(/<[^>]*>?/gm, ''),
+                raw: entry
+            };
+        }).filter(n => Number.isFinite(n.id) && n.nick);
+    }
+
+    function findNearestNpcByNick(patterns, preferredPoint = null, maxDistance = 0) {
+        const normPatterns = (patterns || []).map(p => String(p || '').toLowerCase()).filter(Boolean);
+        const hx = Number(Engine?.hero?.d?.x);
+        const hy = Number(Engine?.hero?.d?.y);
+        const px = Number(preferredPoint?.x);
+        const py = Number(preferredPoint?.y);
+        const hasPreferred = Number.isFinite(px) && Number.isFinite(py);
+        let best = null;
+
+        for (const npc of getCurrentNpcEntries()) {
+            const nick = npc.nick.toLowerCase();
+            if (normPatterns.length && !normPatterns.some(p => nick.includes(p))) continue;
+            const heroDist = Number.isFinite(hx) && Number.isFinite(hy)
+                ? Math.max(Math.abs(hx - npc.x), Math.abs(hy - npc.y))
+                : 999;
+            const prefDist = hasPreferred
+                ? Math.max(Math.abs(px - npc.x), Math.abs(py - npc.y))
+                : heroDist;
+            if (maxDistance > 0 && Math.min(heroDist, prefDist) > maxDistance) continue;
+            const score = Math.min(heroDist, prefDist) + (prefDist * 0.15);
+            if (!best || score < best.score) best = { ...npc, heroDist, prefDist, score };
+        }
+
+        return best;
+    }
+
+    function hasOpenDialogOptions() {
+        return !!document.querySelector('.dialogue-window-answer, .dialog-item, .dialog-choice, .option, .answer, .dialog-answer, #dialog li, .dialog-options li, .dialog-texts li, [data-option]');
+    }
+
+    function startNpcDialogRobust(npc, reason = 'npc') {
+        const npcId = Number(npc?.id || npc);
+        if (!Number.isFinite(npcId) || npcId <= 0) return false;
+
+        const now = Date.now();
+        const key = `${reason}:${npcId}`;
+        const last = window.__lastNpcTalkAttempt || {};
+        if (last.key === key && now - Number(last.ts || 0) < 900) return true;
+        window.__lastNpcTalkAttempt = { key, ts: now };
+
+        const attempts = [];
+        if (typeof Engine?.hero?.sendRequestToTalk === 'function') attempts.push(() => Engine.hero.sendRequestToTalk(npcId));
+        if (typeof Engine?.npcs?.interact === 'function') attempts.push(() => Engine.npcs.interact(npcId));
+        if (typeof window._g === 'function') attempts.push(() => window._g(`talk&id=${npcId}`));
+
+        attempts.forEach((fn, idx) => {
+            setTimeout(() => {
+                if (idx > 0 && hasOpenDialogOptions()) return;
+                try { fn(); } catch (e) {}
+            }, idx * 140);
+        });
+        return attempts.length > 0;
+    }
+
     const HeroTeleportModule = {
         isClicking: false,
 
-       processDialog: function(targetMap, stopCallback, continueCallback, retryCallback) {
+       processDialog: function(targetMap, stopCallback, continueCallback, retryCallback, npcHint = null) {
     if (this.isClicking) return;
 
     let options = Array.from(
@@ -230,31 +300,14 @@
     );
 
     if (options.length === 0) {
-        let npcs = (typeof Engine !== 'undefined' && Engine.npcs)
-            ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d)
-            : {};
+        let zakonnik = findNearestNpcByNick(["zakonnik"], npcHint, 3) || findNearestNpcByNick(["zakonnik"], null, 4);
 
-        let zakonnikId = null;
-
-        for (let id in npcs) {
-            let n = npcs[id].d || npcs[id];
-            let nick = (n && n.nick) ? n.nick.replace(/<[^>]*>?/gm, '').toLowerCase() : "";
-            if (nick.includes("zakonnik")) {
-                zakonnikId = parseInt(id, 10);
-                break;
-            }
-        }
-
-        if (zakonnikId) {
+        if (zakonnik) {
             this.isClicking = true;
             let approachDelay = Math.floor(Math.random() * 401) + 400;
 
             setTimeout(() => {
-                if (typeof Engine !== 'undefined' && Engine.npcs && typeof Engine.npcs.interact === 'function') {
-                    Engine.npcs.interact(zakonnikId);
-                } else if (typeof window._g === 'function') {
-                    window._g(`talk&id=${zakonnikId}`);
-                }
+                startNpcDialogRobust(zakonnik, 'teleport');
 
                 this.isClicking = false;
                 retryCallback();
@@ -1219,6 +1272,7 @@ let opacityValue = 0.95;
 
 
     let isPatrolling = false;
+    window.isPatrolling = false;
 
     let patrolIndex = 0;
 
@@ -3851,7 +3905,8 @@ window.handleTeleportNPC = function(targetMap) {
                 else if (isPatrolling) { clearTimeout(smoothPatrolInterval); smoothPatrolInterval = setTimeout(executePatrolStep, 3500); }
                 else if (window.isExping) { expMapTransitionCooldown = Date.now() + 4000; }
             },
-            () => rescheduleTeleportCheck(targetMap)
+            () => rescheduleTeleportCheck(targetMap),
+            tp
         );
     };
 
@@ -3893,6 +3948,9 @@ window.handleTeleportNPC = function(targetMap) {
     }
 
     function findNpcByNickIncludes(patterns) {
+        const nearest = (typeof findNearestNpcByNick === 'function') ? findNearestNpcByNick(patterns, null, 0) : null;
+        if (nearest) return { id: nearest.id, x: nearest.x, y: nearest.y, nick: nearest.nick };
+
         const npcs = (typeof Engine !== 'undefined' && Engine.npcs)
             ? (typeof Engine.npcs.check === 'function' ? Engine.npcs.check() : Engine.npcs.d)
             : {};
@@ -4091,10 +4149,8 @@ window.handleTeleportNPC = function(targetMap) {
             const dist = Math.max(Math.abs(hx - npc.x), Math.abs(hy - npc.y));
             if (dist > 1) {
                 safeGoTo(npc.x, npc.y, false);
-            } else if (typeof Engine?.npcs?.interact === 'function') {
-                Engine.npcs.interact(npc.id);
-            } else if (typeof window._g === 'function') {
-                window._g(`talk&id=${npc.id}`);
+            } else if (typeof startNpcDialogRobust === 'function') {
+                startNpcDialogRobust(npc, 'special_transport');
             }
             rescheduleSpecialTransport(targetMap);
             return true;
@@ -6357,6 +6413,7 @@ function optimizeRoute() {
 function stopPatrol(hardStop = true) {
         let wasMoving = isPatrolling || isRushing;
         isPatrolling = false;
+        window.isPatrolling = false;
         isRushing = false;
         window.isRushing = !!(typeof isRushing !== 'undefined' && isRushing);
         window.isRushingToShop = false;
@@ -6416,6 +6473,7 @@ function stopPatrol(hardStop = true) {
             }
         }
        isPatrolling = true; patrolIndex = 0; checkedPoints.clear(); heroFoundAlerted = false;
+       window.isPatrolling = true;
 
         let btn = document.getElementById('btnStartStop'); btn.innerHTML = '<span class="btn-icon">⏹</span><span>STOP</span>'; btn.style.color = "#f44336"; btn.style.borderColor = "#f44336";
 
@@ -11304,6 +11362,12 @@ window.openShopAsync = async (namePart) => {
                 rushTargetY: (typeof rushTargetY !== 'undefined' ? rushTargetY : null),
                 rushFullPath: Array.isArray(window.rushFullPath) ? [...window.rushFullPath] : [],
                 resumePatrolAfterRush: !!window.resumePatrolAfterRush,
+                selectedHero: document.getElementById('selHero')?.value || null,
+                currentRouteIndex: (typeof currentRouteIndex !== 'undefined' ? currentRouteIndex : -1),
+                patrolIndex: (typeof patrolIndex !== 'undefined' ? patrolIndex : 0),
+                checkedPointIndexes: (typeof checkedPoints !== 'undefined' && checkedPoints instanceof Set) ? [...checkedPoints] : [],
+                checkedMapNames: (typeof checkedMapsThisSession !== 'undefined' && checkedMapsThisSession instanceof Set) ? [...checkedMapsThisSession] : [],
+                currentCordsList: Array.isArray(currentCordsList) ? currentCordsList.map(c => Array.isArray(c) ? [...c] : c) : [],
                 berserk: !!(botSettings?.berserk?.enabled || Engine?.settings?.d?.fight_auto_solo),
                 heroModeActive: !!document.getElementById('heroModeToggle')?.classList?.contains('active-tab')
             };
@@ -11348,8 +11412,58 @@ window.openShopAsync = async (namePart) => {
                 if (btn) btn.click();
                 else window.isExping = false;
             }
-            if (typeof stopPatrol === 'function') stopPatrol(true);
+            window.__stoppingForCaptcha = true;
+            try {
+                if (typeof stopPatrol === 'function') stopPatrol(true);
+            } finally {
+                window.__stoppingForCaptcha = false;
+            }
             window.__trapBotPausedByCaptcha = true;
+        }
+
+        function resumePatrolAfterTrapSnapshot(snap) {
+            if (!snap || !snap.patrolling) return false;
+
+            const heroSelect = document.getElementById('selHero');
+            if (heroSelect && snap.selectedHero) heroSelect.value = snap.selectedHero;
+
+            if (typeof currentRouteIndex !== 'undefined' && Number.isFinite(Number(snap.currentRouteIndex))) {
+                currentRouteIndex = Number(snap.currentRouteIndex);
+                if (currentRouteIndex >= 0) sessionStorage.setItem('hero_route_index', currentRouteIndex);
+            }
+            if (typeof checkedMapsThisSession !== 'undefined' && Array.isArray(snap.checkedMapNames)) {
+                checkedMapsThisSession = new Set(snap.checkedMapNames);
+                if (typeof saveCheckedMaps === 'function') saveCheckedMaps();
+            }
+            if (typeof checkedPoints !== 'undefined' && Array.isArray(snap.checkedPointIndexes)) {
+                checkedPoints = new Set(snap.checkedPointIndexes.map(n => Number(n)).filter(Number.isFinite));
+            }
+            if (Array.isArray(snap.currentCordsList) && snap.currentCordsList.length > 0 && typeof currentCordsList !== 'undefined') {
+                currentCordsList = snap.currentCordsList.map(c => Array.isArray(c) ? [...c] : c);
+            }
+            if (typeof patrolIndex !== 'undefined') {
+                patrolIndex = Number.isFinite(Number(snap.patrolIndex)) ? Number(snap.patrolIndex) : 0;
+            }
+
+            if (typeof isRushing !== 'undefined') isRushing = false;
+            window.isRushing = false;
+            if (typeof isPatrolling !== 'undefined') isPatrolling = true;
+            window.isPatrolling = true;
+            heroFoundAlerted = false;
+
+            const btn = document.getElementById('btnStartStop');
+            if (btn) {
+                btn.innerHTML = '<span class="btn-icon">⏱</span><span>STOP</span>';
+                btn.style.color = "#f44336";
+                btn.style.borderColor = "#f44336";
+            }
+            if (typeof autoDetectEngineData === 'function') autoDetectEngineData();
+            if (typeof updateUI === 'function') updateUI();
+            clearTimeout(smoothPatrolInterval);
+            smoothPatrolInterval = setTimeout(() => {
+                if (typeof executePatrolStep === 'function') executePatrolStep();
+            }, randomDelay(650, 1250));
+            return true;
         }
 
         function resumeBotsAfterTrap(snapshot) {
@@ -11389,11 +11503,7 @@ window.openShopAsync = async (namePart) => {
                     if (typeof window.executeRushStep === 'function') window.executeRushStep();
                 }, randomDelay(700, 1300));
             } else if (snap.patrolling && !window.isRushing) {
-                if (typeof startPatrol === 'function') {
-                    startPatrol();
-                } else if (typeof isPatrolling !== 'undefined') {
-                    isPatrolling = true;
-                }
+                resumePatrolAfterTrapSnapshot(snap);
             }
 
             if (snap.berserk && window.BerserkController?.setBotBerserkState) {
@@ -11537,10 +11647,14 @@ window.openShopAsync = async (namePart) => {
                     await ensureFullscreenOffAfterTrap();
                 }
                 const resumeSnapshot = window.__trapResumeSnapshot;
+                const shouldTryResumeAfterTrap = (
+                    hadTrapSession ||
+                    window.__trapBotPausedByCaptcha ||
+                    hasTrapResumeWork(resumeSnapshot)
+                );
                 if (
-                    hadTrapSession &&
+                    shouldTryResumeAfterTrap &&
                     !window.__trapResumeQueued &&
-                    (window.__trapBotPausedByCaptcha || hasTrapResumeWork(resumeSnapshot)) &&
                     (window.__captchaPhase === "solving" || window.__captchaPhase === "manual_waiting" || window.__captchaPhase === "pre" || window.__captchaPhase === "none")
                 ) {
                     window.__trapResumeQueued = true;
@@ -11558,8 +11672,15 @@ window.openShopAsync = async (namePart) => {
                             return;
                         }
                         const resumed = resumeBotsAfterTrap(resumeSnapshot);
-                        resetTrapResumeState();
-                        if (resumed && window.logExp) window.logExp("▶ Bot wznowiony po zapadce.", "#4caf50");
+                        if (resumed) {
+                            resetTrapResumeState();
+                            if (window.logExp) window.logExp("▶ Bot wznowiony po zapadce.", "#4caf50");
+                            if (window.logHero) window.logHero("▶ Patrol wznowiony po zapadce.", "#4caf50");
+                        } else {
+                            window.__trapResumeQueued = false;
+                            window.__captchaPhase = "none";
+                            if (window.logHero) window.logHero("⚠️ Zapadka zniknęła, ale nie udało się odtworzyć stanu patrolu. Snapshot zostawiony do kolejnej próby.", "#ff9800");
+                        }
                     }, delay);
                 } else if (hadTrapSession && !window.__trapBotPausedByCaptcha) {
                     resetTrapResumeState();
