@@ -1529,7 +1529,7 @@ function getBestReachableGatewayToMap(targetMap) {
     return valid[0];
 }
 
-function pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap) {
+function pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap, fromMap = null, toMap = null) {
     if (!baseDoor || !distMap) return null;
     const candidates = Array.isArray(baseDoor.allCoords) && baseDoor.allCoords.length
         ? baseDoor.allCoords
@@ -1541,6 +1541,7 @@ function pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap) {
         const x = parseInt(coord[0], 10);
         const y = parseInt(coord[1], 10);
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        if (fromMap && toMap && isGatewayCoordBad(fromMap, toMap, x, y)) continue;
 
         const exactKey = `${x}_${y}`;
         if (!distMap.has(exactKey)) continue;
@@ -1558,7 +1559,75 @@ function pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap) {
 window.__bannedEdges = window.__bannedEdges || {};
 window.__physicalBlockedEdges = window.__physicalBlockedEdges || {};
 
+function getBadGatewayCoordStore() {
+    if (!window.__badGatewayCoordBans) {
+        try {
+            window.__badGatewayCoordBans = JSON.parse(localStorage.getItem('hero_bad_gateway_coords_v1') || '{}') || {};
+        } catch (e) {
+            window.__badGatewayCoordBans = {};
+        }
+    }
+    return window.__badGatewayCoordBans;
+}
+
+function saveBadGatewayCoordStore() {
+    try {
+        localStorage.setItem('hero_bad_gateway_coords_v1', JSON.stringify(getBadGatewayCoordStore()));
+    } catch (e) {}
+}
+
+function gatewayCoordBanKey(from, to, x, y) {
+    return `${normMapName(from)}=>${normMapName(to)}@${parseInt(x, 10)},${parseInt(y, 10)}`;
+}
+
+function cleanupBadGatewayCoords(now = Date.now()) {
+    const store = getBadGatewayCoordStore();
+    let changed = false;
+    for (const key of Object.keys(store)) {
+        const rec = store[key];
+        if (!rec || !rec.until || now >= rec.until) {
+            delete store[key];
+            changed = true;
+        }
+    }
+    if (changed) saveBadGatewayCoordStore();
+}
+
+function isGatewayCoordBad(from, to, x, y, now = Date.now()) {
+    if (!from || !to) return false;
+    cleanupBadGatewayCoords(now);
+    const rec = getBadGatewayCoordStore()[gatewayCoordBanKey(from, to, x, y)];
+    return !!(rec && rec.until && now < rec.until);
+}
+
+function markGatewayCoordBad(from, to, x, y, durationMs = 600000, reason = 'stuck') {
+    if (!from || !to) return false;
+    x = parseInt(x, 10);
+    y = parseInt(y, 10);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+    const until = Date.now() + Math.max(30000, durationMs || 0);
+    const store = getBadGatewayCoordStore();
+    store[gatewayCoordBanKey(from, to, x, y)] = { until, reason, ts: Date.now() };
+    saveBadGatewayCoordStore();
+    window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
+
+    const edge = globalGateways?.[from]?.[to];
+    if (edge && Array.isArray(edge.allCoords)) {
+        const goodCoords = edge.allCoords.filter(c => !(Array.isArray(c) && parseInt(c[0], 10) === x && parseInt(c[1], 10) === y));
+        if (goodCoords.length && goodCoords.length !== edge.allCoords.length) {
+            edge.x = parseInt(goodCoords[0][0], 10);
+            edge.y = parseInt(goodCoords[0][1], 10);
+        }
+    }
+
+    if (window.logExp) window.logExp(`🚧 Odrzucam podejrzaną kratkę przejścia [${x},${y}] dla [${from}] → [${to}] (${reason}).`, '#ff8a65');
+    if (window.logHero) window.logHero(`🚧 Odrzucam podejrzaną kratkę przejścia [${x},${y}] dla [${from}] → [${to}] (${reason}).`, '#ff8a65');
+    return true;
+}
+
 function cleanupExpiredEdgeBans(now = Date.now()) {
+    cleanupBadGatewayCoords(now);
     window.__bannedEdges = window.__bannedEdges || {};
     for (let from in window.__bannedEdges) {
         if (!window.__bannedEdges[from] || typeof window.__bannedEdges[from] !== 'object') {
@@ -1650,7 +1719,7 @@ function pickDoorToNextHop(currentSysMap, nextHop, distMap, reachableDoors) {
 
     const baseDoor = globalGateways[currentSysMap][nextHop];
     const bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
-        ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+        ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap, currentSysMap, nextHop)
         : null;
 
     if (!bestBaseCoord) return null;
@@ -3287,7 +3356,7 @@ window.executeRushStep = function() {
             } else if (baseDoor) {
                 let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
                 let bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
-                    ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+                    ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap, currentSysMap, nextMap)
                     : null;
 
                 if (bestBaseCoord) {
@@ -3391,18 +3460,21 @@ window.executeRushStep = function() {
         let exactX = null, exactY = null;
         let baseDoor = globalGateways[currentSysMap] && globalGateways[currentSysMap][nextMap];
         let liveDoor = typeof getBestReachableGatewayToMap === 'function' ? getBestReachableGatewayToMap(nextMap) : null;
+        let gateCoordSource = "none";
 
         if (liveDoor && liveDoor.reachable) {
             exactX = liveDoor.x;
             exactY = liveDoor.y;
+            gateCoordSource = "live";
         } else if (baseDoor) {
             let distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
             let bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
-                ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+                ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap, currentSysMap, nextMap)
                 : null;
             if (bestBaseCoord) {
                 exactX = bestBaseCoord.x;
                 exactY = bestBaseCoord.y;
+                gateCoordSource = "memory";
             }
         }
 
@@ -3511,6 +3583,16 @@ window.executeRushStep = function() {
 
             window.__movementLock = Date.now() + 1500;
             const attempts = GateRecovery.state.attempts;
+            if (gateCoordSource === "memory" && attempts >= 3) {
+                if (typeof markGatewayCoordBad === 'function') markGatewayCoordBad(currentSysMap, nextMap, exactX, exactY, 20 * 60 * 1000, 'memory-gate-stuck');
+                if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 90000, 'stuck');
+                HeroLogger.emit('WARN', 'RECOVERY_STEP', `Błędna kratka bramy z pamięci: [${exactX},${exactY}], przeliczam trasę.`, "#ff8a65");
+                GateRecovery.state.attempts = 0;
+                window.rushNextMap = null;
+                clearTimeout(rushInterval);
+                rushInterval = setTimeout(window.executeRushStep, 450);
+                return;
+            }
             let moved = false;
             if (attempts === 1) {
                 // krótki wait + retry kliknięcia
@@ -3526,10 +3608,12 @@ window.executeRushStep = function() {
             } else {
                 moved = GateRecovery.tryStep(cx, cy, [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]);
                 if (typeof markGatewayAsBlocked === 'function' && attempts >= 6) {
+                    if (typeof markGatewayCoordBad === 'function') markGatewayCoordBad(currentSysMap, nextMap, exactX, exactY, 10 * 60 * 1000, `gate-${gateCoordSource}-stuck`);
                     markGatewayAsBlocked(currentSysMap, nextMap, 90000, 'stuck');
                     HeroLogger.emit('WARN', 'RECOVERY_STEP', `GateRecovery: oznaczam bramę jako czasowo zablokowaną`, "#ff8a65");
                     GateRecovery.state.attempts = 0;
-                    window.executeRushStep();
+                    clearTimeout(rushInterval);
+                    rushInterval = setTimeout(window.executeRushStep, 450);
                     return;
                 }
             }
@@ -4088,7 +4172,7 @@ window.handleTeleportNPC = function(targetMap) {
             if (baseDoor) {
                 const distMap = typeof buildDistanceMapFromHero === 'function' ? buildDistanceMapFromHero() : new Map();
                 const bestBaseCoord = typeof pickBestReachableGatewayCoordFromBaseDoor === 'function'
-                    ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap)
+                    ? pickBestReachableGatewayCoordFromBaseDoor(baseDoor, distMap, currentMap, targetMap)
                     : null;
                 if (bestBaseCoord) {
                     exactX = bestBaseCoord.x;
@@ -12996,17 +13080,18 @@ function getCurrentMapGatewaysForRadar(distMap, options = {}) {
     const onlyExpMaps = (filterExpMaps && window.isExping) ? getExpAllowedMapSet() : null;
     const toCleanName = (raw) => String(raw || '').replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]*>?/gm, '').split('\n')[0].replace('Przejście do:', '').replace('Przejście do ', '').split('Przejście dostępne')[0].trim();
 
-    const pushGateway = (x, y, targetMap) => {
+    const pushGateway = (x, y, targetMap, source = 'scan') => {
         if (x === undefined || y === undefined) return;
         const cleanTarget = toCleanName(targetMap);
         if (!cleanTarget) return;
         if (onlyExpMaps && !onlyExpMaps.has(cleanTarget.toLowerCase())) return;
+        if (typeof isGatewayCoordBad === 'function' && isGatewayCoordBad(currentMap, cleanTarget, x, y)) return;
 
         const exactKey = `${x}_${y}`;
         const exactReachable = !!(distMap && distMap.has(exactKey));
         const minDist = exactReachable ? distMap.get(exactKey) : Infinity;
         const bestStand = exactReachable ? { x, y } : null;
-        found.push({ x, y, targetMap: cleanTarget, reachable: exactReachable, stand: bestStand, pathDistance: minDist, exactReachable });
+        found.push({ x, y, targetMap: cleanTarget, reachable: exactReachable, stand: bestStand, pathDistance: minDist, exactReachable, source });
     };
 
     let scannedGateways = [];
@@ -13025,44 +13110,47 @@ function getCurrentMapGatewaysForRadar(distMap, options = {}) {
         if (!gw) continue;
         const gx = gw.x !== undefined ? gw.x : gw.rx;
         const gy = gw.y !== undefined ? gw.y : gw.ry;
-        pushGateway(gx, gy, gw.targetMap || gw.name || gw.title || gw.tooltip);
+        pushGateway(gx, gy, gw.targetMap || gw.name || gw.title || gw.tooltip, 'scan');
     }
 
-    if (!found.length) {
-        let gwsList = [];
-        if (typeof Engine.map.getGateways === 'function') {
-            try {
-                gwsList = Engine.map.getGateways().getList().map(g => g.d || g);
-            } catch (e) {
-                gwsList = [];
-            }
-        }
-
-        if (!gwsList.length) {
-            let gws = (Engine.map.gateways) ? Engine.map.gateways : ((Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
-            try { if (typeof gws.values === 'function') gwsList = Array.from(gws.values()); else gwsList = Object.values(gws); }
-            catch(e) { for (let key in gws) { if (gws.hasOwnProperty(key)) gwsList.push(gws[key]); } }
-            gwsList = gwsList.map(g => g.d || g);
-        }
-
-        for (const data of gwsList) {
-            if (!data) continue;
-            const px = data.x !== undefined ? data.x : data.rx;
-            const py = data.y !== undefined ? data.y : data.ry;
-            const targetMap = data.name || data.targetName || data.title || data.tooltip;
-            pushGateway(px, py, targetMap);
+    let gwsList = [];
+    if (typeof Engine.map.getGateways === 'function') {
+        try {
+            gwsList = Engine.map.getGateways().getList().map(g => g.d || g);
+        } catch (e) {
+            gwsList = [];
         }
     }
+
+    if (!gwsList.length) {
+        let gws = (Engine.map.gateways) ? Engine.map.gateways : ((Engine.map.d && Engine.map.d.gw) ? Engine.map.d.gw : {});
+        try { if (typeof gws.values === 'function') gwsList = Array.from(gws.values()); else gwsList = Object.values(gws); }
+        catch(e) { for (let key in gws) { if (gws.hasOwnProperty(key)) gwsList.push(gws[key]); } }
+        gwsList = gwsList.map(g => g.d || g);
+    }
+
+    for (const data of gwsList) {
+        if (!data) continue;
+        const px = data.x !== undefined ? data.x : data.rx;
+        const py = data.y !== undefined ? data.y : data.ry;
+        const targetMap = data.name || data.targetName || data.title || data.tooltip;
+        pushGateway(px, py, targetMap, 'engine');
+    }
+
+    const engineTargets = new Set(found.filter(g => g.source === 'engine').map(g => normMapName(g.targetMap)));
+    const filteredFound = found.filter(g => g.source === 'engine' || !engineTargets.has(normMapName(g.targetMap)));
 
     const dedup = new Map();
-    for (const gw of found) {
+    for (const gw of filteredFound) {
         const key = `${gw.x}_${gw.y}_${String(gw.targetMap).toLowerCase()}`;
         if (!dedup.has(key)) {
             dedup.set(key, gw);
             continue;
         }
         const prev = dedup.get(key);
-        if ((gw.pathDistance ?? 9999) < (prev.pathDistance ?? 9999)) {
+        const gwPriority = gw.source === 'engine' ? 0 : 1;
+        const prevPriority = prev.source === 'engine' ? 0 : 1;
+        if (gwPriority < prevPriority || (gwPriority === prevPriority && (gw.pathDistance ?? 9999) < (prev.pathDistance ?? 9999))) {
             dedup.set(key, gw);
         }
     }
