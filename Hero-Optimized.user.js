@@ -1608,9 +1608,35 @@ function pickDoorToNextHop(currentSysMap, nextHop, distMap, reachableDoors) {
     };
 }
 
+function getActiveRouteContextMaps() {
+    if (Array.isArray(window.rushFullPath) && window.rushFullPath.length > 0) {
+        return window.rushFullPath.filter(Boolean);
+    }
+    if (window.isExping) {
+        if (typeof getCurrentExpHuntMaps === 'function') {
+            const maps = getCurrentExpHuntMaps();
+            if (Array.isArray(maps) && maps.length > 0) return maps.filter(Boolean);
+        }
+        if (botSettings?.exp && Array.isArray(botSettings.exp.mapOrder)) {
+            return botSettings.exp.mapOrder.filter(Boolean);
+        }
+    }
+    const patrolWillResume = !!(typeof window.resumePatrolAfterRush !== 'undefined' && window.resumePatrolAfterRush);
+    if (typeof isPatrolling !== 'undefined' && (isPatrolling || patrolWillResume)) {
+        const hero = document.getElementById('selHero') ? document.getElementById('selHero').value : null;
+        if (hero && heroMapOrder && Array.isArray(heroMapOrder[hero]) && heroMapOrder[hero].length > 0) {
+            return heroMapOrder[hero].filter(Boolean);
+        }
+    }
+    return [];
+}
+
 function pickNextReachableMapFromRoute(currentSysMap, allowedMaps) {
     let hero = document.getElementById('selHero') ? document.getElementById('selHero').value : null;
     let mapList = Array.isArray(allowedMaps) && allowedMaps.length ? [...allowedMaps] : [];
+    if (!mapList.length && typeof getActiveRouteContextMaps === 'function') {
+        mapList = getActiveRouteContextMaps();
+    }
     if (!mapList.length) {
         mapList = (typeof botSettings !== 'undefined' && botSettings.exp) ? botSettings.exp.mapOrder : [];
     }
@@ -1621,11 +1647,11 @@ function pickNextReachableMapFromRoute(currentSysMap, allowedMaps) {
     const reachableDoors = getCurrentMapGatewaysForRadar(distMap).filter(g => g.reachable && g?.targetMap);
     const currNorm = normMapName(currentSysMap);
     const currIdx = mapList.findIndex(m => normMapName(m) === currNorm);
-    if (currIdx === -1) return null;
+    const orderedMaps = currIdx === -1
+        ? mapList
+        : mapList.map((_, offset) => mapList[(currIdx + offset + 1) % mapList.length]);
 
-    for (let i = 1; i < mapList.length; i++) {
-        const checkIdx = (currIdx + i) % mapList.length;
-        const checkMap = mapList[checkIdx];
+    for (const checkMap of orderedMaps) {
         if (!checkMap || normMapName(checkMap) === currNorm) continue;
         if (window.__bannedMaps && window.__bannedMaps[checkMap] && Date.now() < window.__bannedMaps[checkMap]) continue;
 
@@ -2011,6 +2037,188 @@ function cleanOldGateways() {
     };
 
 
+
+    function getLastKnownPositionForMap(mapName) {
+        const targetNorm = normMapName(mapName);
+        for (let i = positionHistory.length - 1; i >= 0; i--) {
+            const p = positionHistory[i];
+            if (p && normMapName(p.map) === targetNorm) return p;
+        }
+        return null;
+    }
+
+    function pushExpHistoryMap(mapName) {
+        if (!mapName) return;
+        window.expMapHistory = window.expMapHistory || [];
+        const last = window.expMapHistory[window.expMapHistory.length - 1];
+        if (normMapName(last) !== normMapName(mapName)) {
+            window.expMapHistory.push(mapName);
+            if (window.expMapHistory.length > 18) window.expMapHistory.shift();
+        }
+    }
+
+    function recordObservedMapTransition(previousMap, currentMap, reason = 'map-change') {
+        if (!previousMap || !currentMap || normMapName(previousMap) === normMapName(currentMap)) return false;
+        const now = Date.now();
+        const pending = window.__pendingGatewayTransition || null;
+        const pendingMatches = !!(
+            pending &&
+            normMapName(pending.fromMap) === normMapName(previousMap) &&
+            normMapName(pending.toMap) === normMapName(currentMap) &&
+            now - (pending.issuedAt || 0) < 25000
+        );
+        const lastPrevPos = getLastKnownPositionForMap(previousMap);
+        const fromX = pendingMatches ? pending.fromX : lastPrevPos?.x;
+        const fromY = pendingMatches ? pending.fromY : lastPrevPos?.y;
+        const toX = Engine?.hero?.d?.x;
+        const toY = Engine?.hero?.d?.y;
+
+        const changed = window.rememberMapTransition(previousMap, currentMap, fromX, fromY, toX, toY, reason);
+        window.expTransitionHistory = Array.isArray(window.expTransitionHistory) ? window.expTransitionHistory : [];
+        const record = {
+            fromMap: previousMap,
+            toMap: currentMap,
+            fromX: Number.isFinite(parseInt(fromX, 10)) ? parseInt(fromX, 10) : null,
+            fromY: Number.isFinite(parseInt(fromY, 10)) ? parseInt(fromY, 10) : null,
+            toX: Number.isFinite(parseInt(toX, 10)) ? parseInt(toX, 10) : null,
+            toY: Number.isFinite(parseInt(toY, 10)) ? parseInt(toY, 10) : null,
+            reason,
+            ts: now
+        };
+        const prevRecord = window.expTransitionHistory[window.expTransitionHistory.length - 1];
+        if (!prevRecord || normMapName(prevRecord.fromMap) !== normMapName(record.fromMap) || normMapName(prevRecord.toMap) !== normMapName(record.toMap)) {
+            window.expTransitionHistory.push(record);
+            if (window.expTransitionHistory.length > 40) window.expTransitionHistory.shift();
+            window.__routePathCacheVersion = (window.__routePathCacheVersion || 0) + 1;
+            window.__internalMapGraphCache = null;
+        }
+
+        if (window.isExping || window.isRushing || (typeof isRushing !== 'undefined' && isRushing)) {
+            pushExpHistoryMap(previousMap);
+        }
+        if (pendingMatches) window.__pendingGatewayTransition = null;
+        return changed;
+    }
+
+    function getLastTransitionBacktrack(currentMap) {
+        if (!currentMap || !Array.isArray(window.expTransitionHistory)) return null;
+        const currNorm = normMapName(currentMap);
+        const now = Date.now();
+        for (let i = window.expTransitionHistory.length - 1; i >= 0; i--) {
+            const rec = window.expTransitionHistory[i];
+            if (!rec || normMapName(rec.toMap) !== currNorm) continue;
+            if (!rec.fromMap || normMapName(rec.fromMap) === currNorm) continue;
+            if (now - (rec.ts || 0) > 20 * 60 * 1000) continue;
+            return { map: rec.fromMap, record: rec };
+        }
+        return null;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[ch]));
+    }
+
+    function addGraphEdge(graph, from, to, meta = {}) {
+        if (!from || !to || normMapName(from) === normMapName(to)) return;
+        const fromKey = normMapName(from);
+        const toKey = normMapName(to);
+        if (!graph.nodes.has(fromKey)) graph.nodes.set(fromKey, { name: from, indoor: isIndoorTransitMapName(from) });
+        if (!graph.nodes.has(toKey)) graph.nodes.set(toKey, { name: to, indoor: isIndoorTransitMapName(to) });
+        if (!graph.adj.has(fromKey)) graph.adj.set(fromKey, new Map());
+        if (!graph.incoming.has(toKey)) graph.incoming.set(toKey, new Map());
+        const current = graph.adj.get(fromKey).get(toKey) || {
+            from,
+            to,
+            coords: [],
+            sources: new Set(),
+            inferred: false
+        };
+        if (meta.x !== undefined && meta.y !== undefined) {
+            const x = parseInt(meta.x, 10);
+            const y = parseInt(meta.y, 10);
+            if (Number.isFinite(x) && Number.isFinite(y) && !current.coords.some(c => c[0] === x && c[1] === y)) {
+                current.coords.push([x, y]);
+            }
+        }
+        if (meta.source) current.sources.add(meta.source);
+        if (meta.inferred) current.inferred = true;
+        graph.adj.get(fromKey).set(toKey, current);
+        graph.incoming.get(toKey).set(fromKey, current);
+    }
+
+    function buildInternalMapGraph(force = false) {
+        const version = `${window.__routePathCacheVersion || 0}:${Array.isArray(window.expTransitionHistory) ? window.expTransitionHistory.length : 0}`;
+        if (!force && window.__internalMapGraphCache && window.__internalMapGraphCache.version === version) {
+            return window.__internalMapGraphCache.graph;
+        }
+        const graph = { nodes: new Map(), adj: new Map(), incoming: new Map(), version };
+
+        for (const from in (globalGateways || {})) {
+            const edges = globalGateways[from] || {};
+            for (const to in edges) {
+                const gw = edges[to] || {};
+                addGraphEdge(graph, from, to, { x: gw.x, y: gw.y, source: 'base' });
+                if (Array.isArray(gw.allCoords)) {
+                    for (const c of gw.allCoords) {
+                        if (Array.isArray(c)) addGraphEdge(graph, from, to, { x: c[0], y: c[1], source: 'base' });
+                    }
+                }
+            }
+        }
+
+        for (const from in (globalGateways || {})) {
+            const edges = globalGateways[from] || {};
+            for (const to in edges) {
+                if (!globalGateways[to] || !globalGateways[to][from]) {
+                    addGraphEdge(graph, to, from, { source: 'reverse-memory', inferred: true });
+                }
+            }
+        }
+
+        if (Array.isArray(window.expTransitionHistory)) {
+            for (const rec of window.expTransitionHistory) {
+                if (!rec) continue;
+                addGraphEdge(graph, rec.fromMap, rec.toMap, { x: rec.fromX, y: rec.fromY, source: 'observed' });
+                addGraphEdge(graph, rec.toMap, rec.fromMap, { x: rec.toX, y: rec.toY, source: 'observed-back' });
+            }
+        }
+
+        const routeMaps = Array.isArray(botSettings?.exp?.mapOrder) ? botSettings.exp.mapOrder : [];
+        for (const map of routeMaps) {
+            const key = normMapName(map);
+            if (map && !graph.nodes.has(key)) graph.nodes.set(key, { name: map, indoor: isIndoorTransitMapName(map), routeOnly: true });
+        }
+
+        window.__internalMapGraphCache = { version, graph };
+        return graph;
+    }
+
+    window.buildInternalMapGraph = buildInternalMapGraph;
+
+    function getRouteNeighborMaps(mapName) {
+        const graph = buildInternalMapGraph();
+        const node = graph.adj.get(normMapName(mapName));
+        if (!node) return [];
+        return [...node.values()].map(edge => edge.to).filter(Boolean);
+    }
+
+    function getKnownOutgoingConnections(mapName) {
+        const graph = buildInternalMapGraph();
+        const node = graph.adj.get(normMapName(mapName));
+        return node ? [...node.values()] : [];
+    }
+
+    function isRouteDeadEndMap(mapName) {
+        return getKnownOutgoingConnections(mapName).filter(e => e && normMapName(e.to) !== normMapName(mapName)).length <= 1;
+    }
+
+    window.getKnownOutgoingConnections = getKnownOutgoingConnections;
 
     // ==========================================
 
@@ -2589,6 +2797,10 @@ function autoDetectEngineData() {
     }
 
     if (currentName !== lastMapName) {
+        const previousMapName = lastMapName;
+        if (previousMapName && typeof recordObservedMapTransition === 'function') {
+            recordObservedMapTransition(previousMapName, currentName, 'engine-map-change');
+        }
         positionHistory = [];
         lastMapName = currentName;
         heroFoundAlerted = false;
@@ -2692,7 +2904,7 @@ function autoDetectEngineData() {
     // ==========================================
     window.rushToMap = function(targetMapName, x = null, y = null, fullPath = null, resumePatrol = false) {
         let currentSysMap = getCurrentMapName();
-        if (currentSysMap === targetMapName) {
+        if (normMapName(currentSysMap) === normMapName(targetMapName)) {
             if (x !== null && y !== null) safeGoTo(x, y, false);
             if (resumePatrol) {
                 isPatrolling = true;
@@ -2707,7 +2919,12 @@ function autoDetectEngineData() {
         rushTarget = targetMapName;
         rushTargetX = x;
         rushTargetY = y;
-        window.rushFullPath = (typeof fullPath === 'string') ? JSON.parse(fullPath) : (fullPath || []);
+        try {
+            const parsedFullPath = (typeof fullPath === 'string') ? JSON.parse(fullPath) : fullPath;
+            window.rushFullPath = Array.isArray(parsedFullPath) ? parsedFullPath.filter(Boolean) : [];
+        } catch (e) {
+            window.rushFullPath = [];
+        }
         window.resumePatrolAfterRush = resumePatrol; // Flaga wznawiająca szukanie Herosa!
 
         let btn = document.getElementById('btnStartStop');
@@ -2838,7 +3055,7 @@ window.executeRushStep = function() {
         }
         let currentSysMap = getCurrentMapName();
 
-        if (currentSysMap === rushTarget) {
+        if (normMapName(currentSysMap) === normMapName(rushTarget)) {
             isRushing = false;
             window.isRushing = false;
             window._lastRushNextMap = null;
@@ -2861,6 +3078,7 @@ window.executeRushStep = function() {
         }
 
         let nextMap = null;
+        let routeFallbackDoor = null;
         let path = typeof getShortestPath === 'function' ? getShortestPath(currentSysMap, rushTarget, routePathOptions()) : null;
         let currentDistance = path ? path.length : 999;
 
@@ -2944,6 +3162,23 @@ window.executeRushStep = function() {
         }
 
         if (!nextMap) {
+            const routeContextMaps = typeof getActiveRouteContextMaps === 'function' ? getActiveRouteContextMaps() : [];
+            const routeFallback = routeContextMaps.length && typeof pickNextReachableMapFromRoute === 'function'
+                ? pickNextReachableMapFromRoute(currentSysMap, routeContextMaps)
+                : null;
+            if (routeFallback && routeFallback.nextHop && routeFallback.door) {
+                nextMap = routeFallback.nextHop;
+                routeFallbackDoor = routeFallback.door;
+                if (window._lastRushNextMap !== nextMap) {
+                    const viaTarget = routeFallback.nextMap && routeFallback.nextMap !== nextMap ? ` -> ${routeFallback.nextMap}` : "";
+                    if (window.logExp) window.logExp(`🧭 Wracam na znana trase przez: [${nextMap}]${viaTarget}`, "#66bb6a");
+                    if (window.logHero) window.logHero(`🧭 Wracam na znana trase przez: [${nextMap}]${viaTarget}`, "#66bb6a");
+                    window._lastRushNextMap = nextMap;
+                }
+            }
+        }
+
+        if (!nextMap) {
             isRushing = false;
             window.isRushing = false;
             let msg = `🚨 BŁĄD TRASY! Bot nie wie jak dojść z [${currentSysMap}] do [${rushTarget}].`;
@@ -2987,7 +3222,11 @@ window.executeRushStep = function() {
             let doorInfo = "";
             let liveDoor = typeof getBestReachableGatewayToMap === 'function' ? getBestReachableGatewayToMap(nextMap) : null;
 
-            if (liveDoor && liveDoor.reachable) {
+            if (routeFallbackDoor && routeFallbackDoor.x !== undefined && routeFallbackDoor.y !== undefined) {
+                targetX = routeFallbackDoor.x;
+                targetY = routeFallbackDoor.y;
+                doorInfo = "(Kontekst trasy)";
+            } else if (liveDoor && liveDoor.reachable) {
                 targetX = liveDoor.x;
                 targetY = liveDoor.y;
                 doorInfo = "(Zasięg radaru)";
@@ -3008,13 +3247,14 @@ window.executeRushStep = function() {
                 if (typeof markGatewayAsBlocked === 'function') markGatewayAsBlocked(currentSysMap, nextMap, 120000, 'unreachable');
                 
                 let fallback = null;
-                // Tylko jak biega rutynowo w Expie, szukamy następnej mapy z listy
-                if (window.isExping && botSettings.exp && botSettings.exp.mapOrder) {
-                    fallback = typeof pickNextReachableMapFromRoute === 'function' ? pickNextReachableMapFromRoute(currentSysMap, window.isExping ? getCurrentExpHuntMaps() : null) : null;
+                const routeContextMaps = typeof getActiveRouteContextMaps === 'function' ? getActiveRouteContextMaps() : [];
+                if (routeContextMaps.length) {
+                    fallback = typeof pickNextReachableMapFromRoute === 'function' ? pickNextReachableMapFromRoute(currentSysMap, routeContextMaps) : null;
                 }
                 if (!fallback) {
                     const smartTargets = [];
                     if (rushTarget) smartTargets.push(rushTarget);
+                    if (routeContextMaps.length) smartTargets.push(...routeContextMaps);
                     if (window.isExping) {
                         const expTargets = typeof getCurrentExpHuntMaps === 'function' ? getCurrentExpHuntMaps() : [];
                         if (Array.isArray(expTargets)) smartTargets.push(...expTargets);
@@ -3027,6 +3267,14 @@ window.executeRushStep = function() {
                 if (fallback && fallback.nextMap && fallback.door) {
                     const immediateHop = fallback.nextHop || fallback.door.targetMap || fallback.nextMap;
                     window.rushNextMap = immediateHop;
+                    window.__pendingGatewayTransition = {
+                        fromMap: currentSysMap,
+                        toMap: immediateHop,
+                        fromX: fallback.door.x,
+                        fromY: fallback.door.y,
+                        issuedAt: Date.now(),
+                        source: 'rush-fallback'
+                    };
                     if (window._lastRushNextMap !== immediateHop) {
                         let suffix = fallback.finalTarget ? ` → cel trasy: ${fallback.finalTarget}` : "";
                         if (!suffix && fallback.nextMap && fallback.nextMap !== immediateHop) suffix = ` → cel trasy: ${fallback.nextMap}`;
@@ -3059,6 +3307,14 @@ window.executeRushStep = function() {
             window.rushGatewayArrivalTime = 0;
             window.rushGateLastClickAt = 0;
 
+            window.__pendingGatewayTransition = {
+                fromMap: currentSysMap,
+                toMap: nextMap,
+                fromX: targetX,
+                fromY: targetY,
+                issuedAt: Date.now(),
+                source: 'rush'
+            };
             safeGoTo(targetX, targetY, false);
             clearTimeout(rushInterval);
             rushInterval = setTimeout(window.checkRushArrival, 500);
@@ -3066,10 +3322,11 @@ window.executeRushStep = function() {
     };
 
     window.checkRushArrival = function() {
+        if (!isRushing && window.isRushing && rushTarget) isRushing = true;
         if (!isRushing || typeof Engine === 'undefined' || !Engine.hero) return;
 
         let currentSysMap = getCurrentMapName();
-        if (currentSysMap === rushTarget) {
+        if (normMapName(currentSysMap) === normMapName(rushTarget)) {
             window.executeRushStep();
             return;
         }
@@ -3144,6 +3401,14 @@ window.executeRushStep = function() {
         if (!window.rushGatewayStallSince) window.rushGatewayStallSince = 0;
         const gateRetryMs = 2800;
         if ((dist === 1 || dist === 0) && (Date.now() - window.rushGateLastClickAt > gateRetryMs)) {
+            window.__pendingGatewayTransition = {
+                fromMap: currentSysMap,
+                toMap: nextMap,
+                fromX: exactX,
+                fromY: exactY,
+                issuedAt: Date.now(),
+                source: 'gate-retry'
+            };
             ActionExecutor.runWithRetry('PASS_GATE', { x: exactX, y: exactY, targetMap: nextMap }, () => safeGoTo(exactX, exactY, false), { retries: 2, baseDelay: 220 });
             window.rushGateLastClickAt = Date.now();
         }
@@ -3161,6 +3426,14 @@ window.executeRushStep = function() {
                 }
                 if (typeof window.safeGoTo === 'function') {
                     // Nie wymuszamy obchodzenia throttle w bramie — bywa to odrzucane przez serwer.
+                    window.__pendingGatewayTransition = {
+                        fromMap: currentSysMap,
+                        toMap: nextMap,
+                        fromX: exactX,
+                        fromY: exactY,
+                        issuedAt: Date.now(),
+                        source: 'gate-force'
+                    };
                     window.safeGoTo(exactX, exactY, false, { forceExact: true });
                 } else if (Engine?.hero?.autoGoTo) {
                     Engine.hero.autoGoTo({ x: exactX, y: exactY });
@@ -3332,9 +3605,10 @@ window.executeRushStep = function() {
                 return path;
             }
 
-            if (globalGateways[u]) {
+            {
                 const nowBan = Date.now();
-                for (let v in globalGateways[u]) {
+                const neighbors = typeof getRouteNeighborMaps === 'function' ? getRouteNeighborMaps(u) : Object.keys(globalGateways[u] || {});
+                for (let v of neighbors) {
                     if (typeof isPhysicalEdgeBlocked === 'function' && isPhysicalEdgeBlocked(u, v, nowBan) && !options.ignorePhysicalBans) continue;
                     if (!ignoreEdgeBans && typeof isEdgeBanned === 'function' && isEdgeBanned(u, v, nowBan)) continue;
                     if (v !== end && window.__bannedMaps && window.__bannedMaps[v] && nowBan < window.__bannedMaps[v]) continue;
@@ -3520,8 +3794,9 @@ window.executeRushStep = function() {
             if (visited.has(current.key)) continue;
             visited.add(current.key);
 
-            if (globalGateways[u]) {
-                for (let v in globalGateways[u]) {
+            {
+                const neighbors = typeof getRouteNeighborMaps === 'function' ? getRouteNeighborMaps(u) : Object.keys(globalGateways[u] || {});
+                for (let v of neighbors) {
                     const nowBan = Date.now();
                     pushNeighbor(current, v, 1, nowBan);
                 }
@@ -4122,6 +4397,14 @@ function initGUI() {
             .list-item:hover { border-color: #5a4b31; background: #333;}
             .list-item.active-route { border-left: 3px solid #00acc1; background: rgba(0, 172, 193, 0.1); }
             .list-item.checked { border-left: 3px solid #43a047; color: #a5d6a7; background: rgba(67, 160, 71, 0.1); }
+            .internal-map-layout { display:grid; grid-template-columns: 180px 1fr; gap:8px; min-height:360px; }
+            .internal-map-list, .internal-map-details { border:1px solid #3a3020; background:#0b0d10; overflow:auto; padding:5px; }
+            .internal-map-node { border:1px solid #263238; background:#15191d; padding:5px; margin-bottom:4px; border-radius:3px; cursor:pointer; color:#d8e2ec; font-size:11px; }
+            .internal-map-node:hover { border-color:#00acc1; background:#1f2a30; }
+            .internal-map-node.active { border-color:#00e5ff; background:#0b3440; color:#fff; }
+            .internal-map-edge { border:1px solid #2e3b2f; background:#101611; border-left:3px solid #4caf50; padding:6px; margin-bottom:6px; border-radius:3px; }
+            .internal-map-edge.inferred { border-left-color:#ffb300; background:#181409; }
+            .internal-map-pill { display:inline-block; padding:1px 5px; border-radius:999px; background:#263238; color:#b0bec5; font-size:9px; margin-left:4px; }
             .btn-sepia { background: linear-gradient(to bottom, #7a6b51, #5a4b31); color: #fff; border: 1px solid #4a3f2b; padding: 2px 6px; cursor: pointer; border-radius: 2px; font-weight:bold; font-size: 10px; text-shadow: 1px 1px 0 #000; }
             .btn-sepia:hover { background: linear-gradient(to bottom, #8a7b61, #6a5b41); border-color: #5a4b31; color: #fff; }
             .btn-go-sepia { background: linear-gradient(to bottom, #5a4b31, #3a2b11); }
@@ -4301,6 +4584,7 @@ function initGUI() {
                             <button id="btnOpenExpBase" class="btn-sepia" style="flex:1; padding:6px; background:#00838f;">🔖 BAZA EXPOWISK</button>
                             <button id="btnOpenRecommendedExp" class="btn-sepia" style="flex:1; padding:6px; background:#4caf50;">⭐ POLECANE</button>
                         </div>
+                        <button id="btnOpenInternalMap" class="btn-sepia" style="width:100%; margin-top:5px; padding:6px; background:#263238; border-color:#00acc1; color:#e0f7fa;" onclick="window.openInternalMapGraph()">🧭 MAPA TRASY I PRZEJŚĆ</button>
                     </div>
 
                     <button id="btnStartExp" class="btn btn-go-sepia" style="margin-top:auto; padding: 6px; font-size: 12px; border: 1px solid #4caf50; color: #4caf50; font-weight:bold;">▶ START</button>
@@ -4461,6 +4745,31 @@ function initGUI() {
             </div>
         `;
         document.body.appendChild(expRecGui);
+
+        const internalMapGui = document.createElement('div');
+        internalMapGui.id = 'heroInternalMapGUI';
+        internalMapGui.className = 'hero-window';
+        internalMapGui.style.display = 'none';
+        internalMapGui.style.top = '80px';
+        internalMapGui.style.left = '740px';
+        internalMapGui.style.width = '620px';
+        internalMapGui.style.height = '500px';
+        internalMapGui.style.resize = 'both';
+        internalMapGui.innerHTML = `
+            <div class="gui-header">🧭 Mapa trasy i pamięci przejść <button class="btn-close" onclick="document.getElementById('heroInternalMapGUI').style.display='none'">✖</button></div>
+            <div class="gui-content" style="gap:8px;">
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <input type="text" id="internalMapSearch" placeholder="Szukaj mapy..." style="flex:1; padding:6px; background:#0f0f0f; color:#e0d8c0; border:1px solid #4a3f2b; border-radius:2px; font-size:11px;">
+                    <button class="btn-sepia" style="padding:6px 8px;" onclick="window.renderInternalMapGraph(window.__internalSelectedMap, true)">Odśwież</button>
+                </div>
+                <div id="internalMapSummary" style="font-size:10px; color:#a99a75;"></div>
+                <div class="internal-map-layout">
+                    <div id="internalMapGraphList" class="internal-map-list"></div>
+                    <div id="internalMapDetails" class="internal-map-details"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(internalMapGui);
 
         setupModals(); setupMultiDrag(); setupGearDrag(); setupLogic();
     }
@@ -4651,6 +4960,13 @@ function setOnChange(id, handler) {
            }
        });
 
+
+       const internalMapSearch = document.getElementById('internalMapSearch');
+       if (internalMapSearch) {
+           internalMapSearch.addEventListener('input', () => {
+               if (typeof window.renderInternalMapGraph === 'function') window.renderInternalMapGraph(window.__internalSelectedMap, false);
+           });
+       }
 
 
 const btnExp = document.getElementById('btnStartExp');
@@ -6042,7 +6358,7 @@ function stopPatrol(hardStop = true) {
         let wasMoving = isPatrolling || isRushing;
         isPatrolling = false;
         isRushing = false;
-        window.isRushing = false;
+        window.isRushing = !!(typeof isRushing !== 'undefined' && isRushing);
         window.isRushingToShop = false;
         window.resumePatrolAfterRush = false; // KRYTYCZNA POPRAWKA: Blokuje auto-wznawianie po ręcznym zatrzymaniu!
 
@@ -7962,6 +8278,17 @@ function runExpLogic() {
             if (fallbackRoute?.nextMap) bestTargetMap = fallbackRoute.nextMap;
         }
 
+        if (!bestTargetMap) {
+            const backtrackHint = typeof getLastTransitionBacktrack === 'function' ? getLastTransitionBacktrack(currMap) : null;
+            if (backtrackHint?.map) {
+                bestTargetMap = backtrackHint.map;
+                if (window.logExp && window._lastDeadEndBacktrackLog !== `${currMap}->${bestTargetMap}`) {
+                    window.logExp(`↩️ Ślepa mapa albo brak dalszej bramy. Cofam się ostatnim znanym przejściem: [${currMap}] → [${bestTargetMap}]`, "#ffcc80");
+                    window._lastDeadEndBacktrackLog = `${currMap}->${bestTargetMap}`;
+                }
+            }
+        }
+
         if (bestTargetMap && !window.isRushing) {
             if (window.logExp && window._lastTransitMapLog !== bestTargetMap) {
                 window.logExp(`🏃 Bieg do: [${bestTargetMap}]`, "#90caf9");
@@ -7982,6 +8309,17 @@ function runExpLogic() {
             if (!window.expAllMapsClearedAt) {
                 window.expAllMapsClearedAt = now;
                 if (window.logExp) window.logExp("✅ Wyczyściłem wszystkie mapy. Szukam bezpiecznej mapy i czekam 1 minutę na resp.", "#4db6ac");
+            }
+
+            const deadEndBack = typeof getLastTransitionBacktrack === 'function' ? getLastTransitionBacktrack(currMap) : null;
+            if (deadEndBack?.map && typeof isRouteDeadEndMap === 'function' && isRouteDeadEndMap(currMap) && !window.isRushing) {
+                if (window.logExp && window._lastAllClearBacktrackLog !== `${currMap}->${deadEndBack.map}`) {
+                    window.logExp(`↩️ Wszystko wyczyszczone, ale stoję na ślepej mapie. Wracam do: [${deadEndBack.map}]`, "#ffcc80");
+                    window._lastAllClearBacktrackLog = `${currMap}->${deadEndBack.map}`;
+                }
+                window.rushToMap(deadEndBack.map);
+                expLastActionTime = now + 1000;
+                return;
             }
 
             const isRedMap = Engine.map?.d?.pvp === 2;
@@ -8016,8 +8354,9 @@ function runExpLogic() {
             return;
         } else if (!bestTargetMap) {
             // Backtracking tylko do map osiągalnych i niezbannowanych map-level.
-            let back = null;
-            while (window.expMapHistory && window.expMapHistory.length) {
+            const immediateBack = typeof getLastTransitionBacktrack === 'function' ? getLastTransitionBacktrack(currMap) : null;
+            let back = immediateBack?.map || null;
+            while (!back && window.expMapHistory && window.expMapHistory.length) {
                 const candidate = window.expMapHistory.pop();
                 if (!candidate) continue;
                 if (normMapName(candidate) === normMapName(currMap)) continue;
@@ -8534,6 +8873,112 @@ window.clearExpMaps = clearExpMaps;
 
         if (!silent) heroAlert(`✅ Trasa połączona!\nBot dodał mapy przejściowe do głównej listy. Jeśli podczas biegu przez korytarz lub las spotka potwory, wyhamuje, normalnie je wybije i po zrobieniu czystki zapisze tę mapę w pamięci!`);
     };
+
+    window.openInternalMapGraph = function(selectedMap = null) {
+        const win = document.getElementById('heroInternalMapGUI');
+        if (!win) return;
+        win.style.display = 'flex';
+        const current = selectedMap || Engine?.map?.d?.name || window.__internalSelectedMap || botSettings?.exp?.mapOrder?.[0] || null;
+        window.__internalSelectedMap = current;
+        window.renderInternalMapGraph(current, true);
+    };
+
+    window.selectInternalMapNode = function(mapName) {
+        window.__internalSelectedMap = mapName;
+        window.renderInternalMapGraph(mapName, false);
+    };
+
+    window.renderInternalMapGraph = function(selectedMap = null, force = false) {
+        const list = document.getElementById('internalMapGraphList');
+        const details = document.getElementById('internalMapDetails');
+        const summary = document.getElementById('internalMapSummary');
+        if (!list || !details) return;
+
+        const graph = typeof buildInternalMapGraph === 'function' ? buildInternalMapGraph(force) : null;
+        if (!graph) return;
+
+        const routeSet = new Set((botSettings?.exp?.mapOrder || []).map(normMapName));
+        const search = (document.getElementById('internalMapSearch')?.value || '').trim().toLowerCase();
+        const nodes = [...graph.nodes.values()]
+            .filter(n => !search || n.name.toLowerCase().includes(search))
+            .sort((a, b) => {
+                const ar = routeSet.has(normMapName(a.name)) ? 0 : 1;
+                const br = routeSet.has(normMapName(b.name)) ? 0 : 1;
+                if (ar !== br) return ar - br;
+                return a.name.localeCompare(b.name);
+            });
+
+        if (!selectedMap || !graph.nodes.has(normMapName(selectedMap))) {
+            selectedMap = Engine?.map?.d?.name || nodes[0]?.name || null;
+        }
+        window.__internalSelectedMap = selectedMap;
+
+        const edgeCount = [...graph.adj.values()].reduce((sum, m) => sum + m.size, 0);
+        if (summary) {
+            summary.innerHTML = `Mapy: <b style="color:#e0f7fa;">${graph.nodes.size}</b> | Połączenia: <b style="color:#c8e6c9;">${edgeCount}</b> | Trasa EXP: <b style="color:#ffd54f;">${routeSet.size}</b>`;
+        }
+
+        list.innerHTML = nodes.map(n => {
+            const active = normMapName(n.name) === normMapName(selectedMap);
+            const outgoing = getKnownOutgoingConnections(n.name).length;
+            const routeBadge = routeSet.has(normMapName(n.name)) ? '<span class="internal-map-pill">EXP</span>' : '';
+            const indoorBadge = n.indoor ? '<span class="internal-map-pill">wnętrze</span>' : '';
+            const safeName = String(n.name).replace(/'/g, "\\'");
+            return `
+                <div class="internal-map-node ${active ? 'active' : ''}" onclick="window.selectInternalMapNode('${safeName}')">
+                    <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(n.name)}</div>
+                    <div style="color:#90a4ae; font-size:9px; margin-top:2px;">wyjścia: ${outgoing} ${routeBadge}${indoorBadge}</div>
+                </div>
+            `;
+        }).join('') || '<div style="color:#777; padding:8px;">Brak map pasujących do filtra.</div>';
+
+        const selectedEdges = getKnownOutgoingConnections(selectedMap);
+        const incoming = graph.incoming.get(normMapName(selectedMap)) ? [...graph.incoming.get(normMapName(selectedMap)).values()] : [];
+        const selectedNode = graph.nodes.get(normMapName(selectedMap));
+        const incomingOnly = incoming.filter(edge => !selectedEdges.some(e => normMapName(e.to) === normMapName(edge.from)));
+
+        const edgeHtml = selectedEdges.map(edge => {
+            const coords = edge.coords.length ? edge.coords.map(c => `[${c[0]},${c[1]}]`).join(', ') : 'brak kordów po tej stronie';
+            const sources = [...edge.sources].join(', ') || 'pamięć';
+            const inferredClass = edge.inferred || edge.coords.length === 0 ? ' inferred' : '';
+            const inferredLabel = edge.inferred ? '<span class="internal-map-pill">odtworzone</span>' : '';
+            const indoorLabel = isIndoorTransitMapName(edge.to) ? '<span class="internal-map-pill">wnętrze</span>' : '';
+            return `
+                <div class="internal-map-edge${inferredClass}">
+                    <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+                        <div style="font-weight:bold; color:#e8f5e9;">→ ${escapeHtml(edge.to)} ${inferredLabel}${indoorLabel}</div>
+                        <button class="btn-sepia" style="padding:2px 6px;" onclick="window.rushToMap('${String(edge.to).replace(/'/g, "\\'")}')">Idź</button>
+                    </div>
+                    <div style="font-size:10px; color:#b0bec5; margin-top:4px;">Kordy: ${escapeHtml(coords)}</div>
+                    <div style="font-size:9px; color:#78909c; margin-top:2px;">Źródło: ${escapeHtml(sources)}</div>
+                </div>
+            `;
+        }).join('');
+
+        const incomingHtml = incomingOnly.length ? `
+            <div style="margin-top:10px; color:#ffcc80; font-weight:bold; font-size:11px;">Wejścia do tej mapy bez zapisanego powrotu:</div>
+            ${incomingOnly.map(edge => `
+                <div class="internal-map-edge inferred">
+                    <div style="font-weight:bold; color:#ffe0b2;">← ${escapeHtml(edge.from)} <span class="internal-map-pill">brak wyjścia zwrotnego</span></div>
+                    <div style="font-size:10px; color:#b0bec5; margin-top:4px;">Po wejściu bot zapisze powrót automatycznie.</div>
+                </div>
+            `).join('')}
+        ` : '';
+
+        details.innerHTML = `
+            <div style="border-bottom:1px solid #263238; padding-bottom:8px; margin-bottom:8px;">
+                <div style="font-size:14px; color:#00e5ff; font-weight:bold;">${escapeHtml(selectedMap || 'Brak mapy')}</div>
+                <div style="font-size:10px; color:#90a4ae; margin-top:3px;">
+                    ${selectedNode?.indoor ? 'Mapa wewnętrzna / jaskinia / domek' : 'Mapa zewnętrzna lub zwykła'}
+                    ${routeSet.has(normMapName(selectedMap)) ? ' | część trasy EXP' : ' | mapa pomocnicza / tranzyt'}
+                    ${isRouteDeadEndMap(selectedMap) ? ' | ślepa mapa' : ''}
+                </div>
+            </div>
+            ${edgeHtml || '<div style="color:#ef9a9a; padding:8px; border:1px solid #4a1f1f; background:#160b0b;">Brak zapisanych wyjść z tej mapy. Wejdź/wyjdź przez przejście raz, a bot zapisze je w pamięci.</div>'}
+            ${incomingHtml}
+        `;
+    };
+
 window.renderMapOrderList = () => {
         let c = document.getElementById('heroMapListContainer');
         if (!c) return;
@@ -8686,7 +9131,7 @@ window.renderMapOrderList = () => {
                 return `<div class="list-item">
                     <div class="map-name-wrap" title="${mapName}">
                         <span class="btn-del-map" onclick="window.removeExpMap(${index})">✖</span>
-                        <span class="map-name" style="color:${mapColor}; font-weight:bold;">
+                        <span class="map-name" style="color:${mapColor}; font-weight:bold; cursor:pointer;" onclick="window.openInternalMapGraph('${safeMapName}')" title="Pokaż zapisane przejścia tej mapy">
                             ${mapName}
                         </span>
                         ${baseBadge}
@@ -11661,7 +12106,7 @@ if (
     // --- ŁATKA: EGZORCYZMY NA SKLONOWANYCH OKNACH I NAPRAWA PRZYCISKÓW ---
         setTimeout(() => {
             // 1. Usuwanie "duchów" - sklonowanych interfejsów, które blokowały przyciski
-            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI', 'heroTeleportsGUI'];
+            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI', 'heroInternalMapGUI', 'heroTeleportsGUI'];
             windowsToClean.forEach(id => {
                 let copies = document.querySelectorAll('#' + id);
                 if (copies.length > 1) {
@@ -11707,7 +12152,7 @@ if (
             // 1. Kasujemy "Duchy" - usuwamy okna z klasą 'hero-window' które wiszą luzem
             document.querySelectorAll('body > .hero-window#heroTeleportsGUI').forEach(el => el.remove());
 
-            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI', 'browserAlertsSettingsGUI', 'discordSettingsGUI', 'heroTeleportsGUI'];
+            const windowsToClean = ['heroNavGUI', 'heroSettingsGUI', 'heroGatewaysGUI', 'heroGoToGUI', 'heroExpBaseGUI', 'heroExpRecGUI', 'heroInternalMapGUI', 'browserAlertsSettingsGUI', 'discordSettingsGUI', 'heroTeleportsGUI'];
             windowsToClean.forEach(id => {
                 let copies = document.querySelectorAll('#' + id);
                 if (copies.length > 1) {
@@ -11768,7 +12213,7 @@ if (
                     .gui-content { background: rgba(26, 29, 33, ${val}) !important; }
                     .tabs-wrapper { background: rgba(34, 34, 34, ${val}) !important; }
                     .list-item { background: rgba(34, 34, 34, ${val}) !important; }
-                    #cordsListContainer, #heroMapListContainer, #gatewaysListContainer, #e2ListContainer, #kolosyListContainer, #expMapList, #recommendedEqList, #potionsList, #shopsSearchWrapper { background: rgba(20, 20, 20, ${val}) !important; }
+                    #cordsListContainer, #heroMapListContainer, #gatewaysListContainer, #e2ListContainer, #kolosyListContainer, #expMapList, #internalMapGraphList, #internalMapDetails, #recommendedEqList, #potionsList, #shopsSearchWrapper { background: rgba(20, 20, 20, ${val}) !important; }
                     .accordion-header { background: rgba(26, 26, 26, ${val}) !important; }
                 `;
                 localStorage.setItem('hero_opacity_v64', val);
@@ -12421,12 +12866,13 @@ function refreshRadarGroupsCache(force = false) {
     window.radarTargetInfo = currentTarget;
 }
 
-function getCurrentMapGatewaysForRadar(distMap) {
+function getCurrentMapGatewaysForRadar(distMap, options = {}) {
     let found = [];
     if (typeof Engine === 'undefined' || !Engine.map) return found;
 
     const currentMap = Engine?.map?.d?.name || '';
-    const onlyExpMaps = window.isExping ? getExpAllowedMapSet() : null;
+    const filterExpMaps = !!options.filterExpMaps;
+    const onlyExpMaps = (filterExpMaps && window.isExping) ? getExpAllowedMapSet() : null;
     const toCleanName = (raw) => String(raw || '').replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]*>?/gm, '').split('\n')[0].replace('Przejście do:', '').replace('Przejście do ', '').split('Przejście dostępne')[0].trim();
 
     const pushGateway = (x, y, targetMap) => {
@@ -12500,7 +12946,7 @@ function getCurrentMapGatewaysForRadar(distMap) {
         }
     }
 
-    if (window.isExping && currentMap) {
+    if (filterExpMaps && window.isExping && currentMap) {
         const allowed = onlyExpMaps || new Set();
         return [...dedup.values()].filter(g => allowed.has(String(g.targetMap || '').toLowerCase()));
     }
