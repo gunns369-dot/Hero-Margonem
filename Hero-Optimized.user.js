@@ -10615,10 +10615,14 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
         const overlay = document.querySelector(".dead-overlay.map-overlay, .dead-window, .death-window");
         const timerEl = document.querySelector(".dead-overlay.map-overlay .dazed-time, .dead-window .dazed-time");
 
+        const rect = overlay ? overlay.getBoundingClientRect() : null;
         const visible = !!(
             overlay &&
             window.getComputedStyle(overlay).display !== "none" &&
-            overlay.offsetParent !== null
+            window.getComputedStyle(overlay).visibility !== "hidden" &&
+            rect &&
+            rect.width > 0 &&
+            rect.height > 0
         );
 
         const text = timerEl ? (timerEl.innerText || timerEl.textContent || "").trim() : null;
@@ -10638,6 +10642,192 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             timerText: text,
             timerSeconds: seconds
         };
+    }
+
+    function normalizeUiText(text) {
+        return String(text || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/ł/g, "l")
+            .replace(/Ł/g, "l")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+    }
+
+    function findBattleLeaveButton() {
+        const selectors = [
+            '.battle-close',
+            '.button.close',
+            '.close-battle-btn',
+            '.battle-close-button',
+            'div.button.green.close-battle-ground.small',
+            '[data-tip*="Opu"]',
+            '[data-tip*="opu"]'
+        ];
+
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el && isVisibleElementForBot(el)) return el;
+        }
+
+        const candidates = Array.from(document.querySelectorAll('button, .button, a, div, span'))
+            .filter(el => isVisibleElementForBot(el))
+            .filter(el => {
+                const txt = normalizeUiText(el.innerText || el.textContent || el.getAttribute('data-tip') || '');
+                return txt.includes('opusc walke') || txt.includes('opus walke') || txt.includes('zakoncz walke');
+            });
+
+        candidates.sort((a, b) => (a.offsetWidth * a.offsetHeight) - (b.offsetWidth * b.offsetHeight));
+        return candidates[0] || null;
+    }
+
+    function isVisibleElementForBot(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== "none" && style.visibility !== "hidden" && parseFloat(style.opacity || "1") > 0 && el.offsetWidth > 0 && el.offsetHeight > 0;
+    }
+
+    function closeBattleEndScreen(reason = 'death') {
+        let clicked = false;
+        try {
+            if (typeof Engine !== 'undefined' && Engine.battle && typeof Engine.battle.close === 'function') {
+                Engine.battle.close();
+                clicked = true;
+            }
+        } catch (e) {}
+
+        try {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', keyCode: 90, which: 90, bubbles: true }));
+            document.dispatchEvent(new KeyboardEvent('keyup', { key: 'z', keyCode: 90, which: 90, bubbles: true }));
+            clicked = true;
+        } catch (e) {}
+
+        const btn = findBattleLeaveButton();
+        if (btn) {
+            try { if (window.jQuery) window.jQuery(btn).trigger('click'); } catch (e) {}
+            try { btn.click(); clicked = true; } catch (e) {}
+        }
+
+        if (clicked) {
+            HeroLogger.emit('INFO', 'BATTLE_CLOSE', `Zamykam ekran walki (${reason}).`, "#ffb74d", { category: 'COMBAT', dedupeMs: 1600 });
+        }
+        return clicked;
+    }
+
+    function getDeathRecoveryTargetMap() {
+        const currMap = typeof getCurrentMapName === 'function' ? getCurrentMapName() : (Engine?.map?.d?.name || "");
+        const mapsPool = typeof getCurrentExpHuntMaps === 'function' ? getCurrentExpHuntMaps() : [];
+        if (currMap && typeof findMatchingExpMapName === 'function') {
+            const matched = findMatchingExpMapName(currMap, mapsPool);
+            if (matched) return matched;
+        }
+        if (typeof rushTarget !== 'undefined' && rushTarget && typeof findMatchingExpMapName === 'function') {
+            const matchedRush = findMatchingExpMapName(rushTarget, mapsPool);
+            if (matchedRush) return matchedRush;
+        }
+        if (currMap && typeof getClosestExpMapPath === 'function') {
+            const nearest = getClosestExpMapPath(currMap, mapsPool);
+            if (nearest?.targetMap) return nearest.targetMap;
+        }
+        return Array.isArray(mapsPool) && mapsPool.length ? mapsPool[0] : null;
+    }
+
+    function ensureDeathRecoverySnapshot(reason = 'death') {
+        if (window.__deathRecovery?.active) return window.__deathRecovery;
+        const localPatrol = (typeof isPatrolling !== 'undefined' && !!isPatrolling);
+        const localRush = (typeof isRushing !== 'undefined' && !!isRushing);
+        const targetMap = getDeathRecoveryTargetMap();
+        window.__deathRecovery = {
+            active: true,
+            reason,
+            createdAt: Date.now(),
+            exping: !!window.isExping,
+            patrolling: localPatrol || !!window.isPatrolling,
+            rushing: localRush || !!window.isRushing,
+            targetMap,
+            deathMap: typeof getCurrentMapName === 'function' ? getCurrentMapName() : (Engine?.map?.d?.name || null),
+            rushTarget: (typeof rushTarget !== 'undefined' ? rushTarget : null),
+            rushTargetX: (typeof rushTargetX !== 'undefined' ? rushTargetX : null),
+            rushTargetY: (typeof rushTargetY !== 'undefined' ? rushTargetY : null),
+            rushFullPath: Array.isArray(window.rushFullPath) ? [...window.rushFullPath] : [],
+            resumePatrolAfterRush: !!window.resumePatrolAfterRush,
+            expRunId: window.expRunId || null,
+            berserk: !!(botSettings?.berserk?.userEnabled || botSettings?.berserk?.enabled)
+        };
+        return window.__deathRecovery;
+    }
+
+    function requestDeadRespawn(reason = 'death_timer') {
+        try {
+            if (typeof Engine !== 'undefined' && Engine.communication) {
+                Engine.communication.send({ a: "deadresp" });
+                return true;
+            }
+        } catch (e) {}
+        try {
+            if (typeof window._g === 'function') {
+                window._g('deadresp');
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function resumeAfterDeathIfReady() {
+        const snap = window.__deathRecovery;
+        if (!snap || !snap.active || isUnconsciousNow() || Engine?.map?.isLoading) return false;
+        const now = Date.now();
+        if (now - (snap.lastResumeTryAt || 0) < 2500) return false;
+        snap.lastResumeTryAt = now;
+
+        if (snap.exping) {
+            window.isExping = true;
+            window.expRunId = snap.expRunId || window.expRunId || `death-resume-${now}`;
+            window.isExpSuspended = false;
+            window.isRushingToShop = false;
+            window.expCurrentTargetGroupKey = null;
+            window.expFocusTarget = null;
+            if (typeof expCurrentTargetId !== 'undefined') expCurrentTargetId = null;
+            if (typeof expEmptyScans !== 'undefined') expEmptyScans = 0;
+            if (typeof expMapTransitionCooldown !== 'undefined') expMapTransitionCooldown = now + 2500;
+            if (typeof expLastActionTime !== 'undefined') expLastActionTime = now + 1200;
+
+            const btn = document.getElementById('btnStartExp');
+            if (btn) {
+                btn.innerHTML = "STOP";
+                btn.style.borderColor = "#f44336";
+                btn.style.color = "#f44336";
+            }
+
+            const currMap = typeof getCurrentMapName === 'function' ? getCurrentMapName() : (Engine?.map?.d?.name || "");
+            const onExpMap = typeof isMapInSelectedExpowisko === 'function' ? isMapInSelectedExpowisko(currMap) : false;
+            if (snap.targetMap && !onExpMap && typeof window.rushToMap === 'function') {
+                window.logExp?.(`Odrodzono postac. Wracam na expowisko: [${snap.targetMap}]`, "#ffcc80");
+                window.rushToMap(snap.targetMap);
+            } else {
+                window.logExp?.("Odrodzono postac. Wznawiam EXP na miejscu.", "#4caf50");
+                if (window.RouteCombatFSM) {
+                    window.RouteCombatFSM.update({
+                        running: true,
+                        currentTask: 'EXP',
+                        inRouteMap: onExpMap
+                    }, 'death_resume_exp');
+                }
+                setTimeout(() => { if (window.isExping && typeof runExpLogic === 'function') runExpLogic(); }, 900);
+            }
+            window.__deathRecovery = null;
+            return true;
+        }
+
+        if (snap.rushing && snap.rushTarget && typeof window.rushToMap === 'function') {
+            window.rushToMap(snap.rushTarget, snap.rushTargetX, snap.rushTargetY, snap.rushFullPath, snap.resumePatrolAfterRush);
+            window.__deathRecovery = null;
+            return true;
+        }
+
+        window.__deathRecovery = null;
+        return false;
     }
 
   function isUnconsciousNow() {
@@ -10663,7 +10853,11 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
 
       if (isDead && !window.__unconscious) {
             window.__unconscious = true;
-            if (window.logExp) window.logExp("💀 [STRAŻNIK] Wykryto zgon! Zamykam walkę i zatrzymuję bota...", "#e53935");
+            const deathSnap = ensureDeathRecoverySnapshot('death_guard');
+            if (window.logExp && deathSnap?.targetMap) {
+                window.logExp(`[DeathRecovery] Po odrodzeniu wracam na expowisko: [${deathSnap.targetMap}]`, "#ffcc80");
+            }
+            if (window.logExp) window.logExp("[STRAZNIK] Wykryto zgon. Zamykam walke i pauzuje bota do odrodzenia.", "#e53935");
 
             // Twarde wyłączenie auto-walki po śmierci (UI + pamięć), żeby nie wisiała aktywna walka na ekranie.
             if (window.BerserkController && typeof window.BerserkController.setBotBerserkState === 'function') {
@@ -10693,8 +10887,25 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
             }
             // ---------------------------------------
 
+            closeBattleEndScreen('death_guard');
+
             if (typeof Engine !== 'undefined' && Engine.hero && typeof Engine.hero.stop === 'function') {
                 Engine.hero.stop();
+            }
+            if (typeof isRushing !== 'undefined') isRushing = false;
+            window.isRushing = false;
+            window.isRushingToShop = false;
+            clearTimeout(rushInterval);
+            clearTimeout(smoothPatrolInterval);
+        }
+
+        if (isDead && window.__unconscious) {
+            closeBattleEndScreen('death_guard_retry');
+            if (state.timerSeconds !== null && state.timerSeconds <= 1 && Date.now() - (window.__lastDeadRespRequestAt || 0) > 2500) {
+                window.__lastDeadRespRequestAt = Date.now();
+                if (requestDeadRespawn('timer_ready')) {
+                    HeroLogger.emit('INFO', 'DEAD_RESPAWN', 'Wyslano prosbe o odrodzenie postaci.', "#ffcc80", { category: 'ROUTE', dedupeMs: 2500 });
+                }
             }
         }
 
@@ -10711,6 +10922,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                     if (botSettings && botSettings.autoheal && botSettings.autoheal.enabled) {
                         window.isRegeneratingToFull = true;
                     }
+                    setTimeout(() => resumeAfterDeathIfReady(), 1800);
                 }
             }, 1200);
         }
@@ -10731,11 +10943,7 @@ window.renderEqItems = function(filterType = 'Wszystkie') {
                 if (window.logExp) window.logExp(`🔄 Zegar śmierci zamarzł na ${seconds}s! Miękkie odświeżanie interfejsu...`, "#ffb300");
                 window.__stuckTimerCount = -999;
 
-                if (typeof Engine !== 'undefined' && Engine.communication) {
-                    Engine.communication.send({ a: "deadresp" });
-                } else if (typeof window._g === 'function') {
-                    window._g('deadresp');
-                }
+                requestDeadRespawn('timer_stuck');
 
                 setTimeout(() => {
                     if (window.__unconscious) {
@@ -12990,29 +13198,28 @@ if (
             // 1. Sprawdzamy, czy w ogóle jesteśmy w trakcie wyświetlanej walki
             if (typeof Engine === 'undefined' || !Engine.battle || !Engine.battle.show) return;
 
-            // 2. Pobieramy tekst z logów walki
-            const battleLogs = document.querySelector(".left-column, .battle-content, .logbox, .battle-log");
-            if (!battleLogs) return;
+            const battleText = normalizeUiText(document.body?.innerText || document.body?.textContent || "");
+            const hasLeaveButton = !!findBattleLeaveButton();
+            const lostOrEnded = (
+                hasLeaveButton ||
+                battleText.includes('walka zakonczona') ||
+                battleText.includes('opusc walke') ||
+                battleText.includes('polegl') ||
+                battleText.includes('nokaut') ||
+                battleText.includes('otrzymal') && battleText.includes('obrazen')
+            );
 
-            const text = battleLogs.innerText || battleLogs.textContent || "";
-
-            // 3. Jeśli padliśmy, szukamy przycisku opuszczenia
-            if (/Poległ/i.test(text)) {
+            if (lostOrEnded) {
                 const now = Date.now();
                 if (now - lastLostCloseTime < 1500) return; // Cooldown na kliknięcie
 
-                const btn = document.querySelector("div.button.green.close-battle-ground.small, .close-battle-btn, .battle-close-button");
-
-                if (btn && getComputedStyle(btn).display !== "none" && getComputedStyle(btn).visibility !== "hidden") {
-                    lastLostCloseTime = now;
-
-                    // Podwójne, bezpieczne kliknięcie
-                    if (window.jQuery) jQuery(btn).trigger('click');
-                    if (typeof btn.click === 'function') btn.click();
-
-                    if (window.logExp) window.logExp("💀 Przegrana walka! Automatycznie opuszczam pole bitwy...", "#e53935");
-                    else if (window.logHero) window.logHero("💀 Przegrana walka! Zamykam...", "#e53935");
+                lastLostCloseTime = now;
+                if (window.isExping || window.isRushing || (typeof isRushing !== 'undefined' && isRushing)) {
+                    ensureDeathRecoverySnapshot('lost_fight_screen');
                 }
+                const closed = closeBattleEndScreen('lost_fight_screen');
+                if (closed && window.logExp) window.logExp("Przegrana walka. Automatycznie opuszczam pole bitwy.", "#e53935");
+                else if (closed && window.logHero) window.logHero("Przegrana walka. Zamykam ekran walki.", "#e53935");
             }
         }, 500);
     }
