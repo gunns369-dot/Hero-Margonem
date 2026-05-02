@@ -11693,6 +11693,9 @@ window.openShopAsync = async (namePart) => {
                 rushTargetY: (typeof rushTargetY !== 'undefined' ? rushTargetY : null),
                 rushFullPath: Array.isArray(window.rushFullPath) ? [...window.rushFullPath] : [],
                 resumePatrolAfterRush: !!window.resumePatrolAfterRush,
+                expRunId: window.expRunId || null,
+                expLastMap: window.lastExpMap || null,
+                activeTab: document.querySelector('.mode-tab.active-tab')?.dataset?.tab || null,
                 selectedHero: document.getElementById('selHero')?.value || null,
                 currentRouteIndex: (typeof currentRouteIndex !== 'undefined' ? currentRouteIndex : -1),
                 patrolIndex: (typeof patrolIndex !== 'undefined' ? patrolIndex : 0),
@@ -11718,7 +11721,11 @@ window.openShopAsync = async (namePart) => {
         }
 
         function hasTrapResumeWork(snapshot = window.__trapResumeSnapshot) {
-            return !!(snapshot && (snapshot.exping || snapshot.patrolling || snapshot.rushing));
+            return !!(
+                (snapshot && (snapshot.exping || snapshot.patrolling || snapshot.rushing)) ||
+                window.__wasExpingBeforeCaptcha ||
+                window.__wasPatrollingBeforeCaptcha
+            );
         }
 
         function resetTrapResumeState() {
@@ -11736,19 +11743,64 @@ window.openShopAsync = async (namePart) => {
             window.__captchaSolveLastAttemptAt = 0;
         }
 
+        function setExpButtonStateForTrap(running) {
+            const btn = document.getElementById('btnStartExp');
+            if (!btn) return;
+            btn.innerHTML = running ? "STOP" : "START";
+            btn.style.borderColor = running ? "#f44336" : "#4caf50";
+            btn.style.color = running ? "#f44336" : "#4caf50";
+        }
+
+        function setPatrolButtonStateForTrap(running) {
+            const btn = document.getElementById('btnStartStop');
+            if (!btn) return;
+            btn.innerHTML = running ? '<span>STOP</span>' : '<span>START</span>';
+            btn.style.color = running ? "#f44336" : "#4caf50";
+            btn.style.borderColor = running ? "#f44336" : "#4caf50";
+        }
+
+        function stopHeroMovementForTrap() {
+            try {
+                if (typeof Engine?.hero?.stop === 'function') Engine.hero.stop();
+                if (Engine?.hero?.d && typeof Engine?.hero?.autoGoTo === 'function') {
+                    Engine.hero.autoGoTo({ x: Engine.hero.d.x, y: Engine.hero.d.y });
+                }
+                if (Engine?.hero?.d?.path) Engine.hero.d.path = [];
+            } catch (e) {}
+        }
+
         function pauseBotsForTrap(snapshot) {
             const snap = snapshot || ensureTrapResumeSnapshot("full");
-            if (snap.exping && window.isExping) {
-                let btn = document.getElementById('btnStartExp');
-                if (btn) btn.click();
-                else window.isExping = false;
-            }
             window.__stoppingForCaptcha = true;
-            try {
-                if (typeof stopPatrol === 'function') stopPatrol(true);
-            } finally {
-                window.__stoppingForCaptcha = false;
+
+            if (snap.exping) {
+                window.isExping = false;
+                setExpButtonStateForTrap(false);
             }
+
+            if (typeof isPatrolling !== 'undefined') isPatrolling = false;
+            window.isPatrolling = false;
+            if (typeof isRushing !== 'undefined') isRushing = false;
+            window.isRushing = false;
+            window.isRushingToShop = false;
+
+            clearTimeout(rushInterval);
+            clearTimeout(smoothPatrolInterval);
+            stopHeroMovementForTrap();
+            setPatrolButtonStateForTrap(false);
+
+            if (window.RouteCombatFSM) {
+                window.RouteCombatFSM.update({
+                    running: false,
+                    currentTask: 'IDLE',
+                    inRouteMap: false
+                }, 'captcha_soft_pause');
+            }
+            if (window.BerserkController?.setBotBerserkState) {
+                window.BerserkController.setBotBerserkState(false, 'captcha_soft_pause');
+            }
+
+            window.__stoppingForCaptcha = false;
             window.__trapBotPausedByCaptcha = true;
         }
 
@@ -11797,51 +11849,92 @@ window.openShopAsync = async (namePart) => {
             return true;
         }
 
+        function resumeExpAfterTrapSnapshot(snap) {
+            if (!snap || !snap.exping) return false;
+            const now = Date.now();
+
+            window.isExping = true;
+            window.expRunId = snap.expRunId || window.expRunId || `captcha-resume-${now}`;
+            window.expCycleId = 0;
+            window.isExpSuspended = false;
+            window.isRushingToShop = false;
+            window.lastExpMap = null;
+            window.expAllMapsClearedAt = 0;
+            window.expWaitingSafeMap = null;
+            window.expCurrentTargetGroupKey = null;
+            window.expFocusTarget = null;
+            if (typeof expCurrentTargetId !== 'undefined') expCurrentTargetId = null;
+            if (typeof expEmptyScans !== 'undefined') expEmptyScans = 0;
+            if (typeof expMapTransitionCooldown !== 'undefined') {
+                expMapTransitionCooldown = now + randomDelay(1000, 1800);
+                window.expMapTransitionCooldown = expMapTransitionCooldown;
+            }
+            if (typeof expLastActionTime !== 'undefined') {
+                expLastActionTime = now + randomDelay(450, 950);
+                window.expLastActionTime = expLastActionTime;
+            }
+            window.expMapEnteredAt = now;
+            window.mapCooldown = now + randomDelay(550, 950);
+
+            setExpButtonStateForTrap(true);
+
+            if (window.RouteCombatFSM) {
+                window.RouteCombatFSM.update({
+                    running: true,
+                    currentTask: 'EXP',
+                    inRouteMap: typeof isMapInSelectedExpowisko === 'function' ? isMapInSelectedExpowisko(Engine?.map?.d?.name || '') : false
+                }, 'captcha_resume_exp');
+            }
+
+            setTimeout(() => {
+                if (window.isExping && typeof runExpLogic === 'function') runExpLogic();
+            }, randomDelay(700, 1300));
+            return true;
+        }
+
+        function resumeRushAfterTrapSnapshot(snap) {
+            if (!snap || !snap.rushing || !snap.rushTarget) return false;
+            if (typeof rushTarget !== 'undefined') rushTarget = snap.rushTarget;
+            if (typeof rushTargetX !== 'undefined') rushTargetX = snap.rushTargetX ?? null;
+            if (typeof rushTargetY !== 'undefined') rushTargetY = snap.rushTargetY ?? null;
+            window.rushFullPath = Array.isArray(snap.rushFullPath) ? [...snap.rushFullPath] : [];
+            window.resumePatrolAfterRush = !!snap.resumePatrolAfterRush;
+            if (typeof isPatrolling !== 'undefined') isPatrolling = false;
+            window.isPatrolling = false;
+            if (typeof isRushing !== 'undefined') isRushing = true;
+            window.isRushing = true;
+            setPatrolButtonStateForTrap(true);
+            clearTimeout(rushInterval);
+            rushInterval = setTimeout(() => {
+                if (typeof window.executeRushStep === 'function') window.executeRushStep();
+            }, randomDelay(700, 1300));
+            return true;
+        }
+
         function resumeBotsAfterTrap(snapshot) {
             const snap = snapshot || window.__trapResumeSnapshot || null;
             if (!snap || !hasTrapResumeWork(snap)) return false;
 
             const now = Date.now();
             window.__trapLastResumeAt = now;
-
-            if (snap.exping && !window.isExping) {
-                let btn = document.getElementById('btnStartExp');
-                if (btn) btn.click();
-                else {
-                    window.isExping = true;
-                    window.expRunId = window.expRunId || `captcha-resume-${now}`;
-                }
-            }
+            let resumed = false;
 
             if (snap.exping) {
-                window.expMapEnteredAt = now;
-                window.expMapTransitionCooldown = now + randomDelay(1200, 2200);
-                window.expLastActionTime = now + randomDelay(500, 1200);
-                window.expCurrentTargetGroupKey = null;
-                window.expFocusTarget = null;
-                if (typeof expCurrentTargetId !== 'undefined') expCurrentTargetId = null;
+                resumed = resumeExpAfterTrapSnapshot(snap) || resumed;
+                if (snap.rushing && snap.rushTarget && !isMapInSelectedExpowisko(Engine?.map?.d?.name || '')) {
+                    resumed = resumeRushAfterTrapSnapshot(snap) || resumed;
+                }
             } else if (snap.rushing && snap.rushTarget) {
-                if (typeof rushTarget !== 'undefined') rushTarget = snap.rushTarget;
-                if (typeof rushTargetX !== 'undefined') rushTargetX = snap.rushTargetX ?? null;
-                if (typeof rushTargetY !== 'undefined') rushTargetY = snap.rushTargetY ?? null;
-                window.rushFullPath = Array.isArray(snap.rushFullPath) ? [...snap.rushFullPath] : [];
-                window.resumePatrolAfterRush = !!snap.resumePatrolAfterRush;
-                if (typeof isPatrolling !== 'undefined') isPatrolling = false;
-                if (typeof isRushing !== 'undefined') isRushing = true;
-                window.isRushing = true;
-                clearTimeout(rushInterval);
-                rushInterval = setTimeout(() => {
-                    if (typeof window.executeRushStep === 'function') window.executeRushStep();
-                }, randomDelay(700, 1300));
+                resumed = resumeRushAfterTrapSnapshot(snap) || resumed;
             } else if (snap.patrolling && !window.isRushing) {
-                resumePatrolAfterTrapSnapshot(snap);
+                resumed = resumePatrolAfterTrapSnapshot(snap) || resumed;
             }
 
             if (snap.berserk && window.BerserkController?.setBotBerserkState) {
                 window.BerserkController.setBotBerserkState(true, 'captcha_resume');
             }
 
-            return true;
+            return resumed;
         }
 
         function getCaptchaGameContainer() {
